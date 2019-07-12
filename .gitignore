@@ -1,0 +1,5 @@
+.ipynb_checkpoints
+.nbgrader.log
+__pycache__
+siteid.egg-info
+

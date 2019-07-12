@@ -51,6 +51,7 @@ class Polyhedron(object):
                           [0,0,1],
                           [1,1,0],
                           [1,0,1],
+                          [0,1,1],
                           [1,1,1]]) + x
         return np.any( self.hull.find_simplex(x_pbc) >= 0 )
     

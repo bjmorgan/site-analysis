@@ -1,10 +1,15 @@
 from collections import Counter
+from .atoms_trajectory import AtomsTrajectory
+from .sites_trajectory import SitesTrajectory
 
 class Analysis(object):
     
     def __init__(self, polyhedra, atoms):
         self.polyhedra = polyhedra
         self.atoms = atoms
+        self.atoms_trajectory = AtomsTrajectory(atoms)
+        self.sites_trajectory = SitesTrajectory(polyhedra)
+        self.timesteps = []
         
     def analyse_structure(self, structure):
         for a in self.atoms:
@@ -32,3 +37,22 @@ class Analysis(object):
     @property
     def site_occupations(self):
         return [ p.contains_atoms for p in self.polyhedra ]
+
+    def append_timestep(self, structure, t=None):
+        self.analyse_structure(structure)
+        self.atoms_trajectory.append_timestep(self.atom_sites, t=t)
+        self.sites_trajectory.append_timestep(self.site_occupations, t=t)
+        self.timesteps.append(t)
+
+    def reset(self):
+        self.atoms_trajectory.reset()
+        self.sites_trajectory.reset()
+        self.timesteps = [] 
+
+    @property
+    def at(self):
+        return self.atoms_trajectory
+
+    @property
+    def st(self):
+        return self.sites_trajectory

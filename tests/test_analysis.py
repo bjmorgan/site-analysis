@@ -1,5 +1,5 @@
 import unittest
-from siteid import Analysis
+from site_analysis import Analysis
 
 class AnalysisTestCase(unittest.TestCase):
 

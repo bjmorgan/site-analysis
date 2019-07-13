@@ -2,10 +2,15 @@ import numpy as np
 
 class AtomsTrajectory(object):
     
-    def __init__(self, atoms):
+    def __init__(self, atoms=None, atom_lookup=None):
         self.data = []
         self.timesteps = []
-        self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
+        if not atom_lookup:
+            if not atoms:
+                raise ArgumentError('atoms or atom_lookup arguments are needed to initialis an AtomsTrajectory')
+            self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
+        else:
+            self.atom_lookup = atom_lookup
         
     def append_timestep(self, atom_sites, t=None):
         self.data.append(atom_sites)
@@ -17,3 +22,17 @@ class AtomsTrajectory(object):
     def reset(self):
         self.data = []
         self.timesteps = []
+
+    def to_dict(self):
+        d = {'data': self.data,
+             'timesteps': self.timesteps,
+             'atom_lookup': self.atom_lookup}
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        at = cls( atom_lookup=d['atom_lookup'] )
+        at.data = d['data']
+        at.timesteps = d['timesteps']
+        return at
+        

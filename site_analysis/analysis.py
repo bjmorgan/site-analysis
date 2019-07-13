@@ -24,7 +24,7 @@ class Analysis(object):
         for atom in self.atoms:
             for p in self.polyhedra:
                 if p.contains_atom(atom):
-                    atom.in_polyhedron = p.index
+                    atom.in_site = p.index
                     p.contains_atoms.append( atom.index )
                     
     def coordination_summary(self):
@@ -32,7 +32,7 @@ class Analysis(object):
     
     @property
     def atom_sites(self):
-        return [ atom.in_polyhedron for atom in self.atoms ]
+        return [ atom.in_site for atom in self.atoms ]
         
     @property
     def site_occupations(self):

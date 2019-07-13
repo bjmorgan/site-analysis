@@ -4,25 +4,33 @@ from monty.io import zopen
 import numpy as np
 
 class Atom(object):
-    """Represents a single persistent atom during a simulation
+    """Represents a single persistent atom during a simulation.
 
     Attributes:
-        species_strings (str): """
+        species_string (str): String for this atom speceis, e.g. 'Li'.
+        index (int): Unique numeric index identifying this atom.
+        in_site (int): Stores the site index for the site this atom
+            currently occupies.
+        frac_coords (np.array): Numpy array containing the current fractional
+            coordinates for this atom.
+
+    """
     
     newid = itertools.count(1)
     
     def __init__(self, species_string):
-        """Initialise an Atom object
+        """Initialise an Atom object.
 
         Args:
             species_string (str): String for this atom species, e.g. 'Li'.
 
         Returns:
             None
+
         """
         self.species_string = species_string
         self.index = next(Atom.newid)
-        self.in_polyhedron = None
+        self.in_site = None
         self._frac_coords = None
         
     def get_coords(self, structure):
@@ -40,7 +48,7 @@ class Atom(object):
     def as_dict(self):
         d = {'species_string': self.species_string,
              'index': self.index,
-             'in_polyhedron': self.in_polyhedron,
+             'in_site': self.in_site,
              'frac_coords': self._frac_coords.tolist()}
         return d
 
@@ -48,7 +56,7 @@ class Atom(object):
     def from_dict(cls, d):
         atom = cls(species_string=d['species_string'])
         atom.index = d['index']
-        atom.in_polyhedron = d['in_polyhedron']
+        atom.in_site = d['in_site']
         atom._frac_coords = np.array(d['frac_coords'])
         return atom
 

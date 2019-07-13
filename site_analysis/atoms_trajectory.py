@@ -23,7 +23,7 @@ class AtomsTrajectory(object):
         self.data = []
         self.timesteps = []
 
-    def to_dict(self):
+    def as_dict(self):
         d = {'data': self.data,
              'timesteps': self.timesteps,
              'atom_lookup': self.atom_lookup}

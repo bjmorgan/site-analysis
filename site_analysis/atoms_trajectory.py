@@ -5,12 +5,12 @@ class AtomsTrajectory(object):
     def __init__(self, atoms=None, atom_lookup=None):
         self.data = []
         self.timesteps = []
-        if not atom_lookup:
-            if not atoms:
-                raise ArgumentError('atoms or atom_lookup arguments are needed to initialis an AtomsTrajectory')
+        if atoms:
             self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
-        else:
+        elif atom_lookup:
             self.atom_lookup = atom_lookup
+        else:
+            raise ArgumentError('atoms or atom_lookup arguments are needed to initialise an AtomsTrajectory')
         
     def append_timestep(self, atom_sites, t=None):
         self.data.append(atom_sites)

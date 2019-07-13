@@ -34,6 +34,7 @@ class Atom(object):
         self._frac_coords = None
         
     def get_coords(self, structure):
+        """TODO"""
         atom_species_sites = [ s for s in structure 
                                 if s.species_string is self.species_string ]
         self._frac_coords = atom_species_sites[self.index-1].frac_coords

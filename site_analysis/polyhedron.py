@@ -6,10 +6,11 @@ class Polyhedron(object):
     
     newid = itertools.count(1)
 
-    def __init__(self, vertex_species, vertex_indices):
+    def __init__(self, vertex_species, vertex_indices, label=None):
         self.index = next(Polyhedron.newid)
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
+        self.label = label
         self.vertex_coords = None
         self._hull = None
         self.contains_atoms = []
@@ -56,6 +57,8 @@ class Polyhedron(object):
              'vertex_indices': self.vertex_indices,
              'vertex_coords': self.vertex_coords,
              'contains_atoms': self.contains_atoms}
+        if self.label:
+            d['label'] = self.label
         return d
 
     @classmethod
@@ -64,6 +67,7 @@ class Polyhedron(object):
                           vertex_indices=d['vertex_indices'] )
         polyhedron.vertex_coords = d['vertex_coords']
         polyhedron.contains_atoms = d['contains_atoms']
+        polyhedron.label = d.get('label')
         return polyhedron 
 
 def x_pbc(x):

@@ -33,3 +33,18 @@ class Atom(object):
             raise AttributeError('Coordinates not set for atom {}'.format(self.index))
         else:
             return self._frac_coords
+
+    def to_dict(self):
+        d = {'species_string': self.species_string,
+             'index': self.index,
+             'in_polyhedron': self.in_polyhedron,
+             'frac_coords': self._frac_coords}
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        atom = cls(species_string=d['species_string'])
+        atom.index = d['index']
+        atom.in_polyhedron = d['in_polyhedron']
+        atom._frac_coords = d['frac_coords']
+        return atom

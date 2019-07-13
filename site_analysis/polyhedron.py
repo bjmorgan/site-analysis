@@ -57,3 +57,19 @@ class Polyhedron(object):
     
     def contains_atom(self, atom):
         return self.contains_point(atom.frac_coords)
+
+    def to_dict(self):
+        d = {'index': self.index,
+             'vertex_species': self.vertex_species,
+             'vertex_indices': self.vertex_indices,
+             'vertex_coords': self.vertex_coords,
+             'contains_atoms': self.contains_atoms}
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        polyhedron = cls( vertex_species=d['vertex_species'],
+                          vertex_indices=d['vertex_indices'] )
+        polyhedron.vertex_coords = d['vertex_coords']
+        polyhedron.contains_atoms = d['contains_atoms']
+        return polyhedron 

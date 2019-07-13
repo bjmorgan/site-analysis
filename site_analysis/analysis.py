@@ -22,10 +22,18 @@ class Analysis(object):
         for p in self.polyhedra:
             p.contains_atoms = []
         for atom in self.atoms:
+            if atom.in_site:
+                # check the site the atom was previously in first
+                p = next(p for p in self.polyhedra if p.index == atom.in_site)
+                if p.contains_atom(atom):
+                    atom.in_site = p.index
+                    p.contains_atoms.append( atom.index )
+                    continue
             for p in self.polyhedra:
                 if p.contains_atom(atom):
                     atom.in_site = p.index
                     p.contains_atoms.append( atom.index )
+                    break
                     
     def coordination_summary(self):
         return Counter( [ p.coordination_number for p in self.polyhedra ] )

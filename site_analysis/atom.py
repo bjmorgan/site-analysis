@@ -1,4 +1,7 @@
 import itertools
+import json
+from monty.io import zopen
+import numpy as np
 
 class Atom(object):
     """Represents a single persistent atom during a simulation
@@ -34,11 +37,11 @@ class Atom(object):
         else:
             return self._frac_coords
 
-    def to_dict(self):
+    def as_dict(self):
         d = {'species_string': self.species_string,
              'index': self.index,
              'in_polyhedron': self.in_polyhedron,
-             'frac_coords': self._frac_coords}
+             'frac_coords': self._frac_coords.tolist()}
         return d
 
     @classmethod
@@ -46,5 +49,23 @@ class Atom(object):
         atom = cls(species_string=d['species_string'])
         atom.index = d['index']
         atom.in_polyhedron = d['in_polyhedron']
-        atom._frac_coords = d['frac_coords']
+        atom._frac_coords = np.array(d['frac_coords'])
         return atom
+
+    def to(self, filename=None):
+        s = json.dumps(self.as_dict())
+        if filename:
+            with zopen(filename, "wt") as f:
+                f.write('{}'.format(s))
+        return s
+
+    @classmethod
+    def from_str(cls, input_string):
+        d = json.loads(input_string)
+        return cls.from_dict(d)
+
+    @classmethod
+    def from_file(cls, filename):
+        with zopen(filename, "rt") as f:
+            contents = f.read()
+        return cls.from_str(contents)

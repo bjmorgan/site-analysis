@@ -41,19 +41,11 @@ class Polyhedron(object):
                     if fc[i] < 0.5:
                         frac_coords[j,i] += 1.0
         self.vertex_coords = frac_coords
-        
+ 
     def contains_point(self, x):
         if self.vertex_coords is None:
             raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
-        x_pbc = np.array([[0,0,0],
-                          [1,0,0],
-                          [0,1,0],
-                          [0,0,1],
-                          [1,1,0],
-                          [1,0,1],
-                          [0,1,1],
-                          [1,1,1]]) + x
-        return np.any( self.hull.find_simplex(x_pbc) >= 0 )
+        return np.any( self.hull.find_simplex(x_pbc(x)) >= 0 )
     
     def contains_atom(self, atom):
         return self.contains_point(atom.frac_coords)
@@ -73,3 +65,14 @@ class Polyhedron(object):
         polyhedron.vertex_coords = d['vertex_coords']
         polyhedron.contains_atoms = d['contains_atoms']
         return polyhedron 
+
+def x_pbc(x):
+    all_x =  np.array([[0,0,0],
+                       [1,0,0],
+                       [0,1,0],
+                       [0,0,1],
+                       [1,1,0],
+                       [1,0,1],
+                       [0,1,1],
+                       [1,1,1]]) + x
+    return all_x

@@ -4,39 +4,38 @@ from .sites_trajectory import SitesTrajectory
 
 class Analysis(object):
     
-    def __init__(self, polyhedra, atoms):
-        self.polyhedra = polyhedra
+    def __init__(self, sites, atoms):
+        self.sites = sites
         self.atoms = atoms
         self.atoms_trajectory = AtomsTrajectory(atoms)
-        self.sites_trajectory = SitesTrajectory(polyhedra)
+        self.sites_trajectory = SitesTrajectory(sites)
         self.timesteps = []
-        
+        self.previous_occupations = {}
+ 
     def analyse_structure(self, structure):
         for a in self.atoms:
             a.get_coords(structure)
-        for p in self.polyhedra:
-            p.get_vertex_coords(structure)
+        for s in self.sites:
+            s.get_vertex_coords(structure)
         self.assign_site_occupations(structure)
         
     def assign_site_occupations(self, structure):
-        for p in self.polyhedra:
-            p.contains_atoms = []
+        for s in self.sites:
+            s.contains_atoms = []
         for atom in self.atoms:
             if atom.in_site:
-                # check the site the atom was previously in first
-                p = next(p for p in self.polyhedra if p.index == atom.in_site)
-                if p.contains_atom(atom):
-                    atom.in_site = p.index
-                    p.contains_atoms.append( atom.index )
+                # first check the site last occupied
+                s = next(s for s in self.sites if s.index == atom.in_site)
+                if s.contains_atom(atom):
+                    update_occupation( s, atom )
                     continue
-            for p in self.polyhedra:
-                if p.contains_atom(atom):
-                    atom.in_site = p.index
-                    p.contains_atoms.append( atom.index )
+            for s in self.sites:
+                if s.contains_atom(atom):
+                    update_occupation( s, atom )
                     break
                     
     def coordination_summary(self):
-        return Counter( [ p.coordination_number for p in self.polyhedra ] )
+        return Counter( [ s.coordination_number for s in self.sites ] )
     
     @property
     def atom_sites(self):
@@ -44,7 +43,7 @@ class Analysis(object):
         
     @property
     def site_occupations(self):
-        return [ p.contains_atoms for p in self.polyhedra ]
+        return [ s.contains_atoms for s in self.sites ]
 
     def append_timestep(self, structure, t=None):
         self.analyse_structure(structure)
@@ -64,3 +63,7 @@ class Analysis(object):
     @property
     def st(self):
         return self.sites_trajectory
+
+def update_occupation( site, atom ):
+    site.contains_atoms.append( atom.index )
+    atom.in_site = site.index

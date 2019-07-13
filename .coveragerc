@@ -1,5 +1,5 @@
 [run]
-source = siteid
+source = site_analysis
 omit =
     */python?.?/*
     */lib-python/?.?/*.py

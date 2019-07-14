@@ -29,6 +29,8 @@ class Analysis(object):
                 if s.contains_atom(atom):
                     update_occupation( s, atom )
                     continue
+                else: # default is atom does not occupy any sites
+                    atom.in_site = None
             for s in self.sites:
                 if s.contains_atom(atom):
                     update_occupation( s, atom )

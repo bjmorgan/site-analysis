@@ -9,7 +9,7 @@ class Atom(object):
     Attributes:
         species_string (str): String for this atom speceis, e.g. 'Li'.
         index (int): Unique numeric index identifying this atom.
-        in_site (int): Stores the site index for the site this atom
+        in_site (int): Site index for the site this atom
             currently occupies.
         frac_coords (np.array): Numpy array containing the current fractional
             coordinates for this atom.
@@ -32,7 +32,7 @@ class Atom(object):
         self.index = next(Atom.newid)
         self.in_site = None
         self._frac_coords = None
-        
+
     def get_coords(self, structure):
         """TODO"""
         atom_species_sites = [ s for s in structure 

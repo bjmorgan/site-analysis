@@ -13,14 +13,14 @@ class Polyhedron(object):
         self.vertex_indices = vertex_indices
         self.label = label
         self.vertex_coords = None
-        self._hull = None
+        self._delaunay = None
         self.contains_atoms = []
  
     @property
-    def hull(self):
-        if not self._hull:
-            self._hull = Delaunay(self.vertex_coords)         
-        return self._hull
+    def delaunay(self):
+        if not self._delaunay:
+            self._delaunay = Delaunay(self.vertex_coords)         
+        return self._delaunay
 
     @property
     def coordination_number(self):
@@ -43,30 +43,22 @@ class Polyhedron(object):
                     if fc[i] < 0.5:
                         frac_coords[j,i] += 1.0
         self.vertex_coords = frac_coords
-        self._hull = None
+        self._delaunay = None
  
     def contains_point(self, x):
         if self.vertex_coords is None:
             raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
-        return np.any( self.hull.find_simplex(x_pbc(x)) >= 0 )
+        return np.any( self.delaunay.find_simplex(x_pbc(x)) >= 0 )
     
-    def contains_point_accurate(self, x):
-        if self.vertex_coords is None:
-            raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
-        for p in x_pbc(x):
-            if in_hull(self.vertex_coords, p):
-                return True
-        return False
-   
     def contains_point_new(self, x):
         if self.vertex_coords is None:
             raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
         for p in x_pbc(x):
-            if np.any( self.contains_point_ben(p)):
+            if np.any( self.contains_point_alt(p)):
                 return True
         return False
  
-    def contains_point_ben(self, x):
+    def contains_point_alt(self, x):
         hull = ConvexHull(self.vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre()

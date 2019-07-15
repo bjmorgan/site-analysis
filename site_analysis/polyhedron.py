@@ -1,6 +1,6 @@
 import itertools
 import numpy as np
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull
 from scipy.optimize import linprog
 
 class Polyhedron(object):
@@ -15,13 +15,13 @@ class Polyhedron(object):
         self.vertex_coords = None
         self._hull = None
         self.contains_atoms = []
-        
+ 
     @property
     def hull(self):
         if not self._hull:
             self._hull = Delaunay(self.vertex_coords)         
         return self._hull
-    
+
     @property
     def coordination_number(self):
         return len(self.vertex_indices)
@@ -43,6 +43,7 @@ class Polyhedron(object):
                     if fc[i] < 0.5:
                         frac_coords[j,i] += 1.0
         self.vertex_coords = frac_coords
+        self._hull = None
  
     def contains_point(self, x):
         if self.vertex_coords is None:
@@ -56,12 +57,35 @@ class Polyhedron(object):
             if in_hull(self.vertex_coords, p):
                 return True
         return False
-    
+   
+    def contains_point_new(self, x):
+        if self.vertex_coords is None:
+            raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
+        for p in x_pbc(x):
+            if np.any( self.contains_point_ben(p)):
+                return True
+        return False
+ 
+    def contains_point_ben(self, x):
+        hull = ConvexHull(self.vertex_coords)
+        faces = hull.points[hull.simplices]
+        centre = self.centre()
+        dotsum = 0
+        for f in faces:
+            surface_normal = np.cross(f[0]-f[2], f[1]-f[2])
+            c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
+            p_sign = np.sign(np.dot( surface_normal, x-f[0]))
+            dotsum += c_sign * p_sign
+        return dotsum == len(faces)
+
     def contains_atom(self, atom):
         return self.contains_point(atom.frac_coords)
 
     def contains_atom_accurate(self, atom):
         return self.contains_point_accurate(atom.frac_coords)
+
+    def contains_atom_new(self, atom):
+        return self.contains_point_new(atom.frac_coords)
 
     def as_dict(self):
         d = {'index': self.index,
@@ -104,3 +128,4 @@ def in_hull(points, x):
     b = np.r_[x, np.ones(1)]
     lp = linprog(c, A_eq=A, b_eq=b)
     return lp.success
+

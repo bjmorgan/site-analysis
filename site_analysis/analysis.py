@@ -25,9 +25,9 @@ class Analysis(object):
         for atom in self.atoms:
             if atom.in_site:
                 # first check the site last occupied
-                s = next(s for s in self.sites if s.index == atom.in_site)
-                if s.contains_atom(atom):
-                    update_occupation( s, atom )
+                previous_site = next(s for s in self.sites if s.index == atom.in_site)
+                if previous_site.contains_atom(atom):
+                    update_occupation( previous_site, atom )
                     continue
                 else: # default is atom does not occupy any sites
                     atom.in_site = None
@@ -35,6 +35,16 @@ class Analysis(object):
                 if s.contains_atom(atom):
                     update_occupation( s, atom )
                     break
+            if atom.in_site is None:
+                # Not able to find this atom inside a polyhedron
+                # Recalculate using more accurate, slower algorithm for unassigned atoms
+                if previous_site.contains_atom_accurate(atom):
+                    update_occupation( previous_site, atom )
+                    continue
+                for s in self.sites:
+                    if s.contains_atom_accurate(atom):
+                        update_occupation( s, atom )
+                        break
                     
     def coordination_summary(self):
         return Counter( [ s.coordination_number for s in self.sites ] )

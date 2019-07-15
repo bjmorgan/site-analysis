@@ -1,6 +1,7 @@
 import itertools
 import numpy as np
 from scipy.spatial import Delaunay
+from scipy.optimize import linprog
 
 class Polyhedron(object):
     
@@ -48,8 +49,19 @@ class Polyhedron(object):
             raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
         return np.any( self.hull.find_simplex(x_pbc(x)) >= 0 )
     
+    def contains_point_accurate(self, x):
+        if self.vertex_coords is None:
+            raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
+        for p in x_pbc(x):
+            if in_hull(self.vertex_coords, p):
+                return True
+        return False
+    
     def contains_atom(self, atom):
         return self.contains_point(atom.frac_coords)
+
+    def contains_atom_accurate(self, atom):
+        return self.contains_point_accurate(atom.frac_coords)
 
     def as_dict(self):
         d = {'index': self.index,
@@ -70,6 +82,9 @@ class Polyhedron(object):
         polyhedron.label = d.get('label')
         return polyhedron 
 
+    def centre(self):
+        return np.mean(self.vertex_coords, axis=0)
+
 def x_pbc(x):
     all_x =  np.array([[0,0,0],
                        [1,0,0],
@@ -80,3 +95,12 @@ def x_pbc(x):
                        [0,1,1],
                        [1,1,1]]) + x
     return all_x
+
+def in_hull(points, x):
+    n_points = len(points)
+    n_dim = len(x)
+    c = np.zeros(n_points)
+    A = np.r_[points.T,np.ones((1,n_points))]
+    b = np.r_[x, np.ones(1)]
+    lp = linprog(c, A_eq=A, b_eq=b)
+    return lp.success

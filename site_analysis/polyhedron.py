@@ -59,6 +59,13 @@ class Polyhedron(object):
         return False
  
     def contains_point_alt(self, x):
+        """Alternative algorithm for calculating whether a point sits
+        inside a convex hull.
+
+        This algorithm is a potential target for optimisation at some
+        future time.
+   
+        """
         hull = ConvexHull(self.vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre()

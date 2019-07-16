@@ -36,9 +36,12 @@ class Analysis(object):
                     update_occupation( s, atom )
                     break
                     
-    def coordination_summary(self):
+    def site_coordination_numbers(self):
         return Counter( [ s.coordination_number for s in self.sites ] )
-    
+
+    def site_labels(self):
+        return [ s.label for s in self.sites ]
+   
     @property
     def atom_sites(self):
         return [ atom.in_site for atom in self.atoms ]

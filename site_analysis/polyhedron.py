@@ -15,6 +15,13 @@ class Polyhedron(object):
         self.vertex_coords = None
         self._delaunay = None
         self.contains_atoms = []
+        self.trajectory = []
+
+    def reset(self):
+        self.vertex_coords = None
+        self._delaunay = None
+        self.contains_atoms = []
+        self.trajectory = []
  
     @property
     def delaunay(self):

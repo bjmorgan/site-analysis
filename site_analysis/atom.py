@@ -32,6 +32,12 @@ class Atom(object):
         self.index = next(Atom.newid)
         self.in_site = None
         self._frac_coords = None
+        self.trajectory = []
+
+    def reset(self):
+        self.in_site = None
+        self._frac_coords = None
+        self.trajectory = []
 
     def get_coords(self, structure):
         """TODO"""

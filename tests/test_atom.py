@@ -1,6 +1,7 @@
 import unittest
 from site_analysis import Atom
 from unittest.mock import patch, MagicMock, Mock
+import numpy as np
 
 class AtomTestCase(unittest.TestCase):
 
@@ -13,7 +14,18 @@ class AtomTestCase(unittest.TestCase):
             self.assertEqual( atom.index, int(Atom.newid) )
             self.assertEqual( atom.in_site, None )
             self.assertEqual( atom._frac_coords, None )
-       
+            self.assertEqual( atom.trajectory, [] )
+
+    def test_reset(self):
+        atom = Atom(species_string='Li')
+        atom.in_site = 3
+        atom._frac_coords = np.array( [0,0, 0.0, 0.0] )
+        atom.trajectory = [1,2,3]
+        atom.reset()
+        self.assertEqual( atom.in_site, None )
+        self.assertEqual( atom._frac_coords, None )
+        self.assertEqual( atom.trajectory, [] )
+
 if __name__ == '__main__':
     unittest.main()
     

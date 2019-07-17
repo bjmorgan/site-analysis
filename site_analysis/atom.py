@@ -13,6 +13,7 @@ class Atom(object):
             currently occupies.
         frac_coords (np.array): Numpy array containing the current fractional
             coordinates for this atom.
+        trajectory (list): List of site indices occupied at each timestep.
 
     """
     
@@ -35,6 +36,14 @@ class Atom(object):
         self.trajectory = []
 
     def reset(self):
+        """Reset the state of this Atom.
+
+        Clears the `in_site` and `trajectory` attributes.
+
+        Returns:
+            None
+
+        """
         self.in_site = None
         self._frac_coords = None
         self.trajectory = []

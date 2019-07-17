@@ -1,6 +1,7 @@
 from collections import Counter
 from .atoms_trajectory import AtomsTrajectory
 from .sites_trajectory import SitesTrajectory
+from tqdm import tqdm, tqdm_notebook
 
 class Analysis(object):
     
@@ -89,6 +90,16 @@ class Analysis(object):
     def st(self):
         return self.sites_trajectory
 
+    def trajectory_from_structures(self, structures, progress=False):
+        generator = enumerate( structures, 1 )
+        if progress:
+            if progress=='notebook':
+                generator = tqdm_notebook( generator, total=len(structures), unit=' steps' )
+            else:
+                generator = tqdm( generator, total=len(structures), unit=' steps' )
+        for timestep, s in generator:
+            self.append_timestep( s, t=timestep )
+    
 def update_occupation( site, atom ):
     site.contains_atoms.append( atom.index )
     atom.in_site = site.index

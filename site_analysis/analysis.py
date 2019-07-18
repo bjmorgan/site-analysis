@@ -4,7 +4,8 @@ from .sites_trajectory import SitesTrajectory
 from tqdm import tqdm, tqdm_notebook
 
 class Analysis(object):
-    
+    """Class for performing sites analysis on simulation trajectories."""
+
     def __init__(self, sites, atoms):
         self.sites = sites
         self.atoms = atoms

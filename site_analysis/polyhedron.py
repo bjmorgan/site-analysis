@@ -2,26 +2,22 @@ import itertools
 import numpy as np
 from scipy.spatial import Delaunay, ConvexHull
 from scipy.optimize import linprog
+from .site import Site
+from .tools import x_pbc
 
-class Polyhedron(object):
+class Polyhedron(Site):
     
-    newid = itertools.count(1)
-
     def __init__(self, vertex_species, vertex_indices, label=None):
-        self.index = next(Polyhedron.newid)
+        super(Polyhedron, self).__init__(label=label)
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
-        self.label = label
         self.vertex_coords = None
         self._delaunay = None
-        self.contains_atoms = []
-        self.trajectory = []
 
     def reset(self):
+        super(Polyhedron, self).reset()
         self.vertex_coords = None
         self._delaunay = None
-        self.contains_atoms = []
-        self.trajectory = []
  
     @property
     def delaunay(self):
@@ -94,13 +90,10 @@ class Polyhedron(object):
         return self.contains_point_new(atom.frac_coords)
 
     def as_dict(self):
-        d = {'index': self.index,
-             'vertex_species': self.vertex_species,
-             'vertex_indices': self.vertex_indices,
-             'vertex_coords': self.vertex_coords,
-             'contains_atoms': self.contains_atoms}
-        if self.label:
-            d['label'] = self.label
+        d = super(Polyhedron, self).as_dict()
+        d['vertex_species'] = self.vertex_species
+        d['vertex_indices'] = self.vertex_indices
+        d['vertex_coords'] = self.vertex_coords
         return d
 
     @classmethod
@@ -114,17 +107,6 @@ class Polyhedron(object):
 
     def centre(self):
         return np.mean(self.vertex_coords, axis=0)
-
-def x_pbc(x):
-    all_x =  np.array([[0,0,0],
-                       [1,0,0],
-                       [0,1,0],
-                       [0,0,1],
-                       [1,1,0],
-                       [1,0,1],
-                       [0,1,1],
-                       [1,1,1]]) + x
-    return all_x
 
 def in_hull(points, x):
     n_points = len(points)

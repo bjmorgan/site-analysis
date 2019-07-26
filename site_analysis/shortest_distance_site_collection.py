@@ -3,9 +3,6 @@ import numpy as np
 
 class ShortestDistanceSiteCollection(SiteCollection):
 
-#    def __init__(self, sites):
-#        super(ShortestDistanceSiteCollection, self).__init__(sites=sites)
-
     def analyse_structure(self, atoms, structure):
         for a in atoms:
             a.get_coords(structure)

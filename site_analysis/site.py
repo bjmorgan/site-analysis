@@ -19,7 +19,7 @@ class Site(object):
  
     def contains_point(self, x):
         raise NotImplementedError('contains_point should be implemented '
-                                  'in the inhereted class')
+                                  'in the inherited class')
 
     def contains_atom(self, atom):
         return self.contains_point(atom.frac_coords)
@@ -42,6 +42,6 @@ class Site(object):
 
     def centre(self):
         raise NotImplementedError('centre should be implemeneted '
-                                  'in the inhereted class')
+                                  'in the inherited class')
 
 

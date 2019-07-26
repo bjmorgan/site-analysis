@@ -1,16 +1,26 @@
 from collections import Counter
-from .atoms_trajectory import AtomsTrajectory
-from .sites_trajectory import SitesTrajectory
 from tqdm import tqdm, tqdm_notebook
+from .polyhedral_site_collection import PolyhedralSiteCollection
+from .polyhedral_site import PolyhedralSite
+from .shortest_distance_site import ShortestDistanceSite
+from .shortest_distance_site_collection import ShortestDistanceSiteCollection
 
 class Analysis(object):
     """Class for performing sites analysis on simulation trajectories."""
 
+    site_collection_types = { PolyhedralSite: PolyhedralSiteCollection,
+                              ShortestDistanceSite: ShortestDistanceSiteCollection }
+
     def __init__(self, sites, atoms):
+        site_collection_class = None
+        for k, v in Analysis.site_collection_types.items():
+            if all( [ isinstance( s, k ) for s in sites ] ):
+                site_collection_class = v
+        if not site_collection_class:
+            raise ValueError('Unable to detect unique SiteCollection class')
         self.sites = sites
         self.atoms = atoms
-#        self.atoms_trajectory = AtomsTrajectory(atoms)
-#        self.sites_trajectory = SitesTrajectory(sites)
+        self.site_collection = site_collection_class(sites)
         self.timesteps = []
         self.previous_occupations = {}
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
@@ -23,28 +33,10 @@ class Analysis(object):
         return self.sites[self.site_lookup[i]] 
 
     def analyse_structure(self, structure):
-        for a in self.atoms:
-            a.get_coords(structure)
-        for s in self.sites:
-            s.get_vertex_coords(structure)
-        self.assign_site_occupations(structure)
+        self.site_collection.analyse_structure(self.atoms, structure)
         
     def assign_site_occupations(self, structure):
-        for s in self.sites:
-            s.contains_atoms = []
-        for atom in self.atoms:
-            if atom.in_site:
-                # first check the site last occupied
-                previous_site = next(s for s in self.sites if s.index == atom.in_site)
-                if previous_site.contains_atom(atom):
-                    update_occupation( previous_site, atom )
-                    continue # atom has not moved
-                else: # default is atom does not occupy any sites
-                    atom.in_site = None
-            for s in self.sites:
-                if s.contains_atom(atom):
-                    update_occupation( s, atom )
-                    break
+        self.site_collection.assign_site_occupations(self.atoms, structure)
                     
     def site_coordination_numbers(self):
         return Counter( [ s.coordination_number for s in self.sites ] )

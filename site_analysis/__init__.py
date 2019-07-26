@@ -1,5 +1,6 @@
 from .atom import Atom
-from .polyhedron import Polyhedron
+from .polyhedral_site import PolyhedralSite
+from .shortest_distance_site import ShortestDistanceSite
 from .analysis import Analysis
 from .atoms_trajectory import AtomsTrajectory
 from .sites_trajectory import SitesTrajectory

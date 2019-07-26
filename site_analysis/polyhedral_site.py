@@ -5,17 +5,17 @@ from scipy.optimize import linprog
 from .site import Site
 from .tools import x_pbc
 
-class Polyhedron(Site):
+class PolyhedralSite(Site):
     
     def __init__(self, vertex_species, vertex_indices, label=None):
-        super(Polyhedron, self).__init__(label=label)
+        super(PolyhedralSite, self).__init__(label=label)
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
         self.vertex_coords = None
         self._delaunay = None
 
     def reset(self):
-        super(Polyhedron, self).reset()
+        super(PolyhedralSite, self).reset()
         self.vertex_coords = None
         self._delaunay = None
  
@@ -50,12 +50,12 @@ class Polyhedron(Site):
  
     def contains_point(self, x):
         if self.vertex_coords is None:
-            raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
+            raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
         return np.any( self.delaunay.find_simplex(x_pbc(x)) >= 0 )
     
     def contains_point_new(self, x):
         if self.vertex_coords is None:
-            raise RuntimeError('no vertex coordinates set for polyhedron {}'.format(self.index))
+            raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
         for p in x_pbc(x):
             if np.any( self.contains_point_alt(p)):
                 return True
@@ -90,7 +90,7 @@ class Polyhedron(Site):
         return self.contains_point_new(atom.frac_coords)
 
     def as_dict(self):
-        d = super(Polyhedron, self).as_dict()
+        d = super(PolyhedralSite, self).as_dict()
         d['vertex_species'] = self.vertex_species
         d['vertex_indices'] = self.vertex_indices
         d['vertex_coords'] = self.vertex_coords
@@ -98,12 +98,12 @@ class Polyhedron(Site):
 
     @classmethod
     def from_dict(cls, d):
-        polyhedron = cls( vertex_species=d['vertex_species'],
+        polyhedral_site = cls( vertex_species=d['vertex_species'],
                           vertex_indices=d['vertex_indices'] )
-        polyhedron.vertex_coords = d['vertex_coords']
-        polyhedron.contains_atoms = d['contains_atoms']
-        polyhedron.label = d.get('label')
-        return polyhedron 
+        polyhedral_site.vertex_coords = d['vertex_coords']
+        polyhedral_site.contains_atoms = d['contains_atoms']
+        polyhedral_site.label = d.get('label')
+        return polyhedral_site 
 
     def centre(self):
         return np.mean(self.vertex_coords, axis=0)

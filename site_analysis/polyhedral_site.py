@@ -7,12 +7,15 @@ from .tools import x_pbc, species_string_from_site
 
 class PolyhedralSite(Site):
     
-    def __init__(self, vertex_species, vertex_indices, label=None):
+    def __init__(self, vertex_species, vertex_indices, label=None, 
+                 fixed_vertex_structure_indices=True):
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
         self.vertex_coords = None
         self._delaunay = None
+        self.fixed_vertex_structure_indices = fixed_vertex_structure_indices
+        self.vertex_structure_indices = None
 
     def reset(self):
         super(PolyhedralSite, self).reset()
@@ -34,11 +37,13 @@ class PolyhedralSite(Site):
         return self.coordination_number
         
     def get_vertex_coords(self, structure):
-        vertex_species_sites = [ s for s in structure 
-                                if species_string_from_site(s) is self.vertex_species ]
-        frac_coords = np.array([ s.frac_coords for i, s in
-                                enumerate(vertex_species_sites, 1) 
-                                if i in self.vertex_indices ])
+        if not self.fixed_vertex_structure_indices or not self.vertex_structure_indices:
+            vertex_species_indices = [ i for i, s in enumerate(structure) 
+                if species_string_from_site(s) is self.vertex_species ]
+            self.vertex_structure_indices = [ j for i, j in enumerate(vertex_species_indices,1)
+                if i in self.vertex_indices ] 
+        frac_coords = np.array([ s.frac_coords for s in 
+            [ structure[i] for i in self.vertex_structure_indices ] ] )
         for i in range(3):
             spread = max(frac_coords[:,i]) - min(frac_coords[:,i])
             if spread > 0.5:

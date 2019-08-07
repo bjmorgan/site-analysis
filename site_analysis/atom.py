@@ -2,6 +2,7 @@ import itertools
 import json
 from monty.io import zopen
 import numpy as np
+from .tools import species_string_from_site
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -51,7 +52,7 @@ class Atom(object):
     def get_coords(self, structure):
         """TODO"""
         atom_species_sites = [ s for s in structure 
-                                if s.species_string is self.species_string ]
+                                if species_string_from_site(s) is self.species_string ]
         self._frac_coords = atom_species_sites[self.index-1].frac_coords
         
     @property

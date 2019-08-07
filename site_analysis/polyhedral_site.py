@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial import Delaunay, ConvexHull
 from scipy.optimize import linprog
 from .site import Site
-from .tools import x_pbc
+from .tools import x_pbc, species_string_from_site
 
 class PolyhedralSite(Site):
     
@@ -35,7 +35,7 @@ class PolyhedralSite(Site):
         
     def get_vertex_coords(self, structure):
         vertex_species_sites = [ s for s in structure 
-                                if s.species_string is self.vertex_species ]
+                                if species_string_from_site(s) is self.vertex_species ]
         frac_coords = np.array([ s.frac_coords for i, s in
                                 enumerate(vertex_species_sites, 1) 
                                 if i in self.vertex_indices ])

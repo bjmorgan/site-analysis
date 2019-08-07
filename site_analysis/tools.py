@@ -53,3 +53,5 @@ def x_pbc(x):
                        [1,1,1]]) + x
     return all_x
 
+def species_string_from_site(site):
+    return [k.__str__() for k in site._species.keys()][0]

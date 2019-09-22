@@ -22,8 +22,8 @@ class ToolsTestCase(unittest.TestCase):
             self.assertEqual( len(vi), 6 )
             c += Counter( vi )
             for i in vi:
-                self.assertEqual( structure[i+31].species_string, 'Cl' )
-        for i in range(1,33):
+                self.assertEqual( structure[i].species_string, 'Cl' )
+        for i in range(33,64):
             self.assertEqual( c[i], 6 )
 
     def test_x_pbc(self):

@@ -7,28 +7,26 @@ from .tools import x_pbc, species_string_from_site
 
 class PolyhedralSite(Site):
     
-    def __init__(self, vertex_species, vertex_indices, label=None, 
-                 fixed_vertex_structure_indices=True):
+    def __init__(self, vertex_species, vertex_indices, label=None):
         """Create a PolyhedralSite instance.
 
         Args:
-            vertex_species (str): String identifying the vertex species, e.g. 'S'.
-            vertex_indices (list(int)): List of integer indices for the vertex atoms.
+            vertex_species (str or list(str)): String identifying the vertex species, e.g. ``'S'``,
+                or a list of strings, e.g, ``['S', 'I']``..
+            vertex_indices (list(int)): List of integer indices for the vertex atoms (counting from 0).
             label (:obj:`str`, optional): Optional label for these sites.
-            fixed_vertex_structure_indices (:obj:`bool`, optional): Whether ``vertex_indices``
-                counts only the vertex species atoms, or all atoms in the structure.
 
         Returns:
             None
 
         """
         super(PolyhedralSite, self).__init__(label=label)
+        if isinstance(vertex_species, str):
+            vertex_species = [ vertex_species ]
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
         self.vertex_coords = None
         self._delaunay = None
-        self.fixed_vertex_structure_indices = fixed_vertex_structure_indices
-        self.vertex_structure_indices = None
 
     def reset(self):
         super(PolyhedralSite, self).reset()
@@ -50,13 +48,8 @@ class PolyhedralSite(Site):
         return self.coordination_number
         
     def get_vertex_coords(self, structure):
-        if not self.fixed_vertex_structure_indices or not self.vertex_structure_indices:
-            vertex_species_indices = [ i for i, s in enumerate(structure) 
-                if species_string_from_site(s) is self.vertex_species ]
-            self.vertex_structure_indices = [ j for i, j in enumerate(vertex_species_indices,1)
-                if i in self.vertex_indices ] 
         frac_coords = np.array([ s.frac_coords for s in 
-            [ structure[i] for i in self.vertex_structure_indices ] ] )
+            [ structure[i] for i in self.vertex_indices ] ] )
         for i in range(3):
             spread = max(frac_coords[:,i]) - min(frac_coords[:,i])
             if spread > 0.5:

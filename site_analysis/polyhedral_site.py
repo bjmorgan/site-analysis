@@ -9,6 +9,19 @@ class PolyhedralSite(Site):
     
     def __init__(self, vertex_species, vertex_indices, label=None, 
                  fixed_vertex_structure_indices=True):
+        """Create a PolyhedralSite instance.
+
+        Args:
+            vertex_species (str): String identifying the vertex species, e.g. 'S'.
+            vertex_indices (list(int)): List of integer indices for the vertex atoms.
+            label (:obj:`str`, optional): Optional label for these sites.
+            fixed_vertex_structure_indices (:obj:`bool`, optional): Whether ``vertex_indices``
+                counts only the vertex species atoms, or all atoms in the structure.
+
+        Returns:
+            None
+
+        """
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices

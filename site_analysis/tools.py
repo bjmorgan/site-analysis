@@ -1,5 +1,36 @@
 import numpy as np
 
+def get_nearest_neighbour_indices(structure, ref_structure, vertex_species, n_coord):
+    """
+    Returns the atom indices for the N nearest neighbours to each site in a reference
+    structure.
+
+    Args:
+        structure (`pymatgen.Structure`): A pymatgen Structure object, used to select
+            the nearest neighbour indices.
+        ref_structure (`pymatgen.Structure`): A pymatgen Structure object. Each site
+            is used to find the set of N nearest neighbours (of the specified atomic species)
+            in ``structure``.
+        vertex_species (list(str)): List of strings specifying the atomic species of
+            the vertex atoms, e.g. ``[ 'S', 'I' ]``.
+        n_coord (int): Number of matching nearest neighbours to return for each site in 
+            ``ref_structure``.
+
+    Returns:
+        (list(list(int)): N_sites x N_neighbours nested list of vertex atom indices.
+
+    """
+    vertex_indices = [ i for i, s in enumerate(structure) if s.species_string in vertex_species ]
+    struc1_coords = np.array([structure[i].frac_coords for i in vertex_indices])
+    struc2_coords = ref_structure.frac_coords
+    lattice = structure[0].lattice
+    dr_ij = lattice.get_all_distances(struc1_coords, struc2_coords).T
+    nn_indices = []
+    for dr_i in dr_ij:
+        idx = np.argpartition(dr_i, n_coord)
+        nn_indices.append( sorted([ vertex_indices[i] for i in idx[:n_coord] ]) )
+    return nn_indices
+
 def get_vertex_indices( structure, centre_species, vertex_species, cutoff=4.5, n_vertices=6 ):
     """
     Find the atom indices for atoms defining the vertices of coordination polyhedra, from 

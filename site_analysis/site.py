@@ -4,7 +4,7 @@ from scipy.spatial import Delaunay, ConvexHull
 from scipy.optimize import linprog
 
 class Site(object):
-    
+
     newid = itertools.count(1)
 
     def __init__(self, label=None):
@@ -12,6 +12,7 @@ class Site(object):
         self.label = label
         self.contains_atoms = []
         self.trajectory = []
+        self.points = []
 
     def reset(self):
         self.contains_atoms = []
@@ -44,4 +45,6 @@ class Site(object):
         raise NotImplementedError('centre should be implemeneted '
                                   'in the inherited class')
 
-
+    @classmethod
+    def reset_index(cls):
+        cls.newid = itertools.count(1)

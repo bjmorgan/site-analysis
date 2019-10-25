@@ -58,8 +58,13 @@ class PolyhedralSite(Site):
                         frac_coords[j,i] += 1.0
         self.vertex_coords = frac_coords
         self._delaunay = None
- 
-    def contains_point(self, x):
+
+    def get_vertex_species(self, structure):
+        return [ structure[i].species_string for i in self.vertex_indices ]
+
+    def contains_point(self, x, structure=None):
+        if structure:
+            self.get_vertex_coords(structure)
         if self.vertex_coords is None:
             raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
         return np.any( self.delaunay.find_simplex(x_pbc(x)) >= 0 )
@@ -76,8 +81,7 @@ class PolyhedralSite(Site):
         """Alternative algorithm for calculating whether a point sits
         inside a convex hull.
 
-        This algorithm is a potential target for optimisation at some
-        future time.
+        This algorithm is a potential target for future optimisation
    
         """
         hull = ConvexHull(self.vertex_coords)

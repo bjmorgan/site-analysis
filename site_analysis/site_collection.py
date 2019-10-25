@@ -11,8 +11,17 @@ class SiteCollection(object):
 
     def update_occupation(self, site, atom):
         site.contains_atoms.append( atom.index )
+        site.points.append( atom.frac_coords )
         atom.in_site = site.index
 
     def reset_site_occupations(self):
         for s in self.sites:
             s.contains_atoms = []
+
+    def sites_contain_points(self, structure, points):
+        check = all([s.contains_point(p,structure=structure) for s, p in zip(self.sites, points)])
+        self.reset_site_occupations()
+        return check
+  
+        
+

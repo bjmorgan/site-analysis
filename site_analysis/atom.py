@@ -99,3 +99,7 @@ class Atom(object):
         with zopen(filename, "rt") as f:
             contents = f.read()
         return cls.from_str(contents)
+
+    @classmethod
+    def reset_index(cls):
+        cls.newid = itertools.count(1)

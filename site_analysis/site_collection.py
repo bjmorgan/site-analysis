@@ -9,6 +9,9 @@ class SiteCollection(object):
     def analyse_structure(self, atoms, structure):
         raise NotImplementedError('analyse_structure should be implemented in the inherited class')
 
+    def neighbouring_sites(self, site_index):
+        raise NotImplementedError('neighbouring_sites should be implemented in the inhereted class')
+
     def update_occupation(self, site, atom):
         site.contains_atoms.append( atom.index )
         site.points.append( atom.frac_coords )

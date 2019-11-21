@@ -2,8 +2,8 @@ from collections import Counter
 from tqdm import tqdm, tqdm_notebook
 from .polyhedral_site_collection import PolyhedralSiteCollection
 from .polyhedral_site import PolyhedralSite
-from .shortest_distance_site import ShortestDistanceSite
-from .shortest_distance_site_collection import ShortestDistanceSiteCollection
+from .voronoi_site import VoronoiSite
+from .voronoi_site_collection import VoronoiSiteCollection
 from .spherical_site import SphericalSite
 from .spherical_site_collection import SphericalSiteCollection
 
@@ -11,7 +11,7 @@ class Analysis(object):
     """Class for performing sites analysis on simulation trajectories."""
 
     site_collection_types = { PolyhedralSite: PolyhedralSiteCollection,
-                              ShortestDistanceSite: ShortestDistanceSiteCollection,
+                              VoronoiSite: VoronoiSiteCollection,
                               SphericalSite: SphericalSiteCollection }
 
     def __init__(self, sites, atoms):

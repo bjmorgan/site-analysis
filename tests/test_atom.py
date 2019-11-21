@@ -1,12 +1,12 @@
 import unittest
-from site_analysis import Atom
+from site_analysis.atom import Atom
 from unittest.mock import patch, MagicMock, Mock
 import numpy as np
 
 class AtomTestCase(unittest.TestCase):
 
     def test_atom_is_initialised(self):
-        with patch('site_analysis.Atom.newid') as mock_new_id:
+        with patch('site_analysis.atom.Atom.newid') as mock_new_id:
             mock_new_id.__next__ = Mock(side_effect = [1])
             species_string = 'foo'
             atom = Atom(species_string=species_string)

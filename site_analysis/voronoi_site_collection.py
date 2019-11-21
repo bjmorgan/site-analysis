@@ -1,7 +1,7 @@
 from .site_collection import SiteCollection
 import numpy as np
 
-class ShortestDistanceSiteCollection(SiteCollection):
+class VoronoiSiteCollection(SiteCollection):
 
     def analyse_structure(self, atoms, structure):
         for a in atoms:

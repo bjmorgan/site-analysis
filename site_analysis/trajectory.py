@@ -7,7 +7,7 @@ from .voronoi_site_collection import VoronoiSiteCollection
 from .spherical_site import SphericalSite
 from .spherical_site_collection import SphericalSiteCollection
 
-class Analysis(object):
+class Trajectory(object):
     """Class for performing sites analysis on simulation trajectories."""
 
     site_collection_types = { PolyhedralSite: PolyhedralSiteCollection,
@@ -16,7 +16,7 @@ class Analysis(object):
 
     def __init__(self, sites, atoms):
         site_collection_class = None
-        for k, v in Analysis.site_collection_types.items():
+        for k, v in Trajectory.site_collection_types.items():
             if all( [ isinstance( s, k ) for s in sites ] ):
                 site_collection_class = v
         if not site_collection_class:

@@ -4,11 +4,26 @@ from scipy.spatial import Delaunay, ConvexHull
 from scipy.optimize import linprog
 
 class Site(object):
+    """Parent class for defining sites.
 
-    newid = itertools.count(1)
+    A Site is a bounded volume that can contain none, one, or more atoms.
+    This class defines the attributes and methods expected for specific
+    Site subclasses.
 
+    Attributes:
+        index (int): TODO
+  
+    """
+
+    _newid = 1
+    # Site._newid provides a counter that is incremented each time a new
+    # site is initialised. This allows each site to have a unique
+    # numerical index.
+    # Site._newid can be reset to 1 by calling Site.reset_index()
+    
     def __init__(self, label=None):
-        self.index = next(Site.newid)
+        self.index = Site._newid
+        Site._newid += 1
         self.label = label
         self.contains_atoms = []
         self.trajectory = []
@@ -46,5 +61,5 @@ class Site(object):
                                   'in the inherited class')
 
     @classmethod
-    def reset_index(cls):
-        cls.newid = itertools.count(1)
+    def reset_index(cls, newid=1):
+        Site._newid = newid

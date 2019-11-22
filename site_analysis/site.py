@@ -11,17 +11,34 @@ class Site(object):
     Site subclasses.
 
     Attributes:
-        index (int): TODO
+        index (int): Numerical ID, intended to be unique to each site.
+        label (`str`: optional): Optional string given as a label for this site.
+            Default is `None`.
+        contains_atoms (list): List of the atoms contained by this site in the
+            structure last processed.
+        trajectory (list): TODO: List of sites this atom has visited at each timestep?
+        points (list): List of fractional coordinates for atoms assigned as
+            occupying this site.
   
     """
 
     _newid = 1
-    # Site._newid provides a counter that is incremented each time a new
-    # site is initialised. This allows each site to have a unique
-    # numerical index.
+    # Site._newid provides a counter that is incremented each time a 
+    # new site is initialised. This allows each site to have a 
+    # unique numerical index.
     # Site._newid can be reset to 1 by calling Site.reset_index()
+    # with the default arguments.
     
     def __init__(self, label=None):
+        """Initialise a Site object.
+
+        Args:
+            label (`str`: optional): Optional string used to label this site.
+
+        Retuns:
+            None
+
+        """
         self.index = Site._newid
         Site._newid += 1
         self.label = label

@@ -1,7 +1,6 @@
 import itertools
 import numpy as np
 from scipy.spatial import Delaunay, ConvexHull
-from scipy.optimize import linprog
 
 class Site(object):
     """Parent class for defining sites.

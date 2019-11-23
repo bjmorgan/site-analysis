@@ -9,11 +9,15 @@ notifications:
 python:
   - "3.6"
   - "3.6-dev" # 3.6 development branch
-matrix:
-  include:
-    - python: 3.7
-      dist: xenial
-      sudo: true
+  - "3.7"
+  - "3.6-dev"
+  - "3.8"
+  - "3.8-dev"
+#matrix:
+#  include:
+#    - python: 3.7
+#      dist: xenial
+#      sudo: true
 os:
   - linux
 # command to install dependencies

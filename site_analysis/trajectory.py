@@ -99,3 +99,4 @@ class Trajectory(object):
 def update_occupation( site, atom ):
     site.contains_atoms.append( atom.index )
     atom.in_site = site.index
+

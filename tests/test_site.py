@@ -25,6 +25,14 @@ class SiteTestCase(unittest.TestCase):
         site2 = Site()
         self.assertEqual(site2.index, site1.index + 1)
 
+    def test_reset(self):
+        site = Site()
+        site.contains_atoms = ['foo']
+        site.trajectory = ['bar']
+        site.reset()
+        self.assertEqual(site.trajectory, [])
+        self.assertEqual(site.contains_atoms, [])
+
 if __name__ == '__main__':
     unittest.main()
     

@@ -47,6 +47,18 @@ class Site(object):
         self.points = []
 
     def reset(self):
+        """Reset the trajectory for this site.
+
+        Returns the contains_atoms and trajectory attributes
+        to empty lists.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        """
         self.contains_atoms = []
         self.trajectory = []
  

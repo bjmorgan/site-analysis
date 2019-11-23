@@ -76,6 +76,9 @@ class Site(object):
         Returns:
             (bool)
 
+        Note:
+            Specific Site subclasses may require additional arguments to be passed.
+
         """
         raise NotImplementedError('contains_point should be implemented '
                                   'in the inherited class')

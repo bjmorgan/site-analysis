@@ -60,6 +60,22 @@ class PolyhedralSiteCollection(SiteCollection):
     def neighbouring_sites(self, index):
         return self._neighbouring_sites[index] 
 
+    def sites_contain_points(self, points, structure):
+        """Checks whether the set of sites contain 
+        a corresponding set of fractional coordinates.
+
+        Args:
+            points (np.array): 3xN numpy array of fractional coordinates.
+                There should be one coordinate for each site being checked.
+            structure (Structure): Pymatgen Structure used to define the
+                vertex coordinates of each polyhedral site.
+        
+        Returns:
+            (bool)
+
+        """
+        check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
+        return check
 
     
  

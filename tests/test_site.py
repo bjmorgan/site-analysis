@@ -72,13 +72,44 @@ class SiteTestCase(unittest.TestCase):
                          'points': [np.array([0,0,0])],
                          'label': 'foo',
                          'transitions': Counter([3,3,2])}
-        self.assertEqual(site_dict['index'], expected_dict['index'])
-        self.assertEqual(site_dict['contains_atoms'], expected_dict['contains_atoms'])
-        self.assertEqual(site_dict['trajectory'], expected_dict['trajectory'])
-        np.testing.assert_array_equal(site_dict['points'], expected_dict['points'])
-        self.assertEqual(site_dict['label'], expected_dict['label'])
-        self.assertEqual(site_dict['transitions'], expected_dict['transitions'])
+        self.assertEqual(site.index, expected_dict['index'])
+        self.assertEqual(site.contains_atoms, expected_dict['contains_atoms'])
+        self.assertEqual(site.trajectory, expected_dict['trajectory'])
+        np.testing.assert_array_equal(site.points, expected_dict['points'])
+        self.assertEqual(site.label, expected_dict['label'])
+        self.assertEqual(site.transitions, expected_dict['transitions'])
 
+    def test_reset_index(self):
+        Site._newid = 7
+        site = Site()
+        self.assertEqual(site.index, 7)
+        Site.reset_index()
+        site = Site()
+        self.assertEqual(site.index, 1)
+        
+    def test_reset_index_to_defined_index(self):
+        Site._newid = 7
+        site = Site()
+        self.assertEqual(site.index, 7)
+        Site.reset_index(newid=12)
+        site = Site()
+        self.assertEqual(site.index, 12)
+   
+    def test_from_dict(self):
+        site_dict = {'index': 7,
+                     'contains_atoms': [3],
+                     'trajectory': [10,11,12],
+                     'points': [np.array([0,0,0])],
+                     'label': 'foo',
+                     'transitions': Counter([3,3,2])}
+        site = Site.from_dict(site_dict)
+        self.assertEqual(site.index, site_dict['index'])
+        self.assertEqual(site.contains_atoms, site_dict['contains_atoms'])
+        self.assertEqual(site.trajectory, site_dict['trajectory'])
+        np.testing.assert_array_equal(site.points, site_dict['points'])
+        self.assertEqual(site.label, site_dict['label'])
+        self.assertEqual(site.transitions, site_dict['transitions'])
+     
 if __name__ == '__main__':
     unittest.main()
     

@@ -113,7 +113,17 @@ class Site(object):
 
     @classmethod
     def from_dict(cls, d):
+        """Create a Site object from a dict representation.
+
+        Args:
+            d (dict): The dict representation of this Site.
+
+        Returns:
+            (Site)
+
+        """
         site = cls()
+        site.index = d['index']
         site.trajectory = d['trajectory']
         site.contains_atoms = d['contains_atoms']
         site.points = d['points']
@@ -122,9 +132,29 @@ class Site(object):
         return site 
 
     def centre(self):
+        """Returns the centre point of this site.
+
+        This method should be implemented in the inhereted subclass.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        """ 
         raise NotImplementedError('centre should be implemeneted '
                                   'in the inherited class')
 
     @classmethod
     def reset_index(cls, newid=1):
+        """Reset the site index counter.
+
+        Args:
+            newid (`int`: optional): New starting index. Default is 1.
+
+        Returns:
+            None
+
+        """ 
         Site._newid = newid

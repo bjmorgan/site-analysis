@@ -68,7 +68,7 @@ class Site(object):
     def contains_point(self, x):
         """Test whether the fractional coordinate x is contained by this site.
 
-        This method should be implemented in the inhereted subclass
+        This method should be implemented in the inherited subclass
 
         Args:
             x (np.array): Fractional coordinate.
@@ -134,7 +134,7 @@ class Site(object):
     def centre(self):
         """Returns the centre point of this site.
 
-        This method should be implemented in the inhereted subclass.
+        This method should be implemented in the inherited subclass.
 
         Args:
             None

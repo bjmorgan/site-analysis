@@ -142,49 +142,74 @@ class PolyhedralSite(Site):
         self._delaunay = None
 
     def get_vertex_species(self, structure):
-        return [ structure[i].species_string for i in self.vertex_indices ]
+        """Returns a list of species strings for the vertex atoms of this
+        polyhedral site.
 
-    def contains_point(self, x, structure=None):
+        Args:
+            structure (Structure): Pymatgen Structure used to assign species
+                to each vertex atom.
+
+        Returns:
+            (list(str)): List of species strings of the vertex atoms.
+
+        """
+        return [structure[i].species_string for i in self.vertex_indices]
+
+    def contains_point(self, x, structure=None, algo='simplex'):
+        """Test whether a specific point is enclosed by this polyhedral site.
+
+        Args:
+            x (np.array): Fractional coordinates of the point to test (length 3 numpy array).
+            structure (:obj:`Structure`, optional): Optional pymatgen Structure. If provided,
+                the vertex coordinates for this polyhedral site will be assigned using
+                this structure. Default is None.
+            algo (str): Select the algorithm for testing whether a point is contained
+                by the site:
+    
+                simplex: Use scipy.spatial.Delaunay.find_simplex to test if any of
+                         the simplices that make up this polyhedron contain the point.
+       
+                sn:      Compute the sign of the surface normal for each polyhedron 
+                         face with respect to the point, to test if the point lies
+                         "inside" every face.
+                
+        Returns:
+            (bool)
+
+        """
+        contains_point_algos = {'simplex': self.contains_point_simplex,
+                                'sn': self.contains_point_sn}
+        if algo not in contains_point_algos.keys():
+            raise ValueError(f'{algo} is not a valid algorithm keyword for contains_point()')
         if structure:
             self.assign_vertex_coords(structure)
         if self.vertex_coords is None:
             raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
-        return np.any( self.delaunay.find_simplex(x_pbc(x)) >= 0 )
-    
-    def contains_point_new(self, x):
-        if self.vertex_coords is None:
-            raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
-        for p in x_pbc(x):
-            if np.any( self.contains_point_alt(p)):
-                return True
-        return False
- 
-    def contains_point_alt(self, x):
-        """Alternative algorithm for calculating whether a point sits
-        inside a convex hull.
-
-        This algorithm is a potential target for future optimisation
+        return contains_point_algos[algo](x_pbc(x))
    
-        """
+    def contains_point_simplex(self, x):
+        return np.any(self.delaunay.find_simplex(x) >= 0)
+ 
+    def contains_point_sn(self, x_list):
         hull = ConvexHull(self.vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre()
         dotsum = 0
-        for f in faces:
-            surface_normal = np.cross(f[0]-f[2], f[1]-f[2])
-            c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
-            p_sign = np.sign(np.dot( surface_normal, x-f[0]))
-            dotsum += c_sign * p_sign
-        return dotsum == len(faces)
+        for x in x_list:
+            for f in faces:
+                surface_normal = np.cross(f[0]-f[2], f[1]-f[2])
+                c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
+                p_sign.append(np.sign(np.dot( surface_normal, x-f[0])))
+                dotsum += c_sign * p_sign
+            if dotsum != len(faces):
+                return False
+        return True
 
-    def contains_atom(self, atom):
-        return self.contains_point(atom.frac_coords)
-
-    def contains_atom_accurate(self, atom):
-        return self.contains_point_accurate(atom.frac_coords)
-
-    def contains_atom_new(self, atom):
-        return self.contains_point_new(atom.frac_coords)
+    def contains_atom(self, atom, algo='simplex'):
+        contains_point_algos = ['simplex', 'sn']
+        if algo not in contains_point_algos:
+            raise ValueError(f'{algo} is not a valid algorithm keyword for contains_atom()')
+        return self.contains_point(atom.frac_coords, algo=algo)
 
     def as_dict(self):
         d = super(PolyhedralSite, self).as_dict()

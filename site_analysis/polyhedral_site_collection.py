@@ -1,38 +1,25 @@
 from .site_collection import SiteCollection
 
 class PolyhedralSiteCollection(SiteCollection):
+    """A collection of PolyhedralSite objects.
+
+    Attributes:
+        sites (list): List of ``Site``-like objects.
+
+    """
 
     def __init__(self, sites):
-        super(PolyhedralSiteCollection, self).__init__(sites)
-        self._neighbouring_sites = self.construct_neighbouring_sites()
-
-    def construct_neighbouring_sites(self):
-        """
-        Find all polyhedral sites that are face-sharing neighbours.
-
-        Any polyhedral sites that share 3 or more vertices are considered
-        to share a face.
+        """Create a PolyhedralSiteCollection instance.
 
         Args:
-            None
+            sites (list(PolyhedralSite)): List of PolyhedralSite objects.
 
         Returns:
-            (dict): Dictionary of `int`: `list` entries. 
-                Keys are site indices. Values are lists of PolyhedralSite objects.
+            None
 
         """
-        neighbours = {}
-        for site_i in self.sites:
-            neighbours[site_i.index] = []
-            for site_j in self.sites:
-                if site_i is site_j:
-                    continue
-                # count the number of shared vertices.
-                n_shared_vertices = len( set(site_i.vertex_indices) & set(site_j.vertex_indices) ) 
-                # if this is >= 3 these sites share a face.
-                if n_shared_vertices >= 3:
-                    neighbours[site_i.index].append(site_j)
-        return neighbours
+        super(PolyhedralSiteCollection, self).__init__(sites)
+        self._neighbouring_sites = construct_neighbouring_sites(self.sites)
 
     def analyse_structure(self, atoms, structure):
         for a in atoms:
@@ -78,4 +65,30 @@ class PolyhedralSiteCollection(SiteCollection):
         return check
 
     
+def construct_neighbouring_sites(sites):
+    """
+    Find all polyhedral sites that are face-sharing neighbours.
+
+    Any polyhedral sites that share 3 or more vertices are considered
+    to share a face.
+
+    Args:
+        None
+
+    Returns:
+        (dict): Dictionary of `int`: `list` entries. 
+            Keys are site indices. Values are lists of ``PolyhedralSite`` objects.
+
+    """
+    neighbours = {}
+    for site_i in sites:
+        neighbours[site_i.index] = []
+        for site_j in sites:
+            if site_i is site_j:
+                continue
+            # 3 or more common vertices indicated a shared face.
+            n_shared_vertices = len(set(site_i.vertex_indices) & set(site_j.vertex_indices))
+            if n_shared_vertices >= 3:
+                neighbours[site_i.index].append(site_j)
+    return neighbours
  

@@ -1,5 +1,6 @@
 import unittest
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.atom import Atom
 from site_analysis.site import Site
 from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
@@ -287,6 +288,43 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                                        [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
+    def test_contains_atom_raises_value_error_if_algo_is_invalid(self):
+        atom = Mock(spec=Atom)
+        site = self.site
+        with self.assertRaises(ValueError):
+            site.contains_atom(atom, algo='foo')
+
+    def test_contains_atom_calls_contains_point_if_algo_is_simplex(self):
+        atom = Mock(spec=Atom)
+        atom.frac_coords = np.array([0.3, 0.4, 0.5])
+        site = self.site
+        site.contains_point = Mock(return_value='foo')
+        return_value = site.contains_atom(atom, algo='simplex')
+        self.assertEqual(return_value, 'foo')
+        call = site.contains_point.call_args
+        np.testing.assert_array_equal(call[0][0], atom.frac_coords)
+        self.assertEqual(call[1], {'algo': 'simplex'})
+
+    def test_contains_atom_calls_contains_point_if_algo_is_sn(self):
+        atom = Mock(spec=Atom)
+        atom.frac_coords = np.array([0.3, 0.4, 0.5])
+        site = self.site
+        site.contains_point = Mock(return_value='foo')
+        return_value = site.contains_atom(atom, algo='sn')
+        self.assertEqual(return_value, 'foo')
+        call = site.contains_point.call_args
+        np.testing.assert_array_equal(call[0][0], atom.frac_coords)
+        self.assertEqual(call[1], {'algo': 'sn'})
+
+    def test_centre(self):
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        expected_centre = np.array([0.5, 0.5, 0.5])
+        np.testing.assert_array_equal(site.centre(),expected_centre)
+  
 def example_structure(species=None):
     if not species:
         species = ['S']*5

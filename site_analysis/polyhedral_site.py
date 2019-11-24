@@ -28,6 +28,7 @@ class PolyhedralSite(Site):
         label (:obj:`str`, optional): Optional label for the site.
    
     """ 
+
     def __init__(self, vertex_species, vertex_indices, label=None):
         """Create a PolyhedralSite instance.
 
@@ -234,6 +235,17 @@ class PolyhedralSite(Site):
         return any(inside)
 
     def contains_atom(self, atom, algo='simplex'):
+        """Test whether an atom is inside this polyhedron.
+
+        Args:
+            atom (Atom): The atom to test.
+            algo (:obj:`str`, optional): Select the algorithm to us. Options are
+                'simplex' and 'sn'. See the documentation for the contains_point()
+                method for more details. Default is 'simplex'.
+
+        Returns:
+            (bool)
+        """
         contains_point_algos = ['simplex', 'sn']
         if algo not in contains_point_algos:
             raise ValueError(f'{algo} is not a valid algorithm keyword for contains_atom()')
@@ -256,5 +268,15 @@ class PolyhedralSite(Site):
         return polyhedral_site 
 
     def centre(self):
+        """Returns the fractional coordinates of the centre point of
+        this polyhedral site.
+
+        Args:
+            None
+
+        Returns:
+            (np.array): (3,) numpy array.
+ 
+        """
         return np.mean(self.vertex_coords, axis=0)
 

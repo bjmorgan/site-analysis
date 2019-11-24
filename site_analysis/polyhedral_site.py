@@ -1,7 +1,6 @@
 import itertools
-import numpy as np
+import numpy as np 
 from scipy.spatial import Delaunay, ConvexHull
-from scipy.optimize import linprog
 from .site import Site
 from .tools import x_pbc, species_string_from_site
 
@@ -188,22 +187,51 @@ class PolyhedralSite(Site):
         return contains_point_algos[algo](x_pbc(x))
    
     def contains_point_simplex(self, x):
+        """Test whether one or more points are inside this site, by checking 
+        whether these points are contained inside the simplices of the Delaunay 
+        tesselation defined by the vertex coordinates.
+
+        Args:
+            x (np.array): Fractional coordinates for one or more points, as a
+                (3x1) or (3xN) numpy array.
+
+        Returns:
+            (bool)
+
+        """
         return np.any(self.delaunay.find_simplex(x) >= 0)
  
     def contains_point_sn(self, x_list):
+        """Test whether one or more points are inside this site, by calculating 
+        the sign of the surface normal for each face with respect to each point.
+
+        Args:
+            x (np.array): Fractional coordinates for one or more points, as a
+                (3x1) or (3xN) numpy array.
+
+        Returns:
+            (bool)
+
+        Note:
+            This method could be made more efficient by caching the 
+            surface_normal vectors and in-face vectors.
+
+            This is also a possible target for optimisation with f2py etc.
+
+        """
         hull = ConvexHull(self.vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre()
-        dotsum = 0
+        inside = []
         for x in x_list:
+            dotsum = 0
             for f in faces:
                 surface_normal = np.cross(f[0]-f[2], f[1]-f[2])
                 c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
-                p_sign.append(np.sign(np.dot( surface_normal, x-f[0])))
+                p_sign = np.sign(np.dot( surface_normal, x-f[0]))
                 dotsum += c_sign * p_sign
-            if dotsum != len(faces):
-                return False
-        return True
+                inside.append(dotsum == len(faces))
+        return any(inside)
 
     def contains_atom(self, atom, algo='simplex'):
         contains_point_algos = ['simplex', 'sn']
@@ -229,13 +257,4 @@ class PolyhedralSite(Site):
 
     def centre(self):
         return np.mean(self.vertex_coords, axis=0)
-
-def in_hull(points, x):
-    n_points = len(points)
-    n_dim = len(x)
-    c = np.zeros(n_points)
-    A = np.r_[points.T,np.ones((1,n_points))]
-    b = np.r_[x, np.ones(1)]
-    lp = linprog(c, A_eq=A, b_eq=b)
-    return lp.success
 

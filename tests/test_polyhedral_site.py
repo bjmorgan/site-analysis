@@ -4,7 +4,7 @@ from site_analysis.site import Site
 from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from collections import Counter
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull
 from pymatgen import Structure, Lattice
 
 class PolyhedralSiteTestCase(unittest.TestCase):
@@ -231,6 +231,60 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             mock_delaunay.return_value = Delaunay(points)
             in_site = site.contains_point_simplex(np.array([[0.1, 0.1, 0.1],
                                                             [0.5, 0.5, 0.5]]))
+            self.assertTrue(in_site)
+
+    def test_contains_point_sn_returns_true_if_point_inside_polyhedron(self):
+        site = self.site
+        points = np.array([[0.4, 0.4, 0.4],
+                           [0.4, 0.6, 0.6],
+                           [0.6, 0.6, 0.4],
+                           [0.6, 0.4, 0.6]]) 
+        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.ConvexHull', 
+                   autospec=True) as mock_ConvexHull:
+            mock_ConvexHull.return_value = ConvexHull(points)
+            in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
+            self.assertTrue(in_site)
+
+    def test_contains_point_sn_returns_false_if_point_outside_polyhedron(self):
+        site = self.site
+        points = np.array([[0.4, 0.4, 0.4],
+                           [0.4, 0.6, 0.6],
+                           [0.6, 0.6, 0.4],
+                           [0.6, 0.4, 0.6]]) 
+        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.ConvexHull',
+                   autospec=True) as mock_ConvexHull:
+            mock_ConvexHull.return_value = ConvexHull(points)
+            in_site = site.contains_point_sn(np.array([0.1, 0.1, 0.1]))
+            self.assertFalse(in_site)
+
+    def test_contains_point_sn_returns_false_if_all_points_outside_polyhedron(self):
+        site = self.site
+        points = np.array([[0.4, 0.4, 0.4],
+                           [0.4, 0.6, 0.6],
+                           [0.6, 0.6, 0.4],
+                           [0.6, 0.4, 0.6]]) 
+        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.ConvexHull',
+                   autospec=True) as mock_ConvexHull:
+            mock_ConvexHull.return_value = ConvexHull(points)
+            in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
+                                                       [0.8, 0.8, 0.9]]))
+            self.assertFalse(in_site)
+
+    def test_contains_point_sn_returns_true_if_one_point_inside_polyhedron(self):
+        site = self.site
+        points = np.array([[0.4, 0.4, 0.4],
+                           [0.4, 0.6, 0.6],
+                           [0.6, 0.6, 0.4],
+                           [0.6, 0.4, 0.6]]) 
+        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.ConvexHull',
+                   autospec=True) as mock_ConvexHull:
+            mock_ConvexHull.return_value = ConvexHull(points)
+            in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
+                                                       [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
 def example_structure(species=None):

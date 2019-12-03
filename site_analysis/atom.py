@@ -20,13 +20,11 @@ class Atom(object):
     
     newid = itertools.count(1)
     
-    def __init__(self, species_string, fixed_structure_index=True):
+    def __init__(self, species_string):
         """Initialise an Atom object.
 
         Args:
             species_string (str): String for this atom species, e.g. 'Li'.
-            fixed_structure_index (:obj:bool, optional): Set whether this atom will have the same
-                index in all structures to be parsed. Default is True.
            
         Returns:
             None
@@ -37,7 +35,6 @@ class Atom(object):
         self.in_site = None
         self._frac_coords = None
         self.trajectory = []
-        self.fixed_structure_index = fixed_structure_index
         self.structure_index = None
 
     def reset(self):
@@ -55,9 +52,6 @@ class Atom(object):
 
     def get_coords(self, structure):
         """TODO"""
-        if not self.fixed_structure_index or not self.structure_index:
-            self.structure_index = [ i for i, s in enumerate(structure)
-                if species_string_from_site(s) is self.species_string ][self.index-1]
         self._frac_coords = structure[self.structure_index].frac_coords
         
     @property

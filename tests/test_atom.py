@@ -37,6 +37,30 @@ class AtomTestCase(unittest.TestCase):
         atom.assign_coords(structure=structure)
         np.testing.assert_array_equal(atom._frac_coords, structure[1].frac_coords )
    
+    def test_frac_coords_getter_raises_atttribute_error_if_frac_coords_is_none(self):
+        atom = Atom(index=1)
+        atom._frac_coords = None
+        with self.assertRaises(AttributeError):
+            atom.frac_coords
+
+    def test_frac_coords_getter(self):
+        atom = Atom(index=12)
+        c = np.array([0.3, 0.4, 0.5])
+        atom._frac_coords = c
+        np.testing.assert_array_equal(atom.frac_coords, c)
+
+    def test_as_dict(self):
+        index = 11
+        in_site = 4
+        c = np.array([0.1, 0.2, 0.3])
+        atom = Atom(index=index)
+        atom.in_site = in_site
+        atom._frac_coords = c
+        d = atom.as_dict()
+        self.assertEqual(d['index'], index)
+        self.assertEqual(d['in_site'], in_site)
+        np.testing.assert_array_equal(d['frac_coords'], c)
+ 
 def example_structure(species=None):
     if not species:
         species = ['S']*5

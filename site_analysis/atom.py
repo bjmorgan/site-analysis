@@ -81,6 +81,13 @@ class Atom(object):
         
     @property
     def frac_coords(self):
+        """Getter for the fractional coordinates of this atom.
+
+        Raises:
+            AttributeError: if the fractional coordinates for this atom have
+                not been set.
+
+        """
         if self._frac_coords is None:
             raise AttributeError('Coordinates not set for atom {}'.format(self.index))
         else:

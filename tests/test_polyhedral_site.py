@@ -12,18 +12,13 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def setUp(self):
         Site._newid = 1
-        vertex_species = 'S'
         vertex_indices = [0, 1, 3, 4]
-        self.site = PolyhedralSite(vertex_species=vertex_species,
-                                   vertex_indices=vertex_indices)
+        self.site = PolyhedralSite(vertex_indices=vertex_indices)
         Site._newid = 1
 
     def test_polyhedral_site_is_initialised(self):
-        vertex_species = ['S', 'I']
         vertex_indices = [1, 2, 3, 4]
-        site = PolyhedralSite(vertex_species=vertex_species,
-                              vertex_indices=vertex_indices)
-        self.assertEqual(site.vertex_species, vertex_species)
+        site = PolyhedralSite(vertex_indices=vertex_indices)
         self.assertEqual(site.vertex_indices, vertex_indices)
         self.assertEqual(site.vertex_coords, None)
         self.assertEqual(site._delaunay, None)
@@ -34,18 +29,9 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertEqual(site.points, [])
         self.assertEqual(site.transitions, Counter())
 
-    def test_polyhedral_site_is_initialised_with_a_single_vertex_species(self):
-        vertex_species = 'S'
-        vertex_indices = [1, 2, 3, 4]
-        site = PolyhedralSite(vertex_species=vertex_species,
-                              vertex_indices=vertex_indices)
-        self.assertEqual(site.vertex_species, [vertex_species])
-        
     def test_polyhedral_site_is_initialised_with_a_label(self):
-        vertex_species = 'S'
         vertex_indices = [1, 2, 3, 4]
-        site = PolyhedralSite(vertex_species=vertex_species,
-                              vertex_indices=vertex_indices,
+        site = PolyhedralSite(vertex_indices=vertex_indices,
                               label='foo')
         self.assertEqual(site.label, 'foo')
 

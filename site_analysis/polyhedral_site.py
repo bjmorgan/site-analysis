@@ -21,20 +21,16 @@ class PolyhedralSite(Site):
             site to other sites. Format is {index: count} with ``index`` giving
             the index of each destination site, and ``count`` giving the number 
             of observed transitions to this site.
-        vertex_species (list(str)): List of species that define the vertices,
-            e.g. ``['S', 'I']``.
         vertex_indices (list(int)): List of integer indices for the vertex atoms
             (counting from 0). 
         label (:obj:`str`, optional): Optional label for the site.
    
     """ 
 
-    def __init__(self, vertex_species, vertex_indices, label=None):
+    def __init__(self, vertex_indices, label=None):
         """Create a PolyhedralSite instance.
 
         Args:
-            vertex_species (str or list(str)): String identifying the vertex species, e.g. ``'S'``,
-                or a list of strings, e.g, ``['S', 'I']``..
             vertex_indices (list(int)): List of integer indices for the vertex atoms (counting from 0).
             label (:obj:`str`, optional): Optional label for this site.
 
@@ -43,13 +39,18 @@ class PolyhedralSite(Site):
 
         """
         super(PolyhedralSite, self).__init__(label=label)
-        if isinstance(vertex_species, str):
-            vertex_species = [ vertex_species ]
-        self.vertex_species = vertex_species
         self.vertex_indices = vertex_indices
         self.vertex_coords = None
         self._delaunay = None
 
+    def __repr__(self):
+        string = ('site_analysis.PolyhedralSite('
+                  f'index={self.index}, '
+                  f'label={self.label}, '
+                  f'vertex_indices={self.vertex_indices}, '
+                  f'contains_atoms={self.contains_atoms})')
+        return string
+                  
     def reset(self):
         """Reset the trajectory for this site.
 
@@ -253,15 +254,13 @@ class PolyhedralSite(Site):
 
     def as_dict(self):
         d = super(PolyhedralSite, self).as_dict()
-        d['vertex_species'] = self.vertex_species
         d['vertex_indices'] = self.vertex_indices
         d['vertex_coords'] = self.vertex_coords
         return d
 
     @classmethod
     def from_dict(cls, d):
-        polyhedral_site = cls( vertex_species=d['vertex_species'],
-                          vertex_indices=d['vertex_indices'] )
+        polyhedral_site = cls(vertex_indices=d['vertex_indices'])
         polyhedral_site.vertex_coords = d['vertex_coords']
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')
@@ -280,3 +279,7 @@ class PolyhedralSite(Site):
         """
         return np.mean(self.vertex_coords, axis=0)
 
+    @classmethod
+    def sites_from_vertex_indices(cls, vertex_indices):
+        sites = [cls(vertex_indices=vi) for vi in vertex_indices]
+        return sites

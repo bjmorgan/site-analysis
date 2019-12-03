@@ -66,7 +66,17 @@ class Atom(object):
         self.trajectory = []
 
     def assign_coords(self, structure):
-        """TODO"""
+        """Assign fractional coordinates to this atom from a 
+        pymatgen Structure.
+
+        Args:
+            structure (pymatgen.Structure): The Structure to use for this atom's
+                fractional coordinates.
+
+        Returns:
+            None
+
+        """
         self._frac_coords = structure[self.index].frac_coords
         
     @property
@@ -107,3 +117,9 @@ class Atom(object):
             contents = f.read()
         return cls.from_str(contents)
 
+def atoms_from_species_string(structure, species_string):
+    atoms = [Atom(index=i) for i, s in enumerate(structure) if s.species_string == species_string]
+    return atoms
+
+def atoms_from_indices(indices):
+    return [Atom(index=i) for i in indices]

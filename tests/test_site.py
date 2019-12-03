@@ -8,11 +8,11 @@ from collections import Counter
 class SiteTestCase(unittest.TestCase):
 
     def setUp(self):
-        Site._newid = 1
+        Site._newid = 0
 
     def test_site_is_initialised(self):
         site = Site()
-        self.assertEqual(site.index, 1)
+        self.assertEqual(site.index, 0)
         self.assertEqual(site.label, None)
         self.assertEqual(site.contains_atoms, [])
         self.assertEqual(site.trajectory, [])
@@ -85,7 +85,7 @@ class SiteTestCase(unittest.TestCase):
         self.assertEqual(site.index, 7)
         Site.reset_index()
         site = Site()
-        self.assertEqual(site.index, 1)
+        self.assertEqual(site.index, 0)
         
     def test_reset_index_to_defined_index(self):
         Site._newid = 7

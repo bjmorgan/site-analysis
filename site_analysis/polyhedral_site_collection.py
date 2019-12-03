@@ -23,9 +23,9 @@ class PolyhedralSiteCollection(SiteCollection):
 
     def analyse_structure(self, atoms, structure):
         for a in atoms:
-            a.get_coords(structure)
+            a.assign_coords(structure)
         for s in self.sites:
-            s.get_vertex_coords(structure)
+            s.assign_vertex_coords(structure)
         self.assign_site_occupations(atoms, structure)
 
     def assign_site_occupations(self, atoms, structure):
@@ -64,7 +64,6 @@ class PolyhedralSiteCollection(SiteCollection):
         check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
         return check
 
-    
 def construct_neighbouring_sites(sites):
     """
     Find all polyhedral sites that are face-sharing neighbours.

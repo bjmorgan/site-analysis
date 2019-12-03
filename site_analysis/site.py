@@ -23,11 +23,11 @@ class Site(object):
  
     """
 
-    _newid = 1
+    _newid = 0
     # Site._newid provides a counter that is incremented each time a 
     # new site is initialised. This allows each site to have a 
     # unique numerical index.
-    # Site._newid can be reset to 1 by calling Site.reset_index()
+    # Site._newid can be reset to 0 by calling Site.reset_index()
     # with the default arguments.
     
     def __init__(self, label=None):
@@ -150,7 +150,7 @@ class Site(object):
                                   'in the inherited class')
 
     @classmethod
-    def reset_index(cls, newid=1):
+    def reset_index(cls, newid=0):
         """Reset the site index counter.
 
         Args:

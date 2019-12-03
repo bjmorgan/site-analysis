@@ -5,7 +5,7 @@ class VoronoiSiteCollection(SiteCollection):
 
     def analyse_structure(self, atoms, structure):
         for a in atoms:
-            a.get_coords(structure)
+            a.assign_coords(structure)
         self.assign_site_occupations(atoms, structure)
 
     def assign_site_occupations(self, atoms, structure):

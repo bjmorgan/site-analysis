@@ -2,13 +2,11 @@ import itertools
 import json
 from monty.io import zopen
 import numpy as np
-from .tools import species_string_from_site
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
 
     Attributes:
-        species_string (str): String for this atom speceis, e.g. 'Li'.
         index (int): Unique numeric index identifying this atom.
         in_site (int): Site index for the site this atom
             currently occupies.
@@ -18,25 +16,42 @@ class Atom(object):
 
     """
     
-    newid = itertools.count(1)
-    
-    def __init__(self, species_string):
+    def __init__(self, index, species_string=None):
         """Initialise an Atom object.
 
         Args:
-            species_string (str): String for this atom species, e.g. 'Li'.
-           
+            index (int): Numerical index for this atom. Used to identify this atom
+                in analysed structures.
+
         Returns:
             None
 
         """
-        self.species_string = species_string
-        self.index = next(Atom.newid)
+        self.index = index
         self.in_site = None
         self._frac_coords = None
         self.trajectory = []
-        self.structure_index = None
 
+    def __str__(self):
+        """Return a string representation of this atom.
+
+        Args:
+            None
+
+        Returns:
+            (str)
+
+        """
+        string = f'Atom: {self.index}'
+        return string
+
+    def __repr__(self):
+        string = ('site_analysis.Atom('
+                  f'index={self.index}, '
+                  f'in_site={self.in_site}, '
+                  f'frac_coords={self._frac_coords})')
+        return string
+        
     def reset(self):
         """Reset the state of this Atom.
 
@@ -50,9 +65,9 @@ class Atom(object):
         self._frac_coords = None
         self.trajectory = []
 
-    def get_coords(self, structure):
+    def assign_coords(self, structure):
         """TODO"""
-        self._frac_coords = structure[self.structure_index].frac_coords
+        self._frac_coords = structure[self.index].frac_coords
         
     @property
     def frac_coords(self):
@@ -62,16 +77,14 @@ class Atom(object):
             return self._frac_coords
 
     def as_dict(self):
-        d = {'species_string': self.species_string,
-             'index': self.index,
+        d = {'index': self.index,
              'in_site': self.in_site,
              'frac_coords': self._frac_coords.tolist()}
         return d
 
     @classmethod
     def from_dict(cls, d):
-        atom = cls(species_string=d['species_string'])
-        atom.index = d['index']
+        atom = cls(index=d['index'])
         atom.in_site = d['in_site']
         atom._frac_coords = np.array(d['frac_coords'])
         return atom
@@ -94,6 +107,3 @@ class Atom(object):
             contents = f.read()
         return cls.from_str(contents)
 
-    @classmethod
-    def reset_index(cls):
-        cls.newid = itertools.count(1)

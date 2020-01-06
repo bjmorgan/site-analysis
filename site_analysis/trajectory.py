@@ -95,7 +95,11 @@ class Trajectory(object):
                 generator = tqdm( generator, total=len(structures), unit=' steps' )
         for timestep, s in generator:
             self.append_timestep( s, t=timestep )
-    
+   
+    def __len__(self):
+        """Returns the "length" of a trajectory, i.e. the number of analysed timesteps."""
+        return len(self.timesteps)
+ 
 def update_occupation( site, atom ):
     site.contains_atoms.append( atom.index )
     atom.in_site = site.index

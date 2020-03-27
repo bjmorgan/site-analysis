@@ -9,7 +9,8 @@ class ToolsTestCase(unittest.TestCase):
 
     def test_get_vertex_indices(self):
         # Create a 2x2x2 NaCl supercell
-        lattice = Lattice.from_lengths_and_angles(abc=[5.0,5.0,5.0], ang=[90,90,90])
+        lattice = Lattice.from_parameters(a=5.0, b=5.0, c=5.0, 
+                      alpha=90, beta=90, gamma=90)
         structure = Structure.from_spacegroup(sg='Fm-3m', lattice=lattice, 
                                               species=['Na','Cl'],
                                               coords=[[0.0, 0.0, 0.0],

@@ -280,6 +280,6 @@ class PolyhedralSite(Site):
         return np.mean(self.vertex_coords, axis=0)
 
     @classmethod
-    def sites_from_vertex_indices(cls, vertex_indices):
-        sites = [cls(vertex_indices=vi) for vi in vertex_indices]
+    def sites_from_vertex_indices(cls, vertex_indices, label=None):
+        sites = [cls(vertex_indices=vi, label=label) for vi in vertex_indices]
         return sites

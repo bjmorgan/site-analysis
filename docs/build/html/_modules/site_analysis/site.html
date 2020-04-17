@@ -1,0 +1,356 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>site_analysis.site &mdash; site-analysis  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> site-analysis
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">site-analysis</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>site_analysis.site</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for site_analysis.site</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">Counter</span>
+
+<div class="viewcode-block" id="Site"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site">[docs]</a><span class="k">class</span> <span class="nc">Site</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Parent class for defining sites.</span>
+
+<span class="sd">    A Site is a bounded volume that can contain none, one, or more atoms.</span>
+<span class="sd">    This class defines the attributes and methods expected for specific</span>
+<span class="sd">    Site subclasses.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        index (int): Numerical ID, intended to be unique to each site.</span>
+<span class="sd">        label (`str`: optional): Optional string given as a label for this site.</span>
+<span class="sd">            Default is `None`.</span>
+<span class="sd">        contains_atoms (list): List of the atoms contained by this site in the</span>
+<span class="sd">            structure last processed.</span>
+<span class="sd">        trajectory (list): List of sites this atom has visited at each timestep?</span>
+<span class="sd">        points (list): List of fractional coordinates for atoms assigned as</span>
+<span class="sd">            occupying this site.</span>
+<span class="sd">        transitions (collections.Counter): Stores observed transitions from this</span>
+<span class="sd">            site to other sites. Format is {index: count} with ``index`` giving</span>
+<span class="sd">            the index of each destination site, and ``count`` giving the number </span>
+<span class="sd">            of observed transitions to this site.</span>
+<span class="sd"> </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_newid</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># Site._newid provides a counter that is incremented each time a </span>
+    <span class="c1"># new site is initialised. This allows each site to have a </span>
+    <span class="c1"># unique numerical index.</span>
+    <span class="c1"># Site._newid can be reset to 0 by calling Site.reset_index()</span>
+    <span class="c1"># with the default arguments.</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialise a Site object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            label (`str`: optional): Optional string used to label this site.</span>
+
+<span class="sd">        Retuns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">Site</span><span class="o">.</span><span class="n">_newid</span>
+        <span class="n">Site</span><span class="o">.</span><span class="n">_newid</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="n">label</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contains_atoms</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">points</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transitions</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Site.reset"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reset the trajectory for this site.</span>
+
+<span class="sd">        Returns the contains_atoms and trajectory attributes</span>
+<span class="sd">        to empty lists.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contains_atoms</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transitions</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span></div>
+ 
+<div class="viewcode-block" id="Site.contains_point"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.contains_point">[docs]</a>    <span class="k">def</span> <span class="nf">contains_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Test whether the fractional coordinate x is contained by this site.</span>
+
+<span class="sd">        This method should be implemented in the inherited subclass</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (np.array): Fractional coordinate.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (bool)</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            Specific Site subclasses may require additional arguments to be passed.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;contains_point should be implemented &#39;</span>
+                                  <span class="s1">&#39;in the inherited class&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Site.contains_atom"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.contains_atom">[docs]</a>    <span class="k">def</span> <span class="nf">contains_atom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Test whether this site contains a specific atom.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            atom (Atom): The atom to test.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (bool)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">contains_point</span><span class="p">(</span><span class="n">atom</span><span class="o">.</span><span class="n">frac_coords</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Site.as_dict"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.as_dict">[docs]</a>    <span class="k">def</span> <span class="nf">as_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Json-serializable dict representation of this Site.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (dict)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;index&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+             <span class="s1">&#39;contains_atoms&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">contains_atoms</span><span class="p">,</span>
+             <span class="s1">&#39;trajectory&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">,</span>
+             <span class="s1">&#39;points&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">points</span><span class="p">,</span>
+             <span class="s1">&#39;transitions&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">transitions</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">label</span><span class="p">:</span>
+            <span class="n">d</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label</span>
+        <span class="k">return</span> <span class="n">d</span></div>
+
+<div class="viewcode-block" id="Site.from_dict"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.from_dict">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create a Site object from a dict representation.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            d (dict): The dict representation of this Site.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (Site)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">site</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;index&#39;</span><span class="p">]</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;trajectory&#39;</span><span class="p">]</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">contains_atoms</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;contains_atoms&#39;</span><span class="p">]</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">points</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">]</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">transitions</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s1">&#39;transitions&#39;</span><span class="p">]</span>
+        <span class="n">site</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">site</span> </div>
+
+<div class="viewcode-block" id="Site.centre"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.centre">[docs]</a>    <span class="k">def</span> <span class="nf">centre</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns the centre point of this site.</span>
+
+<span class="sd">        This method should be implemented in the inherited subclass.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        &quot;&quot;&quot;</span> 
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;centre should be implemeneted &#39;</span>
+                                  <span class="s1">&#39;in the inherited class&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Site.reset_index"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.site.Site.reset_index">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">reset_index</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">newid</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reset the site index counter.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            newid (`int`: optional): New starting index. Default is 1.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        &quot;&quot;&quot;</span> 
+        <span class="n">Site</span><span class="o">.</span><span class="n">_newid</span> <span class="o">=</span> <span class="n">newid</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Benjamin J. Morgan
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../_static/language_data.js"></script>
+    
+
+  
+
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

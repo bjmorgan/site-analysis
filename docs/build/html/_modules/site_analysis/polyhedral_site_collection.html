@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>site_analysis.polyhedral_site_collection &mdash; site-analysis  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> site-analysis
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">site-analysis</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>site_analysis.polyhedral_site_collection</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for site_analysis.polyhedral_site_collection</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">.site_collection</span> <span class="k">import</span> <span class="n">SiteCollection</span>
+
+<div class="viewcode-block" id="PolyhedralSiteCollection"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.PolyhedralSiteCollection">[docs]</a><span class="k">class</span> <span class="nc">PolyhedralSiteCollection</span><span class="p">(</span><span class="n">SiteCollection</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A collection of PolyhedralSite objects.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        sites (list): List of ``Site``-like objects.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sites</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create a PolyhedralSiteCollection instance.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            sites (list(PolyhedralSite)): List of PolyhedralSite objects.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">PolyhedralSiteCollection</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">sites</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_neighbouring_sites</span> <span class="o">=</span> <span class="n">construct_neighbouring_sites</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">)</span>
+
+<div class="viewcode-block" id="PolyhedralSiteCollection.analyse_structure"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.PolyhedralSiteCollection.analyse_structure">[docs]</a>    <span class="k">def</span> <span class="nf">analyse_structure</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atoms</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">atoms</span><span class="p">:</span>
+            <span class="n">a</span><span class="o">.</span><span class="n">assign_coords</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">:</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">assign_vertex_coords</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assign_site_occupations</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">structure</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="PolyhedralSiteCollection.assign_site_occupations"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.PolyhedralSiteCollection.assign_site_occupations">[docs]</a>    <span class="k">def</span> <span class="nf">assign_site_occupations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atoms</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_site_occupations</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">atom</span> <span class="ow">in</span> <span class="n">atoms</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">atom</span><span class="o">.</span><span class="n">in_site</span><span class="p">:</span>
+                <span class="c1"># first check the site last occupied</span>
+                <span class="n">previous_site</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sites</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">index</span> <span class="o">==</span> <span class="n">atom</span><span class="o">.</span><span class="n">in_site</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">previous_site</span><span class="o">.</span><span class="n">contains_atom</span><span class="p">(</span><span class="n">atom</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_occupation</span><span class="p">(</span> <span class="n">previous_site</span><span class="p">,</span> <span class="n">atom</span> <span class="p">)</span>
+                    <span class="k">continue</span> <span class="c1"># atom has not moved</span>
+                <span class="k">else</span><span class="p">:</span> <span class="c1"># default is atom does not occupy any sites</span>
+                    <span class="n">atom</span><span class="o">.</span><span class="n">in_site</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">contains_atom</span><span class="p">(</span><span class="n">atom</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_occupation</span><span class="p">(</span> <span class="n">s</span><span class="p">,</span> <span class="n">atom</span> <span class="p">)</span>
+                    <span class="k">break</span></div>
+
+<div class="viewcode-block" id="PolyhedralSiteCollection.neighbouring_sites"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.PolyhedralSiteCollection.neighbouring_sites">[docs]</a>    <span class="k">def</span> <span class="nf">neighbouring_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_neighbouring_sites</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> </div>
+
+<div class="viewcode-block" id="PolyhedralSiteCollection.sites_contain_points"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.PolyhedralSiteCollection.sites_contain_points">[docs]</a>    <span class="k">def</span> <span class="nf">sites_contain_points</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Checks whether the set of sites contain </span>
+<span class="sd">        a corresponding set of fractional coordinates.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            points (np.array): 3xN numpy array of fractional coordinates.</span>
+<span class="sd">                There should be one coordinate for each site being checked.</span>
+<span class="sd">            structure (Structure): Pymatgen Structure used to define the</span>
+<span class="sd">                vertex coordinates of each polyhedral site.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            (bool)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">check</span> <span class="o">=</span> <span class="nb">all</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">contains_point</span><span class="p">(</span><span class="n">p</span><span class="p">,</span><span class="n">structure</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">,</span> <span class="n">points</span><span class="p">)])</span>
+        <span class="k">return</span> <span class="n">check</span></div></div>
+
+<div class="viewcode-block" id="construct_neighbouring_sites"><a class="viewcode-back" href="../../site_analysis.html#site_analysis.polyhedral_site_collection.construct_neighbouring_sites">[docs]</a><span class="k">def</span> <span class="nf">construct_neighbouring_sites</span><span class="p">(</span><span class="n">sites</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find all polyhedral sites that are face-sharing neighbours.</span>
+
+<span class="sd">    Any polyhedral sites that share 3 or more vertices are considered</span>
+<span class="sd">    to share a face.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        None</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (dict): Dictionary of `int`: `list` entries. </span>
+<span class="sd">            Keys are site indices. Values are lists of ``PolyhedralSite`` objects.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">neighbours</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">site_i</span> <span class="ow">in</span> <span class="n">sites</span><span class="p">:</span>
+        <span class="n">neighbours</span><span class="p">[</span><span class="n">site_i</span><span class="o">.</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">site_j</span> <span class="ow">in</span> <span class="n">sites</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">site_i</span> <span class="ow">is</span> <span class="n">site_j</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># 3 or more common vertices indicated a shared face.</span>
+            <span class="n">n_shared_vertices</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">site_i</span><span class="o">.</span><span class="n">vertex_indices</span><span class="p">)</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="n">site_j</span><span class="o">.</span><span class="n">vertex_indices</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">n_shared_vertices</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="n">neighbours</span><span class="p">[</span><span class="n">site_i</span><span class="o">.</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">site_j</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">neighbours</span></div>
+ 
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Benjamin J. Morgan
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../_static/language_data.js"></script>
+    
+
+  
+
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

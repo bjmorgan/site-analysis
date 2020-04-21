@@ -24,9 +24,9 @@ copyright = '2020, Benjamin J. Morgan'
 author = 'Benjamin J. Morgan'
 
 # The short X.Y version
-version = ''
+version = '0.0'
 # The full version, including alpha/beta/rc tags
-release = ''
+release = '0.0.1'
 
 
 # -- General configuration ---------------------------------------------------
@@ -180,3 +180,7 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+
+# Some logo things
+html_logo = "logo/site-analysis-logo.png"
+html_theme_options = {"logo_only": True}

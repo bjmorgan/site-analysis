@@ -33,6 +33,7 @@ class SiteCollection(object):
         Notes:
             The atom coordinates should already be consistent with the coordinates
             in `structure`. Recommended usage is via the ``analyse_structure()`` method.
+
         """
         raise NotImplementedError('assign_site_occupations should be implemented in'
             ' the derived class')

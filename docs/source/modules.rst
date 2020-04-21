@@ -1,7 +1,7 @@
-site_analysis
-=============
+API documentation
+=================
 
 .. toctree::
    :maxdepth: 4
 
-   site-analysis
+   site_analysis

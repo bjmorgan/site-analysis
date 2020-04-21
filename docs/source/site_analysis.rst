@@ -92,11 +92,3 @@ site\_analysis.voronoi\_site\_collection module
     :undoc-members:
     :show-inheritance:
 
-
-Module contents
----------------
-
-.. automodule:: site_analysis
-    :members:
-    :undoc-members:
-    :show-inheritance:

@@ -5,4 +5,6 @@
 __pycache__
 site_analysis.egg-info
 **/*.swp
+build
+dist
 

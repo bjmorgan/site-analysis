@@ -20,6 +20,6 @@ formats: all
 python:
   version: 3.6
   install:
-    - method: pip
-    - path: site_analysis 
     - requirements: docs/requirements.txt
+    - method: pip
+      path: site_analysis 

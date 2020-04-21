@@ -19,7 +19,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'site-analysis'
+project = 'site_analysis'
 copyright = '2020, Benjamin J. Morgan'
 author = 'Benjamin J. Morgan'
 
@@ -107,7 +107,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'site-analysisdoc'
+htmlhelp_basename = 'site_analysisdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -134,7 +134,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'site-analysis.tex', 'site-analysis Documentation',
+    (master_doc, 'site_analysis.tex', 'site_analysis Documentation',
      'Benjamin J. Morgan', 'manual'),
 ]
 
@@ -144,7 +144,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'site-analysis', 'site-analysis Documentation',
+    (master_doc, 'site_analysis', 'site_analysis Documentation',
      [author], 1)
 ]
 
@@ -155,8 +155,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'site-analysis', 'site-analysis Documentation',
-     author, 'site-analysis', 'One line description of project.',
+    (master_doc, 'site_analysis', 'site_analysis Documentation',
+     author, 'site_analysis', 'One line description of project.',
      'Miscellaneous'),
 ]
 

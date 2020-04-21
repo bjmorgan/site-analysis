@@ -11,7 +11,11 @@ Site analysis for ionic transport in solids
    :maxdepth: 2
    :caption: Contents:
 
-Indices and tables
+   installation
+   tutorials
+   modules
+
+Searching
 ==================
 
 * :ref:`genindex`

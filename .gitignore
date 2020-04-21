@@ -4,4 +4,5 @@
 .nbgrader.log
 __pycache__
 site_analysis.egg-info
+**/*.swp
 

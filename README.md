@@ -1,9 +1,11 @@
 # site-analysis
 
-<img src='logo/site-analysis-logo.png' width='100'>
+<img src='https://github.com/bjmorgan/site-analysis/blob/master/logo/site-analysis-logo.png' width='100'>
 
 [![Build Status](https://travis-ci.org/bjmorgan/site-analysis.svg?branch=master)](https://travis-ci.org/bjmorgan/site-analysis)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/cb871e86f11b715efad6/test_coverage)](https://codeclimate.com/github/bjmorgan/site-analysis/test_coverage)
+[![Documentation Status](https://readthedocs.org/projects/site-analysis/badge/?version=latest)](https://site-analysis.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/site-analysis.svg)](https://badge.fury.io/py/site-analysis)
 
 `site-analysis` is a Python module for analysing molecular dynamics simulations of solid-state ion transport, by assigning positions of mobile ions to specific &ldquo;sites&rdquo; within the host structure.
 

@@ -5,7 +5,7 @@ readme = 'README.md'
 long_description = open( readme ).read()
 
 config = {
-    'description': 'MD analysis using site occupation trajectories',
+    'description': 'site occupation analysis of molecular dynmamics trajectories',
     'long_description': long_description,
     'long_description_content_type': 'text/markdown',
     'author': 'Benjamin J. Morgan',

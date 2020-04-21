@@ -184,3 +184,6 @@ epub_exclude_files = ['search.html']
 # Some logo things
 html_logo = "logo/site-analysis-logo.png"
 html_theme_options = {"logo_only": True}
+
+def setup(app):
+    app.add_css_file('custom.css')

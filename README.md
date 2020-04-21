@@ -21,7 +21,7 @@ pip install site-analysis
 
 Or clone the latest development version from [GitHub](https://github.com/bjmorgan/site-analysis) and install
 ```
- git clone git@github.com:bjmorgan/site-analysis.git
+git clone git@github.com:bjmorgan/site-analysis.git
 cd site-analysis
 python setup.py install
 ```
@@ -32,4 +32,15 @@ pip3 install git+https://github.com/bjmorgan/site-analysis.git
 ```
 
 ## Documentation
-Documentation and tutorials live at [Read the Docs](https://site-analysis.readthedocs.io/en/latest/)
+Documentation and tutorials live at [Read the Docs](https://site-analysis.readthedocs.io/en/latest/).
+
+Example notebooks are also available of [GitHub](https://github.com/bjmorgan/site-analysis/examples).
+
+## Tests
+Automated testing of the latest build happens [here](https://travis-ci.org/github/bjmorgan/site-analysis).
+
+Manual tests can be run using 
+```
+python3 -m unittest discover
+```
+The code has been tested with Python versions 3.6 and above.

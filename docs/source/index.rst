@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Site analysis for ionic transport in solids
-===========================================
+site-analysis
+=============
 
 .. toctree::
    :hidden:
@@ -16,7 +16,7 @@ Site analysis for ionic transport in solids
    modules
 
 Searching
-==================
+=========
 
 * :ref:`genindex`
 * :ref:`modindex`

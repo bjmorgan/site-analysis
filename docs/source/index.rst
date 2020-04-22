@@ -11,7 +11,7 @@ site-analysis
    tutorials
    modules
 
-`site_analysis` is a Python module for anakysing molecular dynamics simulations of solid-state ionic transport, by assigning mobile ions to discrete "sites" within host structures.
+`site_analysis` is a Python module for analysing molecular dynamics simulations of solid-state ionic transport, by assigning mobile ions to discrete "sites" within host structures.
 
 The code is built on top of `pymatgen`_  and takes VASP `XDATCAR` files as molecular dynamics trajectory inputs.
 

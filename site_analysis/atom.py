@@ -120,6 +120,15 @@ class Atom(object):
 
     @classmethod
     def from_str(cls, input_string):
+        """Initiate an Atom object from a JSON-formatted string.
+
+        Args:
+            input_string (str): JSON-formatted string.
+
+        Returns:
+            (Atom)
+
+        """
         d = json.loads(input_string)
         return cls.from_dict(d)
 

@@ -97,9 +97,10 @@ class SiteCollection(object):
             None
 
         Notes:
+
             This method does the following:
-            1. If the atom has moved to a new site, 
-               record a old_site --> new_site transition.
+
+            1. If the atom has moved to a new site, record a old_site --> new_site transition.
             2. Add this atom's index to the list of atoms occupying this site.
             3. Add this atom's fractional coordinates to the list of
                coordinates observed occupying this site.

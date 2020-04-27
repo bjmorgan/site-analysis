@@ -23,9 +23,9 @@ class ToolsTestCase(unittest.TestCase):
             self.assertEqual( len(vi), 6 )
             c += Counter( vi )
             for i in vi:
-                self.assertEqual( structure[i].species_string, 'Cl' )
+                self.assertEqual(structure[i].species_string, 'Cl')
         for i in range(33,64):
-            self.assertEqual( c[i], 6 )
+            self.assertEqual(c[i], 6)
 
     def test_x_pbc(self):
         pbc_coords = x_pbc(np.array([0.1, 0.2, 0.3]))
@@ -38,7 +38,7 @@ class ToolsTestCase(unittest.TestCase):
                                      [ 0.1, 1.2, 1.3 ],
                                      [ 1.1, 1.2, 1.3 ]] )
         for c in expected_coords:
-            self.assertEqual( c in pbc_coords, True )
+            self.assertEqual(c in pbc_coords, True)
  
 if __name__ == '__main__':
     unittest.main()

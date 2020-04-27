@@ -1,3 +1,8 @@
+"""site_analysis.tools module
+
+This module contains tools for 
+
+"""
 import numpy as np
 
 def get_nearest_neighbour_indices(structure, ref_structure, vertex_species, n_coord):
@@ -74,6 +79,29 @@ def get_vertex_indices( structure, centre_species, vertex_species, cutoff=4.5, n
     return vertex_indices
 
 def x_pbc(x):
+    """Return an array of fractional coordinates mapped into all positive neighbouring 
+    periodic cells.
+
+    Args:
+        x (np.array): Input fractional coordinates.
+
+    Returns:
+        np.array: (9,3) numpy array of all mapped fractional coordinates, including the
+                  original coordinates in the origin calculation cell.
+
+    Example:
+        >>> x = np.array([0.1, 0.2, 0.3])
+        >>> x_pbc(x)
+        array([[0.1, 0.2, 0.3],
+               [1.1, 0.2, 0.3],
+               [0.1, 1.2, 0.3],
+               [0.1, 0.2, 1.3],
+               [1.1, 1.2, 0.3],
+               [1.1, 0.2, 1.3],
+               [0.1, 1.2, 1.3],
+               [1.1, 1.2, 1.3]])
+
+    """       
     all_x =  np.array([[0,0,0],
                        [1,0,0],
                        [0,1,0],

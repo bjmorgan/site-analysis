@@ -8,6 +8,7 @@ site-analysis
 
    installation
    context
+   examples/2D_lattice_examples
    tutorials
    modules
 

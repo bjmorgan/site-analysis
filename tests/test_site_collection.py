@@ -2,7 +2,7 @@ import unittest
 from site_analysis.site_collection import SiteCollection
 from site_analysis.site import Site
 from site_analysis.atom import Atom
-from pymatgen import Structure
+from pymatgen.core import Structure
 from unittest.mock import patch, Mock
 import numpy as np
 from collections import Counter

@@ -2,7 +2,7 @@ import unittest
 from site_analysis.tools import get_vertex_indices, x_pbc
 from unittest.mock import patch, MagicMock, Mock
 import numpy as np
-from pymatgen import Lattice, Structure
+from pymatgen.core import Lattice, Structure
 from collections import Counter
 
 class ToolsTestCase(unittest.TestCase):

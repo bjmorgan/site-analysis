@@ -6,7 +6,7 @@ from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from collections import Counter
 from scipy.spatial import Delaunay, ConvexHull
-from pymatgen import Structure, Lattice
+from pymatgen.core import Structure, Lattice
 
 class PolyhedralSiteTestCase(unittest.TestCase):
 

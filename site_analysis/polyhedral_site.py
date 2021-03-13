@@ -1,6 +1,6 @@
 import itertools
 import numpy as np 
-from scipy.spatial import Delaunay, ConvexHull
+from scipy.spatial import Delaunay, ConvexHull # type: ignore
 from .site import Site
 from .tools import x_pbc, species_string_from_site
 

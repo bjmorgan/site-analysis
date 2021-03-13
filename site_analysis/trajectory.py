@@ -1,5 +1,5 @@
 from collections import Counter
-from tqdm import tqdm, tqdm_notebook
+from tqdm import tqdm, tqdm_notebook # type: ignore
 from .polyhedral_site_collection import PolyhedralSiteCollection
 from .polyhedral_site import PolyhedralSite
 from .voronoi_site import VoronoiSite

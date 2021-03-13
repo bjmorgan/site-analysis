@@ -1,7 +1,7 @@
 import unittest
 from site_analysis.atom import Atom
 from unittest.mock import patch, MagicMock, Mock
-from pymatgen import Structure, Lattice
+from pymatgen.core import Structure, Lattice
 import numpy as np
 
 class AtomTestCase(unittest.TestCase):

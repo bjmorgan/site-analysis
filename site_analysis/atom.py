@@ -1,6 +1,6 @@
 import itertools
 import json
-from monty.io import zopen
+from monty.io import zopen # type: ignore
 import numpy as np
 
 

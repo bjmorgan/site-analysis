@@ -10,9 +10,9 @@ from .spherical_site_collection import SphericalSiteCollection
 class Trajectory(object):
     """Class for performing sites analysis on simulation trajectories."""
 
-    site_collection_types = { PolyhedralSite: PolyhedralSiteCollection,
-                              VoronoiSite: VoronoiSiteCollection,
-                              SphericalSite: SphericalSiteCollection }
+    site_collection_types = {PolyhedralSite: PolyhedralSiteCollection,
+                             VoronoiSite: VoronoiSiteCollection,
+                             SphericalSite: SphericalSiteCollection}
 
     def __init__(self, sites, atoms):
         site_collection_class = None
@@ -42,18 +42,18 @@ class Trajectory(object):
         self.site_collection.assign_site_occupations(self.atoms, structure)
                     
     def site_coordination_numbers(self):
-        return Counter( [ s.coordination_number for s in self.sites ] )
+        return Counter([s.coordination_number for s in self.sites])
 
     def site_labels(self):
-        return [ s.label for s in self.sites ]
+        return [s.label for s in self.sites]
    
     @property
     def atom_sites(self):
-        return [ atom.in_site for atom in self.atoms ]
+        return [atom.in_site for atom in self.atoms]
         
     @property
     def site_occupations(self):
-        return [ s.contains_atoms for s in self.sites ]
+        return [s.contains_atoms for s in self.sites]
 
     def append_timestep(self, structure, t=None):
         self.analyse_structure(structure)

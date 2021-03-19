@@ -58,9 +58,9 @@ class Trajectory(object):
     def append_timestep(self, structure, t=None):
         self.analyse_structure(structure)
         for atom in self.atoms:
-            atom.trajectory.append( atom.in_site )
+            atom.trajectory.append(atom.in_site)
         for site in self.sites:
-            site.trajectory.append( site.contains_atoms )
+            site.trajectory.append(site.contains_atoms)
         self.timesteps.append(t)
 
     def reset(self):
@@ -90,9 +90,9 @@ class Trajectory(object):
         generator = enumerate( structures, 1 )
         if progress:
             if progress=='notebook':
-                generator = tqdm_notebook( generator, total=len(structures), unit=' steps' )
+                generator = tqdm_notebook(generator, total=len(structures), unit=' steps')
             else:
-                generator = tqdm( generator, total=len(structures), unit=' steps' )
+                generator = tqdm(generator, total=len(structures), unit=' steps')
         for timestep, s in generator:
             self.append_timestep( s, t=timestep )
    

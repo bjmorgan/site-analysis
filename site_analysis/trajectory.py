@@ -87,14 +87,14 @@ class Trajectory(object):
         return self.sites_trajectory
 
     def trajectory_from_structures(self, structures, progress=False):
-        generator = enumerate( structures, 1 )
+        generator = enumerate(structures, 1)
         if progress:
             if progress=='notebook':
                 generator = tqdm_notebook(generator, total=len(structures), unit=' steps')
             else:
                 generator = tqdm(generator, total=len(structures), unit=' steps')
         for timestep, s in generator:
-            self.append_timestep( s, t=timestep )
+            self.append_timestep(s, t=timestep)
    
     def __len__(self):
         """Returns the "length" of a trajectory, i.e. the number of analysed timesteps."""

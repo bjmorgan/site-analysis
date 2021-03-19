@@ -15,6 +15,10 @@ class Atom(object):
             coordinates for this atom.
         trajectory (list): List of site indices occupied at each timestep.
 
+    Note:
+        The atom index is used to identify it when parsing structures, so
+        needs to be e.g. the corresponding Site index in a Pymatgen Structure.
+        
     """
 
     def __init__(self, index, species_string=None):

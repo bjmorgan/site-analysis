@@ -72,7 +72,7 @@ class PolyhedralSite(Site):
  
     @property
     def delaunay(self):
-        """Delaunay tesselation of the vertex coordinates for this site.
+        """Delaunay tessellation of the vertex coordinates for this site.
 
         This is calculated the first time the attribute is requested,
         and then stored for reuse, unless the site is reset.

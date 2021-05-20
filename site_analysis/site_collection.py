@@ -1,3 +1,7 @@
+import numpy as np
+from typing import Optional
+from pymatgen.core import Structure # type: ignore
+
 class SiteCollection(object):
     """Parent class for collections of sites.
 
@@ -111,6 +115,7 @@ class SiteCollection(object):
             if atom.in_site != site.index: # this atom has moved
                 previous_site = self.site_by_index(atom.in_site)
                 previous_site.transitions[site.index] += 1
+                print(previous_site.transitions)
         site.contains_atoms.append(atom.index)
         site.points.append(atom.frac_coords)
         atom.in_site = site.index
@@ -128,7 +133,9 @@ class SiteCollection(object):
         for s in self.sites:
             s.contains_atoms = []
 
-    def sites_contain_points(self, points):
+    def sites_contain_points(self,
+                             points: np.ndarray,
+                             structure: Optional[Structure]=None) -> bool:
         """If implemented, Checks whether the set of sites contain 
         a corresponding set of fractional coordinates.
 

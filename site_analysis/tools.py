@@ -1,9 +1,12 @@
 """site_analysis.tools module
 
-This module contains tools for 
+This module contains tools for [TODO]
 
 """
 import numpy as np
+
+from typing import Optional, List, Union, Tuple
+from pymatgen.core import Structure # type: ignore
 
 def get_nearest_neighbour_indices(structure, ref_structure, vertex_species, n_coord):
     """
@@ -114,3 +117,60 @@ def x_pbc(x):
 
 def species_string_from_site(site):
     return [k.__str__() for k in site._species.keys()][0]
+
+def site_index_mapping(structure1: Structure, 
+                       structure2: Structure,
+                       species1: Optional[Union[str, List[str]]] = None,
+                       species2: Optional[Union[str, List[str]]] = None,
+                       one_to_one_mapping: Optional[bool] = True,
+                       return_mapping_distances: Optional[bool] = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """Compute the site index mapping between two structures based on the closest corresponding site in
+    structure2 to each selected site in structure1.
+    
+    Args:
+        structure1 (pymatgen.Structure): The structure to map from.
+        structure2 (pymatgen.Structure): The structure to map to.
+        species1 (optional, str or list(str)): Optional argument to select a subset of atomic species
+            to map site indices from.
+        species2 (optional, str of list(str)): Optional argument to specify a subset of atomic species
+            to map site indices to.
+        one_to_one_mapping (optional, bool): Optional argument to check that a one-to-one mapping is found
+            between the relevant subsets of sites in structure1 and structure2. Default is `True`.
+            
+    Returns:
+        np.ndarray
+        
+    Raises:
+        ValueError: if `one_to_one_mapping = True` and a one-to-one mapping is not found.
+ 
+    """
+    # Ensure species1 and species2 are lists of site species strings.
+    if species1 is None:
+        species1 = list(set([site.species_string for site in structure1]))
+    if isinstance(species1, str):
+        species1 = [species1]
+    if isinstance(species2, str):
+        species2 = [species2]
+    if species2 is None:
+        species2 = list(set([site.species_string for site in structure2]))
+    assert(isinstance(species1, list))
+    assert(isinstance(species2, list))
+    
+    structure2_mask = np.array([site.species_string in species2 for site in structure2])
+    lattice = structure1.lattice
+    dr_ij = np.array(lattice.get_all_distances(structure1.frac_coords, structure2.frac_coords))
+    to_return = []
+    dr_ij_to_return = []
+    for site1, dr_i in zip(structure1, dr_ij):
+        if site1.species_string in species1:
+                subset_idx = np.argmin(dr_i[structure2_mask])
+                parent_idx = np.arange(len(dr_i))[structure2_mask][subset_idx] 
+                to_return.append(parent_idx)
+                dr_ij_to_return.append(dr_i[parent_idx])
+    if one_to_one_mapping:
+        if len(to_return) != len(set(to_return)):
+            raise ValueError("One-to-one mapping between structures not found.")   
+    if return_mapping_distances:
+        return np.array(to_return), np.array(dr_ij_to_return)     
+    else:
+        return np.array(to_return)

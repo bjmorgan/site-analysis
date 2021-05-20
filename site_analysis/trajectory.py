@@ -100,7 +100,7 @@ class Trajectory(object):
         """Returns the "length" of a trajectory, i.e. the number of analysed timesteps."""
         return len(self.timesteps)
  
-def update_occupation( site, atom ):
-    site.contains_atoms.append( atom.index )
+def update_occupation(site, atom):
+    site.contains_atoms.append(atom.index)
     atom.in_site = site.index
 

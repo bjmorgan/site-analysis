@@ -1,4 +1,7 @@
 from collections import Counter
+from typing import Any
+from .atom import Atom
+import numpy as np
 
 class Site(object):
     """Parent class for defining sites.
@@ -65,7 +68,10 @@ class Site(object):
         self.trajectory = []
         self.transitions = Counter()
  
-    def contains_point(self, x):
+    def contains_point(self,
+            x: np.ndarray,
+            *args: Any,
+            **kwargs: Any) -> bool:
         """Test whether the fractional coordinate x is contained by this site.
 
         This method should be implemented in the inherited subclass
@@ -83,7 +89,10 @@ class Site(object):
         raise NotImplementedError('contains_point should be implemented '
                                   'in the inherited class')
 
-    def contains_atom(self, atom):
+    def contains_atom(self,
+            atom: Atom,
+            *args: Any,
+            **kwargs: Any) -> bool:
         """Test whether this site contains a specific atom.
 
         Args:

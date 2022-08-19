@@ -1,13 +1,19 @@
 from .site import Site
+from typing import Optional, Dict
+from pymatgen.core.lattice import Lattice
+import numpy as np
 
 class SphericalSite(Site):
     
-    def __init__(self, frac_coords, rcut, label=None):
+    def __init__(self,
+            frac_coords: np.ndarray,
+            rcut: float,
+            label: Optional[str]=None) -> None:
         super(SphericalSite, self).__init__(label=label)
         self.frac_coords = frac_coords
         self.rcut = rcut
 
-    def as_dict(self):
+    def as_dict(self) -> Dict:
         d = super(SphericalSite, self).as_dict()
         d['frac_coords'] = self.frac_coords
         d['rcut'] = self.rcut

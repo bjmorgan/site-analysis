@@ -2,7 +2,7 @@ import itertools
 import json
 from monty.io import zopen # type: ignore
 import numpy as np
-
+from pymatgen.core import Structure
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -72,7 +72,8 @@ class Atom(object):
         self._frac_coords = None
         self.trajectory = []
 
-    def assign_coords(self, structure):
+    def assign_coords(self,
+            structure: Structure) -> None:
         """Assign fractional coordinates to this atom from a 
         pymatgen Structure.
 

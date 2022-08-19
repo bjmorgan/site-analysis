@@ -1,8 +1,10 @@
+from __future__ import annotations
 import itertools
 import json
 from monty.io import zopen # type: ignore
 import numpy as np
 from pymatgen.core import Structure
+from typing import Optional, List, Dict
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -21,7 +23,9 @@ class Atom(object):
         
     """
 
-    def __init__(self, index, species_string=None):
+    def __init__(self,
+            index: int,
+            species_string: Optional[str]=None) -> None:
         """Initialise an Atom object.
 
         Args:
@@ -33,11 +37,11 @@ class Atom(object):
 
         """
         self.index = index
-        self.in_site = None
-        self._frac_coords = None
-        self.trajectory = []
+        self.in_site: Optional[int] = None
+        self._frac_coords: Optional[np.ndarray] = None
+        self.trajectory: List[int] = []
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return a string representation of this atom.
 
         Args:
@@ -50,7 +54,7 @@ class Atom(object):
         string = f"Atom: {self.index}"
         return string
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         string = (
             "site_analysis.Atom("
             f"index={self.index}, "
@@ -59,7 +63,7 @@ class Atom(object):
         )
         return string
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the state of this Atom.
 
         Clears the `in_site` and `trajectory` attributes.
@@ -88,7 +92,7 @@ class Atom(object):
         self._frac_coords = structure[self.index].frac_coords
 
     @property
-    def frac_coords(self):
+    def frac_coords(self) -> np.ndarray:
         """Getter for the fractional coordinates of this atom.
 
         Raises:
@@ -101,22 +105,25 @@ class Atom(object):
         else:
             return self._frac_coords
 
-    def as_dict(self):
+    def as_dict(self) -> Dict:
         d = {
             "index": self.index,
             "in_site": self.in_site,
-            "frac_coords": self._frac_coords.tolist(),
-        }
+            }
+        if self._frac_coords:
+            d["frac_coords"] = self._frac_coords.tolist()
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls,
+            d: Dict) -> Atom:
         atom = cls(index=d["index"])
         atom.in_site = d["in_site"]
         atom._frac_coords = np.array(d["frac_coords"])
         return atom
 
-    def to(self, filename=None):
+    def to(self,
+            filename: Optional[str]=None) -> str:
         s = json.dumps(self.as_dict())
         if filename:
             with zopen(filename, "wt") as f:
@@ -124,7 +131,8 @@ class Atom(object):
         return s
 
     @classmethod
-    def from_str(cls, input_string):
+    def from_str(cls,
+            input_string: str) -> Atom:
         """Initiate an Atom object from a JSON-formatted string.
 
         Args:
@@ -138,13 +146,15 @@ class Atom(object):
         return cls.from_dict(d)
 
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls,
+            filename: str) -> Atom:
         with zopen(filename, "rt") as f:
             contents = f.read()
         return cls.from_str(contents)
 
 
-def atoms_from_species_string(structure, species_string):
+def atoms_from_species_string(structure:Structure,
+        species_string: str) -> List[Atom]:
     atoms = [
         Atom(index=i)
         for i, s in enumerate(structure)
@@ -153,5 +163,5 @@ def atoms_from_species_string(structure, species_string):
     return atoms
 
 
-def atoms_from_indices(indices):
+def atoms_from_indices(indices: List[int]) -> List[Atom]:
     return [Atom(index=i) for i in indices]

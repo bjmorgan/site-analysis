@@ -3,6 +3,9 @@ import numpy as np
 from scipy.spatial import Delaunay, ConvexHull # type: ignore
 from .site import Site
 from .tools import x_pbc, species_string_from_site
+from typing import List, Optional, Any, Dict
+from pymatgen.core import Structure
+from .atom import Atom
 
 class PolyhedralSite(Site):
     """Describes a site defined by the polyhedral volume enclosed by a set
@@ -27,7 +30,9 @@ class PolyhedralSite(Site):
    
     """ 
 
-    def __init__(self, vertex_indices, label=None):
+    def __init__(self,
+            vertex_indices: List[int],
+            label: Optional[str]=None):
         """Create a PolyhedralSite instance.
 
         Args:
@@ -40,10 +45,10 @@ class PolyhedralSite(Site):
         """
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
-        self.vertex_coords = None
-        self._delaunay = None
+        self.vertex_coords: Optional[np.ndarray] = None
+        self._delaunay: Optional[Delaunay] = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('
                   f'index={self.index}, '
                   f'label={self.label}, '
@@ -51,7 +56,7 @@ class PolyhedralSite(Site):
                   f'contains_atoms={self.contains_atoms})')
         return string
                   
-    def reset(self):
+    def reset(self) -> None:
         """Reset the trajectory for this site.
 
         Resets the contains_atoms and trajectory attributes
@@ -71,14 +76,14 @@ class PolyhedralSite(Site):
         self._delaunay = None
  
     @property
-    def delaunay(self):
+    def delaunay(self) -> Delaunay:
         """Delaunay tessellation of the vertex coordinates for this site.
 
         This is calculated the first time the attribute is requested,
         and then stored for reuse, unless the site is reset.
 
         Returns:
-            (scipy.spatial.Delaunay)
+            scipy.spatial.Delaunay
 
         """
         if not self._delaunay:
@@ -86,30 +91,31 @@ class PolyhedralSite(Site):
         return self._delaunay
 
     @property
-    def coordination_number(self):
+    def coordination_number(self) -> int:
         """Coordination number for this site, defined as the number of 
         vertices
 
         Returns:
-            (int)
+            int
 
         """
         return len(self.vertex_indices)
     
     @property
-    def cn(self):
+    def cn(self) -> int:
         """Coordination number for this site, defined as the number of
         vertices
 
         Convenience property for coordination_number()
 
         Returns:
-            (int)
+            int
 
         """
         return self.coordination_number
         
-    def assign_vertex_coords(self, structure):
+    def assign_vertex_coords(self,
+            structure: Structure) -> None:
         """Assign fractional coordinates to the polyhedra vertices
         from the corresponding atom positions in a pymatgen Structure.
 
@@ -142,7 +148,8 @@ class PolyhedralSite(Site):
         self.vertex_coords = frac_coords
         self._delaunay = None
 
-    def get_vertex_species(self, structure):
+    def get_vertex_species(self,
+            structure: Structure) -> List[str]:
         """Returns a list of species strings for the vertex atoms of this
         polyhedral site.
 
@@ -156,7 +163,12 @@ class PolyhedralSite(Site):
         """
         return [structure[i].species_string for i in self.vertex_indices]
 
-    def contains_point(self, x, structure=None, algo='simplex'):
+    def contains_point(self,
+            x: np.ndarray,
+            structure: Optional[Structure]=None,
+            algo: str='simplex',
+            *args,
+            **kwargs) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
         Args:
@@ -175,7 +187,7 @@ class PolyhedralSite(Site):
                          "inside" every face.
                 
         Returns:
-            (bool)
+            bool
 
         """
         contains_point_algos = {'simplex': self.contains_point_simplex,
@@ -188,7 +200,8 @@ class PolyhedralSite(Site):
             raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
         return contains_point_algos[algo](x_pbc(x))
    
-    def contains_point_simplex(self, x):
+    def contains_point_simplex(self,
+            x: np.ndarray) -> bool:
         """Test whether one or more points are inside this site, by checking 
         whether these points are contained inside the simplices of the Delaunay 
         tesselation defined by the vertex coordinates.
@@ -198,12 +211,13 @@ class PolyhedralSite(Site):
                 (3x1) or (3xN) numpy array.
 
         Returns:
-            (bool)
+            bool
 
         """
-        return np.any(self.delaunay.find_simplex(x) >= 0)
+        return bool(np.any(self.delaunay.find_simplex(x) >= 0))
  
-    def contains_point_sn(self, x_list):
+    def contains_point_sn(self,
+            x_list: np.ndarray) -> bool:
         """Test whether one or more points are inside this site, by calculating 
         the sign of the surface normal for each face with respect to each point.
 
@@ -212,7 +226,7 @@ class PolyhedralSite(Site):
                 (3x1) or (3xN) numpy array.
 
         Returns:
-            (bool)
+            bool
 
         Note:
             This method could be made more efficient by caching the 
@@ -235,7 +249,11 @@ class PolyhedralSite(Site):
                 inside.append(dotsum == len(faces))
         return any(inside)
 
-    def contains_atom(self, atom, algo='simplex'):
+    def contains_atom(self,
+            atom: Atom,
+            algo: Optional[str]='simplex',
+            *args: Any,
+            **kwargs: Any) -> bool:
         """Test whether an atom is inside this polyhedron.
 
         Args:
@@ -245,14 +263,14 @@ class PolyhedralSite(Site):
                 method for more details. Default is 'simplex'.
 
         Returns:
-            (bool)
+            bool
         """
         contains_point_algos = ['simplex', 'sn']
         if algo not in contains_point_algos:
             raise ValueError(f'{algo} is not a valid algorithm keyword for contains_atom()')
         return self.contains_point(atom.frac_coords, algo=algo)
 
-    def as_dict(self):
+    def as_dict(self) -> Dict:
         d = super(PolyhedralSite, self).as_dict()
         d['vertex_indices'] = self.vertex_indices
         d['vertex_coords'] = self.vertex_coords
@@ -266,7 +284,7 @@ class PolyhedralSite(Site):
         polyhedral_site.label = d.get('label')
         return polyhedral_site 
 
-    def centre(self):
+    def centre(self) -> np.ndarray:
         """Returns the fractional coordinates of the centre point of
         this polyhedral site.
 
@@ -277,6 +295,7 @@ class PolyhedralSite(Site):
             (np.array): (3,) numpy array.
  
         """
+        assert(isinstance(self.vertex_coords, np.ndarray))
         return np.mean(self.vertex_coords, axis=0)
 
     @classmethod

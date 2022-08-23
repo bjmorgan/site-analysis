@@ -1,11 +1,12 @@
 from __future__ import annotations
+from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Any, Optional, List, Dict
 from .atom import Atom
 import numpy as np
 from pymatgen.core import Structure
 
-class Site(object):
+class Site(ABC):
     """Parent class for defining sites.
 
     A Site is a bounded volume that can contain none, one, or more atoms.
@@ -18,7 +19,8 @@ class Site(object):
             Default is `None`.
         contains_atoms (list): List of the atoms contained by this site in the
             structure last processed.
-        trajectory (list): List of sites this atom has visited at each timestep?
+        trajectory (list(list(int))): Nested list of atoms that have visited this
+            site at each timestep.
         points (list): List of fractional coordinates for atoms assigned as
             occupying this site.
         transitions (collections.Counter): Stores observed transitions from this
@@ -50,7 +52,7 @@ class Site(object):
         Site._newid += 1
         self.label = label
         self.contains_atoms: List[int] = []
-        self.trajectory: List[int] = []
+        self.trajectory: List[List[int]] = []
         self.points: List[np.ndarray] = []
         self.transitions: Counter = Counter()
 
@@ -71,13 +73,14 @@ class Site(object):
         self.trajectory = []
         self.transitions = Counter()
  
+    @abstractmethod
     def contains_point(self,
             x: np.ndarray,
             *args: Any,
             **kwargs: Any) -> bool:
         """Test whether the fractional coordinate x is contained by this site.
 
-        This method should be implemented in the inherited subclass
+        This method should be implemented in the derived subclass
 
         Args:
             x (np.array): Fractional coordinate.
@@ -90,7 +93,7 @@ class Site(object):
 
         """
         raise NotImplementedError('contains_point should be implemented '
-                                  'in the inherited class')
+                                  'in the derived class')
 
     def contains_atom(self,
             atom: Atom,
@@ -106,10 +109,6 @@ class Site(object):
 
         """
         return self.contains_point(atom.frac_coords)
-
-    def assign_vertex_coords(self,
-            structure: Structure) -> None:
-        raise NotImplementedError()
 
     def as_dict(self) -> Dict:
         """Json-serializable dict representation of this Site.
@@ -151,10 +150,11 @@ class Site(object):
         site.label = d.get('label')
         return site 
 
+    @abstractmethod
     def centre(self) -> np.ndarray:
         """Returns the centre point of this site.
 
-        This method should be implemented in the inherited subclass.
+        This method should be implemented in the derived subclass.
 
         Args:
             None
@@ -164,7 +164,7 @@ class Site(object):
 
         """ 
         raise NotImplementedError('centre should be implemeneted '
-                                  'in the inherited class')
+                                  'in the derived class')
 
     @classmethod
     def reset_index(cls,
@@ -179,3 +179,19 @@ class Site(object):
 
         """ 
         Site._newid = newid
+
+    def coordination_number(self) -> int:
+        """Returns the coordination number of this site.
+
+        This method should be implemented in the derived subclass.
+
+        Args:
+            None
+
+        Returns:
+            int
+
+        """
+        raise NotImplementedError('coordination_number should be implemented '
+                                  'in the derived class')
+

@@ -1,9 +1,10 @@
+from abc import ABC, abstractmethod
 import numpy as np
 from typing import Optional, List, Sequence
 from pymatgen.core import Structure # type: ignore
 from .site import Site
 
-class SiteCollection(object):
+class SiteCollection(ABC):
     """Parent class for collections of sites.
 
     Collections of specific site types should inherit from this class.
@@ -23,6 +24,7 @@ class SiteCollection(object):
         """
         self.sites = sites
 
+    @abstractmethod
     def assign_site_occupations(self, atoms, structure):
         """Assigns atoms to sites for a specific structure.
 
@@ -44,6 +46,7 @@ class SiteCollection(object):
         raise NotImplementedError('assign_site_occupations should be implemented in'
             ' the derived class')
 
+    @abstractmethod
     def analyse_structure(self, atoms, structure):
         """Perform a site analysis for a set of atoms on a specific structure.
 
@@ -138,21 +141,17 @@ class SiteCollection(object):
     def sites_contain_points(self,
                              points: np.ndarray,
                              structure: Optional[Structure]=None) -> bool:
-        """If implemented, Checks whether the set of sites contain 
+        """If implemented, Checks whether the set of sites contain
         a corresponding set of fractional coordinates.
-
         Args:
             points (np.array): 3xN numpy array of fractional coordinates.
                 There should be one coordinate for each site being checked.
-        
+
         Returns:
             (bool)
-
         Notes:
             Specific SiteCollection subclass implementations may require
             additional arguments to be passed.
-
         """
         raise NotImplementedError('sites_contain_points() should be'
             ' implemented in the derived class')
-

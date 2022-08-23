@@ -2,6 +2,7 @@ from .site_collection import SiteCollection
 from typing import List, Any, Optional, Dict
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
+from .site import Site
 from pymatgen.core import Structure # type: ignore
 import numpy as np
 
@@ -13,8 +14,8 @@ class PolyhedralSiteCollection(SiteCollection):
 
     """
 
-    def __init__(self, 
-                 sites: List[PolyhedralSite]) -> None:
+    def __init__(self,
+            sites: List[Site]) -> None:
         """Create a PolyhedralSiteCollection instance.
 
         Args:
@@ -24,12 +25,16 @@ class PolyhedralSiteCollection(SiteCollection):
             None
 
         """
+        for s in sites:
+            if not isinstance(s, PolyhedralSite):
+                raise TypeError
         super(PolyhedralSiteCollection, self).__init__(sites)
+        self.sites = self.sites # type: List[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
 
     def analyse_structure(self,
-                          atoms: List[Atom],
-                          structure: Structure):
+            atoms: List[Atom],
+            structure: Structure):
         for a in atoms:
             a.assign_coords(structure)
         for s in self.sites:
@@ -55,12 +60,12 @@ class PolyhedralSiteCollection(SiteCollection):
                     break
 
     def neighbouring_sites(self,
-                           index: int) -> List[PolyhedralSite]:
+            index: int) -> List[PolyhedralSite]:
         return self._neighbouring_sites[index] 
 
     def sites_contain_points(self,
-                             points: np.ndarray,
-                             structure: Optional[Structure]=None) -> bool:
+            points: np.ndarray,
+            structure: Optional[Structure]=None) -> bool:
         """Checks whether the set of sites contain 
         a corresponding set of fractional coordinates.
 
@@ -78,7 +83,8 @@ class PolyhedralSiteCollection(SiteCollection):
         check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
         return check
 
-def construct_neighbouring_sites(sites: List[PolyhedralSite]) -> Dict[int, List[PolyhedralSite]]:
+def construct_neighbouring_sites(
+        sites: List[PolyhedralSite]) -> Dict[int, List[PolyhedralSite]]:
     """
     Find all polyhedral sites that are face-sharing neighbours.
 

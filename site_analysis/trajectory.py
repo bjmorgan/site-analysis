@@ -6,6 +6,9 @@ from .voronoi_site import VoronoiSite
 from .voronoi_site_collection import VoronoiSiteCollection
 from .spherical_site import SphericalSite
 from .spherical_site_collection import SphericalSiteCollection
+from .site import Site
+from .atom import Atom
+from typing import List
 
 class Trajectory(object):
     """Class for performing sites analysis on simulation trajectories."""
@@ -14,7 +17,9 @@ class Trajectory(object):
                              VoronoiSite: VoronoiSiteCollection,
                              SphericalSite: SphericalSiteCollection}
 
-    def __init__(self, sites, atoms):
+    def __init__(self,
+            sites: List[Site],
+            atoms: List[Atom]):
         site_collection_class = None
         for k, v in Trajectory.site_collection_types.items():
             if all( [ isinstance( s, k ) for s in sites ] ):
@@ -24,8 +29,7 @@ class Trajectory(object):
         self.sites = sites
         self.atoms = atoms
         self.site_collection = site_collection_class(sites)
-        self.timesteps = []
-        self.previous_occupations = {}
+        self.timesteps: List[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
 

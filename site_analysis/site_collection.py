@@ -1,6 +1,7 @@
 import numpy as np
-from typing import Optional
+from typing import Optional, List, Sequence
 from pymatgen.core import Structure # type: ignore
+from .site import Site
 
 class SiteCollection(object):
     """Parent class for collections of sites.
@@ -12,7 +13,8 @@ class SiteCollection(object):
 
     """
 
-    def __init__(self, sites):
+    def __init__(self,
+            sites: Sequence[Site]) -> None:
         """Create a SiteCollection object.
 
         Args:

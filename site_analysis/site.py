@@ -1,7 +1,9 @@
+from __future__ import annotations
 from collections import Counter
-from typing import Any
+from typing import Any, Optional, List, Dict
 from .atom import Atom
 import numpy as np
+from pymatgen.core import Structure
 
 class Site(object):
     """Parent class for defining sites.
@@ -33,7 +35,8 @@ class Site(object):
     # Site._newid can be reset to 0 by calling Site.reset_index()
     # with the default arguments.
     
-    def __init__(self, label=None):
+    def __init__(self,
+            label: Optional[str]=None) -> None:
         """Initialise a Site object.
 
         Args:
@@ -46,12 +49,12 @@ class Site(object):
         self.index = Site._newid
         Site._newid += 1
         self.label = label
-        self.contains_atoms = []
-        self.trajectory = []
-        self.points = []
-        self.transitions = Counter()
+        self.contains_atoms: List[int] = []
+        self.trajectory: List[int] = []
+        self.points: List[np.ndarray] = []
+        self.transitions: Counter = Counter()
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the trajectory for this site.
 
         Returns the contains_atoms and trajectory attributes
@@ -104,7 +107,11 @@ class Site(object):
         """
         return self.contains_point(atom.frac_coords)
 
-    def as_dict(self):
+    def assign_vertex_coords(self,
+            structure: Structure) -> None:
+        raise NotImplementedError()
+
+    def as_dict(self) -> Dict:
         """Json-serializable dict representation of this Site.
 
         Args:
@@ -124,7 +131,8 @@ class Site(object):
         return d
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls,
+            d: Dict) -> Site:
         """Create a Site object from a dict representation.
 
         Args:
@@ -143,7 +151,7 @@ class Site(object):
         site.label = d.get('label')
         return site 
 
-    def centre(self):
+    def centre(self) -> np.ndarray:
         """Returns the centre point of this site.
 
         This method should be implemented in the inherited subclass.
@@ -159,7 +167,8 @@ class Site(object):
                                   'in the inherited class')
 
     @classmethod
-    def reset_index(cls, newid=0):
+    def reset_index(cls,
+            newid: int=0) -> None:
         """Reset the site index counter.
 
         Args:

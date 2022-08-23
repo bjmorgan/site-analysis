@@ -146,14 +146,14 @@ class Atom(object):
         return cls.from_dict(d)
 
     @classmethod
-    def from_file(cls,
-            filename: str) -> Atom:
+    def from_file(cls, filename):
         with zopen(filename, "rt") as f:
             contents = f.read()
         return cls.from_str(contents)
 
 
-def atoms_from_species_string(structure:Structure,
+def atoms_from_species_string(
+        structure:Structure,
         species_string: str) -> List[Atom]:
     atoms = [
         Atom(index=i)
@@ -163,5 +163,6 @@ def atoms_from_species_string(structure:Structure,
     return atoms
 
 
-def atoms_from_indices(indices: List[int]) -> List[Atom]:
+def atoms_from_indices(
+        indices: List[int]) -> List[Atom]:
     return [Atom(index=i) for i in indices]

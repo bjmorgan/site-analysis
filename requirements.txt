@@ -1,7 +1,6 @@
 numpy
 scipy
-codeclimate-test-reporter
-coverage==4.3.4
+coverage>=6.3
 monty
 pymatgen>=2022.0.3
 tqdm

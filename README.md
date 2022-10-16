@@ -2,8 +2,8 @@
 
 <img src='https://github.com/bjmorgan/site-analysis/blob/master/logo/site-analysis-logo.png' width='180'>
 
-[![Build Status](https://travis-ci.org/bjmorgan/site-analysis.svg?branch=master)](https://travis-ci.org/bjmorgan/site-analysis)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/cb871e86f11b715efad6/test_coverage)](https://codeclimate.com/github/bjmorgan/site-analysis/test_coverage)
+![Build Status](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/bjmorgan/site-analysis/badge.svg?branch=master)](https://coveralls.io/github/bjmorgan/site-analysis?branch=master)
 [![Documentation Status](https://readthedocs.org/projects/site-analysis/badge/?version=latest)](https://site-analysis.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/site-analysis.svg)](https://badge.fury.io/py/site-analysis)
 

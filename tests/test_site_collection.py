@@ -7,18 +7,31 @@ from unittest.mock import patch, Mock
 import numpy as np
 from collections import Counter
 
+class ConcreteSiteCollection(SiteCollection):
+
+    def assign_site_occupations(self,
+                                atoms,
+                                structure):
+        raise NotImplementedError
+
+    def analyse_structure(self,
+                          atoms,
+                          structure):
+        raise NotImplementedError
+
+
 class SiteCollectionTestCase(unittest.TestCase):
 
     def test_site_collection_is_initialised(self):
         sites = [Mock(spec=Site), Mock(spec=Site)]
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         self.assertEqual(site_collection.sites, sites)
 
     def test_assign_site_occupations_raises_not_implemented_error(self):
         sites = [Mock(spec=Site), Mock(spec=Site)]
         atoms = [Mock(spec=Atom), Mock(spec=Atom)]
         structure = Mock(spec=Structure)
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         with self.assertRaises(NotImplementedError):
             site_collection.assign_site_occupations(atoms, structure)
 
@@ -26,13 +39,13 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites = [Mock(spec=Site), Mock(spec=Site)]
         atoms = [Mock(spec=Atom), Mock(spec=Atom)]
         structure = Mock(spec=Structure)
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         with self.assertRaises(NotImplementedError):
             site_collection.analyse_structure(atoms, structure)
 
     def test_neighbouring_sites_raises_not_implemented_error(self):
         sites = [Mock(spec=Site), Mock(spec=Site)]
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         with self.assertRaises(NotImplementedError):
             site_collection.neighbouring_sites(site_index=27)
    
@@ -40,7 +53,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites = [Mock(spec=Site), Mock(spec=Site)]
         sites[0].index = 12
         sites[1].index = 42
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         self.assertEqual(site_collection.site_by_index(12), sites[0])
         self.assertEqual(site_collection.site_by_index(42), sites[1])
         with self.assertRaises(ValueError):
@@ -51,7 +64,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites[0].index = 12
         sites[0].contains_atoms = []
         sites[0].points = []
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
         atom.in_site = None
@@ -66,7 +79,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites[0].index = 12
         sites[0].contains_atoms = []
         sites[0].points = []
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
         atom.in_site = 12
@@ -83,7 +96,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites[1].transitions = Counter()
         sites[0].contains_atoms = []
         sites[0].points = []
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         site_collection.site_by_index = Mock(return_value=sites[1])
         atom = Mock(spec=Atom)
         atom.index = 4
@@ -99,14 +112,14 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites = [Mock(spec=Site), Mock(spec=Site)]
         sites[0].contains_atoms = [12]
         sites[1].contains_atoms = [42]
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         site_collection.reset_site_occupations()
         self.assertEqual(sites[0].contains_atoms, [])
         self.assertEqual(sites[1].contains_atoms, [])
    
     def test_sites_contain_points_raises_not_implemented_error(self):
         sites = [Mock(spec=Site), Mock(spec=Site)]
-        site_collection = SiteCollection(sites=sites)
+        site_collection = ConcreteSiteCollection(sites=sites)
         points = np.array([[0.0, 0.0, 0.0],
                            [0.5, 0.5, 0.5]])
         with self.assertRaises(NotImplementedError):

@@ -16,6 +16,9 @@ class SphericalSite(Site):
         self.frac_coords = frac_coords
         self.rcut = rcut
 
+    def centre(self) -> np.ndarray:
+        return self.frac_coords
+
     def as_dict(self) -> Dict:
         d = super(SphericalSite, self).as_dict()
         d['frac_coords'] = self.frac_coords

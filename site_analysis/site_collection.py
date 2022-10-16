@@ -120,7 +120,6 @@ class SiteCollection(ABC):
             if atom.in_site != site.index: # this atom has moved
                 previous_site = self.site_by_index(atom.in_site)
                 previous_site.transitions[site.index] += 1
-                print(previous_site.transitions)
         site.contains_atoms.append(atom.index)
         site.points.append(atom.frac_coords)
         atom.in_site = site.index

@@ -1,4 +1,6 @@
 from .site import Site
+from typing import Dict, Any
+import numpy as np
 
 class VoronoiSite(Site):
     """Site subclass corresponding to Voronoi cells centered
@@ -9,7 +11,9 @@ class VoronoiSite(Site):
 
     """
     
-    def __init__(self, frac_coords, label=None):
+    def __init__(self,
+                 frac_coords: np.ndarray,
+                 label: str=None) -> None:
         """Create a ``VoronoiSite`` instance.
         
         Args:
@@ -23,7 +27,7 @@ class VoronoiSite(Site):
         super(VoronoiSite, self).__init__(label=label)
         self.frac_coords = frac_coords
 
-    def as_dict(self):
+    def as_dict(self) -> Dict:
         """Json-serializable dict representation of this VoronoiSite.
 
         Args:
@@ -48,7 +52,30 @@ class VoronoiSite(Site):
             (VoronoiSite)
 
         """
-        voronoi_site = cls( frac_coords=d['frac_coords'] )
+        voronoi_site = cls(frac_coords=d['frac_coords'])
         voronoi_site.label = d.get('label')
         return voronoi_site 
 
+    def centre(self) -> np.ndarray:
+        """Returns the centre position of this site.
+
+        Args:
+            None
+
+        Returns:
+            np.ndarray
+
+        """
+        return self.frac_coords
+
+    def contains_point(self,
+                       x: np.ndarray,
+                       *args: Any,
+                       **kwargs: Any) -> bool:
+        """A single Voronoi site cannot determine whether it contains a given point, because
+        the site boundaries are defined by the set of all Voronoi sites.
+
+        Use VoronoiSiteCollection.assign_site_occupations() instead.
+
+        """
+        raise NotImplementedError

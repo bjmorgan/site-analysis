@@ -110,7 +110,7 @@ class Atom(object):
             "index": self.index,
             "in_site": self.in_site,
             }
-        if self._frac_coords:
+        if self._frac_coords is not None:
             d["frac_coords"] = self._frac_coords.tolist()
         return d
 

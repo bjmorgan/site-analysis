@@ -32,7 +32,8 @@ class PolyhedralSiteCollection(SiteCollection):
                 raise TypeError
         super(PolyhedralSiteCollection, self).__init__(sites)
         self.sites: List[PolyhedralSite] = self.sites
-        self._neighbouring_sites: Optional[List[PolyhedralSite]]  = None 
+        self._neighbouring_sites: Optional[List[PolyhedralSite]]  = None
+        self.max_cn: int = max([s.cn for s in self.sites]) 
 
     def analyse_structure(self,
             atoms: List[Atom],
@@ -61,7 +62,7 @@ class PolyhedralSiteCollection(SiteCollection):
         """
         self.reset_site_occupations()
 
-        atoms = atoms.copy() # Copy the list to avoid some wonky behaviour
+        atoms = atoms.copy()  # Copy the list to avoid some wonky behaviour
 
         # First handle atoms that are already assigned to sites
         for atom in atoms:
@@ -73,26 +74,39 @@ class PolyhedralSiteCollection(SiteCollection):
 
         if len(atoms) == 0:
             return
-        
+
         # Distance matrix for all sites and atoms by minimum pbc distance
         distance_matrix = generate_site_atom_distance_matrix(self.sites, atoms)
 
+        # First get the k nearest neighbors using partition
+        k = self.max_cn
+        partial_sorted_indices = np.argpartition(distance_matrix, k, axis=0)
+
         not_assigned_atoms = []
         for i, atom in enumerate(atoms):
-            
-            sorted_site_indices = np.argsort(distance_matrix[:, i])
-            
             assigned = False
-            for site_idx in sorted_site_indices:
+
+            # First check the k nearest sites (these are partially sorted)
+            for site_idx in partial_sorted_indices[:k, i]:
                 site = self.sites[site_idx]
                 if site.contains_atom(atom):
                     self.update_occupation(site, atom)
-                    # Modify this part if you want to allow an atom to be in multiple sites.
                     assigned = True
                     break
+
+            # If not assigned, check the remaining sites
+            if not assigned:
+                remaining_indices = partial_sorted_indices[k:, i]
+                for site_idx in remaining_indices:
+                    site = self.sites[site_idx]
+                    if site.contains_atom(atom):
+                        self.update_occupation(site, atom)
+                        assigned = True
+                        break
+
             if not assigned:
                 not_assigned_atoms.append(atom)
-        
+
         if not_assigned_atoms:
             print("Not assigned atoms: ", [atom.index for atom in not_assigned_atoms])
             print(f'Atom frac coords: {not_assigned_atoms[0].frac_coords} for atom {not_assigned_atoms[0].index}')

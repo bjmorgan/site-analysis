@@ -9,6 +9,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
     def setUp(self):
         self.mock_site1 = Mock(spec=PolyhedralSite)
         self.mock_site2 = Mock(spec=PolyhedralSite)
+        self.mock_site1.cn = 4
+        self.mock_site2.cn = 4
         self.sites = [self.mock_site1, self.mock_site2]
 
     def test_site_collection_initialization(self):

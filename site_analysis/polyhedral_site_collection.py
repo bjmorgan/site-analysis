@@ -1,12 +1,14 @@
 from .site_collection import SiteCollection
-from typing import List, Any, Optional, Dict
+from typing import List, Optional, Dict
 from .polyhedral_site import PolyhedralSite
-from .tools import generate_site_atom_distance_matrix
+from .tools import generate_site_atom_distance_matrix_and_sort_jax
 from .atom import Atom
 from .site import Site
 from pymatgen.core import Structure # type: ignore
 import numpy as np
 from scipy.spatial import Delaunay # type: ignore
+import jax
+import jax.numpy as jnp 
 
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
@@ -60,12 +62,13 @@ class PolyhedralSiteCollection(SiteCollection):
             3. If not, sort sites by distance and check them in order
             4. If the atom is in a site, update the site occupation
         """
+
         self.reset_site_occupations()
 
-        atoms = atoms.copy()  # Copy the list to avoid some wonky behaviour
+        atoms = atoms.copy()
 
-        # First handle atoms that are already assigned to sites
-        for atom in atoms:
+        # Handle pre-assigned atoms
+        for atom in atoms[:]:
             if atom.in_site:
                 previous_site = self.sites[atom.in_site]
                 if previous_site.contains_atom(atom):
@@ -75,41 +78,42 @@ class PolyhedralSiteCollection(SiteCollection):
         if len(atoms) == 0:
             return
 
-        # Distance matrix for all sites and atoms by minimum pbc distance
-        distance_matrix = generate_site_atom_distance_matrix(self.sites, atoms)
+        site_coords = jnp.array([site.centre() for site in self.sites])
+        atom_coords = jnp.array([atom.frac_coords for atom in atoms])
 
-        # First get the k nearest neighbors using partition
         k = self.max_cn
-        partial_sorted_indices = np.argpartition(distance_matrix, k, axis=0)
+        
+        distances, nearest_indices = generate_site_atom_distance_matrix_and_sort_jax(
+            site_coords, 
+            atom_coords,
+            k)
 
         not_assigned_atoms = []
         for i, atom in enumerate(atoms):
             assigned = False
 
-            # First check the k nearest sites (these are partially sorted)
-            for site_idx in partial_sorted_indices[:k, i]:
-                site = self.sites[site_idx]
+            # First check up to k (these are guaranteed to be the k nearest)
+            for site_idx in nearest_indices[:k, i]:
+                site = self.sites[int(site_idx)]
                 if site.contains_atom(atom):
                     self.update_occupation(site, atom)
                     assigned = True
                     break
 
-            # If not assigned, check the remaining sites
+            # If not assigned, check remaining sites (already partitioned, but unsorted within partition)
             if not assigned:
-                remaining_indices = partial_sorted_indices[k:, i]
-                for site_idx in remaining_indices:
-                    site = self.sites[site_idx]
+                for site_idx in nearest_indices[k:, i]:
+                    site = self.sites[int(site_idx)]
                     if site.contains_atom(atom):
                         self.update_occupation(site, atom)
                         assigned = True
                         break
 
-            if not assigned:
-                not_assigned_atoms.append(atom)
-
         if not_assigned_atoms:
             print("Not assigned atoms: ", [atom.index for atom in not_assigned_atoms])
             print(f'Atom frac coords: {not_assigned_atoms[0].frac_coords} for atom {not_assigned_atoms[0].index}')
+
+
 
     def neighbouring_sites(self, index: int) -> List[PolyhedralSite]:
         """Get list of neighboring sites for a given site index.

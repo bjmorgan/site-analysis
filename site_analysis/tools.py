@@ -10,6 +10,11 @@ from pymatgen.core import Structure
 from .atom import Atom
 from .site import Site
 
+import jax
+import jax.numpy as jnp
+from functools import partial
+
+
 def get_nearest_neighbour_indices(
         structure: Structure,
         ref_structure: Structure,
@@ -149,6 +154,35 @@ def fractional_min_pbc_distance(coord1: np.ndarray, coord2: np.ndarray) -> float
 
 def species_string_from_site(site: Site):
     return [k.__str__() for k in site._species.keys()][0]
+
+@partial(jax.jit, static_argnames=['k'])
+def generate_site_atom_distance_matrix_and_sort_jax(site_coords: jnp.ndarray, 
+                                                    atom_coords: jnp.ndarray,
+                                                    k: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    JIT-compiled function to calculate distances and partition k nearest neighbors.
+
+    Args:
+        site_coords (jnp.ndarray): Array of site coordinates
+        atom_coords (jnp.ndarray): Array of atom coordinates
+        k (int): Number of nearest neighbors to partition
+
+    Returns:
+        Tuple[jnp.ndarray, jnp.ndarray]: (distance_matrix, partitioned_indices)
+    """
+    # Compute displacement vectors with broadcasting
+    delta = atom_coords - site_coords[:, jnp.newaxis]
+
+    # Apply periodic boundary conditions
+    delta = delta - jnp.round(delta)
+
+    # Calculate distances using einsum for efficiency
+    distances = jnp.sqrt(jnp.einsum('ijk,ijk->ij', delta, delta))
+
+    # Use top_k to get k nearest neighbors (partially sorted)
+    partitioned_indices = jnp.argpartition(distances, k, axis=0)
+
+    return distances, partitioned_indices
 
 def generate_site_atom_distance_matrix(sites: List[Site], atoms: List[Atom]) -> np.ndarray:
     """

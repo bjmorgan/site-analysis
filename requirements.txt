@@ -4,3 +4,4 @@ coverage>=6.3
 monty
 pymatgen>=2022.0.3
 tqdm
+jax

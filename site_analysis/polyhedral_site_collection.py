@@ -77,6 +77,7 @@ class PolyhedralSiteCollection(SiteCollection):
         # Distance matrix for all sites and atoms by minimum pbc distance
         distance_matrix = generate_site_atom_distance_matrix(self.sites, atoms)
 
+        not_assigned_atoms = []
         for i, atom in enumerate(atoms):
             
             sorted_site_indices = np.argsort(distance_matrix[:, i])
@@ -89,12 +90,12 @@ class PolyhedralSiteCollection(SiteCollection):
                     # Modify this part if you want to allow an atom to be in multiple sites.
                     assigned = True
                     break
-
-        for atom in atoms:
-            unassigned_atoms = [a.index for a in atoms if a.in_site is None]
-            if unassigned_atoms:
-                print(f"# of unassigned atoms: {len(unassigned_atoms)}")
-                print(f"Unassigned atom indices: {unassigned_atoms}")
+            if not assigned:
+                not_assigned_atoms.append(atom)
+        
+        if not_assigned_atoms:
+            print("Not assigned atoms: ", [atom.index for atom in not_assigned_atoms])
+            print(f'Atom frac coords: {not_assigned_atoms[0].frac_coords} for atom {not_assigned_atoms[0].index}')
 
     def neighbouring_sites(self, index: int) -> List[PolyhedralSite]:
         """Get list of neighboring sites for a given site index.

@@ -125,18 +125,42 @@ class PolyhedralSite(Site):
         self._c_signs = None
 
     def _calculate_surface_properties(self) -> None:
-        """Calculate all surface properties at once."""
+        """Calculate all surface properties at once.
+        
+        Mathematical Description:
+        -----------------------
+        For each triangular face of the convex hull, we:
+        
+        1. Get face vertices (v0, v1, v2) from the hull simplices
+        
+        2. Calculate two edge vectors of the triangle:
+        edge1 = v1 - v2
+        edge2 = v0 - v2
+        
+        3. Compute face normal vectors using cross product:
+        normal = edge1 × edge2
+        This gives normal vectors pointing outward from the hull
+        
+        4. Determine orientation of each face relative to center:
+        - Calculate vector from face to polyhedron center: 
+            center_vec = center - v0
+        - Compute sign of dot product: sign(normal · center_vec)
+        - If positive: face normal points toward center
+        - If negative: face normal points away from center
+        """
         current_hull = self.hull 
         self._faces = current_hull.points[current_hull.simplices]
         centre = self.centre()
 
-        # Precompute surface normals and c_sign for all faces
-        face_edges_1 = self._faces[:, 1] - self._faces[:, 2]
-        face_edges_2 = self._faces[:, 0] - self._faces[:, 2]
+        face_edges_1 = self._faces[:, 1] - self._faces[:, 2]  # v1 - v2
+        face_edges_2 = self._faces[:, 0] - self._faces[:, 2]  # v0 - v2
+        
         self._surface_normals = np.cross(face_edges_1, face_edges_2)
+        
         self._c_signs = np.sign(np.einsum('ij,ij->i', 
                                         self._surface_normals, 
                                         centre - self._faces[:, 0]))
+
 
     def get_vertex_species(self,
             structure: Structure) -> List[str]:

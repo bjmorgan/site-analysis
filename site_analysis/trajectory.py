@@ -71,8 +71,12 @@ class Trajectory(object):
         structure: Structure,
         t: Optional[int]=None) -> None:
         self.analyse_structure(structure)
+
+        not_assigned_atoms = [atom for atom in self.atoms if atom.in_site is None]
+        if not_assigned_atoms:
+            print("Not assigned atoms: ", [atom.index for atom in not_assigned_atoms])
+            print(f'Atom frac coords: {not_assigned_atoms[0].frac_coords} for atom {not_assigned_atoms[0].index}')
         for atom in self.atoms:
-            assert(isinstance(atom.in_site, int))
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)

@@ -1,10 +1,12 @@
 from .site_collection import SiteCollection
 from typing import List, Any, Optional, Dict
 from .polyhedral_site import PolyhedralSite
+from .tools import generate_site_atom_distance_matrix
 from .atom import Atom
 from .site import Site
 from pymatgen.core import Structure # type: ignore
 import numpy as np
+from scipy.spatial import Delaunay # type: ignore
 
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
@@ -29,8 +31,8 @@ class PolyhedralSiteCollection(SiteCollection):
             if not isinstance(s, PolyhedralSite):
                 raise TypeError
         super(PolyhedralSiteCollection, self).__init__(sites)
-        self.sites = self.sites # type: List[PolyhedralSite]
-        self._neighbouring_sites = construct_neighbouring_sites(self.sites)
+        self.sites: List[PolyhedralSite] = self.sites
+        self._neighbouring_sites: Optional[List[PolyhedralSite]]  = None 
 
     def analyse_structure(self,
             atoms: List[Atom],
@@ -41,27 +43,69 @@ class PolyhedralSiteCollection(SiteCollection):
             s.assign_vertex_coords(structure)
         self.assign_site_occupations(atoms, structure)
 
-    def assign_site_occupations(self,
-                                atoms: List[Atom],
-                                structure: Structure):
+    def assign_site_occupations(self, atoms: List[Atom], structure: Structure) -> None:
+        """Assign atoms to sites by checking sites in order of proximity.
+
+        Args:
+            atoms (list(Atom)): List of Atom objects.
+            structure (Structure): Crystal structure information.
+
+        Returns:
+            None
+
+        Idea:
+            1. Reset site occupations
+            2. For each atom, check if it is already in a site
+            3. If not, sort sites by distance and check them in order
+            4. If the atom is in a site, update the site occupation
+        """
         self.reset_site_occupations()
+
+        atoms = atoms.copy() # Copy the list to avoid some wonky behaviour
+
+        # First handle atoms that are already assigned to sites
         for atom in atoms:
             if atom.in_site:
-                # first check the site last occupied
-                previous_site = next(s for s in self.sites if s.index == atom.in_site)
+                previous_site = self.sites[atom.in_site]
                 if previous_site.contains_atom(atom):
-                    self.update_occupation( previous_site, atom )
-                    continue # atom has not moved
-                else: # default is atom does not occupy any sites
-                    atom.in_site = None
-            for s in self.sites:
-                if s.contains_atom(atom):
-                    self.update_occupation( s, atom )
+                    self.update_occupation(previous_site, atom)
+                    atoms.remove(atom)
+
+        if len(atoms) == 0:
+            return
+        
+        # Distance matrix for all sites and atoms by minimum pbc distance
+        distance_matrix = generate_site_atom_distance_matrix(self.sites, atoms)
+
+        for i, atom in enumerate(atoms):
+            
+            sorted_site_indices = np.argsort(distance_matrix[:, i])
+            
+            assigned = False
+            for site_idx in sorted_site_indices:
+                site = self.sites[site_idx]
+                if site.contains_atom(atom):
+                    self.update_occupation(site, atom)
+                    # Modify this part if you want to allow an atom to be in multiple sites.
+                    assigned = True
                     break
 
-    def neighbouring_sites(self,
-            index: int) -> List[PolyhedralSite]:
-        return self._neighbouring_sites[index] 
+        for atom in atoms:
+            unassigned_atoms = [a.index for a in atoms if a.in_site is None]
+            if unassigned_atoms:
+                print(f"# of unassigned atoms: {len(unassigned_atoms)}")
+                print(f"Unassigned atom indices: {unassigned_atoms}")
+
+    def neighbouring_sites(self, index: int) -> List[PolyhedralSite]:
+        """Get list of neighboring sites for a given site index.
+        
+        Args:
+            index (int): Index of the site to get neighbors for
+            
+        Returns:
+            List[PolyhedralSite]: List of neighboring polyhedral sites
+        """
+        return self._neighbouring_sites[index]
 
     def sites_contain_points(self,
             points: np.ndarray,
@@ -82,32 +126,44 @@ class PolyhedralSiteCollection(SiteCollection):
         assert isinstance(structure, Structure)
         check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
         return check
+    
+    @property
+    def neighbouring_sites(self) -> Dict[int, List[PolyhedralSite]]:
+        """
+        Get all polyhedral sites that are face-sharing neighbours.
 
-def construct_neighbouring_sites(
-        sites: List[PolyhedralSite]) -> Dict[int, List[PolyhedralSite]]:
-    """
-    Find all polyhedral sites that are face-sharing neighbours.
+        Returns:
+            Dict[int, List[PolyhedralSite]]: Dictionary mapping site indices to lists of 
+                                            neighbouring PolyhedralSite objects.
+        """
+        if self._neighbouring_sites is None:
+            self._neighbouring_sites = self._construct_neighbouring_sites(self.sites)
+        return self._neighbouring_sites
 
-    Any polyhedral sites that share 3 or more vertices are considered
-    to share a face.
+    def _construct_neighbouring_sites(
+            self,
+            sites: List[PolyhedralSite]) -> Dict[int, List[PolyhedralSite]]:
+        """
+        Find all polyhedral sites that are face-sharing neighbours.
 
-    Args:
-        None
+        Any polyhedral sites that share 3 or more vertices are considered
+        to share a face.
 
-    Returns:
-        (dict): Dictionary of `int`: `list` entries. 
-            Keys are site indices. Values are lists of ``PolyhedralSite`` objects.
+        Args:
+            sites (List[PolyhedralSite]): List of polyhedral sites to analyze.
 
-    """
-    neighbours: Dict[int, List[PolyhedralSite]] = {}
-    for site_i in sites:
-        neighbours[site_i.index] = []
-        for site_j in sites:
-            if site_i is site_j:
-                continue
-            # 3 or more common vertices indicated a shared face.
-            n_shared_vertices = len(set(site_i.vertex_indices) & set(site_j.vertex_indices))
-            if n_shared_vertices >= 3:
-                neighbours[site_i.index].append(site_j)
-    return neighbours
- 
+        Returns:
+            Dict[int, List[PolyhedralSite]]: Dictionary mapping site indices to lists of 
+                                            neighbouring PolyhedralSite objects.
+        """
+        neighbours: Dict[int, List[PolyhedralSite]] = {}
+        for site_i in sites:
+            neighbours[site_i.index] = []
+            for site_j in sites:
+                if site_i is site_j:
+                    continue
+                # 3 or more common vertices indicated a shared face.
+                n_shared_vertices = len(set(site_i.vertex_indices) & set(site_j.vertex_indices))
+                if n_shared_vertices >= 3:
+                    neighbours[site_i.index].append(site_j)
+        return neighbours

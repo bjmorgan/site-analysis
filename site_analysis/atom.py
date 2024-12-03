@@ -39,7 +39,7 @@ class Atom(object):
         self.index = index
         self.in_site: Optional[int] = None
         self._frac_coords: Optional[np.ndarray] = None
-        self.trajectory: List[int] = []
+        self.trajectory: List[Optional[int]] = []
 
     def __str__(self) -> str:
         """Return a string representation of this atom.

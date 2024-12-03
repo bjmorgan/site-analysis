@@ -6,7 +6,9 @@ This module contains tools for [TODO]
 import numpy as np
 
 from typing import Optional, List, Union, Tuple
-from pymatgen.core import Structure, Site
+from pymatgen.core import Structure
+from .atom import Atom
+from .site import Site
 
 def get_nearest_neighbour_indices(
         structure: Structure,
@@ -125,8 +127,82 @@ def x_pbc(x: np.ndarray):
                        [1,1,1]]) + x
     return all_x
 
+def fractional_min_pbc_distance(coord1: np.ndarray, coord2: np.ndarray) -> float:
+    """
+    Calculate the minimum distance between two points in fractional coordinates considering PBC.
+
+    Args:
+        coord1 (np.ndarray): Fractional coordinates of the first point.
+        coord2 (np.ndarray): Fractional coordinates of the second point.
+
+    Returns:
+        float: The minimum distance between the two points in fractional space considering PBC.
+    """
+    delta = coord2 - coord1
+    delta -= np.round(delta)  # Apply PBC: shift to [-0.5, 0.5]
+
+    # Calculate the distance in fractional coordinates
+    distance = np.linalg.norm(delta)
+
+    return distance
+
+
 def species_string_from_site(site: Site):
     return [k.__str__() for k in site._species.keys()][0]
+
+def generate_site_atom_distance_matrix(sites: List[Site], atoms: List[Atom]) -> np.ndarray:
+    """
+    Generate a distance matrix between all sites and all atoms.
+
+    Args:
+        sites (List[Site]): List of sites.
+        atoms (List[Atom]): List of atoms.
+
+    Returns:
+        np.ndarray: A 2D distance matrix where each element [i, j] is the distance
+        between the i-th site and the j-th atom.
+    """
+    # Extract fractional coordinates for sites and atoms
+    site_coords = np.array([site.centre() for site in sites])
+    atom_coords = np.array([atom.frac_coords for atom in atoms])
+
+    # Apply PBC and calculate distances
+    delta = atom_coords - site_coords[:, np.newaxis]
+    delta -= np.round(delta)
+    distance_matrix = np.sqrt(np.einsum('ijk,ijk->ij', delta, delta))
+
+    return distance_matrix
+
+def generate_structure_distance_matrix(structure: Structure,
+                                    return_cartesian: bool = True) -> np.ndarray:
+    """
+    Generate a distance matrix for all sites within the structure,
+    considering periodic boundary conditions.
+
+    Args:
+        structure (Structure): The structure to generate a distance matrix for.
+        return_cartesian (bool): If True, uses Cartesian distances for mapping; 
+                                otherwise, fractional distances are returned.
+
+    Returns:
+        np.ndarray: A 2D distance matrix where each element [i, j] is the distance 
+                    between the i-th and j-th site, respecting PBC.
+    """
+    frac_coords = structure.frac_coords
+
+    delta = frac_coords[np.newaxis, :] - frac_coords[:, np.newaxis]
+    delta -= np.round(delta)  
+
+    if return_cartesian:
+        # Convert to Cartesian coordinates
+        lattice_matrix = structure.lattice.matrix
+        delta_cart = np.einsum('ijk,kl->ijl', delta, lattice_matrix)
+        distance_matrix = np.sqrt(np.einsum('ijk,ijk->ij', delta_cart, delta_cart))
+    else:
+        # Use fractional coordinates directly
+        distance_matrix = np.sqrt(np.einsum('ijk,ijk->ij', delta, delta))
+
+    return distance_matrix
 
 def site_index_mapping(structure1: Structure, 
                        structure2: Structure,

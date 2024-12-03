@@ -227,9 +227,10 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
         site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull', 
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
+        with patch.object(type(site), 'hull', new_callable=PropertyMock) as mock_hull:
+            mock_hull.return_value = ConvexHull(points)
+            site.vertex_coords = points
+            
             in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
             self.assertTrue(in_site)
 
@@ -240,9 +241,10 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
         site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
+        with patch.object(type(site), 'hull', new_callable=PropertyMock) as mock_hull:
+            mock_hull.return_value = ConvexHull(points)
+            site.vertex_coords = points
+
             in_site = site.contains_point_sn(np.array([0.1, 0.1, 0.1]))
             self.assertFalse(in_site)
 
@@ -253,11 +255,13 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
         site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
+        
+        with patch.object(type(site), 'hull', new_callable=PropertyMock) as mock_hull:
+            mock_hull.return_value = ConvexHull(points)
+            site.vertex_coords = points
+
             in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                       [0.8, 0.8, 0.9]]))
+                                                    [0.8, 0.8, 0.9]]))
             self.assertFalse(in_site)
 
     def test_contains_point_sn_returns_true_if_one_point_inside_polyhedron(self):
@@ -266,13 +270,16 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
-        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
-            in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                       [0.5, 0.5, 0.5]]))
-            self.assertTrue(in_site)
+
+        site.centre = Mock(return_value=np.array([0.5, 0.5, 0.5]))
+        with patch.object(type(site), 'hull', new_callable=PropertyMock) as mock_hull:
+            mock_hull.return_value = ConvexHull(points)
+            site.vertex_coords = points
+            test_points = np.array([[0.1, 0.1, 0.1],
+                                    [0.5, 0.5, 0.5]])
+
+            in_site = site.contains_point_sn(test_points)
+            self.assertTrue(in_site) 
 
     def test_contains_atom_raises_value_error_if_algo_is_invalid(self):
         atom = Mock(spec=Atom)

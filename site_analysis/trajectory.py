@@ -6,9 +6,12 @@ from .voronoi_site import VoronoiSite
 from .voronoi_site_collection import VoronoiSiteCollection
 from .spherical_site import SphericalSite
 from .spherical_site_collection import SphericalSiteCollection
+from .dynamic_voronoi_site import DynamicVoronoiSite
+from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
+from .site_collection import SiteCollection
 from .site import Site
 from .atom import Atom
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Type
 from pymatgen.core import Structure
 
 class Trajectory(object):
@@ -17,20 +20,39 @@ class Trajectory(object):
     def __init__(self,
             sites: List[Site],
             atoms: List[Atom]) -> None:
+        """Initialize a Trajectory object for site analysis of simulation trajectories.
+        
+        This constructor ensures all sites are of the same type and initializes the
+        appropriate site collection based on the type of sites provided.
+        
+        Args:
+            sites: List of Site objects (must all be of the same type).
+            atoms: List of Atom objects to track during the trajectory analysis.
+            
+        Raises:
+            TypeError: If sites contains mixed site types or an unrecognised site type.
+        """
         # ensure that all sites are of the same type
         if len(set([type(s) for s in sites])) > 1:
             raise TypeError("A Trajectory cannot be initialised with mixed Site types")
-        self.site_collection: Union[PolyhedralSiteCollection,
-                                    VoronoiSiteCollection,
-                                    SphericalSiteCollection]
-        if isinstance(sites[0], PolyhedralSite):
-            self.site_collection = PolyhedralSiteCollection(sites) 
-        elif isinstance(sites[0], VoronoiSite):
-            self.site_collection = VoronoiSiteCollection(sites)
-        elif isinstance(sites[0], SphericalSite):
-            self.site_collection = SphericalSiteCollection(sites)
-        else:
+        
+        # Map site types to their corresponding collection classes
+        site_collection_map: Dict[Type[Site], Type[SiteCollection]] = {
+            PolyhedralSite: PolyhedralSiteCollection,
+            VoronoiSite: VoronoiSiteCollection,
+            SphericalSite: SphericalSiteCollection,
+            DynamicVoronoiSite: DynamicVoronoiSiteCollection
+        }
+        
+        site_type = type(sites[0])
+        # Find the appropriate site collection class
+        for site_type, collection_class in site_collection_map.items():
+            if isinstance(sites[0], site_type):
+                self.site_collection = collection_class(sites)
+                break
+        else:  # This executes if no break occurs in the for loop
             raise TypeError(f"Site type {type(sites[0])} not recognised for Trajectory initialisation")
+        
         self.sites = sites
         self.atoms = atoms
         self.timesteps: List[int] = []
@@ -39,37 +61,99 @@ class Trajectory(object):
 
     def atom_by_index(self,
             i: int) -> Atom:
+        """Return the atom with the specified index.
+        
+        Args:
+            i: Index of the atom to return.
+            
+        Returns:
+            The Atom object with the specified index.
+        """
         return self.atoms[self.atom_lookup[i]] 
 
     def site_by_index(self,
             i: int) -> Site:
+        """Return the site with the specified index.
+        
+        Args:
+            i: Index of the site to return.
+            
+        Returns:
+            The Site object with the specified index.
+        """
         return self.sites[self.site_lookup[i]] 
 
     def analyse_structure(self,
             structure: Structure) -> None:
+        """Analyse a structure to assign atoms to sites.
+        
+        This delegates the analysis to the site collection's analyse_structure method.
+        
+        Args:
+            structure: A pymatgen Structure object to be analysed.
+        """
         self.site_collection.analyse_structure(self.atoms, structure)
         
     def assign_site_occupations(self,
             structure: Structure) -> None:
+        """Assign atoms to sites for a specific structure.
+        
+        This delegates the assignment to the site collection's assign_site_occupations method.
+        
+        Args:
+            structure: A pymatgen Structure object to be analysed.
+        """
         self.site_collection.assign_site_occupations(self.atoms, structure)
                     
     def site_coordination_numbers(self) -> Counter:
+        """Return the coordination numbers of all sites.
+        
+        Returns:
+            A Counter object mapping coordination numbers to their frequencies.
+        """
         return Counter([s.coordination_number for s in self.sites])
 
     def site_labels(self) -> List[Optional[str]]:
+        """Return the labels of all sites.
+        
+        Returns:
+            A list of site labels (or None for sites without labels).
+        """
         return [s.label for s in self.sites]
    
     @property
     def atom_sites(self) -> List[Optional[int]]:
+        """Return the sites that each atom currently occupies.
+        
+        Returns:
+            A list of site indices (or None for unoccupied atoms), one for each atom.
+        """
         return [atom.in_site for atom in self.atoms]
         
     @property
     def site_occupations(self) -> List[List[int]]:
+        """Return the atoms occupying each site.
+        
+        Returns:
+            A list of lists, where each inner list contains the indices of atoms
+            occupying a site.
+        """
         return [s.contains_atoms for s in self.sites]
 
     def append_timestep(self,
         structure: Structure,
         t: Optional[int]=None) -> None:
+        """Append a new timestep to the trajectory.
+        
+        This method:
+        1. Analyses the structure to assign atoms to sites
+        2. Updates the trajectory information for atoms and sites
+        3. Adds the timestep to the list of timesteps if provided
+        
+        Args:
+            structure: A pymatgen Structure object for this timestep.
+            t: Optional timestep index to record. If None, no timestep is recorded.
+        """
         self.analyse_structure(structure)
         for atom in self.atoms:
             assert(isinstance(atom.in_site, int))
@@ -80,6 +164,11 @@ class Trajectory(object):
             self.timesteps.append(t)
 
     def reset(self) -> None:
+        """Reset the trajectory.
+        
+        This clears all trajectory information for atoms and sites and
+        resets the timesteps list.
+        """
         for atom in self.atoms:
             atom.reset()
         for site in self.sites:
@@ -88,21 +177,56 @@ class Trajectory(object):
 
     @property
     def atoms_trajectory(self):
+        """Return the trajectory of all atoms.
+        
+        Returns:
+            A list of lists, where each inner list represents a timestep and
+            contains the site indices occupied by each atom at that timestep.
+        """
         return list(map(list, zip(*[atom.trajectory for atom in self.atoms])))
 
     @property
     def sites_trajectory(self):
+        """Return the trajectory of all sites.
+        
+        Returns:
+            A list of lists, where each inner list represents a timestep and
+            contains the atom indices occupying each site at that timestep.
+        """
         return list(map(list, zip(*[site.trajectory for site in self.sites])))
 
     @property
     def at(self):
+        """Shorthand for atoms_trajectory.
+        
+        Returns:
+            The atoms_trajectory property.
+        """
         return self.atoms_trajectory
 
     @property
     def st(self):
+        """Shorthand for sites_trajectory.
+        
+        Returns:
+            The sites_trajectory property.
+        """
         return self.sites_trajectory
 
     def trajectory_from_structures(self, structures, progress=False):
+        """Generate a trajectory from a list of structures.
+        
+        This method processes each structure in sequence, appending a timestep
+        for each one.
+        
+        Args:
+            structures: List of pymatgen Structure objects to analyse.
+            progress: If False, no progress is shown. If True, a progress bar is displayed.
+                If 'notebook', a notebook-friendly progress bar is displayed.
+                
+        Notes:
+            This method uses tqdm for progress tracking when enabled.
+        """
         generator = enumerate(structures, 1)
         if progress:
             if progress=='notebook':
@@ -113,7 +237,11 @@ class Trajectory(object):
             self.append_timestep(s, t=timestep)
    
     def __len__(self):
-        """Returns the "length" of a trajectory, i.e. the number of analysed timesteps."""
+        """Return the length of the trajectory.
+        
+        Returns:
+            The number of timesteps in the trajectory.
+        """
         return len(self.timesteps)
  
 def update_occupation(site, atom):

@@ -150,6 +150,7 @@ class Site(ABC):
         site.label = d.get('label')
         return site 
 
+    @property
     @abstractmethod
     def centre(self) -> np.ndarray:
         """Returns the centre point of this site.
@@ -180,6 +181,8 @@ class Site(ABC):
         """ 
         Site._newid = newid
 
+    @property
+    @abstractmethod
     def coordination_number(self) -> int:
         """Returns the coordination number of this site.
 

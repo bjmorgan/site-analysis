@@ -125,8 +125,21 @@ def x_pbc(x: np.ndarray):
                        [1,1,1]]) + x
     return all_x
 
-def species_string_from_site(site: Site):
-    return [k.__str__() for k in site._species.keys()][0]
+def species_string_from_site(site: Site) -> str:
+    """Extract the species string from a pymatgen Site object.
+    
+    Args:
+        site: A pymatgen Site object
+        
+    Returns:
+        String representation of the site's species
+    """
+    if hasattr(site._species, 'keys'):
+        return [k.__str__() for k in site._species.keys()][0]
+    elif hasattr(site, 'species_string'):
+        return site.species_string
+    else:
+        return str(site._species)
 
 def site_index_mapping(structure1: Structure, 
                        structure2: Structure,

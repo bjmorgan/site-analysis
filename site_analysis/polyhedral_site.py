@@ -237,7 +237,7 @@ class PolyhedralSite(Site):
         """
         hull = ConvexHull(self.vertex_coords)
         faces = hull.points[hull.simplices]
-        centre = self.centre()
+        centre = self.centre
         inside = []
         for x in x_list:
             dotsum = 0
@@ -284,6 +284,7 @@ class PolyhedralSite(Site):
         polyhedral_site.label = d.get('label')
         return polyhedral_site 
 
+    @property
     def centre(self) -> np.ndarray:
         """Returns the fractional coordinates of the centre point of
         this polyhedral site.

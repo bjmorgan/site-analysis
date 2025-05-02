@@ -4,7 +4,7 @@ import json
 from monty.io import zopen # type: ignore
 import numpy as np
 from pymatgen.core import Structure
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -105,20 +105,22 @@ class Atom(object):
         else:
             return self._frac_coords
 
-    def as_dict(self) -> Dict:
-        d = {
-            "index": self.index,
-            "in_site": self.in_site,
-            }
+    def as_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "index": int(self.index),
+            "in_site": None if self.in_site is None else int(self.in_site),
+        }
         if self._frac_coords is not None:
             d["frac_coords"] = self._frac_coords.tolist()
         return d
 
     @classmethod
-    def from_dict(cls,
-            d: Dict) -> Atom:
+    def from_dict(cls, d: Dict) -> Atom:
         atom = cls(index=d["index"])
-        atom.in_site = d["in_site"]
+        if d["in_site"] is not None:
+            atom.in_site = int(d["in_site"])  # Convert string to int
+        else:
+            atom.in_site = None
         atom._frac_coords = np.array(d["frac_coords"])
         return atom
 
@@ -126,8 +128,8 @@ class Atom(object):
             filename: Optional[str]=None) -> str:
         s = json.dumps(self.as_dict())
         if filename:
-            with zopen(filename, "wt") as f:
-                f.write("{}".format(s))
+            with zopen(filename, "wb") as f:
+                f.write(s.encode('utf-8'))
         return s
 
     @classmethod

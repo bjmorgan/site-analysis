@@ -182,7 +182,6 @@ class Site(ABC):
         Site._newid = newid
 
     @property
-    @abstractmethod
     def coordination_number(self) -> int:
         """Returns the coordination number of this site.
 

@@ -5,8 +5,8 @@ This module contains tools for [TODO]
 """
 import numpy as np
 
-from typing import Optional, List, Union, Tuple
-from pymatgen.core import Structure, Site
+from typing import Optional, List, Union, Tuple, cast
+from pymatgen.core import Structure, Site, PeriodicSite
 
 def get_nearest_neighbour_indices(
         structure: Structure,
@@ -77,18 +77,19 @@ def get_vertex_indices(
             coordination environment.
 
     """
-    central_sites = [ s for s in structure if s.species_string == centre_species ]
+    central_sites = [s for s in structure if s.species_string == centre_species]
     if isinstance(n_vertices, int):
         n_vertices = [n_vertices] * len(central_sites)
     if isinstance(vertex_species, str):
-        vertex_species = [ vertex_species ]
+        vertex_species = [vertex_species]
     vertex_indices = []
     for site, n_vert in zip(central_sites, n_vertices):
-        neighbours = [ s for s in structure.get_neighbors(site, r=cutoff, include_index=True) 
-                       if s[0].species_string in vertex_species ]
+        periodic_site = cast(PeriodicSite, site)
+        neighbours = [s for s in structure.get_neighbors(periodic_site, r=cutoff, include_index=True) 
+                       if s[0].species_string in vertex_species]
         neighbours.sort(key=lambda x: x[1])
-        atom_indices = [ n[2] for n in neighbours[:n_vert] ]
-        vertex_indices.append( atom_indices )
+        atom_indices = [n[2] for n in neighbours[:n_vert]]
+        vertex_indices.append(atom_indices)
     return vertex_indices
 
 def x_pbc(x: np.ndarray):
@@ -186,10 +187,11 @@ def site_index_mapping(structure1: Structure,
     dr_ij_to_return = []
     for site1, dr_i in zip(structure1, dr_ij):
         if site1.species_string in species1:
-                subset_idx = np.argmin(dr_i[structure2_mask])
-                parent_idx = np.arange(len(dr_i))[structure2_mask][subset_idx] 
+                dr_i_array = np.asarray(dr_i)
+                subset_idx = np.argmin(dr_i_array[structure2_mask])
+                parent_idx = np.arange(dr_i_array.size)[structure2_mask][subset_idx] 
                 to_return.append(parent_idx)
-                dr_ij_to_return.append(dr_i[parent_idx])
+                dr_ij_to_return.append(dr_i_array[parent_idx])
     if one_to_one_mapping:
         if len(to_return) != len(set(to_return)):
             raise ValueError("One-to-one mapping between structures not found.")   

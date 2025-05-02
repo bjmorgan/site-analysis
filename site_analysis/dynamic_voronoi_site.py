@@ -85,6 +85,7 @@ class DynamicVoronoiSite(Site):
 		
 		self._centre_coords = centre
 		
+	@property
 	def centre(self) -> np.ndarray:
 		"""Returns the centre position of this site.
 		

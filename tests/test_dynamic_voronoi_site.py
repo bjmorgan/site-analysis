@@ -111,13 +111,13 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
 		centre_coords = np.array([0.5, 0.5, 0.5])
 		site._centre_coords = centre_coords
 		
-		# Check that centre() returns the expected coordinates
-		np.testing.assert_array_equal(site.centre(), centre_coords)
+		# Check that centre returns the expected coordinates
+		np.testing.assert_array_equal(site.centre, centre_coords)
 		
-		# Check that centre() raises an error if the centre has not been calculated yet
+		# Check that centre raises an error if the centre has not been calculated yet
 		site._centre_coords = None
 		with self.assertRaises(RuntimeError):
-			site.centre()
+			site.centre
 			
 	def test_update_centre_when_reference_atoms_move(self):
 		"""Test that the centre updates when reference atoms move."""

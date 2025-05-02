@@ -183,3 +183,20 @@ class DynamicVoronoiSite(Site):
 	
 		"""
 		return self.coordination_number
+		
+	@classmethod
+	def sites_from_reference_indices(cls,
+		reference_indices_list: List[List[int]],
+		label: Optional[str] = None) -> List[DynamicVoronoiSite]:
+		"""Create a list of DynamicVoronoiSite objects from a list of reference indices.
+		
+		Args:
+			reference_indices_list: List of lists, where each inner list contains
+				reference indices for a site.
+			label: Optional label for all sites. Default is None.
+			
+		Returns:
+			A list of DynamicVoronoiSite objects.
+		"""
+		sites = [cls(reference_indices=ri, label=label) for ri in reference_indices_list]
+		return sites

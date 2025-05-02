@@ -198,6 +198,47 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
 		
 		# Test the cn property (convenience alias for coordination_number)
 		self.assertEqual(site.cn, 6)
+
+	def test_sites_from_reference_indices(self):
+		"""Test that sites_from_reference_indices correctly creates sites from reference indices."""
+		reference_indices_list = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+		label = "tetrahedral_site"
 		
+		# Create sites using the class method
+		sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list, label=label)
+		
+		# Check that the correct number of sites were created
+		self.assertEqual(len(sites), len(reference_indices_list))
+		
+		# Check that each site has the correct reference indices and label
+		for site, ref_indices in zip(sites, reference_indices_list):
+			self.assertEqual(site.reference_indices, ref_indices)
+			self.assertEqual(site.label, label)
+		
+	def test_sites_from_reference_indices_without_label(self):
+		"""Test that sites_from_reference_indices works correctly without a label."""
+		reference_indices_list = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+		
+		# Create sites using the class method
+		sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
+		
+		# Check that the correct number of sites were created
+		self.assertEqual(len(sites), len(reference_indices_list))
+		
+		# Check that each site has the correct reference indices and no label
+		for site, ref_indices in zip(sites, reference_indices_list):
+			self.assertEqual(site.reference_indices, ref_indices)
+			self.assertEqual(site.label, None)
+	
+	def test_sites_from_reference_indices_empty_list(self):
+		"""Test that sites_from_reference_indices returns an empty list when given an empty list."""
+		reference_indices_list = []
+		
+		# Create sites using the class method
+		sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
+		
+		# Check that no sites were created
+		self.assertEqual(len(sites), 0)
+
 if __name__ == '__main__':
 	unittest.main()

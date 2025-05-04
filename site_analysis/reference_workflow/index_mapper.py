@@ -48,13 +48,11 @@ class IndexMapper:
 		"""
 		# Extract all unique coordinating atoms from reference structure
 		unique_indices = self._extract_unique_coordinating_atoms(ref_coordinating)
-		print(unique_indices)
 		
 		# Create mapping from reference to target structure
 		index_mapping = self._find_closest_atom_mapping(
 			reference, target, unique_indices, target_species
 		)
-		print(index_mapping)
 		
 		# Map the coordination lists using the established mapping
 		mapped_coordinating = self._apply_mapping(ref_coordinating, index_mapping)
@@ -142,23 +140,6 @@ class IndexMapper:
 		
 		# Create mapping dictionary
 		mapping = {ref_indices[i]: int(mapped_indices[i]) for i in range(len(ref_indices))}
-		
-		return mapping
-		
-		# Verify 1:1 mapping constraint
-		target_indices = list(mapping.values())
-		if len(target_indices) != len(set(target_indices)):
-			seen = set()
-			duplicates = []
-			for target_idx in target_indices:
-				if target_idx in seen:
-					duplicates.append(target_idx)
-				seen.add(target_idx)
-			
-			raise ValueError(
-				f"1:1 mapping violation: Multiple reference atoms map to "
-				f"the same target atom(s) at indices {duplicates}"
-			)
 		
 		return mapping
 	

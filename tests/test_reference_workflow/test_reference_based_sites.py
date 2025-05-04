@@ -359,6 +359,24 @@ class TestReferenceBasedSites(unittest.TestCase):
             
             # This will verify the mock was called with the target structure
             mock_factory.assert_called_once_with(self.target)
+            
+    def test_map_environments_with_empty_list(self):
+        """Test that _map_environments correctly handles an empty list of environments.
+        
+        This directly tests the internal method that's failing when no environments are found.
+        """
+        with self.index_mapper_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Call _map_environments directly with an empty list
+            empty_environments = []
+            result = rbs._map_environments(empty_environments)
+            
+            # Verify that an empty list is returned
+            self.assertEqual(result, [])
+            
+            # Verify that index_mapper was not called (which would cause the error)
+            self.mock_index_mapper.map_coordinating_atoms.assert_not_called()
 
 
 if __name__ == '__main__':

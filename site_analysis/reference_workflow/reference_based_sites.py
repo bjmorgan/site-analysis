@@ -260,6 +260,10 @@ class ReferenceBasedSites:
 		Raises:
 			ValueError: If environments cannot be mapped between structures.
 		"""
+		# If no environments were found, return an empty list immediately
+		if not ref_environments:
+			return []
+
 		try:
 			# Create index mapper if not already initialised
 			if self._index_mapper is None:

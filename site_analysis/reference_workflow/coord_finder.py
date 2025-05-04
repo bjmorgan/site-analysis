@@ -12,7 +12,7 @@ class CoordinationEnvironmentFinder:
     
     def _index_atoms_by_species(self) -> Dict[str, List[int]]:
         """Organize atoms by species."""
-        indices = {}
+        indices: Dict[str, List[int]] = {}
         for i, site in enumerate(self.structure):
             species = site.species_string
             if species not in indices:

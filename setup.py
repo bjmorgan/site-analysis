@@ -17,7 +17,7 @@ config = {
     'install_requires': open( 'requirements.txt' ).read(),
     'python_requires': '>=3.7',
     'license': 'MIT',
-    'packages': [ 'site_analysis' ],
+    'packages': ['site_analysis'],
     'scripts': [],
     'name': 'site-analysis'
 }

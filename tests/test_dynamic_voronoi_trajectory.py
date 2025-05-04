@@ -190,10 +190,6 @@ class DynamicVoronoiTrajectoryIntegrationTestCase(unittest.TestCase):
 			
 			# The site center should be very close to the O atom position
 			o_coords = structure[o_atom.index].frac_coords
-			print(o_coords, site.centre)
-			print(structure[i].frac_coords)
-			for j in site.reference_indices:
-				print(j, structure[j].frac_coords)
 			np.testing.assert_array_almost_equal(site.centre, o_coords, decimal=5)
 			
 			# Verify that the site is defined by the two nearest Re atoms

@@ -78,7 +78,6 @@ class StructureAligner:
 			method='Nelder-Mead',  # More robust method without gradient requirements
 			options={'xatol': 1e-4, 'fatol': 1e-4, 'disp': False}
 		)
-		print(result)
 		
 		if not result.success:
 			raise ValueError(f"Optimization failed: {result.message}")

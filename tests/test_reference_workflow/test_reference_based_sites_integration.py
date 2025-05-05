@@ -73,7 +73,7 @@ class TestCsPbI3Integration(unittest.TestCase):
     def test_polyhedral_sites_for_cesium(self):
         """Test creating polyhedral sites for Cs atoms in CsPbI3.
         
-        Cs atoms sit in a cavity formed by 8 I atoms in the cubic phase.
+        Cs atoms sit in a cavity formed by 8 Pb atoms in the cubic phase.
         """
         # Initialize ReferenceBasedSites
         rbs = ReferenceBasedSites(self.reference, self.target, align=True)
@@ -82,9 +82,9 @@ class TestCsPbI3Integration(unittest.TestCase):
         # In cubic perovskite, Cs is coordinated by 8 I atoms
         sites = rbs.create_polyhedral_sites(
             center_species="Cs",       # Cs is at the center of the site
-            vertex_species="I",        # I atoms define the vertices
-            cutoff=4.5,                # Typical Cs-I distance is ~4 Å
-            n_vertices=8,              # Each Cs is coordinated by 8 I atoms
+            vertex_species="Pb",       # Pb atoms define the vertices
+            cutoff=6.0,                # Typical Cs-Pb distance is ~6 Å
+            n_vertices=8,              # Each Cs is coordinated by 8 Pb atoms
             label="Cs_site"            # Label for the sites
         )
         

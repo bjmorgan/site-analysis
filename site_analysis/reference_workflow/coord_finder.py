@@ -1,6 +1,6 @@
 from typing import Dict, List, Union
 from pymatgen.core import Structure
-from site_analysis.tools import get_vertex_indices
+from site_analysis.tools import get_coordination_indices
 
 
 class CoordinationEnvironmentFinder:
@@ -22,35 +22,35 @@ class CoordinationEnvironmentFinder:
     
     def find_environments(self, 
                           center_species: str, 
-                          vertex_species: Union[str, List[str]], 
-                          n_vertices: int, 
+                          coordination_species: Union[str, List[str]], 
+                          n_coord: int, 
                           cutoff: float) -> Dict[int, List[int]]:
         """Find coordination environments."""
         # Check if we have the required species
         if center_species not in self._atom_indices:
             raise ValueError(f"Center species '{center_species}' not found in structure")
         
-        if isinstance(vertex_species, str):
-            vertex_species = [vertex_species]
+        if isinstance(coordination_species, str):
+            coordination_species = [coordination_species]
         
-        for species in vertex_species:
+        for species in coordination_species:
             if species not in self._atom_indices:
-                raise ValueError(f"Vertex species '{species}' not found in structure")
+                raise ValueError(f"Coordinating species '{species}' not found in structure")
         
-        # Use get_vertex_indices to find coordination environments
-        environments = get_vertex_indices(
+        environments = get_coordination_indices(
             structure=self.structure,
             centre_species=center_species,
-            vertex_species=vertex_species,
+            coordination_species=coordination_species,
             cutoff=cutoff,
-            n_vertices=n_vertices
+            n_coord=n_coord
         )
+        print(environments)
         
         # Convert to dictionary format
         result = {}
         center_indices = self._atom_indices[center_species]
-        for i, vertices in enumerate(environments):
+        for i, coordinating in enumerate(environments):
             center_idx = center_indices[i]
-            result[center_idx] = vertices
+            result[center_idx] = coordinating
         
         return result

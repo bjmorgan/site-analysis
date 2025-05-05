@@ -3,10 +3,91 @@
 This module contains tools for [TODO]
 
 """
+import warnings
 import numpy as np
 
 from typing import Optional, List, Union, Tuple, cast
 from pymatgen.core import Structure, Site, PeriodicSite
+
+from typing import List, Union
+from pymatgen.core import Structure
+
+def get_coordination_indices(
+        structure: Structure,
+        centre_species: str, 
+        coordination_species: Union[str, List[str]],
+        cutoff: float,
+        n_coord: Union[int, List[int]]) -> List[List[int]]:
+    """
+    Find atoms with exactly the specified coordination environment.
+    
+    For each atom of centre_species, finds environments with exactly n_coord
+    coordinating atoms of coordination_species within the cutoff distance.
+    
+    Args:
+        structure: A pymatgen Structure object.
+        centre_species: Species string identifying the atoms at the centres.
+        coordination_species: Species string or list of strings identifying 
+            the coordinating atoms.
+        cutoff: Distance cutoff for neighbour search in Angstroms.
+        n_coord: Number(s) of coordinating atoms required for 
+            each environment. If an int is provided, the same number is used for all
+            centre atoms. If a list is provided, it should have the same length as 
+            the number of centre atoms found.
+            
+    Returns:
+        list(list(int)): Nested list of integers, giving the atom indices for each
+            complete coordination environment. Only includes environments with 
+            exactly n_coord coordinating atoms within cutoff.
+            
+    Raises:
+        ValueError: If no centre atoms are found, or if a list of n_coord
+            has incorrect length.
+    """
+    # Standardize coordination_species to list
+    if isinstance(coordination_species, str):
+        coordination_species = [coordination_species]
+        
+    # Find all centre atoms
+    centre_atoms = [i for i, site in enumerate(structure) 
+                    if site.species_string == centre_species]
+    
+    if not centre_atoms:
+        raise ValueError(f"No atoms of species '{centre_species}' found in structure")
+    
+    # Standardize n_coord to list
+    if isinstance(n_coord, int):
+        required_coord = [n_coord] * len(centre_atoms)
+    else:
+        if len(n_coord) != len(centre_atoms):
+            raise ValueError(f"Length of n_coord list ({len(n_coord)}) does not match "
+                             f"number of {centre_species} atoms ({len(centre_atoms)})")
+        required_coord = n_coord
+    
+    # Find coordinating environments
+    complete_environments = []
+    
+    for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
+        centre_site = structure[centre_idx]
+        
+        # Get all neighbors within cutoff that match coordination_species
+        neighbors = []
+        # structure.get_neighbors returns a list of PeriodicNeighbor objects
+        # PeriodicNeighbor is a PeriodicSite subclass with additional properties
+        # for neighbor info (nn_distance, index, image)
+        for neighbor in structure.get_neighbors(centre_site, cutoff):
+            if neighbor.species_string in coordination_species:
+                neighbors.append((int(neighbor.index), int(neighbor.nn_distance)))
+        print(neighbors)
+        
+        # Only include environments with exactly the required number of coordinating atoms
+        if len(neighbors) == required:
+            # Sort by distance
+            neighbors.sort(key=lambda x: x[1])
+            neighbor_indices = [idx for idx, _ in neighbors]
+            complete_environments.append(neighbor_indices)
+    
+    return complete_environments
 
 def get_nearest_neighbour_indices(
         structure: Structure,
@@ -46,50 +127,77 @@ def get_nearest_neighbour_indices(
 
 def get_vertex_indices(
         structure: Structure,
-        centre_species: str,
+        centre_species: str, 
         vertex_species: Union[str, List[str]],
-        cutoff: float=4.5,
-        n_vertices: Union[int, List[int]]=6) -> List[List[int]]:
+        cutoff: float,
+        n_vertices: Union[int, List[int]]) -> List[List[int]]:
     """
-    Find the atom indices for atoms defining the vertices of coordination polyhedra, from 
-    a pymatgen Structure object.
-
+    DEPRECATED: Find the atom indices for atoms defining the vertices of coordination polyhedra.
+    
+    This function is deprecated and will be removed in a future version.
+    
+    Please use one of the following alternatives:
+    - get_coordinating_indices(): For finding atoms with exact coordination environments
+    - ReferenceBasedSites workflow: For generating sites based on reference structures
+    
     Given the elemental species of a set of central atoms, A, 
     and of the polyhedral vertices, B, this function finds:
     for each A, then N closest neighbours B (within some cutoff).
     The number of neighbours found per central atom can be a single
     value for all A, or can be provided as a list of values for each A.
-
+    
     Args:
-        structure (`pymatgen.Structure`): A pymatgen Structure object, used to
-            find the coordination polyhedra vertices..
-        centre_species (str): Species string identifying the atoms at the centres
-            of each coordination environment, e.g. "Na".
-        vertex_species (str or list(str)): Species string identifying the atoms at the vertices
-            of each coordination environment, e.g. "S"., or a list of strings, e.g. ``["S", "I"]``.
-        cutoff (float): Distance cutoff for neighbour search.
-        n_vertices (int or list(int)): Number(s) of nearest neighbours to return
-            for each set of vertices. If a list is passed, this should be the same
+        structure: A pymatgen Structure object.
+        centre_species: Species string identifying the atoms at the centres.
+        vertex_species: Species string or list of strings identifying the vertex atoms.
+        cutoff: Distance cutoff for neighbour search.
+        n_vertices: Number(s) of nearest neighbours to return
+            for each set of vertices. If an int is passed, this should be the same
             length as the number of atoms of centre species A.
-
+            
     Returns:
         list(list(int)): Nested list of integers, giving the atom indices for each
             coordination environment.
-
     """
-    central_sites = [s for s in structure if s.species_string == centre_species]
-    if isinstance(n_vertices, int):
-        n_vertices = [n_vertices] * len(central_sites)
+    warnings.warn(
+        "get_vertex_indices is deprecated and will be removed in a future version. "
+        "Please use get_coordinating_indices() for finding atoms with exact coordination "
+        "environments, or use the ReferenceBasedSites workflow for generating sites based "
+        "on reference structures.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Original implementation remains unchanged
+    # Standardize vertex_species to list
     if isinstance(vertex_species, str):
         vertex_species = [vertex_species]
+        
+    # Find all centre atoms
+    central_sites = [s for s in structure if s.species_string == centre_species]
+    
+    if isinstance(n_vertices, int):
+        n_vertices = [n_vertices] * len(central_sites)
+    
+    if len(n_vertices) != len(central_sites):
+        raise ValueError(f"Length of n_vertices list ({len(n_vertices)}) does not match "
+                         f"number of {centre_species} atoms ({len(central_sites)})")
+    
     vertex_indices = []
     for site, n_vert in zip(central_sites, n_vertices):
-        periodic_site = cast(PeriodicSite, site)
-        neighbours = [s for s in structure.get_neighbors(periodic_site, r=cutoff, include_index=True) 
-                       if s[0].species_string in vertex_species]
-        neighbours.sort(key=lambda x: x[1])
-        atom_indices = [n[2] for n in neighbours[:n_vert]]
-        vertex_indices.append(atom_indices)
+        # Get all neighbors within cutoff that match vertex_species
+        neighbors = []
+        for neighbor in structure.get_neighbors(site, cutoff):
+            if neighbor.species_string in vertex_species:
+                neighbors.append((neighbor.index, neighbor.nn_distance))
+        
+        # Sort by distance
+        neighbors.sort(key=lambda x: x[1])
+        
+        # Get the n_vert closest neighbors
+        neighbor_indices = [idx for idx, _ in neighbors[:n_vert]]
+        vertex_indices.append(neighbor_indices)
+    
     return vertex_indices
 
 def x_pbc(x: np.ndarray):

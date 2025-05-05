@@ -163,16 +163,16 @@ class TestReferenceBasedSites(unittest.TestCase):
             # Find coordination environments
             environments = rbs._find_coordination_environments(
                 center_species='Na',
-                vertex_species='Cl',
+                coordination_species='Cl',
                 cutoff=3.0,
-                n_vertices=2
+                n_coord=2
             )
             
             # Check that find_environments was called with correct parameters
             self.mock_coord_finder.find_environments.assert_called_with(
                 center_species='Na',
-                vertex_species='Cl',
-                n_vertices=2,
+                coordination_species='Cl',
+                n_coord=2,
                 cutoff=3.0
             )
             
@@ -243,8 +243,8 @@ class TestReferenceBasedSites(unittest.TestCase):
             # Check that find_coordination_environments was called
             self.mock_coord_finder.find_environments.assert_called_with(
                 center_species='Na',
-                vertex_species='Cl',
-                n_vertices=2,
+                coordination_species='Cl',
+                n_coord=2,
                 cutoff=3.0
             )
             
@@ -284,8 +284,8 @@ class TestReferenceBasedSites(unittest.TestCase):
             # Check that find_coordination_environments was called
             self.mock_coord_finder.find_environments.assert_called_with(
                 center_species='Na',
-                vertex_species='Cl',  # vertex_species is used internally
-                n_vertices=2,  # n_vertices is used internally
+                coordination_species='Cl',  # vertex_species is used internally
+                n_coord=2,  # n_vertices is used internally
                 cutoff=3.0
             )
             
@@ -319,9 +319,9 @@ class TestReferenceBasedSites(unittest.TestCase):
             with self.assertRaises(ValueError) as context:
                 rbs._find_coordination_environments(
                     center_species='Mg',  # Not in the structure
-                    vertex_species='Cl',
+                    coordination_species='Cl',
                     cutoff=3.0,
-                    n_vertices=6
+                    n_coord=6
                 )
             
             # Check error message

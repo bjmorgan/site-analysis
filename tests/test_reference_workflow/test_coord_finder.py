@@ -42,15 +42,15 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="Si",
-            vertex_species="Si",
-            n_vertices=4,
+            coordination_species="Si",
+            n_coord=4,
             cutoff=3.0  # This should be sufficient for Si-Si bonds (~2.35 Å)
         )
     
         # Each Si should have 4 Si neighbors in diamond structure
-        for center_idx, vertices in environments.items():
-            self.assertEqual(len(vertices), 4, 
-                             f"Si {center_idx} has {len(vertices)} neighbors, expected 4")
+        for center_idx, coordinating in environments.items():
+            self.assertEqual(len(coordinating), 4, 
+                             f"Si {center_idx} has {len(coordinating)} neighbors, expected 4")
     
     def test_find_cspbi3_coordination(self):
         """Test finding Pb coordination around I in cubic perovskite."""
@@ -69,8 +69,8 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="I",
-            vertex_species="Pb",
-            n_vertices=2,
+            coordination_species="Pb",
+            n_coord=2,
             cutoff=4.0
         )
         
@@ -94,7 +94,7 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         # Should raise error if vertex species is missing
         with self.assertRaises(ValueError) as cm:
             finder.find_environments("Si", "O", 4, 3.0)
-        self.assertIn("Vertex species 'O' not found", str(cm.exception))
+        self.assertIn("Coordinating species 'O' not found", str(cm.exception))
 
     def test_empty_structure(self):
         """Test behavior with empty structure."""
@@ -106,8 +106,8 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         
         self.assertEqual(indices, {})
 
-    def test_find_environments_with_single_vertex_species(self):
-        """Test find_environments with single vertex species as string."""
+    def test_find_environments_with_single_coordination_species(self):
+        """Test find_environments with single coordination species as string."""
         lattice = Lattice.cubic(5.0)
         structure = Structure(lattice, 
                               species=["Na", "Cl", "Cl"], 
@@ -116,17 +116,17 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="Na",
-            vertex_species="Cl",  # Single string, not list
-            n_vertices=2,
+            coordination_species="Cl",  # Single string, not list
+            n_coord=4,
             cutoff=3.0
         )
         
         self.assertEqual(len(environments), 1)
         self.assertIn(0, environments)
-        self.assertEqual(len(environments[0]), 2)
+        self.assertEqual(len(environments[0]), 4)
 
-    def test_find_environments_with_multiple_vertex_species(self):
-        """Test find_environments with multiple vertex species."""
+    def test_find_environments_with_multiple_coordination_species(self):
+        """Test find_environments with multiple coordination species."""
         lattice = Lattice.cubic(5.0)
         structure = Structure(lattice, 
                               species=["Na", "Cl", "O", "Cl"], 
@@ -135,14 +135,14 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="Na",
-            vertex_species=["Cl", "O"],  # Multiple species as list
-            n_vertices=3,
+            coordination_species=["Cl", "O"],  # Multiple species as list
+            n_coord=6,
             cutoff=3.0
         )
         
         self.assertEqual(len(environments), 1)
         self.assertIn(0, environments)
-        self.assertEqual(len(environments[0]), 3)
+        self.assertEqual(len(environments[0]), 6)
 
 
 if __name__ == '__main__':

@@ -98,7 +98,10 @@ class ReferenceBasedSites:
 		"""
 		# Find coordination environments in reference structure
 		ref_environments = self._find_coordination_environments(
-			center_species, vertex_species, cutoff, n_vertices
+			center_species=center_species,
+			coordination_species=vertex_species,
+			cutoff=cutoff,
+			n_coord=n_vertices
 		)
 		
 		# Map environments to target structure
@@ -201,16 +204,16 @@ class ReferenceBasedSites:
 	
 	def _find_coordination_environments(self, 
 									  center_species: str, 
-									  vertex_species: Union[str, List[str]], 
+									  coordination_species: Union[str, List[str]], 
 									  cutoff: float, 
-									  n_vertices: int) -> List[List[int]]:
+									  n_coord: int) -> List[List[int]]:
 		"""Find coordination environments in the reference structure.
 		
 		Args:
 			center_species: Species at the center of coordination environments
-			vertex_species: Species at vertices of coordination environments
+			coordination_species: Coordination atom species
 			cutoff: Cutoff distance for coordination environment
-			n_vertices: Number of vertices per environment
+			n_coord: Number of coordination atoms per environment
 			
 		Returns:
 			List of environments, where each environment is a list of atom indices
@@ -228,13 +231,13 @@ class ReferenceBasedSites:
 			assert self._coord_finder is not None
 			environments_dict = self._coord_finder.find_environments(
 				center_species=center_species,
-				vertex_species=vertex_species,
-				n_vertices=n_vertices,
+				coordination_species=coordination_species,
+				n_coord=n_coord,
 				cutoff=cutoff
 			)
 			
 			# Convert from dict of {center_idx: [vertex_indices]} to list of vertex index lists
-			environments_list = [vertices for vertices in environments_dict.values()]
+			environments_list = [coordinating for coordinating in environments_dict.values()]
 			
 			return environments_list
 			
@@ -242,7 +245,7 @@ class ReferenceBasedSites:
 			# Re-raise with more context
 			raise ValueError(
 				f"Failed to find coordination environments for {center_species} centers "
-				f"and {vertex_species} vertices: {str(e)}"
+				f"and {coordination_species} coordinating atoms: {str(e)}"
 			) from e
 	
 	def _map_environments(self, 
@@ -261,6 +264,7 @@ class ReferenceBasedSites:
 			ValueError: If environments cannot be mapped between structures.
 		"""
 		# If no environments were found, return an empty list immediately
+		print(ref_environments)
 		if not ref_environments:
 			return []
 

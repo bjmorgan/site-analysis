@@ -104,8 +104,13 @@ class ReferenceBasedSites:
 			n_coord=n_vertices
 		)
 		
+		# Check we do not have repeat periodic images in the coordination environments
+		self._validate_unique_environments(ref_environments)
+		
 		# Map environments to target structure
 		mapped_environments = self._map_environments(ref_environments, target_species)
+		
+		print(mapped_environments)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -152,6 +157,9 @@ class ReferenceBasedSites:
 		ref_environments = self._find_coordination_environments(
 			center_species, reference_species, cutoff, n_reference
 		)
+		
+		# Check we do not have repeat periodic images in the coordination environments
+		self._validate_unique_environments(ref_environments)
 		
 		# Map environments to target structure
 		mapped_environments = self._map_environments(ref_environments, target_species)
@@ -303,3 +311,27 @@ class ReferenceBasedSites:
 		if self._site_factory is None:
 			self._site_factory = SiteFactory(self.target_structure)
 		return self._site_factory
+	
+	def _validate_unique_environments(self, environments):
+		"""Validate that each environment contains unique atom indices.
+		
+		Args:
+			environments: List of environments, where each environment is a list of atom indices.
+			
+		Raises:
+			ValueError: If any environment contains duplicate atom indices.
+		"""
+		for i, env in enumerate(environments):
+			if len(env) != len(set(env)):
+				# Find the duplicates
+				counts = {}
+				for idx in env:
+					counts[idx] = counts.get(idx, 0) + 1
+				duplicates = [idx for idx, count in counts.items() if count > 1]
+				
+				raise ValueError(
+					f"Environment {i} contains duplicate atom indices {duplicates}. "
+					f"This typically occurs in small unit cells where the same atom "
+					f"appears as a neighbor in multiple periodic images. "
+					f"Please use a larger supercell for your analysis."
+				)

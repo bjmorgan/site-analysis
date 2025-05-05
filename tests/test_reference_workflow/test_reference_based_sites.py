@@ -377,6 +377,98 @@ class TestReferenceBasedSites(unittest.TestCase):
             
             # Verify that index_mapper was not called (which would cause the error)
             self.mock_index_mapper.map_coordinating_atoms.assert_not_called()
+            
+    def test_validate_unique_environments_valid(self):
+        """Test that environments with unique indices pass validation."""
+        with self.coord_finder_patch, self.index_mapper_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Valid environments with unique indices
+            valid_environments = [
+                [1, 2, 3, 4],       # All unique
+                [5, 6, 7],          # All unique
+                [8]                 # Single index
+            ]
+            
+            # Should not raise any exception
+            rbs._validate_unique_environments(valid_environments)
+    
+    def test_validate_unique_environments_empty(self):
+        """Test that empty environments pass validation."""
+        with self.coord_finder_patch, self.index_mapper_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Empty environments
+            empty_environments = [
+                [],                 # Empty list
+                []                  # Another empty list
+            ]
+            
+            # Should not raise any exception
+            rbs._validate_unique_environments(empty_environments)
+    
+    def test_validate_unique_environments_duplicates(self):
+        """Test that environments with duplicate indices raise ValueError."""
+        with self.coord_finder_patch, self.index_mapper_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Environments with duplicate indices
+            duplicate_environments = [
+                [1, 2, 2, 3],       # Duplicate 2
+                [4, 5, 6]           # All unique (but earlier list has duplicates)
+            ]
+            
+            # Should raise ValueError due to duplicates in the first environment
+            with self.assertRaises(ValueError) as context:
+                rbs._validate_unique_environments(duplicate_environments)
+            
+            # Check error message
+            self.assertIn("Environment 0 contains duplicate atom indices", str(context.exception))
+            self.assertIn("2", str(context.exception))  # Should mention the duplicated index
+    
+    def test_validate_unique_environments_multiple_duplicates(self):
+        """Test validation with multiple duplicate indices in an environment."""
+        with self.coord_finder_patch, self.index_mapper_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Environment with multiple duplicates
+            multi_duplicate_environments = [
+                [1, 2, 3, 1, 2, 4]  # Duplicates 1 and 2
+            ]
+            
+            # Should raise ValueError
+            with self.assertRaises(ValueError) as context:
+                rbs._validate_unique_environments(multi_duplicate_environments)
+            
+            # Check error message contains both duplicated indices
+            error_msg = str(context.exception)
+            self.assertIn("1", error_msg)
+            self.assertIn("2", error_msg)
+            
+            # Check suggestion about supercell is included
+            self.assertIn("Please use a larger supercell", error_msg)
+            
+    def test_integration_with_find_environments(self):
+        """Test integration with _find_coordination_environments method."""
+        # Create a mock that returns environments with duplicates
+        with self.coord_finder_patch, self.index_mapper_patch:
+            # Configure the mock to return environments with duplicates
+            duplicate_envs = {0: [1, 2, 3, 1]}  # Na at index 0 with duplicated Cl at index 1
+            self.mock_coord_finder.find_environments.return_value = duplicate_envs
+            
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Attempting to create sites should raise the duplicate error
+            with self.assertRaises(ValueError) as context:
+                rbs.create_polyhedral_sites(
+                    center_species='Na',
+                    vertex_species='Cl',
+                    cutoff=3.0,
+                    n_vertices=4
+                )
+                
+            # Check error message
+            self.assertIn("contains duplicate atom indices", str(context.exception))
 
 
 if __name__ == '__main__':

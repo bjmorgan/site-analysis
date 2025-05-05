@@ -388,7 +388,7 @@ class TestMixedStructureIntegration(unittest.TestCase):
             [0.5, 0.5, 0.0],
             [0.0, 0.0, 0.5]
         ]
-        reference = Structure(lattice, species1, coords1)
+        reference = Structure(lattice, species1, coords1) * [2, 2, 2]
         
         # Create a target with same atoms but completely different ordering
         # Shuffle both species and coordinates
@@ -422,6 +422,64 @@ class TestMixedStructureIntegration(unittest.TestCase):
         for site in sites:
             self.assertIsInstance(site, DynamicVoronoiSite)
             self.assertEqual(len(site.reference_indices), 2)
+            
+class TestCoordinationValidation(unittest.TestCase):
+    
+    def test_octahedral_coordination_in_small_cell(self):
+        """Test that creating sites with octahedral coordination in a small unit cell
+        raises the expected validation error due to duplicated atoms from periodic images.
+        
+        This test creates a simple cubic structure with Na at the origin and Cl at the 
+        face centers. Due to periodic boundary conditions, these three Cl atoms would 
+        form an octahedral coordination around Na, but with duplicated indices.
+        """
+        # Create a small cubic structure - similar to the test case in the issue
+        lattice = Lattice.cubic(5.0)
+        structure = Structure(
+            lattice=lattice,
+            species=["Na", "Cl", "Cl", "Cl"],
+            coords=[
+                [0.0, 0.0, 0.0],      # Na at origin
+                [0.5, 0.0, 0.0],      # Cl at x face center
+                [0.0, 0.5, 0.0],      # Cl at y face center
+                [0.0, 0.0, 0.5]       # Cl at z face center
+            ]
+        )
+        
+        # Create ReferenceBasedSites instance with the actual structure
+        # Using the same structure for both reference and target
+        rbs = ReferenceBasedSites(structure, structure.copy(), align=False)
+        
+        # Attempt to create polyhedral sites with octahedral coordination
+        # This should fail due to duplicate indices from periodic images
+        with self.assertRaises(ValueError) as context:
+            rbs.create_polyhedral_sites(
+                center_species="Na",
+                vertex_species="Cl",
+                cutoff=3.0,  # Large enough to include periodic images
+                n_vertices=6,  # Octahedral coordination
+                label="octahedral_site"
+            )
+        
+        # Check error message contains mention of duplicates and supercell
+        error_msg = str(context.exception)
+        self.assertIn("contains duplicate atom indices", error_msg)
+        self.assertIn("Please use a larger supercell", error_msg)
+        
+        # Also test with dynamic Voronoi sites
+        with self.assertRaises(ValueError) as context:
+            rbs.create_dynamic_voronoi_sites(
+                center_species="Na",
+                reference_species="Cl",
+                cutoff=3.0,
+                n_reference=6,  # Octahedral coordination
+                label="octahedral_site"
+            )
+        
+        # Check error message is also appropriate for dynamic sites
+        error_msg = str(context.exception)
+        self.assertIn("contains duplicate atom indices", error_msg)
+        self.assertIn("Please use a larger supercell", error_msg)
 
 
 if __name__ == "__main__":

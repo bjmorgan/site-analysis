@@ -75,7 +75,7 @@ def get_coordination_indices(
         # structure.get_neighbors returns a list of PeriodicNeighbor objects
         # PeriodicNeighbor is a PeriodicSite subclass with additional properties
         # for neighbor info (nn_distance, index, image)
-        for neighbor in structure.get_neighbors(centre_site, cutoff):
+        for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
             if neighbor.species_string in coordination_species:
                 neighbors.append((int(neighbor.index), int(neighbor.nn_distance)))
         print(neighbors)
@@ -187,7 +187,7 @@ def get_vertex_indices(
     for site, n_vert in zip(central_sites, n_vertices):
         # Get all neighbors within cutoff that match vertex_species
         neighbors = []
-        for neighbor in structure.get_neighbors(site, cutoff):
+        for neighbor in structure.get_neighbors(cast(PeriodicSite, site), cutoff):
             if neighbor.species_string in vertex_species:
                 neighbors.append((neighbor.index, neighbor.nn_distance))
         

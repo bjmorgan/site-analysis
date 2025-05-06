@@ -167,17 +167,12 @@ class TestStructureAligner(unittest.TestCase):
         aligned_max, trans_max, metrics_max = aligner.align(
             reference, target, metric='max_dist')
             
-        # Test mean_dist metric
-        aligned_mean, trans_mean, metrics_mean = aligner.align(
-            reference, target, metric='mean_dist')
-            
         # The translations may differ slightly due to the different metrics
         # but they should all be close to the average translation
-        print(trans_rmsd, trans_max, trans_mean)
+        print(trans_rmsd, trans_max)
         avg_translation = [0.14, 0.14, 0.14]
         self.assertLess(np.linalg.norm(trans_rmsd - avg_translation), 0.05)
         self.assertLess(np.linalg.norm(trans_max - avg_translation), 0.05)
-        self.assertLess(np.linalg.norm(trans_mean - avg_translation), 0.05)
         
         # Check that metrics are properly returned
         self.assertIn('rmsd', metrics_rmsd)

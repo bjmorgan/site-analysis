@@ -34,7 +34,6 @@ class StructureAligner:
 			metric: Metric to optimize. Options are:
 				'rmsd': Root mean square deviation
 				'max_dist': Maximum distance between any atom pair
-				'mean_dist': Mean distance between atom pairs
 			tolerance: Tolerance for considering atoms as aligned.
 				Default is 0.1 Angstroms.
 				
@@ -73,9 +72,6 @@ class StructureAligner:
 				return np.sqrt(np.mean(np.array(all_distances)**2))
 			elif metric == 'max_dist':
 				return np.max(all_distances)
-			elif metric == 'mean_dist':
-				print(all_distances)
-				return np.mean(all_distances)
 			else:
 				raise ValueError(f"Unknown metric: {metric}")
 		

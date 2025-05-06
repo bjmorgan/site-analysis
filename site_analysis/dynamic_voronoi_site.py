@@ -35,6 +35,14 @@ class DynamicVoronoiSite(Site):
 		self.reference_indices = reference_indices
 		self._centre_coords: Optional[np.ndarray] = None
 		
+	def __repr__(self) -> str:
+		string = ('site_analysis.DynamicVoronoiSite('
+				f'index={self.index}, '
+				f'label={self.label}, '
+				f'reference_indices={self.reference_indices}, '
+				f'contains_atoms={self.contains_atoms})')
+		return string
+
 	def reset(self) -> None:
 		"""Reset the site state.
 		

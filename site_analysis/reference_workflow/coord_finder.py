@@ -44,7 +44,6 @@ class CoordinationEnvironmentFinder:
             cutoff=cutoff,
             n_coord=n_coord
         )
-        print(environments)
         
         # Convert to dictionary format
         result = {}

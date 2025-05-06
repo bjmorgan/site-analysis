@@ -12,6 +12,12 @@ class AtomTestCase(unittest.TestCase):
         self.assertEqual(atom.in_site, None)
         self.assertEqual(atom._frac_coords, None)
         self.assertEqual(atom.trajectory, [])
+        
+    def test_init_with_species_string(self):
+        """Test that Atom correctly stores species_string when provided."""
+        species = "Na"
+        atom = Atom(index=1, species_string=species)
+        self.assertEqual(atom.species_string, species)
 
     def test_reset(self):
         atom = Atom(index=12)
@@ -29,7 +35,7 @@ class AtomTestCase(unittest.TestCase):
 
     def test___repr__(self):
         atom = Atom(index=12)
-        self.assertEqual(atom.__repr__(), 'site_analysis.Atom(index=12, in_site=None, frac_coords=None)')
+        self.assertEqual(atom.__repr__(), 'site_analysis.Atom(index=12, in_site=None, frac_coords=None, species_string=None)')
 
     def test_assign_coords(self):
         atom = Atom(index=1)

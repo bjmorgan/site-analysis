@@ -251,6 +251,149 @@ class TestStructureAligner(unittest.TestCase):
             dist = target.lattice.get_distance_and_image(
                 aligned_structure[i].frac_coords, target[i].frac_coords)[0]
             self.assertLess(dist, 0.01)  # Should be very close
+            
+    def test_align_with_permuted_atoms(self):
+        """Test that alignment works correctly with permuted atom ordering."""
+        # Create a simple reference structure
+        lattice = Lattice.cubic(5.0)
+        species1 = ["Na", "Cl", "Na", "Cl"]
+        coords1 = [
+            [0.1, 0.1, 0.1],  # Na1
+            [0.6, 0.6, 0.6],  # Cl1
+            [0.3, 0.3, 0.3],  # Na2
+            [0.8, 0.8, 0.8]   # Cl2
+        ]
+        reference = Structure(lattice, species1, coords1)
+        
+        # Create target with permuted atom order (reversed)
+        permuted_species = species1[::-1]  # Reverse the order
+        permuted_coords = coords1[::-1]    # Reverse the order
+        
+        target = Structure(lattice, permuted_species, permuted_coords)
+        
+        # Align the structures
+        aligner = StructureAligner()
+        aligned_structure, translation_vector, metrics = aligner.align(reference, target)
+        
+        # Check that alignment succeeded without translation
+        self.assertLess(metrics['rmsd'], 0.01)
+        np.testing.assert_array_almost_equal(translation_vector, [0, 0, 0], decimal=2)
+    
+    def test_align_with_permuted_atoms_and_translation(self):
+        """Test that alignment works correctly with permuted atoms and translation."""
+        # Create a simple reference structure
+        lattice = Lattice.cubic(5.0)
+        species1 = ["Na", "Cl", "Na", "Cl"]
+        coords1 = [
+            [0.1, 0.1, 0.1],  # Na1
+            [0.6, 0.6, 0.6],  # Cl1
+            [0.3, 0.3, 0.3],  # Na2
+            [0.8, 0.8, 0.8]   # Cl2
+        ]
+        reference = Structure(lattice, species1, coords1)
+        
+        # Apply a translation of [0.1, 0.1, 0.1]
+        translation = [0.1, 0.1, 0.1]
+        translated_coords = []
+        for coord in coords1:
+            translated = [(c + t) % 1.0 for c, t in zip(coord, translation)]
+            translated_coords.append(translated)
+        
+        # Permute the atom order
+        permuted_species = species1[::-1]  # Reverse the order
+        permuted_coords = translated_coords[::-1]  # Reverse the order
+        
+        target = Structure(lattice, permuted_species, permuted_coords)
+        
+        # Align the structures
+        aligner = StructureAligner()
+        aligned_structure, found_translation, metrics = aligner.align(reference, target)
+        
+        # Check that alignment succeeded and found the correct translation
+        self.assertLess(metrics['rmsd'], 0.01)
+        np.testing.assert_array_almost_equal(found_translation, translation, decimal=2)
+        
+    def test_validate_structures(self):
+        """Test the _validate_structures method with various scenarios."""
+        # Create test structures with different compositions
+        lattice = Lattice.cubic(5.0)
+        
+        # Structure A: Na2Cl2
+        species_a = ["Na", "Na", "Cl", "Cl"]
+        coords_a = [
+            [0.1, 0.1, 0.1],
+            [0.3, 0.3, 0.3],
+            [0.5, 0.5, 0.5],
+            [0.7, 0.7, 0.7]
+        ]
+        structure_a = Structure(lattice, species_a, coords_a)
+        
+        # Structure B: Na2Cl2 with different atom ordering
+        species_b = ["Cl", "Na", "Cl", "Na"]
+        coords_b = [
+            [0.5, 0.5, 0.5],
+            [0.3, 0.3, 0.3],
+            [0.7, 0.7, 0.7],
+            [0.1, 0.1, 0.1]
+        ]
+        structure_b = Structure(lattice, species_b, coords_b)
+        
+        # Structure C: Na3Cl2 (different Na count)
+        species_c = ["Na", "Na", "Na", "Cl", "Cl"]
+        coords_c = [
+            [0.1, 0.1, 0.1],
+            [0.3, 0.3, 0.3],
+            [0.4, 0.4, 0.4],
+            [0.5, 0.5, 0.5],
+            [0.7, 0.7, 0.7]
+        ]
+        structure_c = Structure(lattice, species_c, coords_c)
+        
+        # Structure D: Na2Cl2F1 (extra species)
+        species_d = ["Na", "Na", "Cl", "Cl", "F"]
+        coords_d = [
+            [0.1, 0.1, 0.1],
+            [0.3, 0.3, 0.3],
+            [0.5, 0.5, 0.5],
+            [0.7, 0.7, 0.7],
+            [0.9, 0.9, 0.9]
+        ]
+        structure_d = Structure(lattice, species_d, coords_d)
+        
+        # Create StructureAligner
+        aligner = StructureAligner()
+        
+        # Case 1: Both structures have identical composition, species=None
+        species_list = aligner._validate_structures(structure_a, structure_b, None)
+        self.assertCountEqual(species_list, ["Na", "Cl"])
+        
+        # Case 2: Both structures have different composition, species=None
+        with self.assertRaises(ValueError) as context:
+            aligner._validate_structures(structure_a, structure_c, None)
+        self.assertIn("different compositions", str(context.exception))
+        
+        with self.assertRaises(ValueError) as context:
+            aligner._validate_structures(structure_a, structure_d, None)
+        self.assertIn("different compositions", str(context.exception))
+        
+        # Case 3: Species is explicitly specified and exists in both structures
+        species_list = aligner._validate_structures(structure_a, structure_b, ["Na"])
+        self.assertEqual(species_list, ["Na"])
+        
+        # Case 4: Species is explicitly specified but doesn't exist in reference
+        with self.assertRaises(ValueError) as context:
+            aligner._validate_structures(structure_a, structure_d, ["F"])
+        self.assertIn("not found in reference structure", str(context.exception))
+        
+        # Case 5: Species is explicitly specified but doesn't exist in target
+        with self.assertRaises(ValueError) as context:
+            aligner._validate_structures(structure_d, structure_a, ["F"])
+        self.assertIn("not found in target structure", str(context.exception))
+        
+        # Case 6: Species is explicitly specified but has different counts
+        with self.assertRaises(ValueError) as context:
+            aligner._validate_structures(structure_a, structure_c, ["Na"])
+        self.assertIn("Different number of Na atoms", str(context.exception))
 
 if __name__ == '__main__':
     unittest.main()

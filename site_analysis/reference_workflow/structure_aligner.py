@@ -48,8 +48,11 @@ class StructureAligner:
 			ValueError: If the structures cannot be aligned due to different
 				composition or if no valid alignment is found.
 		"""
-		# Validate inputs and create atom mappings
-		ref_indices, target_indices = self._validate_and_map_structures(reference, target, species)
+		# Validate structures and get species to use
+		valid_species = self._validate_structures(reference, target, species)
+		
+		# Map atoms between structures
+		ref_indices, target_indices = self._map_atoms_by_species(reference, target, valid_species)
 		
 		# Define objective function for optimization
 		def objective_function(translation_vector):
@@ -97,11 +100,11 @@ class StructureAligner:
 		
 		return aligned_structure, translation_vector, metrics
 	
-	def _validate_and_map_structures(self, 
-									 reference: Structure, 
-									 target: Structure, 
-									 species: Optional[List[str]] = None) -> Tuple[List[int], List[int]]:
-		"""Validate structures and create atom mappings for alignment.
+	def _validate_structures(self, 
+							reference: Structure, 
+							target: Structure, 
+							species: Optional[List[str]] = None) -> List[str]:
+		"""Validate that structures can be aligned and determine species to use.
 		
 		Args:
 			reference: Reference structure
@@ -109,27 +112,31 @@ class StructureAligner:
 			species: List of species to use for alignment
 			
 		Returns:
-			Tuple of lists containing indices of atoms to align in each structure
+			List of species to use for alignment
 			
 		Raises:
 			ValueError: If structures cannot be aligned
 		"""
+		# Check if species is provided
 		if species is None:
-			# Find common species
-			ref_species = set(site.species_string for site in reference)
-			target_species = set(site.species_string for site in target)
-			common_species = ref_species.intersection(target_species)
+			# No specific species provided - get all species from reference
+			ref_species_counts = reference.composition.as_dict()
+			target_species_counts = target.composition.as_dict()
 			
-			if not common_species:
-				raise ValueError("No common species found between reference and target structures")
+			# Verify compositions match exactly
+			if ref_species_counts != target_species_counts:
+				raise ValueError(
+					f"Structures have different compositions: "
+					f"{reference.composition.formula} vs {target.composition.formula}"
+				)
 			
-			species = list(common_species)
+			# Use all species from reference
+			species_to_use = list(ref_species_counts.keys())
+		else:
+			species_to_use = species
 		
-		# Extract indices for each species in both structures
-		ref_indices: List[int] = []
-		target_indices: List[int] = []
-		
-		for sp in species:
+		# Validate each species has matching counts
+		for sp in species_to_use:
 			ref_sp_indices = reference.indices_from_symbol(sp)
 			target_sp_indices = target.indices_from_symbol(sp)
 			
@@ -145,10 +152,56 @@ class StructureAligner:
 					f"{len(ref_sp_indices)} in reference vs "
 					f"{len(target_sp_indices)} in target"
 				)
+		
+		return species_to_use
+	
+	def _map_atoms_by_species(self,
+							 reference: Structure,
+							 target: Structure,
+							 species: List[str]) -> Tuple[List[int], List[int]]:
+		"""Map atoms between structures by species and proximity.
+		
+		For each species, finds the optimal assignment of atoms between 
+		reference and target structures based on minimum distances.
+		
+		Args:
+			reference: Reference structure
+			target: Target structure
+			species: List of species to map
 			
-			# Add indices to our lists
-			ref_indices.extend(ref_sp_indices)
-			target_indices.extend(target_sp_indices)
+		Returns:
+			Tuple of (ref_indices, target_indices) mapping atoms between structures
+		"""
+		from scipy.optimize import linear_sum_assignment
+		
+		ref_indices = []
+		target_indices = []
+		
+		for sp in species:
+			ref_sp_indices = reference.indices_from_symbol(sp)
+			target_sp_indices = target.indices_from_symbol(sp)
+			
+			# Get coordinates for this species
+			ref_coords = reference.frac_coords[ref_sp_indices]
+			target_coords = target.frac_coords[target_sp_indices]
+			
+			# Calculate distance matrix between all pairs of atoms of this species
+			distance_matrix = np.zeros((len(ref_sp_indices), len(target_sp_indices)))
+			for i, ref_idx in enumerate(ref_sp_indices):
+				for j, target_idx in enumerate(target_sp_indices):
+					# Calculate minimum distance considering PBC
+					dist = target.lattice.get_distance_and_image(
+						reference[ref_idx].frac_coords, 
+						target[target_idx].frac_coords)[0]
+					distance_matrix[i, j] = dist
+			
+			# Use the Hungarian algorithm to find the optimal assignment
+			row_ind, col_ind = linear_sum_assignment(distance_matrix)
+			
+			# Add the mapped indices
+			for i, j in zip(row_ind, col_ind):
+				ref_indices.append(ref_sp_indices[i])
+				target_indices.append(target_sp_indices[j])
 		
 		return ref_indices, target_indices
 	

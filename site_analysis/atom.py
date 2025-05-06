@@ -27,19 +27,20 @@ class Atom(object):
             index: int,
             species_string: Optional[str]=None) -> None:
         """Initialise an Atom object.
-
+        
         Args:
             index (int): Numerical index for this atom. Used to identify this atom
                 in analysed structures.
-
+            species_string (Optional[str]): String identifying the chemical species of this atom.
+        
         Returns:
             None
-
         """
         self.index = index
         self.in_site: Optional[int] = None
         self._frac_coords: Optional[np.ndarray] = None
         self.trajectory: List[int] = []
+        self.species_string = species_string
 
     def __str__(self) -> str:
         """Return a string representation of this atom.
@@ -59,10 +60,11 @@ class Atom(object):
             "site_analysis.Atom("
             f"index={self.index}, "
             f"in_site={self.in_site}, "
-            f"frac_coords={self._frac_coords})"
+            f"frac_coords={self._frac_coords}, "
+            f"species_string={self.species_string})"
         )
         return string
-
+        
     def reset(self) -> None:
         """Reset the state of this Atom.
 
@@ -112,13 +114,15 @@ class Atom(object):
         }
         if self._frac_coords is not None:
             d["frac_coords"] = self._frac_coords.tolist()
+        if hasattr(self, "species_string") and self.species_string is not None:
+            d["species_string"] = self.species_string
         return d
-
+    
     @classmethod
     def from_dict(cls, d: Dict) -> Atom:
-        atom = cls(index=d["index"])
+        atom = cls(index=d["index"], species_string=d.get("species_string"))
         if d["in_site"] is not None:
-            atom.in_site = int(d["in_site"])  # Convert string to int
+            atom.in_site = int(d["in_site"])
         else:
             atom.in_site = None
         atom._frac_coords = np.array(d["frac_coords"])
@@ -163,7 +167,20 @@ def atoms_from_species_string(
         if s.species_string == species_string
     ]
     return atoms
-
+    
+def atoms_from_structure(
+    structure: Structure,
+    species_string: Union[List[str], str]) -> List[Atom]:
+    if isinstance(species_string, str):
+        species_string = [species_string]
+    atoms = [
+        Atom(index=i, species_string=s.species_string)
+        for i, s in enumerate(structure)
+        if s.species_string in species_string
+    ]
+    for atom in atoms:
+        atom._frac_coords = structure[atom.index].frac_coords
+    return atoms
 
 def atoms_from_indices(
         indices: List[int]) -> List[Atom]:

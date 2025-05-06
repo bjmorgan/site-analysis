@@ -57,7 +57,7 @@ class ReferenceBasedSites:
 		self.target_structure = target_structure
 		
 		# Initialise alignment attributes with proper types
-		self.aligned_structure: Structure = target_structure
+		self.aligned_structure: Optional[Structure] = None
 		self.translation_vector: Optional[np.ndarray] = None
 		self.alignment_metrics: Optional[Dict[str, float]] = None
 		
@@ -109,8 +109,6 @@ class ReferenceBasedSites:
 		
 		# Map environments to target structure
 		mapped_environments = self._map_environments(ref_environments, target_species)
-		
-		print(mapped_environments)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -257,8 +255,8 @@ class ReferenceBasedSites:
 			) from e
 	
 	def _map_environments(self, 
-						ref_environments: List[List[int]], 
-						target_species: Optional[Union[str, List[str]]] = None) -> List[List[int]]:
+		ref_environments: List[List[int]], 
+		target_species: Optional[Union[str, List[str]]] = None) -> List[List[int]]:
 		"""Map coordination environments from reference to target structure.
 		
 		Args:
@@ -272,24 +270,25 @@ class ReferenceBasedSites:
 			ValueError: If environments cannot be mapped between structures.
 		"""
 		# If no environments were found, return an empty list immediately
-		print(ref_environments)
 		if not ref_environments:
 			return []
-
+		
 		try:
 			# Create index mapper if not already initialised
 			if self._index_mapper is None:
 				self._index_mapper = IndexMapper()
 			
-			# Map environments
-			# Use aligned structure if available, otherwise use target structure
-			structure_to_use = self.aligned_structure
+			# Use aligned reference if available, otherwise use original reference
+			reference_to_use = (
+				self.aligned_structure  # When alignment was performed
+				if self.aligned_structure is not None 
+				else self.reference_structure  # When no alignment was performed
+			)
 			
-			# At this point we know self._index_mapper is not None
-			assert self._index_mapper is not None
+			# Map environments
 			mapped_environments = self._index_mapper.map_coordinating_atoms(
-				self.reference_structure,
-				structure_to_use,
+				reference_to_use,      # Aligned reference if available
+				self.target_structure, # Always use original target
 				ref_environments,
 				target_species=target_species
 			)

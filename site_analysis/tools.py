@@ -306,3 +306,124 @@ def site_index_mapping(structure1: Structure,
         return np.array(to_return), np.array(dr_ij_to_return)     
     else:
         return np.array(to_return)
+
+def hungarian_site_mapping(
+        structure1: Structure,
+        structure2: Structure,
+        species1: Optional[Union[str, List[str]]] = None,
+        species2: Optional[Union[str, List[str]]] = None,
+        return_mapping_distances: bool = False
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """Compute the optimal site index mapping between two structures using the Hungarian algorithm.
+    
+    This function finds the best one-to-one mapping between atoms in structure1 and structure2
+    that minimizes the total distance between matched atoms. The mapping is performed using
+    the Hungarian (Kuhn-Munkres) algorithm, which guarantees finding the global optimum.
+    
+    The structures must have identical counts for each species being mapped.
+    
+    Args:
+        structure1: The structure to map from.
+        structure2: The structure to map to.
+        species1: Optional species to select from structure1. If None, all species are used.
+        species2: Optional species to select from structure2. If None, all species from 
+                 structure1 are used.
+        return_mapping_distances: Whether to return the distances between mapped atoms.
+            
+    Returns:
+        If return_mapping_distances is False:
+            np.ndarray: Indices in structure2 that correspond to the atoms in structure1.
+        If return_mapping_distances is True:
+            Tuple[np.ndarray, np.ndarray]: Indices and distances.
+        
+    Raises:
+        ValueError: If structures have incompatible species counts or if specified
+                   species are not present in the structures.
+    """
+    from scipy.optimize import linear_sum_assignment
+    
+    # Ensure species1 and species2 are lists of site species strings
+    if species1 is None:
+        species1 = sorted(set([site.species_string for site in structure1]))
+    elif isinstance(species1, str):
+        species1 = [species1]
+    
+    if species2 is None:
+        species2 = species1.copy()
+    elif isinstance(species2, str):
+        species2 = [species2]
+    
+    # Validate that the selected species exist in both structures
+    for sp in species1:
+        ref_sp_indices = [i for i, site in enumerate(structure1) if site.species_string == sp]
+        if not ref_sp_indices:
+            raise ValueError(f"Species {sp} not found in structure1")
+    
+    for sp in species2:
+        target_sp_indices = [i for i, site in enumerate(structure2) if site.species_string == sp]
+        if not target_sp_indices:
+            raise ValueError(f"Species {sp} not found in structure2")
+    
+    # Validate that the species have compatible counts
+    for sp in species1:
+        if sp not in species2:
+            raise ValueError(f"Species {sp} found in structure1 but not in species2 list")
+        
+        ref_count = sum(1 for site in structure1 if site.species_string == sp)
+        target_count = sum(1 for site in structure2 if site.species_string == sp)
+        
+        if ref_count != target_count:
+            raise ValueError(
+                f"Different number of {sp} atoms: {ref_count} in structure1 vs {target_count} in structure2. "
+                f"Cannot create a one-to-one mapping."
+            )
+    
+    # Get indices of atoms to map in structure1
+    ref_indices = [i for i, site in enumerate(structure1) 
+                  if site.species_string in species1]
+    
+    # Create a dictionary to store mapping and distances
+    mapping_dict = {}
+    distances_dict = {}
+    
+    # Process each species separately
+    for sp in species1:
+        # Get indices for this species in both structures
+        sp_ref_indices = [i for i, site in enumerate(structure1) if site.species_string == sp]
+        sp_target_indices = [i for i, site in enumerate(structure2) if site.species_string == sp]
+        
+        # Skip if this species isn't present
+        if not sp_ref_indices or not sp_target_indices:
+            continue
+        
+        # Get coordinates for this species
+        lattice = structure1.lattice
+        
+        # Calculate distance matrix between all pairs
+        distance_matrix = np.zeros((len(sp_ref_indices), len(sp_target_indices)))
+        for i, ref_idx in enumerate(sp_ref_indices):
+            for j, target_idx in enumerate(sp_target_indices):
+                # Calculate minimum distance considering PBC
+                dist = lattice.get_distance_and_image(
+                    structure1[ref_idx].frac_coords, 
+                    structure2[target_idx].frac_coords)[0]
+                distance_matrix[i, j] = dist
+        
+        # Use the Hungarian algorithm to find the optimal assignment
+        row_ind, col_ind = linear_sum_assignment(distance_matrix)
+        
+        # Record the mapping and distances
+        for i, j in zip(row_ind, col_ind):
+            ref_idx = sp_ref_indices[i]
+            target_idx = sp_target_indices[j]
+            mapping_dict[ref_idx] = target_idx
+            distances_dict[ref_idx] = distance_matrix[i, j]
+    
+    # Create the output arrays
+    mapping = np.array([mapping_dict[i] for i in ref_indices])
+    distances = np.array([distances_dict[i] for i in ref_indices])
+    
+    if return_mapping_distances:
+        return mapping, distances
+    else:
+        return mapping

@@ -8,7 +8,7 @@ import numpy as np
 from pymatgen.core import Structure
 from scipy.optimize import minimize # type: ignore
 from typing import List, Dict, Tuple, Optional, Union, Any
-
+from ..tools import hungarian_site_mapping
 
 class StructureAligner:
 	"""Aligns crystal structures via translation optimization.
@@ -19,11 +19,11 @@ class StructureAligner:
 	"""
 	
 	def align(self, 
-			  reference: Structure, 
-			  target: Structure, 
-			  species: Optional[List[str]] = None, 
-			  metric: str = 'rmsd', 
-			  tolerance: float = 0.1) -> Tuple[Structure, np.ndarray, Dict[str, float]]:
+		reference: Structure, 
+		target: Structure, 
+		species: Optional[List[str]] = None, 
+		metric: str = 'rmsd', 
+		tolerance: float = 0.1) -> Tuple[Structure, np.ndarray, Dict[str, float]]:
 		"""Align reference structure to target structure via translation.
 		
 		Args:
@@ -51,8 +51,12 @@ class StructureAligner:
 		# Validate structures and get species to use
 		valid_species = self._validate_structures(reference, target, species)
 		
-		# Map atoms between structures
-		ref_indices, target_indices = self._map_atoms_by_species(reference, target, valid_species)
+		# Map atoms between structures - returns a dictionary {ref_idx: target_idx, ...}
+		atom_mapping = self._map_atoms_by_species(reference, target, valid_species)
+		
+		# Extract reference and target indices from the mapping
+		ref_indices = list(atom_mapping.keys())
+		target_indices = [atom_mapping[idx] for idx in ref_indices]
 		
 		# Define objective function for optimization
 		def objective_function(translation_vector):
@@ -74,7 +78,8 @@ class StructureAligner:
 			else:
 				raise ValueError(f"Unknown metric: {metric}")
 		
-		# Perform optimization
+		# Perform optimization to find best translation
+		from scipy.optimize import minimize
 		result = minimize(
 			objective_function,
 			x0=[0, 0, 0],  # Start with zero translation
@@ -156,9 +161,9 @@ class StructureAligner:
 		return species_to_use
 	
 	def _map_atoms_by_species(self,
-							 reference: Structure,
-							 target: Structure,
-							 species: List[str]) -> Tuple[List[int], List[int]]:
+		reference: Structure,
+		target: Structure,
+		species: List[str]) -> Dict[int, int]:
 		"""Map atoms between structures by species and proximity.
 		
 		For each species, finds the optimal assignment of atoms between 
@@ -170,40 +175,25 @@ class StructureAligner:
 			species: List of species to map
 			
 		Returns:
-			Tuple of (ref_indices, target_indices) mapping atoms between structures
+			Dict mapping reference indices to target indices
 		"""
-		from scipy.optimize import linear_sum_assignment
+		from site_analysis.tools import hungarian_site_mapping
 		
+		# Use the hungarian_site_mapping function to find optimal mapping
+		target_indices = hungarian_site_mapping(reference, target, species1=species)
+		
+		# Get all reference indices that match the species list
 		ref_indices = []
-		target_indices = []
-		
 		for sp in species:
-			ref_sp_indices = reference.indices_from_symbol(sp)
-			target_sp_indices = target.indices_from_symbol(sp)
-			
-			# Get coordinates for this species
-			ref_coords = reference.frac_coords[ref_sp_indices]
-			target_coords = target.frac_coords[target_sp_indices]
-			
-			# Calculate distance matrix between all pairs of atoms of this species
-			distance_matrix = np.zeros((len(ref_sp_indices), len(target_sp_indices)))
-			for i, ref_idx in enumerate(ref_sp_indices):
-				for j, target_idx in enumerate(target_sp_indices):
-					# Calculate minimum distance considering PBC
-					dist = target.lattice.get_distance_and_image(
-						reference[ref_idx].frac_coords, 
-						target[target_idx].frac_coords)[0]
-					distance_matrix[i, j] = dist
-			
-			# Use the Hungarian algorithm to find the optimal assignment
-			row_ind, col_ind = linear_sum_assignment(distance_matrix)
-			
-			# Add the mapped indices
-			for i, j in zip(row_ind, col_ind):
-				ref_indices.append(ref_sp_indices[i])
-				target_indices.append(target_sp_indices[j])
+			ref_indices.extend(reference.indices_from_symbol(sp))
 		
-		return ref_indices, target_indices
+		# Sort reference indices to maintain consistent ordering
+		ref_indices.sort()
+		
+		# Create a dictionary mapping reference indices to target indices
+		mapping = {ref_idx: target_idx for ref_idx, target_idx in zip(ref_indices, target_indices)}
+		
+		return mapping
 	
 	def _translate_coords(self, 
 						 coords: np.ndarray, 

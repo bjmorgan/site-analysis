@@ -176,27 +176,6 @@ class StructureAligner:
 		# Ensure coordinates are within [0, 1)
 		return translated % 1.0
 	
-	def _calculate_distances(self, 
-							coords1: np.ndarray, 
-							coords2: np.ndarray, 
-							lattice: Any) -> np.ndarray:
-		"""Calculate distances between pairs of coordinates.
-		
-		Args:
-			coords1: First set of coordinates
-			coords2: Second set of coordinates
-			lattice: Lattice to use for distance calculations
-			
-		Returns:
-			Array of distances between corresponding coordinate pairs
-		"""
-		distances = []
-		for i in range(len(coords1)):
-			# Use pymatgen's method that handles PBC correctly
-			dist = lattice.get_distance_and_image(coords1[i], coords2[i])[0]
-			distances.append(dist)
-		return np.array(distances)
-	
 	def _apply_translation(self, 
 						  structure: Structure, 
 						  translation_vector: np.ndarray) -> Structure:

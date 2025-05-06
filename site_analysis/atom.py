@@ -4,7 +4,7 @@ import json
 from monty.io import zopen # type: ignore
 import numpy as np
 from pymatgen.core import Structure
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.

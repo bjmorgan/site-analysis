@@ -36,6 +36,8 @@ class VoronoiSiteCollection(SiteCollection):
                                 atoms: List[Atom],
                                 structure: Structure):
         self.reset_site_occupations()
+        if not atoms:
+            return
         lattice = structure.lattice
         site_coords = np.array([s.frac_coords for s in self.sites])
         atom_coords = np.array([a.frac_coords for a in atoms])

@@ -75,6 +75,8 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 			None
 		"""
 		self.reset_site_occupations()
+		if not atoms:
+			return
 		lattice = structure.lattice
 		site_coords = np.array([site.centre for site in self.sites])
 		atom_coords = np.array([atom.frac_coords for atom in atoms])

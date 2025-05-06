@@ -146,5 +146,36 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		# Verify the number of calls matches the number of atoms
 		self.assertEqual(site_collection.update_occupation.call_count, len(atoms))
 		
+	def test_empty_atoms_list(self):
+		"""Test that assign_site_occupations correctly handles empty atom lists."""
+		# Create sites with pre-populated contains_atoms
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site1.contains_atoms = [1, 2]
+		
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site2.contains_atoms = [3, 4]
+		
+		# Set the _centre_coords to avoid needing to calculate them
+		site1._centre_coords = np.array([0.3, 0.3, 0.3])
+		site2._centre_coords = np.array([0.7, 0.7, 0.7])
+		
+		# Create a collection with these sites
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+		
+		# Create a test structure
+		lattice = Lattice.cubic(10.0)
+		structure = Structure(
+			lattice=lattice,
+			species=["Na", "Na", "Na", "Na"],
+			coords=[[0.0, 0.0, 0.0], [0.1, 0.1, 0.1], [0.8, 0.8, 0.8], [0.9, 0.9, 0.9]]
+		)
+		
+		# Call the method with empty atom list
+		collection.assign_site_occupations([], structure)
+		
+		# Verify that contains_atoms was reset for both sites
+		self.assertEqual(site1.contains_atoms, [])
+		self.assertEqual(site2.contains_atoms, [])
+		
 if __name__ == '__main__':
 	unittest.main()

@@ -1,7 +1,7 @@
 import unittest
 from site_analysis.tools import get_vertex_indices, x_pbc, site_index_mapping
 from site_analysis.tools import get_coordination_indices
-from site_analysis.tools import hungarian_site_mapping
+from site_analysis.tools import calculate_species_distances
 from unittest.mock import patch, MagicMock, Mock
 import numpy as np
 from pymatgen.core import Lattice, Structure, PeriodicSite
@@ -538,12 +538,9 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         )
         self.assertEqual(len(environments), 0)  # No matching environments
         
-class HungarianSiteMappingTestCase(unittest.TestCase):
-    """Test cases for the hungarian_site_mapping function."""
-
-    def test_identical_structures(self):
-        """Test mapping between structurally identical systems."""
-        # Create a simple cubic structure
+    def test_calculate_species_distances_identical_structures(self):
+        """Test distance calculation between identical structures."""
+        # Create a simple structure
         lattice = Lattice.cubic(5.0)
         species = ["Na", "Cl", "Na", "Cl"]
         coords = [
@@ -555,48 +552,23 @@ class HungarianSiteMappingTestCase(unittest.TestCase):
         structure1 = Structure(lattice, species, coords)
         structure2 = Structure(lattice, species, coords)
         
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
+        # Calculate distances
+        species_distances, all_distances = calculate_species_distances(structure1, structure2)
         
-        # Each atom should map to itself (same index)
-        expected_mapping = np.array([0, 1, 2, 3])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_permuted_atom_order(self):
-        """Test mapping between structures with permuted atom ordering."""
-        # Create a simple cubic structure
-        lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Cl", "Na", "Cl"]
-        coords1 = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8]   # Cl2
-        ]
-        structure1 = Structure(lattice, species1, coords1)
+        # Check results
+        self.assertEqual(len(species_distances), 2)  # Na and Cl
+        self.assertIn("Na", species_distances)
+        self.assertIn("Cl", species_distances)
         
-        # Create the same structure but with permuted atom order
-        species2 = ["Cl", "Na", "Cl", "Na"]  # Completely different order
-        coords2 = [
-            [0.8, 0.8, 0.8],   # Cl2
-            [0.3, 0.3, 0.3],   # Na2
-            [0.6, 0.6, 0.6],   # Cl1
-            [0.1, 0.1, 0.1]    # Na1
-        ]
-        structure2 = Structure(lattice, species2, coords2)
-        
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
-        
-        # Each atom should map to the corresponding atom in structure2
-        # Na1 (idx 0) → Na1 (idx 3), Cl1 (idx 1) → Cl1 (idx 2), 
-        # Na2 (idx 2) → Na2 (idx 1), Cl2 (idx 3) → Cl2 (idx 0)
-        expected_mapping = np.array([3, 2, 1, 0])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_translated_structure(self):
-        """Test mapping between a structure and its translated version."""
-        # Create a simple cubic structure
+        # Distances should be zero for identical structures
+        self.assertEqual(len(species_distances["Na"]), 2)  # Two Na atoms
+        self.assertEqual(len(species_distances["Cl"]), 2)  # Two Cl atoms
+        for dist in all_distances:
+            self.assertAlmostEqual(dist, 0.0, places=5)
+    
+    def test_calculate_species_distances_translated_structures(self):
+        """Test distance calculation between translated structures."""
+        # Create a simple structure
         lattice = Lattice.cubic(5.0)
         species = ["Na", "Cl", "Na", "Cl"]
         coords1 = [
@@ -609,357 +581,129 @@ class HungarianSiteMappingTestCase(unittest.TestCase):
         
         # Create a translated version (shift by [0.1, 0.1, 0.1])
         coords2 = [
-            [0.2, 0.2, 0.2],  # Na1 shifted
-            [0.7, 0.7, 0.7],  # Cl1 shifted
-            [0.4, 0.4, 0.4],  # Na2 shifted
-            [0.9, 0.9, 0.9]   # Cl2 shifted
+            [0.2, 0.2, 0.2],  # +0.1 in each direction
+            [0.7, 0.7, 0.7],
+            [0.4, 0.4, 0.4],
+            [0.9, 0.9, 0.9]
         ]
         structure2 = Structure(lattice, species, coords2)
         
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
+        # Calculate distances
+        species_distances, all_distances = calculate_species_distances(structure1, structure2)
         
-        # Each atom should map to its translated version (same index)
-        expected_mapping = np.array([0, 1, 2, 3])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_periodic_boundary_crossing(self):
-        """Test mapping with atoms near periodic boundaries."""
-        # Create a structure with atoms near the boundary
+        # Expected distance for a [0.1, 0.1, 0.1] shift in a 5.0 Å unit cell
+        expected_dist = 5.0 * np.sqrt(3 * (0.1**2))
+        
+        # Check results
+        for sp, distances in species_distances.items():
+            for dist in distances:
+                self.assertAlmostEqual(dist, expected_dist, places=5)
+    
+    def test_calculate_species_distances_different_compositions(self):
+        """Test distance calculation between structures with different compositions."""
+        # Create structures with different compositions
         lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl"]
-        coords1 = [
-            [0.05, 0.05, 0.05],  # Na near origin
-            [0.95, 0.95, 0.95]   # Cl near [1,1,1]
-        ]
-        structure1 = Structure(lattice, species, coords1)
         
-        # Create a shifted structure that crosses the boundary
-        # The Na moves to [0.1, 0.1, 0.1]
-        # The Cl wraps to [0.0, 0.0, 0.0]
-        coords2 = [
-            [0.1, 0.1, 0.1],   # Na shifted
-            [0.0, 0.0, 0.0]    # Cl wrapped
-        ]
-        structure2 = Structure(lattice, species, coords2)
-        
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
-        
-        # Each atom should map to its corresponding atom
-        expected_mapping = np.array([0, 1])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_species_filtering_single(self):
-        """Test mapping with filtering for a single species."""
-        # Create a mixed species structure
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl", "Na", "Cl", "K", "K"]
-        coords = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8],  # Cl2
-            [0.4, 0.4, 0.4],  # K1
-            [0.9, 0.9, 0.9]   # K2
-        ]
-        structure1 = Structure(lattice, species, coords)
-        
-        # Create the same structure but with permuted atom order
-        permuted_species = ["K", "Cl", "Na", "K", "Na", "Cl"]
-        permuted_coords = [
-            [0.9, 0.9, 0.9],   # K2
-            [0.6, 0.6, 0.6],   # Cl1
-            [0.1, 0.1, 0.1],   # Na1
-            [0.4, 0.4, 0.4],   # K1
-            [0.3, 0.3, 0.3],   # Na2
-            [0.8, 0.8, 0.8]    # Cl2
-        ]
-        structure2 = Structure(lattice, permuted_species, permuted_coords)
-        
-        # Test mapping with Na only
-        mapping = hungarian_site_mapping(structure1, structure2, species1="Na")
-        
-        # Should only return mapping for Na atoms (indices 0 and 2)
-        # Na1 (idx 0) → Na1 (idx 2), Na2 (idx 2) → Na2 (idx 4)
-        expected_mapping = np.array([2, 4])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_species_filtering_multiple(self):
-        """Test mapping with filtering for multiple species."""
-        # Create a mixed species structure
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl", "Na", "Cl", "K", "K"]
-        coords = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8],  # Cl2
-            [0.4, 0.4, 0.4],  # K1
-            [0.9, 0.9, 0.9]   # K2
-        ]
-        structure1 = Structure(lattice, species, coords)
-        
-        # Create the same structure but with permuted atom order
-        permuted_species = ["K", "Cl", "Na", "K", "Na", "Cl"]
-        permuted_coords = [
-            [0.9, 0.9, 0.9],   # K2
-            [0.6, 0.6, 0.6],   # Cl1
-            [0.1, 0.1, 0.1],   # Na1
-            [0.4, 0.4, 0.4],   # K1
-            [0.3, 0.3, 0.3],   # Na2
-            [0.8, 0.8, 0.8]    # Cl2
-        ]
-        structure2 = Structure(lattice, permuted_species, permuted_coords)
-        
-        # Test mapping with Na and Cl
-        mapping = hungarian_site_mapping(structure1, structure2, species1=["Na", "Cl"])
-        
-        # Should return mapping for Na and Cl atoms (indices 0, 1, 2, 3)
-        # Na1 (idx 0) → Na1 (idx 2), Cl1 (idx 1) → Cl1 (idx 1),
-        # Na2 (idx 2) → Na2 (idx 4), Cl2 (idx 3) → Cl2 (idx 5)
-        expected_mapping = np.array([2, 1, 4, 5])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_species_filtering_species2(self):
-        """Test mapping with species2 filtering."""
-        # Create a structure with multiple species
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl", "Na", "Cl", "K", "K"]
-        coords = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8],  # Cl2
-            [0.4, 0.4, 0.4],  # K1
-            [0.9, 0.9, 0.9]   # K2
-        ]
-        structure1 = Structure(lattice, species, coords)
-        
-        # Create a structure with additional atoms
-        extended_species = ["Na", "Cl", "Na", "Cl", "K", "K", "O", "O"]
-        extended_coords = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8],  # Cl2
-            [0.4, 0.4, 0.4],  # K1
-            [0.9, 0.9, 0.9],  # K2
-            [0.2, 0.2, 0.2],  # O1 (extra)
-            [0.7, 0.7, 0.7]   # O2 (extra)
-        ]
-        structure2 = Structure(lattice, extended_species, extended_coords)
-        
-        # Test mapping with species2 filtering
-        mapping = hungarian_site_mapping(structure1, structure2, 
-                                         species1=["Na", "Cl"], 
-                                         species2=["Na", "Cl"])
-        
-        # Should map Na and Cl atoms correctly
-        expected_mapping = np.array([0, 1, 2, 3])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_mapping_distances(self):
-        """Test returning mapping distances."""
-        # Create two slightly different structures
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl"]
-        coords1 = [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]]
-        structure1 = Structure(lattice, species, coords1)
-        
-        # Shifted slightly
-        coords2 = [[0.15, 0.15, 0.15], [0.65, 0.65, 0.65]]
-        structure2 = Structure(lattice, species, coords2)
-        
-        # Test mapping with distances
-        mapping, distances = hungarian_site_mapping(structure1, structure2, 
-                                                    return_mapping_distances=True)
-        
-        # Each atom should map to itself with a distance of ~0.43 Å 
-        # (0.05 shift in each direction × lattice parameter)
-        expected_mapping = np.array([0, 1])
-        expected_distances = np.array([5.0 * np.sqrt(3) * 0.05] * 2)  # 5.0 is the lattice parameter
-        np.testing.assert_array_equal(mapping, expected_mapping)
-        np.testing.assert_array_almost_equal(distances, expected_distances)
-
-    def test_incompatible_structure_compositions(self):
-        """Test error handling with incompatible structure compositions."""
-        # Create a structure
-        lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Cl", "Na", "Cl"]
+        # Structure 1: Na2Cl2
+        species1 = ["Na", "Na", "Cl", "Cl"]
         coords1 = [
             [0.1, 0.1, 0.1],
-            [0.6, 0.6, 0.6],
             [0.3, 0.3, 0.3],
+            [0.6, 0.6, 0.6],
             [0.8, 0.8, 0.8]
         ]
         structure1 = Structure(lattice, species1, coords1)
         
-        # Create a structure with different composition
-        species2 = ["Na", "Na", "Cl"]  # Missing one Cl
+        # Structure 2: Na1Cl3
+        species2 = ["Na", "Cl", "Cl", "Cl"]
         coords2 = [
-            [0.1, 0.1, 0.1],
-            [0.3, 0.3, 0.3],
-            [0.6, 0.6, 0.6]
+            [0.1, 0.1, 0.1],  # Same Na position
+            [0.6, 0.6, 0.6],  # Same Cl position
+            [0.7, 0.7, 0.7],  # Extra Cl
+            [0.8, 0.8, 0.8]   # Same Cl position
         ]
         structure2 = Structure(lattice, species2, coords2)
         
-        # Test mapping without species filtering - should fail
-        with self.assertRaises(ValueError) as context:
-            hungarian_site_mapping(structure1, structure2)
+        # Calculate distances with auto-detection of common species
+        species_distances, all_distances = calculate_species_distances(structure1, structure2)
         
-        # Error message should mention the mismatched counts
-        self.assertIn("Cl", str(context.exception))
-
-    def test_incompatible_atom_counts(self):
-        """Test error handling with incompatible atom counts."""
-        # Create a structure
+        # Should include Na and Cl (common to both)
+        self.assertEqual(len(species_distances), 2)
+        self.assertIn("Na", species_distances)
+        self.assertIn("Cl", species_distances)
+        
+        # Should include 2 Na atoms (the number in structure1)
+        self.assertEqual(len(species_distances["Na"]), 2)
+        
+        # Should include 2 Cl atoms (the number in structure1)
+        self.assertEqual(len(species_distances["Cl"]), 2)
+        
+        # First Na atom should have zero distance (same position in both structures)
+        self.assertAlmostEqual(species_distances["Na"][0], 0.0, places=5)
+        
+        # Second Na atom should have non-zero distance (different position)
+        self.assertGreater(species_distances["Na"][1], 0.0)
+    
+    def test_calculate_species_distances_species_filtering(self):
+        """Test distance calculation with explicit species filtering."""
+        # Create a multi-species structure
         lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Na", "Cl", "Cl", "K"]
-        coords1 = [
+        species = ["Na", "Cl", "K", "F"]
+        coords = [
             [0.1, 0.1, 0.1],
-            [0.2, 0.2, 0.2],
+            [0.3, 0.3, 0.3],
             [0.6, 0.6, 0.6],
-            [0.7, 0.7, 0.7],
             [0.8, 0.8, 0.8]
         ]
-        structure1 = Structure(lattice, species1, coords1)
+        structure1 = Structure(lattice, species, coords)
+        structure2 = Structure(lattice, species, coords)
         
-        # Create a structure with different counts
-        species2 = ["Na", "Na", "Na", "Cl", "Cl", "K"]  # Extra Na
-        coords2 = [
-            [0.1, 0.1, 0.1],
-            [0.2, 0.2, 0.2],
-            [0.3, 0.3, 0.3],  # Extra Na
-            [0.6, 0.6, 0.6],
-            [0.7, 0.7, 0.7],
-            [0.8, 0.8, 0.8]
-        ]
-        structure2 = Structure(lattice, species2, coords2)
+        # Calculate distances with only Na and K
+        species_distances, all_distances = calculate_species_distances(
+            structure1, structure2, species=["Na", "K"])
         
-        # Test mapping all species - should fail due to Na count mismatch
-        with self.assertRaises(ValueError) as context:
-            hungarian_site_mapping(structure1, structure2)
+        # Should only include Na and K
+        self.assertEqual(len(species_distances), 2)
+        self.assertIn("Na", species_distances)
+        self.assertIn("K", species_distances)
+        self.assertNotIn("Cl", species_distances)
+        self.assertNotIn("F", species_distances)
         
-        # Error message should mention Na
-        self.assertIn("Na", str(context.exception))
+        # Each should have exactly one atom
+        self.assertEqual(len(species_distances["Na"]), 1)
+        self.assertEqual(len(species_distances["K"]), 1)
         
-        # Test mapping just Na - should still fail
-        with self.assertRaises(ValueError) as context:
-            hungarian_site_mapping(structure1, structure2, species1=["Na"])
-        
-        # Test mapping just K - should work (same count in both)
-        mapping = hungarian_site_mapping(structure1, structure2, species1=["K"])
-        expected_mapping = np.array([5])  # K maps to index 5
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_missing_species(self):
-        """Test error handling with missing specified species."""
-        # Create a structure
+        # All distances should be 0 (identical structures)
+        self.assertEqual(len(all_distances), 2)
+        for dist in all_distances:
+            self.assertAlmostEqual(dist, 0.0, places=5)
+    
+    def test_calculate_species_distances_edge_cases(self):
+        """Test edge cases for calculate_species_distances."""
+        # Create a minimal structure
         lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Cl"]
-        coords1 = [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]]
-        structure1 = Structure(lattice, species1, coords1)
+        species = ["Na"]
+        coords = [[0.0, 0.0, 0.0]]
+        structure = Structure(lattice, species, coords)
         
-        # Test with a non-existent species
-        with self.assertRaises(ValueError) as context:
-            hungarian_site_mapping(structure1, structure1, species1=["K"])
+        # Empty second structure
+        empty_structure = Structure(lattice, [], [])
         
-        # Error message should mention the missing species
-        self.assertIn("K not found", str(context.exception))
+        # Calculate distances between structure and empty structure
+        species_distances, all_distances = calculate_species_distances(structure, empty_structure)
+        
+        # No common species, should return empty results
+        self.assertEqual(len(species_distances), 0)
+        self.assertEqual(len(all_distances), 0)
+        
+        # Non-existent species
+        species_distances, all_distances = calculate_species_distances(
+            structure, structure, species=["Cl"])
+        
+        # No matches for Cl, should return empty results
+        self.assertEqual(len(species_distances), 0)
+        self.assertEqual(len(all_distances), 0)
 
-    def test_empty_structures(self):
-        """Test behavior with empty structures."""
-        # Create empty structures
-        lattice = Lattice.cubic(5.0)
-        structure1 = Structure(lattice, [], [])
-        structure2 = Structure(lattice, [], [])
-        
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
-        
-        # Should return an empty array
-        self.assertEqual(len(mapping), 0)
-
-    def test_supercell_mapping(self):
-        """Test mapping between a structure and its supercell."""
-        # Create a simple structure
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Cl"]
-        coords = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
-        unit_cell = Structure(lattice, species, coords)
-        
-        # Create a 2x1x1 supercell
-        supercell = unit_cell * [2, 1, 1]
-        
-        # Test mapping from unit cell to supercell - should fail due to atom count mismatch
-        with self.assertRaises(ValueError):
-            hungarian_site_mapping(unit_cell, supercell)
-        
-        # Test mapping from supercell to unit cell - should also fail
-        with self.assertRaises(ValueError):
-            hungarian_site_mapping(supercell, unit_cell)
-
-    def test_complex_permutation(self):
-        """Test mapping with a complex permutation of atoms of same species."""
-        # Create a structure with multiple atoms of the same species
-        lattice = Lattice.cubic(5.0)
-        species = ["Na", "Na", "Na", "Na", "Cl", "Cl", "Cl", "Cl"]
-        coords1 = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.2, 0.2, 0.2],  # Na2
-            [0.3, 0.3, 0.3],  # Na3
-            [0.4, 0.4, 0.4],  # Na4
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.7, 0.7, 0.7],  # Cl2
-            [0.8, 0.8, 0.8],  # Cl3
-            [0.9, 0.9, 0.9]   # Cl4
-        ]
-        structure1 = Structure(lattice, species, coords1)
-        
-        # Create a structure with a complex permutation
-        permuted_species = ["Na", "Cl", "Na", "Cl", "Na", "Cl", "Na", "Cl"]
-        permuted_coords = [
-            [0.4, 0.4, 0.4],  # Na4
-            [0.7, 0.7, 0.7],  # Cl2
-            [0.1, 0.1, 0.1],  # Na1
-            [0.9, 0.9, 0.9],  # Cl4
-            [0.3, 0.3, 0.3],  # Na3
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.2, 0.2, 0.2],  # Na2
-            [0.8, 0.8, 0.8]   # Cl3
-        ]
-        structure2 = Structure(lattice, permuted_species, permuted_coords)
-        
-        # Test mapping
-        mapping = hungarian_site_mapping(structure1, structure2)
-        
-        # Each atom should map to its permuted position
-        expected_mapping = np.array([2, 6, 4, 0, 5, 1, 7, 3])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-
-    def test_different_lattice_parameters(self):
-        """Test mapping between structures with different lattice parameters."""
-        # Create a structure
-        lattice1 = Lattice.cubic(5.0)
-        species = ["Na", "Cl"]
-        coords = [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]]
-        structure1 = Structure(lattice1, species, coords)
-        
-        # Create a structure with different lattice parameter
-        lattice2 = Lattice.cubic(10.0)  # Twice the size
-        structure2 = Structure(lattice2, species, coords)
-        
-        # Test mapping - should work because we use fractional coordinates
-        mapping = hungarian_site_mapping(structure1, structure2)
-        expected_mapping = np.array([0, 1])
-        np.testing.assert_array_equal(mapping, expected_mapping)
-        
-        # Test with mapping distances
-        mapping, distances = hungarian_site_mapping(structure1, structure2, 
-                                                    return_mapping_distances=True)
-        # Distances should be zero since fractional coordinates are identical
-        np.testing.assert_array_almost_equal(distances, np.array([0.0, 0.0]))
               
 if __name__ == '__main__':
     unittest.main()

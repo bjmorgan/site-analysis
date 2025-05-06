@@ -8,7 +8,7 @@ import numpy as np
 from pymatgen.core import Structure
 from scipy.optimize import minimize # type: ignore
 from typing import List, Dict, Tuple, Optional, Union, Any
-from ..tools import hungarian_site_mapping
+from site_analysis.tools import calculate_species_distances
 
 class StructureAligner:
 	"""Aligns crystal structures via translation optimization.
@@ -19,11 +19,11 @@ class StructureAligner:
 	"""
 	
 	def align(self, 
-		reference: Structure, 
-		target: Structure, 
-		species: Optional[List[str]] = None, 
-		metric: str = 'rmsd', 
-		tolerance: float = 0.1) -> Tuple[Structure, np.ndarray, Dict[str, float]]:
+			reference: Structure, 
+			target: Structure, 
+			species: Optional[List[str]] = None, 
+			metric: str = 'rmsd', 
+			tolerance: float = 0.1) -> Tuple[Structure, np.ndarray, Dict[str, float]]:
 		"""Align reference structure to target structure via translation.
 		
 		Args:
@@ -51,57 +51,61 @@ class StructureAligner:
 		# Validate structures and get species to use
 		valid_species = self._validate_structures(reference, target, species)
 		
-		# Map atoms between structures - returns a dictionary {ref_idx: target_idx, ...}
-		atom_mapping = self._map_atoms_by_species(reference, target, valid_species)
-		
-		# Extract reference and target indices from the mapping
-		ref_indices = list(atom_mapping.keys())
-		target_indices = [atom_mapping[idx] for idx in ref_indices]
-		
 		# Define objective function for optimization
 		def objective_function(translation_vector):
 			# Apply translation to reference coordinates
-			translated_coords = self._translate_coords(
-				reference.frac_coords[ref_indices], translation_vector)
+			translated_coords = reference.frac_coords + translation_vector
+			translated_coords = translated_coords % 1.0  # Apply PBC
 			
-			# Calculate distances considering PBC
-			distances = self._calculate_distances(
-				translated_coords, target.frac_coords[target_indices], target.lattice)
+			# Create a temporary translated structure for distance calculation
+			temp_structure = reference.copy()
+			for i in range(len(temp_structure)):
+				temp_structure[i] = temp_structure[i].species, translated_coords[i]
 			
-			# Return the metric value
+			# Calculate distances using our helper function
+			_, all_distances = calculate_species_distances(temp_structure, target, species=valid_species)
+			
+			# Calculate the desired metric
+			if not all_distances:  # Handle empty distance list
+				return float('inf')
+				
 			if metric == 'rmsd':
-				return np.sqrt(np.mean(distances**2))
+				return np.sqrt(np.mean(np.array(all_distances)**2))
 			elif metric == 'max_dist':
-				return np.max(distances)
+				return np.max(all_distances)
 			elif metric == 'mean_dist':
-				return np.mean(distances)
+				print(all_distances)
+				return np.mean(all_distances)
 			else:
 				raise ValueError(f"Unknown metric: {metric}")
 		
-		# Perform optimization to find best translation
+		# Perform optimization
 		from scipy.optimize import minimize
 		result = minimize(
 			objective_function,
 			x0=[0, 0, 0],  # Start with zero translation
-			method='Nelder-Mead',  # More robust method without gradient requirements
-			options={'xatol': 1e-4, 'fatol': 1e-4, 'disp': False}
+			method='Nelder-Mead',
+			options={'xatol': 1e-4, 'fatol': 1e-4}
 		)
 		
 		if not result.success:
 			raise ValueError(f"Optimization failed: {result.message}")
 		
 		# Get the optimal translation vector
-		translation_vector = result.x
+		translation_vector = result.x % 1.0  # Ensure in [0,1) range
 		
 		# Apply the translation to get the aligned structure
 		aligned_structure = self._apply_translation(reference, translation_vector)
 		
 		# Calculate final metrics
-		metrics = self._calculate_metrics(
-			aligned_structure.frac_coords[ref_indices],
-			target.frac_coords[target_indices],
-			target.lattice
-		)
+		species_distances, all_distances = calculate_species_distances(
+			aligned_structure, target, species=valid_species)
+		
+		metrics = {
+			'rmsd': np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf'),
+			'max_dist': np.max(all_distances) if all_distances else float('inf'),
+			'mean_dist': np.mean(all_distances) if all_distances else float('inf')
+		}
 		
 		return aligned_structure, translation_vector, metrics
 	
@@ -159,41 +163,6 @@ class StructureAligner:
 				)
 		
 		return species_to_use
-	
-	def _map_atoms_by_species(self,
-		reference: Structure,
-		target: Structure,
-		species: List[str]) -> Dict[int, int]:
-		"""Map atoms between structures by species and proximity.
-		
-		For each species, finds the optimal assignment of atoms between 
-		reference and target structures based on minimum distances.
-		
-		Args:
-			reference: Reference structure
-			target: Target structure
-			species: List of species to map
-			
-		Returns:
-			Dict mapping reference indices to target indices
-		"""
-		from site_analysis.tools import hungarian_site_mapping
-		
-		# Use the hungarian_site_mapping function to find optimal mapping
-		target_indices = hungarian_site_mapping(reference, target, species1=species)
-		
-		# Get all reference indices that match the species list
-		ref_indices = []
-		for sp in species:
-			ref_indices.extend(reference.indices_from_symbol(sp))
-		
-		# Sort reference indices to maintain consistent ordering
-		ref_indices.sort()
-		
-		# Create a dictionary mapping reference indices to target indices
-		mapping = {ref_idx: target_idx for ref_idx, target_idx in zip(ref_indices, target_indices)}
-		
-		return mapping
 	
 	def _translate_coords(self, 
 						 coords: np.ndarray, 
@@ -255,27 +224,3 @@ class StructureAligner:
 			new_structure[i] = site.species, frac_coords
 		
 		return new_structure
-	
-	def _calculate_metrics(self, 
-						  coords1: np.ndarray, 
-						  coords2: np.ndarray, 
-						  lattice: Any) -> Dict[str, float]:
-		"""Calculate alignment quality metrics.
-		
-		Args:
-			coords1: First set of coordinates
-			coords2: Second set of coordinates
-			lattice: Lattice to use for distance calculations
-			
-		Returns:
-			Dictionary of metrics
-		"""
-		distances = self._calculate_distances(coords1, coords2, lattice)
-		
-		metrics = {
-			'rmsd': np.sqrt(np.mean(distances**2)),
-			'max_dist': np.max(distances),
-			'mean_dist': np.mean(distances)
-		}
-		
-		return metrics

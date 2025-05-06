@@ -7,10 +7,9 @@ structures by finding optimal translation vectors.
 import unittest
 import numpy as np
 from pymatgen.core import Structure, Lattice
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from site_analysis.reference_workflow.structure_aligner import StructureAligner
-from site_analysis.tools import hungarian_site_mapping
 
 
 class TestStructureAligner(unittest.TestCase):
@@ -174,6 +173,7 @@ class TestStructureAligner(unittest.TestCase):
             
         # The translations may differ slightly due to the different metrics
         # but they should all be close to the average translation
+        print(trans_rmsd, trans_max, trans_mean)
         avg_translation = [0.14, 0.14, 0.14]
         self.assertLess(np.linalg.norm(trans_rmsd - avg_translation), 0.05)
         self.assertLess(np.linalg.norm(trans_max - avg_translation), 0.05)
@@ -213,7 +213,7 @@ class TestStructureAligner(unittest.TestCase):
         """Test alignment with exactly half a unit cell offset in a highly symmetric structure.
         
         This represents a case where a gradient-based optimizer might struggle,
-        as the starting point is a local symetric maximum.
+        as the starting point is a local symmetric maximum.
         """
         # Create a reference structure with high symmetry
         # Using rock salt (NaCl) structure which has full cubic symmetry
@@ -242,17 +242,46 @@ class TestStructureAligner(unittest.TestCase):
         aligner = StructureAligner()
         aligned_structure, trans_vector, metrics = aligner.align(reference, target)
         
-        # The translation vector should be close to [0.5, 0.5, 0.5] or an equivalent vector
-        # Due to the periodicity, we check the absolute values of each vector component
-        expected_translation_magnitude = [0.5, 0.5, 0.5]
-        np.allclose(np.abs(trans_vector), expected_translation_magnitude, rtol=1e-3, atol=1e-4)
+        # Use the helper function to verify alignment quality by species
+        from site_analysis.tools import calculate_species_distances
+        species_distances, all_distances = calculate_species_distances(
+            aligned_structure, target)
         
-        # Check that the aligned structure matches the target
-        for i in range(len(reference)):
-            # Compute minimum distance considering PBC
-            dist = target.lattice.get_distance_and_image(
-                aligned_structure[i].frac_coords, target[i].frac_coords)[0]
-            self.assertLess(dist, 0.01)  # Should be very close
+        # Verify overall alignment quality
+        rmsd = np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf')
+        self.assertLess(rmsd, 0.01, "Overall RMSD is too large")
+        
+        # Check that each species is well-aligned
+        for sp, distances in species_distances.items():
+            for i, dist in enumerate(distances):
+                self.assertLess(dist, 0.01, 
+                    f"{sp} atom {i} not aligned properly (distance: {dist})")
+        
+        # Check that the translation vector is one of the valid forms
+        trans_components = np.mod(trans_vector, 1.0)  # Ensure in [0,1)
+        
+        # Convert components close to 1.0 to be close to 0.0 for easier checking
+        trans_components = np.abs(trans_components - np.rint(trans_components))
+        
+        # Count components close to 0.5
+        half_shift_count = sum(np.isclose(component, 0.5, atol=0.05) 
+                            for component in trans_components)
+        
+        # Count components close to 0.0
+        zero_shift_count = sum(np.isclose(component, 0.0, atol=0.05) 
+                            for component in trans_components)
+        
+        # Valid translations must have either:
+        # 1. Exactly one component close to 0.5 and two close to 0.0, OR
+        # 2. All three components close to 0.5
+        is_valid_translation = (
+            (half_shift_count == 1 and zero_shift_count == 2) or  # Single-axis half shift
+            (half_shift_count == 3)                               # Diagonal half shift
+        )
+        
+        self.assertTrue(is_valid_translation, 
+                    f"Translation vector {trans_vector} is not a valid half-cell shift pattern")
+
             
     def test_align_with_permuted_atoms(self):
         """Test that alignment works correctly with permuted atom ordering."""
@@ -396,146 +425,6 @@ class TestStructureAligner(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             aligner._validate_structures(structure_a, structure_c, ["Na"])
         self.assertIn("Different number of Na atoms", str(context.exception))
-        
-        
-class MapAtomsBySpeciesTestCase(unittest.TestCase):
-    """Test cases for the StructureAligner._map_atoms_by_species method."""
-    
-    def setUp(self):
-        """Set up test structures for mapping."""
-        # Create a simple test structure
-        self.lattice = Lattice.cubic(5.0)
-        self.species1 = ["Na", "Cl", "Na", "Cl"]
-        self.coords1 = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8]   # Cl2
-        ]
-        self.reference = Structure(self.lattice, self.species1, self.coords1)
-        
-        # Create a test structure with identical atom ordering
-        self.identical_target = Structure(self.lattice, self.species1, self.coords1)
-        
-        # Create a test structure with permuted atom ordering
-        self.permuted_species = ["Cl", "Na", "Cl", "Na"]  # Completely different order
-        self.permuted_coords = [
-            [0.8, 0.8, 0.8],   # Cl2
-            [0.3, 0.3, 0.3],   # Na2
-            [0.6, 0.6, 0.6],   # Cl1
-            [0.1, 0.1, 0.1]    # Na1
-        ]
-        self.permuted_target = Structure(self.lattice, self.permuted_species, self.permuted_coords)
-        
-        # Create an instance of StructureAligner
-        self.aligner = StructureAligner()
-
-    def test_identical_structures_all_species(self):
-        """Test mapping between identical structures with all species."""
-        # Perform mapping for all species
-        species = ["Na", "Cl"]
-        mapping = self.aligner._map_atoms_by_species(
-            self.reference, self.identical_target, species)
-        
-        # Expected mapping: {0:0, 1:1, 2:2, 3:3} - each atom maps to itself
-        expected_mapping = {0:0, 1:1, 2:2, 3:3}
-        self.assertEqual(mapping, expected_mapping)
-
-    def test_permuted_structures_all_species(self):
-        """Test mapping between structures with permuted atom ordering, all species."""
-        # Perform mapping for all species
-        species = ["Na", "Cl"]
-        mapping = self.aligner._map_atoms_by_species(
-            self.reference, self.permuted_target, species)
-        
-        # Expected mapping: {0:3, 1:2, 2:1, 3:0} - each atom maps to its permuted position
-        expected_mapping = {0:3, 1:2, 2:1, 3:0}
-        self.assertEqual(mapping, expected_mapping)
-
-    def test_identical_structures_single_species(self):
-        """Test mapping between identical structures with single species."""
-        # Perform mapping for Na atoms only
-        species = ["Na"]
-        mapping = self.aligner._map_atoms_by_species(
-            self.reference, self.identical_target, species)
-        
-        # Expected mapping: {0:0, 2:2} - Na atoms map to themselves
-        expected_mapping = {0:0, 2:2}
-        self.assertEqual(mapping, expected_mapping)
-
-    def test_permuted_structures_single_species(self):
-        """Test mapping between structures with permuted atom ordering, single species."""
-        # Perform mapping for Na atoms only
-        species = ["Na"]
-        mapping = self.aligner._map_atoms_by_species(
-            self.reference, self.permuted_target, species)
-        
-        # Expected mapping: {0:3, 2:1} - Na atoms map to their permuted positions
-        expected_mapping = {0:3, 2:1}
-        self.assertEqual(mapping, expected_mapping)
-
-    def test_delegation_to_hungarian_site_mapping(self):
-        """Test that _map_atoms_by_species correctly delegates to hungarian_site_mapping."""
-        # Mock the hungarian_site_mapping function
-        with patch('site_analysis.tools.hungarian_site_mapping') as mock_mapping:
-            # Configure the mock to return a known array
-            mock_mapping.return_value = np.array([9, 8, 7, 6])
-            
-            # Call the method being tested
-            species = ["Na", "Cl"]
-            mapping = self.aligner._map_atoms_by_species(
-                self.reference, self.identical_target, species)
-            
-            # Verify hungarian_site_mapping was called with the correct arguments
-            mock_mapping.assert_called_once()
-            args, kwargs = mock_mapping.call_args
-            self.assertEqual(args[0], self.reference)
-            self.assertEqual(args[1], self.identical_target)
-            self.assertEqual(kwargs['species1'], species)
-            
-            # Verify the returned mapping uses the values from the mock
-            expected_mapping = {0:9, 1:8, 2:7, 3:6}
-            self.assertEqual(mapping, expected_mapping)
-
-    def test_species_ordering(self):
-        """Test that atom indices are mapped correctly for different species."""
-        # Create a structure with mixed species in non-alphabetical order
-        mixed_species = ["Cl", "Na", "K", "Na", "Cl"]
-        mixed_coords = [
-            [0.1, 0.1, 0.1],  # Cl1
-            [0.3, 0.3, 0.3],  # Na1
-            [0.5, 0.5, 0.5],  # K1
-            [0.7, 0.7, 0.7],  # Na2
-            [0.9, 0.9, 0.9]   # Cl2
-        ]
-        mixed_reference = Structure(self.lattice, mixed_species, mixed_coords)
-        
-        # Create a target with the same coordinates but different ordering
-        target_species = ["Na", "K", "Cl", "Na", "Cl"]
-        target_coords = [
-            [0.3, 0.3, 0.3],  # Na1
-            [0.5, 0.5, 0.5],  # K1
-            [0.9, 0.9, 0.9],  # Cl2
-            [0.7, 0.7, 0.7],  # Na2
-            [0.1, 0.1, 0.1]   # Cl1
-        ]
-        mixed_target = Structure(self.lattice, target_species, target_coords)
-        
-        # Test mapping with multiple species in specific order
-        species = ["K", "Na", "Cl"]  # Order specified by user
-        mapping = self.aligner._map_atoms_by_species(
-            mixed_reference, mixed_target, species)
-        
-        # Expected mapping:
-        # K(idx 2) → K(idx 1)
-        # Na(idx 1) → Na(idx 0)
-        # Na(idx 3) → Na(idx 3)
-        # Cl(idx 0) → Cl(idx 4)
-        # Cl(idx 4) → Cl(idx 2)
-        expected_mapping = {2:1, 1:0, 3:3, 0:4, 4:2}
-        
-        # Verify the mapping is correct
-        self.assertEqual(mapping, expected_mapping)
 
 if __name__ == '__main__':
     unittest.main()

@@ -51,7 +51,7 @@ class ReferenceBasedSites:
 			target_structure: Target structure where sites will be created
 			align: Whether to perform structure alignment. Default is True.
 			align_species: Species to use for alignment. Default is all species.
-			align_metric: Metric for alignment ('rmsd', 'max_dist', 'mean_dist'). Default is 'rmsd'.
+			align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
 		"""
 		self.reference_structure = reference_structure
 		self.target_structure = target_structure
@@ -182,7 +182,7 @@ class ReferenceBasedSites:
 		
 		Args:
 			align_species: Species to use for alignment. Default is all species.
-			align_metric: Metric for alignment ('rmsd', 'max_dist', 'mean_dist'). Default is 'rmsd'.
+			align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
 			
 		Raises:
 			ValueError: If alignment fails.

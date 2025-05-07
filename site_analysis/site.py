@@ -164,7 +164,7 @@ class Site(ABC):
             None
 
         """ 
-        raise NotImplementedError('centre should be implemeneted '
+        raise NotImplementedError('centre should be implemented '
                                   'in the derived class')
 
     @classmethod

@@ -30,8 +30,17 @@ class Trajectory(object):
             atoms: List of Atom objects to track during the trajectory analysis.
             
         Raises:
+            ValueError: If sites or atoms list is empty.
             TypeError: If sites contains mixed site types or an unrecognised site type.
         """
+        # Validate sites is not empty
+        if not sites:
+            raise ValueError("Cannot initialize Trajectory with empty sites list")
+        
+        # Validate atoms is not empty
+        if not atoms:
+            raise ValueError("Cannot initialize Trajectory with empty atoms list")
+        
         # ensure that all sites are of the same type
         if len(set([type(s) for s in sites])) > 1:
             raise TypeError("A Trajectory cannot be initialised with mixed Site types")

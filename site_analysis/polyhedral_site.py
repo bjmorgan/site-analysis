@@ -31,18 +31,27 @@ class PolyhedralSite(Site):
     """ 
 
     def __init__(self,
-            vertex_indices: List[int],
-            label: Optional[str]=None):
+        vertex_indices: List[int],
+        label: Optional[str]=None):
         """Create a PolyhedralSite instance.
-
+        
         Args:
             vertex_indices (list(int)): List of integer indices for the vertex atoms (counting from 0).
             label (:obj:`str`, optional): Optional label for this site.
-
+        
         Returns:
             None
-
+        
+        Raises:
+            ValueError: If vertex_indices is empty.
+            TypeError: If any element in vertex_indices is not an integer.
         """
+        if not vertex_indices:
+            raise ValueError("vertex_indices cannot be empty")
+        
+        if not all(isinstance(idx, int) for idx in vertex_indices):
+            raise TypeError("All vertex indices must be integers")
+        
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
         self.vertex_coords: Optional[np.ndarray] = None

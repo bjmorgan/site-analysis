@@ -318,6 +318,20 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                        [0.6, 0.4, 0.6]])
         expected_centre = np.array([0.5, 0.5, 0.5])
         np.testing.assert_array_equal(site.centre, expected_centre)
+        
+    def test_init_with_empty_vertex_indices(self):
+        """Test that PolyhedralSite raises ValueError with empty vertex_indices."""
+        with self.assertRaises(ValueError) as context:
+            PolyhedralSite(vertex_indices=[])
+        
+        self.assertIn("vertex_indices cannot be empty", str(context.exception))
+    
+    def test_init_with_non_integer_vertex_indices(self):
+        """Test that PolyhedralSite raises TypeError with non-integer vertex_indices."""
+        with self.assertRaises(TypeError) as context:
+            PolyhedralSite(vertex_indices=[1, 2, "three"])
+        
+        self.assertIn("All vertex indices must be integers", str(context.exception))
   
 def example_structure(species=None):
     if not species:

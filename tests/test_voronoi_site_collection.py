@@ -169,7 +169,7 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 		# Verify sites contain the correct atoms
 		self.assertIn(self.atom1.index, self.site1.contains_atoms)
 		self.assertIn(self.atom2.index, self.site2.contains_atoms)
-
+		
 
 if __name__ == '__main__':
 	unittest.main()

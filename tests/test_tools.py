@@ -1,6 +1,7 @@
 import unittest
 from site_analysis.tools import get_vertex_indices, x_pbc, site_index_mapping
 from site_analysis.tools import get_coordination_indices
+from site_analysis.tools import get_nearest_neighbour_indices
 from site_analysis.tools import calculate_species_distances
 from unittest.mock import patch, MagicMock, Mock
 import numpy as np
@@ -703,6 +704,100 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         # No matches for Cl, should return empty results
         self.assertEqual(len(species_distances), 0)
         self.assertEqual(len(all_distances), 0)
+        
+        
+class ToolsValidationTestCase(unittest.TestCase):
+    
+    def setUp(self):
+        """Create test structures for validation tests."""
+        self.lattice = Lattice.cubic(5.0)
+        self.structure = Structure(
+            lattice=self.lattice,
+            species=["Na", "Cl", "Na", "Cl"],
+            coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5], [0.5, 0.0, 0.0], [0.0, 0.5, 0.5]]
+        )
+        
+        self.ref_structure = Structure(
+            lattice=self.lattice,
+            species=["O", "O"],
+            coords=[[0.25, 0.25, 0.25], [0.75, 0.75, 0.75]]
+        )
+    
+    def test_empty_structure(self):
+        """Test that get_nearest_neighbour_indices raises ValueError with empty structure."""
+        empty_structure = Structure(self.lattice, [], [])
+        
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                empty_structure, 
+                self.ref_structure, 
+                vertex_species=["Na"], 
+                n_coord=2
+            )
+        
+        self.assertIn("Empty structure provided", str(context.exception))
+    
+    def test_empty_reference_structure(self):
+        """Test that get_nearest_neighbour_indices raises ValueError with empty reference structure."""
+        empty_ref = Structure(self.lattice, [], [])
+        
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                self.structure, 
+                empty_ref, 
+                vertex_species=["Na"], 
+                n_coord=2
+            )
+        
+        self.assertIn("Empty reference structure", str(context.exception))
+    
+    def test_empty_vertex_species(self):
+        """Test that get_nearest_neighbour_indices raises ValueError with empty vertex_species."""
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                self.structure, 
+                self.ref_structure, 
+                vertex_species=[], 
+                n_coord=2
+            )
+        
+        self.assertIn("No vertex species specified", str(context.exception))
+    
+    def test_non_positive_n_coord(self):
+        """Test that get_nearest_neighbour_indices raises ValueError with n_coord <= 0."""
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                self.structure, 
+                self.ref_structure, 
+                vertex_species=["Na"], 
+                n_coord=0
+            )
+        
+        self.assertIn("n_coord must be positive", str(context.exception))
+    
+    def test_no_matching_atoms(self):
+        """Test that get_nearest_neighbour_indices raises ValueError when no atoms match vertex_species."""
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                self.structure, 
+                self.ref_structure, 
+                vertex_species=["K"],  # No K atoms in the structure
+                n_coord=2
+            )
+        
+        self.assertIn("No atoms of species", str(context.exception))
+    
+    def test_too_few_matching_atoms(self):
+        """Test that get_nearest_neighbour_indices raises ValueError when fewer matching atoms than n_coord."""
+        with self.assertRaises(ValueError) as context:
+            get_nearest_neighbour_indices(
+                self.structure, 
+                self.ref_structure, 
+                vertex_species=["Na"],  # 2 Na atoms in the structure
+                n_coord=3  # Requesting 3 neighbors
+            )
+        
+        self.assertIn("Requested 3 neighbors but only 2 matching atoms found", str(context.exception))
 
               
 if __name__ == '__main__':

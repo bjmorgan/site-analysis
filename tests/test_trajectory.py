@@ -361,6 +361,24 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
             
             # Check append_timestep was called for each structure
             self.assertEqual(mock_append.call_count, 2)
+            
+    def test_init_with_empty_sites(self):
+        """Test that Trajectory raises ValueError with empty sites list."""
+        atoms = [Mock(spec=Atom)]
+        
+        with self.assertRaises(ValueError) as context:
+            Trajectory(sites=[], atoms=atoms)
+        
+        self.assertIn("empty sites list", str(context.exception))
+    
+    def test_init_with_empty_atoms(self):
+        """Test that Trajectory raises ValueError with empty atoms list."""
+        sites = [Mock(spec=PolyhedralSite)]
+        
+        with self.assertRaises(ValueError) as context:
+            Trajectory(sites=sites, atoms=[])
+        
+        self.assertIn("empty atoms list", str(context.exception))
 
 
 if __name__ == '__main__':

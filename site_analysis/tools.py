@@ -96,7 +96,7 @@ def get_nearest_neighbour_indices(
     """
     Returns the atom indices for the N nearest neighbours to each site in a reference
     structure.
-
+    
     Args:
         structure (`pymatgen.Structure`): A pymatgen Structure object, used to select
             the nearest neighbour indices.
@@ -107,13 +107,35 @@ def get_nearest_neighbour_indices(
             the vertex atoms, e.g. ``[ 'S', 'I' ]``.
         n_coord (int): Number of matching nearest neighbours to return for each site in 
             ``ref_structure``.
-
+    
     Returns:
         (list(list(int)): N_sites x N_neighbours nested list of vertex atom indices.
-
+        
+    Raises:
+        ValueError: If structure or ref_structure is empty, if vertex_species is empty,
+            if n_coord is not positive, if no atoms match vertex_species, or if there
+            are fewer matching atoms than n_coord.
     """
+    if len(structure) == 0:
+        raise ValueError("Empty structure provided")
+        
+    if len(ref_structure) == 0:
+        raise ValueError("Empty reference structure provided")
+        
+    if not vertex_species:
+        raise ValueError("No vertex species specified")
+        
+    if n_coord <= 0:
+        raise ValueError(f"n_coord must be positive, got {n_coord}")
+    
     vertex_indices = [i for i, s in enumerate(structure)
             if s.species_string in vertex_species]
+    if not vertex_indices:
+        raise ValueError(f"No atoms of species {vertex_species} found in structure")
+        
+    if len(vertex_indices) < n_coord:
+        raise ValueError(f"Requested {n_coord} neighbors but only {len(vertex_indices)} matching atoms found")
+    
     struc1_coords = np.array([structure[i].frac_coords for i in vertex_indices])
     struc2_coords = ref_structure.frac_coords
     lattice = structure[0].lattice

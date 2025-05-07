@@ -44,6 +44,8 @@ Examples:
 	```
 """
 
+from __future__ import annotations
+
 from pymatgen.core import Structure
 from site_analysis.atom import Atom, atoms_from_structure
 from site_analysis.site import Site
@@ -90,7 +92,7 @@ class TrajectoryBuilder:
 		self._sites: Optional[List[Site]] = None
 		self._atoms: Optional[List[Atom]] = None
 		
-	def with_structure(self, structure) -> "TrajectoryBuilder":
+	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
 		
 		Args:
@@ -102,7 +104,7 @@ class TrajectoryBuilder:
 		self._structure = structure
 		return self
 		
-	def with_reference_structure(self, reference_structure) -> "TrajectoryBuilder":
+	def with_reference_structure(self, reference_structure) -> TrajectoryBuilder:
 		"""Set the reference structure for complex site types.
 		
 		Args:
@@ -115,7 +117,7 @@ class TrajectoryBuilder:
 		self._reference_structure = reference_structure
 		return self
 		
-	def with_mobile_species(self, species: Union[str, List[str]]) -> "TrajectoryBuilder":
+	def with_mobile_species(self, species: Union[str, List[str]]) -> TrajectoryBuilder:
 		"""Set the mobile species to track.
 		
 		Args:
@@ -130,7 +132,7 @@ class TrajectoryBuilder:
 	def with_spherical_sites(self, 
 						   centres: List[List[float]], 
 						   radii: List[float], 
-						   labels: Optional[List[str]] = None) -> "TrajectoryBuilder":
+						   labels: Optional[List[str]] = None) -> TrajectoryBuilder:
 		"""Define spherical sites.
 		
 		Args:
@@ -160,7 +162,7 @@ class TrajectoryBuilder:
 		
 	def with_voronoi_sites(self, 
 						centres: List[List[float]], 
-						labels: Optional[List[str]] = None) -> "TrajectoryBuilder":
+						labels: Optional[List[str]] = None) -> TrajectoryBuilder:
 		"""Define Voronoi sites.
 		
 		Args:
@@ -185,7 +187,7 @@ class TrajectoryBuilder:
 							vertex_species: Union[str, List[str]], 
 							cutoff: float, 
 							n_vertices: int, 
-							label: Optional[str] = None) -> "TrajectoryBuilder":
+							label: Optional[str] = None) -> TrajectoryBuilder:
 		"""Define polyhedral sites using the ReferenceBasedSites workflow.
 		
 		Args:
@@ -228,7 +230,7 @@ class TrajectoryBuilder:
 								 reference_species: Union[str, List[str]], 
 								 cutoff: float, 
 								 n_reference: int, 
-								 label: Optional[str] = None) -> "TrajectoryBuilder":
+								 label: Optional[str] = None) -> TrajectoryBuilder:
 		"""Define dynamic Voronoi sites using the ReferenceBasedSites workflow.
 		
 		Args:
@@ -266,7 +268,7 @@ class TrajectoryBuilder:
 		
 		return self
 		
-	def with_existing_sites(self, sites: List) -> "TrajectoryBuilder":
+	def with_existing_sites(self, sites: List) -> TrajectoryBuilder:
 		"""Use existing site objects.
 		
 		Args:
@@ -278,7 +280,7 @@ class TrajectoryBuilder:
 		self._sites = sites
 		return self
 		
-	def with_existing_atoms(self, atoms: List) -> "TrajectoryBuilder":
+	def with_existing_atoms(self, atoms: List) -> TrajectoryBuilder:
 		"""Use existing atom objects.
 		
 		Args:

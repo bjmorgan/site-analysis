@@ -198,47 +198,144 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Check error message
 		self.assertIn("structure", str(context.exception).lower())
 	
-	@patch('site_analysis.builders.ReferenceBasedSites')
-	def test_with_dynamic_voronoi_sites(self, mock_rbs_class):
+	def test_with_polyhedral_sites(self):
+		"""Test building with polyhedral sites."""
+		# Configure the mock ReferenceBasedSites
+		mock_rbs = Mock()
+		mock_sites = [Mock(), Mock()]
+		mock_rbs.create_polyhedral_sites.return_value = mock_sites
+		
+		# Create a mock for ReferenceBasedSites class
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
+			# Configure mock to return our mock_rbs instance
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure the builder with structures
+			self.builder.with_structure(self.structure)
+			self.builder.with_reference_structure(self.reference_structure)
+			
+			# Call the method
+			self.builder.with_polyhedral_sites(
+				centre_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral"
+			)
+			
+			# Verify ReferenceBasedSites was created correctly with alignment parameters
+			mock_rbs_class.assert_called_once_with(
+				reference_structure=self.reference_structure,
+				target_structure=self.structure,
+				align=True,                # Default is True
+				align_species=None,        # Default is None
+				align_metric='rmsd'        # Default is 'rmsd'
+			)
+			
+			# Verify create_polyhedral_sites was called correctly
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
+				center_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral"
+			)
+			
+			# Sites should be stored in the builder
+			self.assertEqual(self.builder._sites, mock_sites)
+	
+	def test_with_dynamic_voronoi_sites(self):
 		"""Test building with dynamic Voronoi sites."""
 		# Configure the mock ReferenceBasedSites
 		mock_rbs = Mock()
-		mock_rbs_class.return_value = mock_rbs
-		
-		# Mock the sites that would be returned
 		mock_sites = [Mock(), Mock()]
 		mock_rbs.create_dynamic_voronoi_sites.return_value = mock_sites
 		
-		# Configure the builder with structures
-		self.builder.with_structure(self.structure)
-		self.builder.with_reference_structure(self.reference_structure)
+		# Create a mock for ReferenceBasedSites class
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
+			# Configure mock to return our mock_rbs instance
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure the builder with structures
+			self.builder.with_structure(self.structure)
+			self.builder.with_reference_structure(self.reference_structure)
+			
+			# Call the method
+			self.builder.with_dynamic_voronoi_sites(
+				centre_species="Li",
+				reference_species="O",
+				cutoff=2.0,
+				n_reference=4,
+				label="tetrahedral"
+			)
+			
+			# Verify ReferenceBasedSites was created correctly with alignment parameters
+			mock_rbs_class.assert_called_once_with(
+				reference_structure=self.reference_structure,
+				target_structure=self.structure,
+				align=True,                # Default is True
+				align_species=None,        # Default is None
+				align_metric='rmsd'        # Default is 'rmsd'
+			)
+			
+			# Verify create_dynamic_voronoi_sites was called correctly
+			mock_rbs.create_dynamic_voronoi_sites.assert_called_once_with(
+				center_species="Li",
+				reference_species="O",
+				cutoff=2.0,
+				n_reference=4,
+				label="tetrahedral"
+			)
+			
+			# Sites should be stored in the builder
+			self.assertEqual(self.builder._sites, mock_sites)
+	
+	def test_with_alignment_options(self):
+		"""Test setting alignment options."""
+		# Start with a fresh builder
+		builder = TrajectoryBuilder()
 		
-		# Call the method
-		self.builder.with_dynamic_voronoi_sites(
-			centre_species="Li",
-			reference_species="O",
-			cutoff=2.0,
-			n_reference=4,
-			label="tetrahedral"
+		# Set alignment options
+		result = builder.with_alignment_options(
+			align=False,
+			align_species=["Li"],
+			align_metric="max_dist"
 		)
 		
-		# Verify ReferenceBasedSites was created correctly
-		mock_rbs_class.assert_called_once_with(
-			reference_structure=self.reference_structure,
-			target_structure=self.structure
-		)
+		# Verify chaining works
+		self.assertIs(result, builder)
 		
-		# Verify create_dynamic_voronoi_sites was called correctly
-		mock_rbs.create_dynamic_voronoi_sites.assert_called_once_with(
-			center_species="Li",
-			reference_species="O",
-			cutoff=2.0,
-			n_reference=4,
-			label="tetrahedral"
-		)
+		# Verify options were stored
+		self.assertEqual(builder._align, False)
+		self.assertEqual(builder._align_species, ["Li"])
+		self.assertEqual(builder._align_metric, "max_dist")
 		
-		# Sites should be stored in the builder
-		self.assertEqual(self.builder._sites, mock_sites)
+		# Test with polyhedral sites to verify options are passed correctly
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			mock_rbs.create_polyhedral_sites.return_value = [Mock()]
+			
+			# Configure the builder
+			builder.with_structure(self.structure)
+			builder.with_reference_structure(self.reference_structure)
+			
+			# Call with_polyhedral_sites
+			builder.with_polyhedral_sites(
+				centre_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4
+			)
+			
+			# Verify ReferenceBasedSites was created with our custom alignment options
+			mock_rbs_class.assert_called_once_with(
+				reference_structure=self.reference_structure,
+				target_structure=self.structure,
+				align=False,
+				align_species=["Li"],
+				align_metric="max_dist"
+			)
 	
 	def test_with_dynamic_voronoi_sites_requires_structures(self):
 		"""Test validation of reference and target structures for dynamic Voronoi sites."""
@@ -483,6 +580,7 @@ class TestFactoryFunctions(unittest.TestCase):
 		mock_builder.with_structure.return_value = mock_builder
 		mock_builder.with_reference_structure.return_value = mock_builder
 		mock_builder.with_mobile_species.return_value = mock_builder
+		mock_builder.with_alignment_options.return_value = mock_builder
 		mock_builder.with_polyhedral_sites.return_value = mock_builder
 		
 		# Mock the final trajectory
@@ -505,6 +603,11 @@ class TestFactoryFunctions(unittest.TestCase):
 		mock_builder.with_structure.assert_called_once_with(self.structure)
 		mock_builder.with_reference_structure.assert_called_once_with(self.reference_structure)
 		mock_builder.with_mobile_species.assert_called_once_with("Li")
+		
+		# Verify alignment options were set with defaults
+		mock_builder.with_alignment_options.assert_called_once_with(True, None, 'rmsd')
+		
+		# Verify polyhedral sites were created
 		mock_builder.with_polyhedral_sites.assert_called_once_with("O", "Li", 2.0, 4, "tetrahedral")
 		mock_builder.build.assert_called_once()
 		

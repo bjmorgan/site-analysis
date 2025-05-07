@@ -56,7 +56,7 @@ class ReferenceBasedSites:
 		self.reference_structure = reference_structure
 		self.target_structure = target_structure
 		
-		# Initialise alignment attributes with proper types
+		# Initialise alignment attributes
 		self.aligned_structure: Optional[Structure] = None
 		self.translation_vector: Optional[np.ndarray] = None
 		self.alignment_metrics: Optional[Dict[str, float]] = None

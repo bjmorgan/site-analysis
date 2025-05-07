@@ -54,7 +54,7 @@ from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 import numpy as np
-from typing import List, Union, Optional, cast
+from typing import Union, Optional, cast
 
 
 class TrajectoryBuilder:
@@ -88,9 +88,13 @@ class TrajectoryBuilder:
 		"""Initialize a TrajectoryBuilder."""
 		self._structure: Optional[Structure] = None
 		self._reference_structure: Optional[Structure] = None
-		self._mobile_species: Optional[Union[str, List[str]]] = None
-		self._sites: Optional[List[Site]] = None
-		self._atoms: Optional[List[Atom]] = None
+		self._mobile_species: Optional[Union[str, list[str]]] = None
+		self._sites: Optional[list[Site]] = None
+		self._atoms: Optional[list[Atom]] = None
+		# Alignment options
+		self._align: bool = True
+		self._align_species: Optional[list[str]] = None
+		self._align_metric: str = 'rmsd'
 		
 	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
@@ -117,7 +121,7 @@ class TrajectoryBuilder:
 		self._reference_structure = reference_structure
 		return self
 		
-	def with_mobile_species(self, species: Union[str, List[str]]) -> TrajectoryBuilder:
+	def with_mobile_species(self, species: Union[str, list[str]]) -> TrajectoryBuilder:
 		"""Set the mobile species to track.
 		
 		Args:
@@ -128,16 +132,36 @@ class TrajectoryBuilder:
 		"""
 		self._mobile_species = species
 		return self
+	
+	def with_alignment_options(self, 
+							 align: bool = True, 
+							 align_species: Optional[list[str]] = None, 
+							 align_metric: str = 'rmsd') -> TrajectoryBuilder:
+		"""Set options for aligning reference and target structures.
+		
+		Args:
+			align: Whether to perform structure alignment. Default is True.
+			align_species: Species to use for alignment. Default is all species.
+			align_metric: Metric for alignment ('rmsd', 'max_dist'). 
+				Default is 'rmsd'.
+				
+		Returns:
+			self: For method chaining
+		"""
+		self._align = align
+		self._align_species = align_species
+		self._align_metric = align_metric
+		return self
 		
 	def with_spherical_sites(self, 
-						   centres: List[List[float]], 
-						   radii: List[float], 
-						   labels: Optional[List[str]] = None) -> TrajectoryBuilder:
+						   centres: list[list[float]], 
+						   radii: list[float], 
+						   labels: Optional[list[str]] = None) -> TrajectoryBuilder:
 		"""Define spherical sites.
 		
 		Args:
-			centres: List of fractional coordinate centres for spherical sites
-			radii: List of radii for spherical sites (in Angstroms)
+			centres: list of fractional coordinate centres for spherical sites
+			radii: list of radii for spherical sites (in Angstroms)
 			labels: Optional list of labels for sites
 				
 		Returns:
@@ -161,12 +185,12 @@ class TrajectoryBuilder:
 		return self
 		
 	def with_voronoi_sites(self, 
-						centres: List[List[float]], 
-						labels: Optional[List[str]] = None) -> TrajectoryBuilder:
+						centres: list[list[float]], 
+						labels: Optional[list[str]] = None) -> TrajectoryBuilder:
 		"""Define Voronoi sites.
 		
 		Args:
-			centres: List of fractional coordinate centres for Voronoi sites
+			centres: list of fractional coordinate centres for Voronoi sites
 			labels: Optional list of labels for sites
 				
 		Returns:
@@ -184,7 +208,7 @@ class TrajectoryBuilder:
 		
 	def with_polyhedral_sites(self, 
 							centre_species: str, 
-							vertex_species: Union[str, List[str]], 
+							vertex_species: Union[str, list[str]], 
 							cutoff: float, 
 							n_vertices: int, 
 							label: Optional[str] = None) -> TrajectoryBuilder:
@@ -209,11 +233,14 @@ class TrajectoryBuilder:
 		# Create ReferenceBasedSites
 		rbs = ReferenceBasedSites(
 			reference_structure=self._reference_structure,
-			target_structure=self._structure
+			target_structure=self._structure,
+			align=self._align,
+			align_species=self._align_species,
+			align_metric=self._align_metric
 		)
 		
 		# Create sites
-		self._sites = cast(List[Site], 
+		self._sites = cast(list[Site], 
 			rbs.create_polyhedral_sites(
 				center_species=centre_species,
 				vertex_species=vertex_species,
@@ -227,7 +254,7 @@ class TrajectoryBuilder:
 		
 	def with_dynamic_voronoi_sites(self, 
 								 centre_species: str, 
-								 reference_species: Union[str, List[str]], 
+								 reference_species: Union[str, list[str]], 
 								 cutoff: float, 
 								 n_reference: int, 
 								 label: Optional[str] = None) -> TrajectoryBuilder:
@@ -252,11 +279,14 @@ class TrajectoryBuilder:
 		# Create ReferenceBasedSites
 		rbs = ReferenceBasedSites(
 			reference_structure=self._reference_structure,
-			target_structure=self._structure
+			target_structure=self._structure,
+			align=self._align,
+			align_species=self._align_species,
+			align_metric=self._align_metric
 		)
 		
 		# Create sites
-		self._sites = cast(List[Site],
+		self._sites = cast(list[Site],
 			rbs.create_dynamic_voronoi_sites(
 				center_species=centre_species,
 				reference_species=reference_species,
@@ -268,11 +298,11 @@ class TrajectoryBuilder:
 		
 		return self
 		
-	def with_existing_sites(self, sites: List) -> TrajectoryBuilder:
+	def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
 		"""Use existing site objects.
 		
 		Args:
-			sites: List of site objects
+			sites: list of site objects
 				
 		Returns:
 			self: For method chaining
@@ -280,11 +310,11 @@ class TrajectoryBuilder:
 		self._sites = sites
 		return self
 		
-	def with_existing_atoms(self, atoms: List) -> TrajectoryBuilder:
+	def with_existing_atoms(self, atoms: list) -> TrajectoryBuilder:
 		"""Use existing atom objects.
 		
 		Args:
-			atoms: List of atom objects
+			atoms: list of atom objects
 				
 		Returns:
 			self: For method chaining
@@ -324,18 +354,18 @@ class TrajectoryBuilder:
 
 def create_trajectory_with_spherical_sites(
 	structure, 
-	mobile_species: Union[str, List[str]], 
-	centres: List[List[float]], 
-	radii: List[float], 
-	labels: Optional[List[str]] = None
+	mobile_species: Union[str, list[str]], 
+	centres: list[list[float]], 
+	radii: list[float], 
+	labels: Optional[list[str]] = None
 ) -> Trajectory:
 	"""Create a Trajectory with spherical sites.
 	
 	Args:
 		structure: Structure containing the atoms to analyse
 		mobile_species: Species string or list of species strings for mobile atoms
-		centres: List of fractional coordinate centres for spherical sites
-		radii: List of radii for spherical sites (in Angstroms)
+		centres: list of fractional coordinate centres for spherical sites
+		radii: list of radii for spherical sites (in Angstroms)
 		labels: Optional list of labels for sites
 		
 	Returns:
@@ -351,16 +381,16 @@ def create_trajectory_with_spherical_sites(
 
 def create_trajectory_with_voronoi_sites(
 	structure, 
-	mobile_species: Union[str, List[str]], 
-	centres: List[List[float]], 
-	labels: Optional[List[str]] = None
+	mobile_species: Union[str, list[str]], 
+	centres: list[list[float]], 
+	labels: Optional[list[str]] = None
 ) -> Trajectory:
 	"""Create a Trajectory with Voronoi sites.
 	
 	Args:
 		structure: Structure containing the atoms to analyse
 		mobile_species: Species string or list of species strings for mobile atoms
-		centres: List of fractional coordinate centres for Voronoi sites
+		centres: list of fractional coordinate centres for Voronoi sites
 		labels: Optional list of labels for sites
 		
 	Returns:
@@ -377,12 +407,15 @@ def create_trajectory_with_voronoi_sites(
 def create_trajectory_with_polyhedral_sites(
 	structure, 
 	reference_structure, 
-	mobile_species: Union[str, List[str]], 
+	mobile_species: Union[str, list[str]], 
 	centre_species: str, 
-	vertex_species: Union[str, List[str]], 
+	vertex_species: Union[str, list[str]], 
 	cutoff: float, 
 	n_vertices: int, 
-	label: Optional[str] = None
+	label: Optional[str] = None,
+	align: bool = True,
+	align_species: Optional[list[str]] = None,
+	align_metric: str = 'rmsd'
 ) -> Trajectory:
 	"""Create a Trajectory with polyhedral sites.
 	
@@ -395,6 +428,10 @@ def create_trajectory_with_polyhedral_sites(
 		cutoff: Cutoff distance for coordination environment
 		n_vertices: Number of vertices per environment
 		label: Label to apply to all created sites
+		align: Whether to perform structure alignment. Default is True.
+		align_species: Species to use for alignment. Default is all species.
+		align_metric: Metric for alignment ('rmsd', 'max_dist'). 
+			Default is 'rmsd'.
 		
 	Returns:
 		Trajectory: The constructed Trajectory object
@@ -404,6 +441,7 @@ def create_trajectory_with_polyhedral_sites(
 			.with_structure(structure)
 			.with_reference_structure(reference_structure)
 			.with_mobile_species(mobile_species)
+			.with_alignment_options(align, align_species, align_metric)
 			.with_polyhedral_sites(centre_species, vertex_species, cutoff, n_vertices, label)
 			.build())
 
@@ -411,12 +449,15 @@ def create_trajectory_with_polyhedral_sites(
 def create_trajectory_with_dynamic_voronoi_sites(
 	structure, 
 	reference_structure, 
-	mobile_species: Union[str, List[str]], 
+	mobile_species: Union[str, list[str]], 
 	centre_species: str, 
-	reference_species: Union[str, List[str]], 
+	reference_species: Union[str, list[str]], 
 	cutoff: float, 
 	n_reference: int, 
-	label: Optional[str] = None
+	label: Optional[str] = None,
+	align: bool = True,
+	align_species: Optional[list[str]] = None,
+	align_metric: str = 'rmsd'
 ) -> Trajectory:
 	"""Create a Trajectory with dynamic Voronoi sites.
 	
@@ -429,6 +470,10 @@ def create_trajectory_with_dynamic_voronoi_sites(
 		cutoff: Cutoff distance for finding reference atoms
 		n_reference: Number of reference atoms per site
 		label: Label to apply to all created sites
+		align: Whether to perform structure alignment. Default is True.
+		align_species: Species to use for alignment. Default is all species.
+		align_metric: Metric for alignment ('rmsd', 'max_dist'). 
+			Default is 'rmsd'.
 		
 	Returns:
 		Trajectory: The constructed Trajectory object
@@ -438,5 +483,6 @@ def create_trajectory_with_dynamic_voronoi_sites(
 			.with_structure(structure)
 			.with_reference_structure(reference_structure)
 			.with_mobile_species(mobile_species)
+			.with_alignment_options(align, align_species, align_metric)
 			.with_dynamic_voronoi_sites(centre_species, reference_species, cutoff, n_reference, label)
 			.build())

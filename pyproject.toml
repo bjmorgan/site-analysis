@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "site_analysis"
+version = "0.2.0"
+description = "Analysis tools for tracking ion migration through crystallographic sites"
+readme = "README.md"
+authors = [
+    {name = "Benjamin J. Morgan", email = "example@email.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pymatgen",
+    "tqdm",
+    "monty",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/username/site_analysis"
+"Bug Tracker" = "https://github.com/username/site_analysis/issues"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["site_analysis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

@@ -1,10 +1,20 @@
 """Site analysis package for molecular dynamics trajectories.
 
 This package provides functionality for analysing molecular dynamics trajectories,
-with a focus on tracking ion migration pathways through crystallographic sites.
+with a focus on tracking ion migration through crystallographic sites.
 """
 
-from site_analysis.version import __version__
+try:
+    # Get version from installed package metadata
+    from importlib.metadata import version
+    __version__ = version("site_analysis")
+except ImportError:
+    # For Python < 3.8
+    try:
+        from importlib_metadata import version
+        __version__ = version("site_analysis")
+    except ImportError:
+        __version__ = "unknown"
 
 # Import and expose the builder tools
 from site_analysis.builders import (

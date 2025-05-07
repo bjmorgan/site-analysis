@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import itertools
 import json
 from monty.io import zopen # type: ignore
 import numpy as np
 from pymatgen.core import Structure
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, Any, Union
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -15,7 +16,7 @@ class Atom(object):
             currently occupies.
         frac_coords (np.array): Numpy array containing the current fractional
             coordinates for this atom.
-        trajectory (list): List of site indices occupied at each timestep.
+        trajectory (list): list of site indices occupied at each timestep.
 
     Note:
         The atom index is used to identify it when parsing structures, so
@@ -39,7 +40,7 @@ class Atom(object):
         self.index = index
         self.in_site: Optional[int] = None
         self._frac_coords: Optional[np.ndarray] = None
-        self.trajectory: List[int] = []
+        self.trajectory: list[int] = []
         self.species_string = species_string
 
     def __str__(self) -> str:
@@ -107,8 +108,8 @@ class Atom(object):
         else:
             return self._frac_coords
 
-    def as_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
+    def as_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
             "index": int(self.index),
             "in_site": None if self.in_site is None else int(self.in_site),
         }
@@ -119,7 +120,7 @@ class Atom(object):
         return d
     
     @classmethod
-    def from_dict(cls, d: Dict) -> Atom:
+    def from_dict(cls, d: dict) -> Atom:
         atom = cls(index=d["index"], species_string=d.get("species_string"))
         if d["in_site"] is not None:
             atom.in_site = int(d["in_site"])
@@ -160,7 +161,7 @@ class Atom(object):
 
 def atoms_from_species_string(
         structure:Structure,
-        species_string: str) -> List[Atom]:
+        species_string: str) -> list[Atom]:
     atoms = [
         Atom(index=i)
         for i, s in enumerate(structure)
@@ -170,7 +171,7 @@ def atoms_from_species_string(
     
 def atoms_from_structure(
     structure: Structure,
-    species_string: Union[List[str], str]) -> List[Atom]:
+    species_string: Union[list[str], str]) -> list[Atom]:
     if isinstance(species_string, str):
         species_string = [species_string]
     atoms = [
@@ -183,5 +184,5 @@ def atoms_from_structure(
     return atoms
 
 def atoms_from_indices(
-        indices: List[int]) -> List[Atom]:
+        indices: list[int]) -> list[Atom]:
     return [Atom(index=i) for i in indices]

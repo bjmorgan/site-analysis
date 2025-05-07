@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import itertools
 import numpy as np 
 from scipy.spatial import Delaunay, ConvexHull # type: ignore
-from .site import Site
-from .tools import x_pbc, species_string_from_site
-from typing import Optional, Any
 from pymatgen.core import Structure
-from .atom import Atom
+from site_analysis.site import Site
+from site_analysis.tools import x_pbc, species_string_from_site
+from site_analysis.atom import Atom
+from typing import Optional, Any
+
 
 class PolyhedralSite(Site):
     """Describes a site defined by the polyhedral volume enclosed by a set
@@ -310,6 +313,8 @@ class PolyhedralSite(Site):
         return np.array(centre_coords) 
 
     @classmethod
-    def sites_from_vertex_indices(cls, vertex_indices, label=None):
+    def sites_from_vertex_indices(cls,
+        vertex_indices: list[list[int]],
+        label: Optional[str]=None) -> list[PolyhedralSite]:
         sites = [cls(vertex_indices=vi, label=label) for vi in vertex_indices]
         return sites

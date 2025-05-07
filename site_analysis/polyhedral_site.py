@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial import Delaunay, ConvexHull # type: ignore
 from .site import Site
 from .tools import x_pbc, species_string_from_site
-from typing import List, Optional, Any, Dict
+from typing import Optional, Any
 from pymatgen.core import Structure
 from .atom import Atom
 
@@ -15,28 +15,28 @@ class PolyhedralSite(Site):
         index (int): Numerical ID, intended to be unique to each site.
         label (`str`: optional): Optional string given as a label for this site.
             Default is `None`.
-        contains_atoms (list): List of the atoms contained by this site in the
+        contains_atoms (list): list of the atoms contained by this site in the
             structure last processed.
-        trajectory (list): List of sites this atom has visited at each timestep?
-        points (list): List of fractional coordinates for atoms assigned as
+        trajectory (list): list of sites this atom has visited at each timestep?
+        points (list): list of fractional coordinates for atoms assigned as
             occupying this site.
         transitions (collections.Counter): Stores observed transitions from this
             site to other sites. Format is {index: count} with ``index`` giving
             the index of each destination site, and ``count`` giving the number 
             of observed transitions to this site.
-        vertex_indices (list(int)): List of integer indices for the vertex atoms
+        vertex_indices (list(int)): list of integer indices for the vertex atoms
             (counting from 0). 
         label (:obj:`str`, optional): Optional label for the site.
    
     """ 
 
     def __init__(self,
-        vertex_indices: List[int],
+        vertex_indices: list[int],
         label: Optional[str]=None):
         """Create a PolyhedralSite instance.
         
         Args:
-            vertex_indices (list(int)): List of integer indices for the vertex atoms (counting from 0).
+            vertex_indices (list(int)): list of integer indices for the vertex atoms (counting from 0).
             label (:obj:`str`, optional): Optional label for this site.
         
         Returns:
@@ -158,7 +158,7 @@ class PolyhedralSite(Site):
         self._delaunay = None
 
     def get_vertex_species(self,
-            structure: Structure) -> List[str]:
+            structure: Structure) -> list[str]:
         """Returns a list of species strings for the vertex atoms of this
         polyhedral site.
 
@@ -167,7 +167,7 @@ class PolyhedralSite(Site):
                 to each vertex atom.
 
         Returns:
-            (list(str)): List of species strings of the vertex atoms.
+            (list(str)): list of species strings of the vertex atoms.
 
         """
         return [structure[i].species_string for i in self.vertex_indices]
@@ -279,7 +279,7 @@ class PolyhedralSite(Site):
             raise ValueError(f'{algo} is not a valid algorithm keyword for contains_atom()')
         return self.contains_point(atom.frac_coords, algo=algo)
 
-    def as_dict(self) -> Dict:
+    def as_dict(self) -> dict:
         d = super(PolyhedralSite, self).as_dict()
         d['vertex_indices'] = self.vertex_indices
         d['vertex_coords'] = self.vertex_coords

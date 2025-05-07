@@ -306,7 +306,8 @@ class PolyhedralSite(Site):
  
         """
         assert isinstance(self.vertex_coords, np.ndarray)
-        return np.mean(self.vertex_coords, axis=0)
+        centre_coords = np.mean(self.vertex_coords, axis=0)
+        return np.array(centre_coords) 
 
     @classmethod
     def sites_from_vertex_indices(cls, vertex_indices, label=None):

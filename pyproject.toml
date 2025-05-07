@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "site_analysis"
 version = "0.2.0"
-description = "Analysis tools for tracking ion migration through crystallographic sites"
+description = "Analysis tools for tracking ion migration pathways through crystallographic sites"
 readme = "README.md"
 authors = [
     {name = "Benjamin J. Morgan", email = "example@email.com"}
@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",

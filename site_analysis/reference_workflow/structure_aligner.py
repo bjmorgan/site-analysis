@@ -174,7 +174,7 @@ class StructureAligner:
 		"""
 		translated = coords + translation_vector
 		# Ensure coordinates are within [0, 1)
-		return translated % 1.0
+		return np.array(translated % 1.0)
 	
 	def _apply_translation(self, 
 						  structure: Structure, 

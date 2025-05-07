@@ -6,18 +6,15 @@ This module contains tools for [TODO]
 import warnings
 import numpy as np
 
-from typing import Optional, List, Union, Tuple, cast
+from typing import Optional, Union, cast
 from pymatgen.core import Structure, Site, PeriodicSite
-
-from typing import List, Union
-from pymatgen.core import Structure
 
 def get_coordination_indices(
         structure: Structure,
         centre_species: str, 
-        coordination_species: Union[str, List[str]],
+        coordination_species: Union[str, list[str]],
         cutoff: float,
-        n_coord: Union[int, List[int]]) -> List[List[int]]:
+        n_coord: Union[int, list[int]]) -> list[list[int]]:
     """
     Find atoms with exactly the specified coordination environment.
     
@@ -91,8 +88,8 @@ def get_coordination_indices(
 def get_nearest_neighbour_indices(
         structure: Structure,
         ref_structure: Structure,
-        vertex_species: List[str],
-        n_coord: int) -> List[List[int]]:
+        vertex_species: list[str],
+        n_coord: int) -> list[list[int]]:
     """
     Returns the atom indices for the N nearest neighbours to each site in a reference
     structure.
@@ -103,7 +100,7 @@ def get_nearest_neighbour_indices(
         ref_structure (`pymatgen.Structure`): A pymatgen Structure object. Each site
             is used to find the set of N nearest neighbours (of the specified atomic species)
             in ``structure``.
-        vertex_species (list(str)): List of strings specifying the atomic species of
+        vertex_species (list(str)): list of strings specifying the atomic species of
             the vertex atoms, e.g. ``[ 'S', 'I' ]``.
         n_coord (int): Number of matching nearest neighbours to return for each site in 
             ``ref_structure``.
@@ -149,9 +146,9 @@ def get_nearest_neighbour_indices(
 def get_vertex_indices(
         structure: Structure,
         centre_species: str, 
-        vertex_species: Union[str, List[str]],
+        vertex_species: Union[str, list[str]],
         cutoff: float,
-        n_vertices: Union[int, List[int]]) -> List[List[int]]:
+        n_vertices: Union[int, list[int]]) -> list[list[int]]:
     """
     DEPRECATED: Find the atom indices for atoms defining the vertices of coordination polyhedra.
     
@@ -265,7 +262,10 @@ def species_string_from_site(site: Site) -> str:
         String representation of the site's species
     """
     if hasattr(site._species, 'keys'):
-        return [k.__str__() for k in site._species.keys()][0]
+        species_keys = [k.__str__() for k in site._species.keys()]
+        if species_keys:
+            return str(species_keys[0])
+        return "" 
     elif hasattr(site, 'species_string'):
         return site.species_string
     else:
@@ -273,10 +273,10 @@ def species_string_from_site(site: Site) -> str:
 
 def site_index_mapping(structure1: Structure, 
                        structure2: Structure,
-                       species1: Optional[Union[str, List[str]]] = None,
-                       species2: Optional[Union[str, List[str]]] = None,
+                       species1: Optional[Union[str, list[str]]] = None,
+                       species2: Optional[Union[str, list[str]]] = None,
                        one_to_one_mapping: Optional[bool] = True,
-                       return_mapping_distances: Optional[bool] = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                       return_mapping_distances: Optional[bool] = False) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Compute the site index mapping between two structures based on the closest corresponding site in
     structure2 to each selected site in structure1.
     
@@ -335,7 +335,7 @@ def calculate_species_distances(structure1, structure2, species=None):
     Args:
         structure1: First structure to compare
         structure2: Second structure to compare
-        species: List of species to include. If None, includes all species
+        species: list of species to include. If None, includes all species
                  present in both structures.
                  
     Returns:

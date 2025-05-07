@@ -32,6 +32,11 @@ class VoronoiSiteTestCase(unittest.TestCase):
             site = VoronoiSite.from_dict(site_dict)
             self.assertEqual(site.label, 'foo')
             np.testing.assert_array_equal(site.frac_coords, site_dict['frac_coords'])
+            
+    def test_contains_point_raises_not_implemented_error(self):
+        site = VoronoiSite(frac_coords=np.array([0.1, 0.1, 0.1]))
+        with self.assertRaises(NotImplementedError):
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
+from site_analysis.site import Site
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -663,6 +664,57 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertIn("Different number of Li atoms", error_msg)
 		self.assertIn("27 in reference", error_msg)  # 27 Li atoms in reference
 		self.assertIn("26 in target", error_msg)     # 26 Li atoms in target
+		
+	def test_site_indices_reset_between_trajectories(self):
+		"""Test that site indices are reset for each new trajectory build."""
+		# Create a simple structure for testing
+		lattice = Lattice.cubic(5.0)
+		structure = Structure(
+			lattice=lattice,
+			species=["Li", "O"],
+			coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
+		)
+		
+		# Reset the site counter to ensure a clean test
+		Site.reset_index()
+		
+		# Configure first builder
+		builder1 = TrajectoryBuilder()
+		builder1.with_structure(structure)
+		builder1.with_mobile_species("Li")
+		builder1.with_spherical_sites(
+			centres=[[0.5, 0.5, 0.5]],
+			radii=[1.0],
+			labels=["test_site"]
+		)
+		
+		# Build first trajectory (without mocking)
+		first_trajectory = builder1.build()
+		
+		# Verify first site has index 0
+		self.assertEqual(first_trajectory.sites[0].index, 0)
+		
+		# Verify Site._newid is now 1 (after creating one site)
+		self.assertEqual(Site._newid, 1)
+		
+		# Configure second builder
+		builder2 = TrajectoryBuilder()
+		builder2.with_structure(structure)
+		builder2.with_mobile_species("Li")
+		builder2.with_spherical_sites(
+			centres=[[0.5, 0.5, 0.5]],
+			radii=[1.0],
+			labels=["test_site"]
+		)
+		
+		# Build second trajectory (without mocking)
+		second_trajectory = builder2.build()
+		
+		# The second site should also have index 0
+		self.assertEqual(second_trajectory.sites[0].index, 0)
+		
+		# And Site._newid should still be 1 after the second build
+		self.assertEqual(Site._newid, 1)
 
 if __name__ == '__main__':
 	unittest.main()

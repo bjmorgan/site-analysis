@@ -196,8 +196,7 @@ class TrajectoryBuilder:
 		self._align_metric = align_metric
 		return self
 		
-	def with_site_mapping(self,
-		mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
+	def with_site_mapping(self, mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
 		"""Set the species to use for mapping sites between reference and target structures.
 		
 		Site mapping identifies corresponding sites between structures even when

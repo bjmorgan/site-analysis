@@ -55,6 +55,9 @@ myst_enable_extensions = [
     'tasklist',
 ]
 
+# Configure sphinx search to use 'english' stemmer instead of 'porter'
+search_language_stemming_code = 'english'
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 

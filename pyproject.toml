@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "site_analysis"
 version = "0.2.0"
@@ -23,13 +27,25 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "sphinx>=1.6.3",
-    "nbsphinx",
-    "sphinx-rtd-theme",
-    "myst-parser",
+    "pytest",               # Test runner
+    "coverage",             # For test coverage reporting
+    "pytest-cov",           # Pytest coverage plugin
+    "mypy",                 # Type checking
+    "types-PyYAML",         # Type stubs for PyYAML
+    "sphinx>=1.6.3",        # Documentation generation
+    "nbsphinx",             # For notebook integration in docs
+    "sphinx-rtd-theme",     # Documentation theme
+    "myst-parser",          # For markdown in Sphinx
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/username/site_analysis"
-"Bug Tracker" = "https://github.com/username/site_analysis/issues"
+"Homepage" = "https://github.com/bjmorgan/site_analysis"
+"Bug Tracker" = "https://github.com/bjmorgan/site_analysis/issues"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["site_analysis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

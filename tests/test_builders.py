@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.site import Site
+from site_analysis.polyhedral_site import PolyhedralSite
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -47,7 +48,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertIsNone(builder._reference_structure)
 		self.assertIsNone(builder._mobile_species)
 		self.assertIsNone(builder._atoms)
-		self.assertIsNone(builder._site_generator)
+		self.assertEqual(builder._site_generators, [])
 	
 	def test_method_chaining(self):
 		"""Test that all builder methods return self for method chaining."""
@@ -90,8 +91,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Verify a site generator was set
-		self.assertIsNotNone(builder._site_generator)
-		self.assertTrue(callable(builder._site_generator))
+		self.assertNotEqual(builder._site_generators, [])
+		self.assertTrue(callable(builder._site_generators[0]))
 	
 	def test_with_voronoi_sites_sets_generator(self):
 		"""Test that with_voronoi_sites sets a site generator function."""
@@ -102,8 +103,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Verify a site generator was set
-		self.assertIsNotNone(builder._site_generator)
-		self.assertTrue(callable(builder._site_generator))
+		self.assertNotEqual(builder._site_generators, [])
+		self.assertTrue(callable(builder._site_generators[0]))
 	
 	def test_with_existing_sites_sets_generator(self):
 		"""Test that with_existing_sites sets a site generator function."""
@@ -113,8 +114,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder = self.builder.with_existing_sites(mock_sites)
 		
 		# Verify a site generator was set
-		self.assertIsNotNone(builder._site_generator)
-		self.assertTrue(callable(builder._site_generator))
+		self.assertNotEqual(builder._site_generators, [])
+		self.assertTrue(callable(builder._site_generators[0]))
 	
 	def test_with_polyhedral_sites_sets_generator(self):
 		"""Test that with_polyhedral_sites sets a site generator function."""
@@ -128,8 +129,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Verify a site generator was set
-		self.assertIsNotNone(builder._site_generator)
-		self.assertTrue(callable(builder._site_generator))
+		self.assertNotEqual(builder._site_generators, [])
+		self.assertTrue(callable(builder._site_generators[0]))
 	
 	def test_with_dynamic_voronoi_sites_sets_generator(self):
 		"""Test that with_dynamic_voronoi_sites sets a site generator function."""
@@ -143,8 +144,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Verify a site generator was set
-		self.assertIsNotNone(builder._site_generator)
-		self.assertTrue(callable(builder._site_generator))
+		self.assertNotEqual(builder._site_generators, [])
+		self.assertTrue(callable(builder._site_generators[0]))
 	
 	def test_deferred_site_creation_spherical_sites(self):
 		"""Test that spherical sites are created at build time."""
@@ -716,5 +717,86 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# And Site._newid should still be 1 after the second build
 		self.assertEqual(Site._newid, 1)
 
+	def test_multiple_polyhedral_site_groups_with_dummy_atoms(self):
+		"""Test creating multiple groups of polyhedral sites in a single trajectory.
+		
+		This test creates an FCC structure with dummy atoms at tetrahedral and octahedral
+		interstitial sites, then constructs polyhedral sites for both types.
+		"""
+		# Create FCC structure with Cu atoms and dummy T/O atoms at interstitial sites
+		lattice = Lattice.cubic(5.64)  # FCC lattice parameter
+		
+		# Define all sites in the FCC lattice in a single call:
+		# - Cu atoms at Wyckoff position 4a: (0, 0, 0)
+		# - Tetrahedral sites (T) at Wyckoff position 8c: (1/4, 1/4, 1/4)
+		# - Octahedral sites (O) at Wyckoff position 4b: (1/2, 0, 0)
+		fcc_structure = Structure.from_spacegroup(
+			sg="Fm-3m",
+			lattice=lattice,
+			species=["Cu", "S", "O"],
+			coords=[
+				[0.0, 0.0, 0.0],    # Cu at FCC positions
+				[0.25, 0.25, 0.25],  # T at tetrahedral sites 
+				[0.5, 0.0, 0.0]      # O at octahedral sites
+			]
+		)
+		
+		# Make a 2x2x2 supercell to avoid boundary issues
+		supercell = fcc_structure * [2, 2, 2]
+		
+		# Add a Li atom to the structure (needed as the mobile species)
+		supercell.append("Li", [0.1, 0.1, 0.1])
+		
+		# Configure builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(supercell)
+		builder.with_reference_structure(supercell.copy())
+		builder.with_mobile_species("Li")  # Hypothetical mobile species
+		
+		# First group: polyhedral sites centered at T atoms with Cu atoms as vertices
+		builder.with_polyhedral_sites(
+			centre_species="S",
+			vertex_species="Cu",
+			cutoff=3.0,
+			n_vertices=4,  # Each tetrahedral site has 4 Cu atoms as vertices
+			label="tetrahedral"
+		)
+		
+		# Second group: polyhedral sites centered at O atoms with Cu atoms as vertices
+		builder.with_polyhedral_sites(
+			centre_species="O",
+			vertex_species="Cu",
+			cutoff=3.0,
+			n_vertices=6,  # Each octahedral site has 6 Cu atoms as vertices
+			label="octahedral"
+		)
+		
+		# Build trajectory
+		trajectory = builder.build()
+		
+		# Verify sites were created
+		self.assertGreater(len(trajectory.sites), 0)
+		
+		# Get counts of tetrahedral and octahedral dummy atoms in the supercell
+		t_count = len([site for site in supercell if site.species_string == "S"])
+		o_count = len([site for site in supercell if site.species_string == "O"])
+		
+		# Verify we have both tetrahedral and octahedral sites
+		tetrahedral_sites = [s for s in trajectory.sites if s.label == "tetrahedral"]
+		octahedral_sites = [s for s in trajectory.sites if s.label == "octahedral"]
+		
+		# Verify correct counts of sites
+		self.assertEqual(len(tetrahedral_sites), t_count)  # Should match dummy T atoms
+		self.assertEqual(len(octahedral_sites), o_count)   # Should match dummy O atoms		
+		
+		# Verify all sites are PolyhedralSite instances
+		for site in trajectory.sites:
+			self.assertIsInstance(site, PolyhedralSite)
+		
+		# Verify site indices are sequential
+		self.assertEqual(min(site.index for site in trajectory.sites), 0)
+		expected_count = len(tetrahedral_sites) + len(octahedral_sites)
+		self.assertEqual(max(site.index for site in trajectory.sites), expected_count - 1)
+	
 if __name__ == '__main__':
 	unittest.main()

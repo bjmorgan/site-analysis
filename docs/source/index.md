@@ -5,7 +5,7 @@
 The code is built on top of [pymatgen](https://pymatgen.org) and processes molecular dynamics trajectory data, with particular support for VASP XDATCAR format files.
 
 [![Build Status](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml/badge.svg)](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/bjmorgan/site-analysis/badge.svg?branch=master)](https://coveralls.io/github/bjmorgan/site-analysis?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/bjmorgan/site-analysis/badge.svg?branch=main)](https://coveralls.io/github/bjmorgan/site-analysis?branch=main)
 [![PyPI version](https://badge.fury.io/py/site-analysis.svg)](https://badge.fury.io/py/site-analysis)
 
 ## Site Types

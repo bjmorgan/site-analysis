@@ -89,12 +89,15 @@ class TrajectoryBuilder:
 		self._structure: Optional[Structure] = None
 		self._reference_structure: Optional[Structure] = None
 		self._mobile_species: Optional[Union[str, list[str]]] = None
-		self._sites: Optional[list[Site]] = None
 		self._atoms: Optional[list[Atom]] = None
+		
 		# Alignment options
 		self._align: bool = True
 		self._align_species: Optional[list[str]] = None
 		self._align_metric: str = 'rmsd'
+		
+		# Function to be called during build() to create sites
+		self._site_generator: Optional[Callable[[], list[Site]]] = None
 		
 	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
@@ -161,34 +164,31 @@ class TrajectoryBuilder:
 		return self
 		
 	def with_spherical_sites(self, 
-						   centres: list[list[float]], 
-						   radii: list[float], 
-						   labels: Optional[list[str]] = None) -> TrajectoryBuilder:
+						centres: list[list[float]], 
+						radii: list[float], 
+						labels: Optional[list[str]] = None) -> TrajectoryBuilder:
 		"""Define spherical sites.
 		
-		Args:
-			centres: list of fractional coordinate centres for spherical sites
-			radii: list of radii for spherical sites (in Angstroms)
-			labels: Optional list of labels for sites
-				
-		Returns:
-			self: For method chaining
-			
-		Raises:
-			ValueError: If centres and radii have different lengths
+		Note: Sites will be generated when build() is called.
 		"""
 		if len(centres) != len(radii):
 			raise ValueError("Number of centres must match number of radii")
 			
-		# Create spherical sites
-		self._sites = []
-		for i, (centre, radius) in enumerate(zip(centres, radii)):
-			label = labels[i] if labels and i < len(labels) else None
-			self._sites.append(SphericalSite(
-				frac_coords=np.array(centre), 
-				rcut=radius, 
-				label=label
-			))
+		# Define the site generation function but don't execute it yet
+		def create_spherical_sites() -> list[Site]:
+			# Create spherical sites
+			sites = []
+			for i, (centre, radius) in enumerate(zip(centres, radii)):
+				label = labels[i] if labels and i < len(labels) else None
+				sites.append(SphericalSite(
+					frac_coords=np.array(centre), 
+					rcut=radius, 
+					label=label
+				))
+			return sites
+			
+		# Store the function for later execution
+		self._site_generator = create_spherical_sites
 		return self
 		
 	def with_voronoi_sites(self, 
@@ -196,21 +196,22 @@ class TrajectoryBuilder:
 						labels: Optional[list[str]] = None) -> TrajectoryBuilder:
 		"""Define Voronoi sites.
 		
-		Args:
-			centres: list of fractional coordinate centres for Voronoi sites
-			labels: Optional list of labels for sites
-				
-		Returns:
-			self: For method chaining
+		Note: Sites will be generated when build() is called.
 		"""
-		# Create Voronoi sites
-		self._sites = []
-		for i, centre in enumerate(centres):
-			label = labels[i] if labels and i < len(labels) else None
-			self._sites.append(VoronoiSite(
-				frac_coords=np.array(centre), 
-				label=label
-			))
+		# Define the site generation function but don't execute it yet
+		def create_voronoi_sites() -> list[Site]:
+			# Create Voronoi sites
+			sites = []
+			for i, centre in enumerate(centres):
+				label = labels[i] if labels and i < len(labels) else None
+				sites.append(VoronoiSite(
+					frac_coords=np.array(centre), 
+					label=label
+				))
+			return sites
+			
+		# Store the function for later execution
+		self._site_generator = create_voronoi_sites
 		return self
 		
 	def with_polyhedral_sites(self, 
@@ -221,53 +222,46 @@ class TrajectoryBuilder:
 							label: Optional[str] = None) -> TrajectoryBuilder:
 		"""Define polyhedral sites using the ReferenceBasedSites workflow.
 		
-		Args:
-			centre_species: Species at the centre of coordination environments
-			vertex_species: Species at vertices of coordination environments
-			cutoff: Cutoff distance for coordination environment
-			n_vertices: Number of vertices per environment
-			label: Label to apply to all created sites
-				
-		Returns:
-			self: For method chaining
-			
-		Raises:
-			ValueError: If reference_structure or structure is not set
-			ValueError: If no sites are found with the given parameters
+		Note: Sites will be generated when build() is called.
 		"""
-		if not self._structure or not self._reference_structure:
-			raise ValueError("Both structure and reference_structure must be set")
+		# Define the site generation function but don't execute it yet
+		def create_polyhedral_sites() -> list[Site]:
+			if not self._structure or not self._reference_structure:
+				raise ValueError("Both structure and reference_structure must be set for polyhedral sites")
+				
+			# Create ReferenceBasedSites
+			rbs = ReferenceBasedSites(
+				reference_structure=self._reference_structure,
+				target_structure=self._structure,
+				align=self._align,
+				align_species=self._align_species,
+				align_metric=self._align_metric
+			)
 			
-		# Create ReferenceBasedSites
-		rbs = ReferenceBasedSites(
-			reference_structure=self._reference_structure,
-			target_structure=self._structure,
-			align=self._align,
-			align_species=self._align_species,
-			align_metric=self._align_metric
-		)
-		
-		# Create sites
-		sites = cast(list[Site], 
-			rbs.create_polyhedral_sites(
-				center_species=centre_species,
-				vertex_species=vertex_species,
-				cutoff=cutoff,
-				n_vertices=n_vertices,
-				label=label
+			# Create sites
+			sites = cast(list[Site], 
+				rbs.create_polyhedral_sites(
+					center_species=centre_species,
+					vertex_species=vertex_species,
+					cutoff=cutoff,
+					n_vertices=n_vertices,
+					label=label
+				)
 			)
-		)
-		
-		# Check if any sites were found
-		if not sites:
-			raise ValueError(
-				f"No polyhedral sites found for centre_species='{centre_species}', "
-				f"vertex_species='{vertex_species}', cutoff={cutoff}, n_vertices={n_vertices}. "
-				f"Try adjusting these parameters or verify that the specified species exist "
-				f"in the structure."
-			)
-		
-		self._sites = sites
+			
+			# Check if any sites were found
+			if not sites:
+				raise ValueError(
+					f"No polyhedral sites found for centre_species='{centre_species}', "
+					f"vertex_species='{vertex_species}', cutoff={cutoff}, n_vertices={n_vertices}. "
+					f"Try adjusting these parameters or verify that the specified species exist "
+					f"in the structure."
+				)
+			
+			return sites
+			
+		# Store the function for later execution
+		self._site_generator = create_polyhedral_sites
 		return self
 		
 	def with_dynamic_voronoi_sites(self,
@@ -278,65 +272,56 @@ class TrajectoryBuilder:
 		label: Optional[str] = None) -> TrajectoryBuilder:
 		"""Define dynamic Voronoi sites using the ReferenceBasedSites workflow.
 		
-		Args:
-			centre_species: Species at the centre of coordination environments
-			reference_species: Species of reference atoms for dynamic site centres
-			cutoff: Cutoff distance for finding reference atoms
-			n_reference: Number of reference atoms per site
-			label: Label to apply to all created sites
-				
-		Returns:
-			self: For method chaining
-			
-		Raises:
-			ValueError: If reference_structure or structure is not set
-			ValueError: If no sites are found with the given parameters
+		Note: Sites will be generated when build() is called.
 		"""
-		if not self._structure or not self._reference_structure:
-			raise ValueError("Both structure and reference_structure must be set")
+		# Define the site generation function but don't execute it yet
+		def create_dynamic_voronoi_sites() -> list[Site]:
+			if not self._structure or not self._reference_structure:
+				raise ValueError("Both structure and reference_structure must be set for dynamic Voronoi sites")
+				
+			# Create ReferenceBasedSites
+			rbs = ReferenceBasedSites(
+				reference_structure=self._reference_structure,
+				target_structure=self._structure,
+				align=self._align,
+				align_species=self._align_species,
+				align_metric=self._align_metric
+			)
 			
-		# Create ReferenceBasedSites
-		rbs = ReferenceBasedSites(
-			reference_structure=self._reference_structure,
-			target_structure=self._structure,
-			align=self._align,
-			align_species=self._align_species,
-			align_metric=self._align_metric
-		)
-		
-		# Create sites
-		sites = cast(list[Site],
-			rbs.create_dynamic_voronoi_sites(
-				center_species=centre_species,
-				reference_species=reference_species,
-				cutoff=cutoff,
-				n_reference=n_reference,
-				label=label
+			# Create sites
+			sites = cast(list[Site],
+				rbs.create_dynamic_voronoi_sites(
+					center_species=centre_species,
+					reference_species=reference_species,
+					cutoff=cutoff,
+					n_reference=n_reference,
+					label=label
+				)
 			)
-		)
-		
-		# Check if any sites were found
-		if not sites:
-			raise ValueError(
-				f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
-				f"reference_species='{reference_species}', cutoff={cutoff}, n_reference={n_reference}. "
-				f"Try adjusting these parameters or verify that the specified species exist "
-				f"in the structure."
-			)
-		
-		self._sites = sites
+			
+			# Check if any sites were found
+			if not sites:
+				raise ValueError(
+					f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
+					f"reference_species='{reference_species}', cutoff={cutoff}, n_reference={n_reference}. "
+					f"Try adjusting these parameters or verify that the specified species exist "
+					f"in the structure."
+				)
+			
+			return sites
+			
+		# Store the function for later execution
+		self._site_generator = create_dynamic_voronoi_sites
 		return self
 		
 	def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
-		"""Use existing site objects.
-		
-		Args:
-			sites: list of site objects
-				
-		Returns:
-			self: For method chaining
-		"""
-		self._sites = sites
+		"""Use existing site objects."""
+		# Define a simple function that returns the provided sites
+		def return_existing_sites() -> list[Site]:
+			return sites
+			
+		# Store the function for later execution
+		self._site_generator = return_existing_sites
 		return self
 		
 	def with_existing_atoms(self, atoms: list) -> TrajectoryBuilder:
@@ -354,18 +339,24 @@ class TrajectoryBuilder:
 	def build(self) -> Trajectory:
 		"""Build and return the Trajectory object.
 		
+		This method validates all required parameters and generates sites
+		using the previously configured site generator.
+		
 		Returns:
 			Trajectory: The constructed Trajectory object
 			
 		Raises:
-			ValueError: If structure, sites, or mobile_species is not set
+			ValueError: If required parameters are missing
 		"""
-		# Validate state
+		# Validate basic requirements
 		if not self._structure:
 			raise ValueError("Structure must be set")
-		if not self._sites:
-			raise ValueError("Sites must be defined")
+		if not self._site_generator:
+			raise ValueError("Site type must be defined using one of the with_*_sites methods")
 			
+		# Generate sites using the stored site generator function
+		sites = self._site_generator()
+		
 		# Create atoms if not already set
 		if not self._atoms:
 			if not self._mobile_species:
@@ -373,10 +364,7 @@ class TrajectoryBuilder:
 			self._atoms = atoms_from_structure(self._structure, self._mobile_species)
 			
 		# Create trajectory
-		trajectory = Trajectory(sites=self._sites, atoms=self._atoms)
-		
-		# Pre-analyse the structure
-		trajectory.analyse_structure(self._structure)
+		trajectory = Trajectory(sites=sites, atoms=self._atoms)
 		
 		return trajectory
 

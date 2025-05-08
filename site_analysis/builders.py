@@ -352,6 +352,9 @@ class TrajectoryBuilder:
 		if not self._site_generator:
 			raise ValueError("Site type must be defined using one of the with_*_sites methods")
 			
+		# Reset the site index counter
+		Site.reset_index()
+			
 		# Generate sites using the stored site generator function
 		sites = self._site_generator()
 		

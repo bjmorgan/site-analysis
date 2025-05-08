@@ -32,7 +32,7 @@ dev = [
     "pytest-cov",           # Pytest coverage plugin
     "mypy",                 # Type checking
     "types-PyYAML",         # Type stubs for PyYAML
-    "sphinx>=1.6.3",        # Documentation generation
+    "sphinx<8.0.0",,        # Documentation generation
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme
     "myst-parser",          # For markdown in Sphinx

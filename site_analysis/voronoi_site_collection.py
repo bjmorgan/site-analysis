@@ -26,24 +26,26 @@ class VoronoiSiteCollection(SiteCollection):
         self.sites = self.sites # type: List[VoronoiSite]
 
     def analyse_structure(self,
-            atoms: List[Atom],
-            structure: Structure) -> None:
+                          atoms: List[Atom],
+                          structure: Structure) -> None:
         for a in atoms:
             a.assign_coords(structure)
         self.assign_site_occupations(atoms, structure)
 
     def assign_site_occupations(self,
-            atoms: List[Atom],
-            structure: Structure):
+                                atoms: List[Atom],
+                                structure: Structure):
         self.reset_site_occupations()
+        if not atoms:
+            return
         lattice = structure.lattice
         site_coords = np.array([s.frac_coords for s in self.sites])
         atom_coords = np.array([a.frac_coords for a in atoms])
         dist_matrix = lattice.get_all_distances(site_coords, atom_coords)
-        site_list_indices = np.argmin( dist_matrix, axis=0 )
+        site_list_indices = np.argmin(dist_matrix, axis=0)
         for atom, site_list_index in zip( atoms, site_list_indices):
             site = self.sites[site_list_index]
-            self.update_occupation( site, atom )
+            self.update_occupation(site, atom)
 
     
  

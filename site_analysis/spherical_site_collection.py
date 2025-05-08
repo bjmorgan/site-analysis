@@ -1,8 +1,8 @@
-from .site_collection import SiteCollection
 import numpy as np
 from typing import List
 from pymatgen.core import Structure
-from .atom import Atom
+from site_analysis.atom import Atom
+from site_analysis.site_collection import SiteCollection
 
 class SphericalSiteCollection(SiteCollection):
 

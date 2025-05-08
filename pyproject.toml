@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "site_analysis"
+version = "0.2.0"
+description = "Analysis tools for tracking ion migration pathways through crystallographic sites"
+readme = "README.md"
+authors = [
+    {name = "Benjamin J. Morgan", email = "example@email.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pymatgen",
+    "tqdm",
+    "monty",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",               # Test runner
+    "coverage",             # For test coverage reporting
+    "pytest-cov",           # Pytest coverage plugin
+    "mypy",                 # Type checking
+    "types-PyYAML",         # Type stubs for PyYAML
+    "sphinx>=1.6.3",        # Documentation generation
+    "nbsphinx",             # For notebook integration in docs
+    "sphinx-rtd-theme",     # Documentation theme
+    "myst-parser",          # For markdown in Sphinx
+]
+
+[project.urls]
+"Homepage" = "https://github.com/bjmorgan/site_analysis"
+"Bug Tracker" = "https://github.com/bjmorgan/site_analysis/issues"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["site_analysis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

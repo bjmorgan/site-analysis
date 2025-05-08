@@ -226,12 +226,14 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
-        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull', 
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
-            in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
-            self.assertTrue(in_site)
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+            new_callable=PropertyMock) as mock_centre:
+            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
+            with patch('site_analysis.polyhedral_site.ConvexHull', 
+                    autospec=True) as mock_ConvexHull:
+                mock_ConvexHull.return_value = ConvexHull(points)
+                in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
+                self.assertTrue(in_site)
 
     def test_contains_point_sn_returns_false_if_point_outside_polyhedron(self):
         site = self.site
@@ -239,12 +241,14 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
-        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
-            in_site = site.contains_point_sn(np.array([0.1, 0.1, 0.1]))
-            self.assertFalse(in_site)
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+            new_callable=PropertyMock) as mock_centre:
+            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
+            with patch('site_analysis.polyhedral_site.ConvexHull',
+                    autospec=True) as mock_ConvexHull:
+                mock_ConvexHull.return_value = ConvexHull(points)
+                in_site = site.contains_point_sn(np.array([0.1, 0.1, 0.1]))
+                self.assertFalse(in_site)
 
     def test_contains_point_sn_returns_false_if_all_points_outside_polyhedron(self):
         site = self.site
@@ -252,13 +256,15 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
-        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
-            in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                       [0.8, 0.8, 0.9]]))
-            self.assertFalse(in_site)
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+            new_callable=PropertyMock) as mock_centre:
+            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
+            with patch('site_analysis.polyhedral_site.ConvexHull',
+                    autospec=True) as mock_ConvexHull:
+                mock_ConvexHull.return_value = ConvexHull(points)
+                in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
+                                                        [0.8, 0.8, 0.9]]))
+                self.assertFalse(in_site)
 
     def test_contains_point_sn_returns_true_if_one_point_inside_polyhedron(self):
         site = self.site
@@ -266,13 +272,15 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
                            [0.6, 0.4, 0.6]]) 
-        site.centre = Mock(return_value = np.array([0.5, 0.5, 0.5]))
-        with patch('site_analysis.polyhedral_site.ConvexHull',
-                   autospec=True) as mock_ConvexHull:
-            mock_ConvexHull.return_value = ConvexHull(points)
-            in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                       [0.5, 0.5, 0.5]]))
-            self.assertTrue(in_site)
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+            new_callable=PropertyMock) as mock_centre:
+            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
+            with patch('site_analysis.polyhedral_site.ConvexHull',
+                    autospec=True) as mock_ConvexHull:
+                mock_ConvexHull.return_value = ConvexHull(points)
+                in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
+                                                        [0.5, 0.5, 0.5]]))
+                self.assertTrue(in_site)
 
     def test_contains_atom_raises_value_error_if_algo_is_invalid(self):
         atom = Mock(spec=Atom)
@@ -309,7 +317,21 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
         expected_centre = np.array([0.5, 0.5, 0.5])
-        np.testing.assert_array_equal(site.centre(),expected_centre)
+        np.testing.assert_array_equal(site.centre, expected_centre)
+        
+    def test_init_with_empty_vertex_indices(self):
+        """Test that PolyhedralSite raises ValueError with empty vertex_indices."""
+        with self.assertRaises(ValueError) as context:
+            PolyhedralSite(vertex_indices=[])
+        
+        self.assertIn("vertex_indices cannot be empty", str(context.exception))
+    
+    def test_init_with_non_integer_vertex_indices(self):
+        """Test that PolyhedralSite raises TypeError with non-integer vertex_indices."""
+        with self.assertRaises(TypeError) as context:
+            PolyhedralSite(vertex_indices=[1, 2, "three"])
+        
+        self.assertIn("All vertex indices must be integers", str(context.exception))
   
 def example_structure(species=None):
     if not species:

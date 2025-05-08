@@ -1,5 +1,5 @@
 from .site import Site
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import numpy as np
 
 class VoronoiSite(Site):
@@ -13,7 +13,7 @@ class VoronoiSite(Site):
     
     def __init__(self,
                  frac_coords: np.ndarray,
-                 label: str=None) -> None:
+                 label: Optional[str]=None) -> None:
         """Create a ``VoronoiSite`` instance.
         
         Args:
@@ -56,6 +56,7 @@ class VoronoiSite(Site):
         voronoi_site.label = d.get('label')
         return voronoi_site 
 
+    @property
     def centre(self) -> np.ndarray:
         """Returns the centre position of this site.
 

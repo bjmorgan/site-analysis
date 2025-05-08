@@ -44,8 +44,15 @@ extensions = [
     'sphinx.ext.coverage',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'nbsphinx',
-    'recommonmark'
+    'myst_parser',
+    'nbsphinx'
+]
+
+# Configure MyST Markdown
+myst_enable_extensions = [
+    'colon_fence',  # Important for proper directive rendering
+    'deflist',
+    'tasklist',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -57,8 +64,7 @@ templates_path = ['_templates']
 # source_suffix = ['.rst', '.md']
 source_suffix = {
     '.rst': 'restructuredtext',
-    '.txt': 'markdown',
-    '.md': 'markdown',
+    '.md': 'myst',
 }
 
 # The master toctree document.

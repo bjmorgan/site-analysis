@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional
 from .atom import Atom
 import numpy as np
 from pymatgen.core import Structure
@@ -17,11 +17,11 @@ class Site(ABC):
         index (int): Numerical ID, intended to be unique to each site.
         label (`str`: optional): Optional string given as a label for this site.
             Default is `None`.
-        contains_atoms (list): List of the atoms contained by this site in the
+        contains_atoms (list): list of the atoms contained by this site in the
             structure last processed.
         trajectory (list(list(int))): Nested list of atoms that have visited this
             site at each timestep.
-        points (list): List of fractional coordinates for atoms assigned as
+        points (list): list of fractional coordinates for atoms assigned as
             occupying this site.
         transitions (collections.Counter): Stores observed transitions from this
             site to other sites. Format is {index: count} with ``index`` giving
@@ -51,9 +51,9 @@ class Site(ABC):
         self.index = Site._newid
         Site._newid += 1
         self.label = label
-        self.contains_atoms: List[int] = []
-        self.trajectory: List[List[int]] = []
-        self.points: List[np.ndarray] = []
+        self.contains_atoms: list[int] = []
+        self.trajectory: list[list[int]] = []
+        self.points: list[np.ndarray] = []
         self.transitions: Counter = Counter()
 
     def reset(self) -> None:
@@ -110,7 +110,7 @@ class Site(ABC):
         """
         return self.contains_point(atom.frac_coords)
 
-    def as_dict(self) -> Dict:
+    def as_dict(self) -> dict:
         """Json-serializable dict representation of this Site.
 
         Args:
@@ -131,7 +131,7 @@ class Site(ABC):
 
     @classmethod
     def from_dict(cls,
-            d: Dict) -> Site:
+            d: dict) -> Site:
         """Create a Site object from a dict representation.
 
         Args:
@@ -150,6 +150,7 @@ class Site(ABC):
         site.label = d.get('label')
         return site 
 
+    @property
     @abstractmethod
     def centre(self) -> np.ndarray:
         """Returns the centre point of this site.
@@ -163,7 +164,7 @@ class Site(ABC):
             None
 
         """ 
-        raise NotImplementedError('centre should be implemeneted '
+        raise NotImplementedError('centre should be implemented '
                                   'in the derived class')
 
     @classmethod
@@ -180,6 +181,7 @@ class Site(ABC):
         """ 
         Site._newid = newid
 
+    @property
     def coordination_number(self) -> int:
         """Returns the coordination number of this site.
 

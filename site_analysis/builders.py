@@ -54,7 +54,7 @@ from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 import numpy as np
-from typing import Union, Optional, cast
+from typing import Union, Optional, cast, Callable
 
 
 class TrajectoryBuilder:

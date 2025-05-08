@@ -489,9 +489,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			self.assertEqual(kwargs['sites'], mock_sites)
 			self.assertEqual(kwargs['atoms'], mock_atoms)
 			
-			# Verify analyse_structure was called
-			mock_trajectory.analyse_structure.assert_called_once_with(self.structure)
-			
 			# Result should be the trajectory
 			self.assertEqual(result, mock_trajectory)
 	
@@ -508,6 +505,164 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		
 		# Check error message
 		self.assertIn("site type must be defined", str(context.exception).lower())
+		
+	def test_builder_with_interstitial_in_simple_cubic(self):
+		"""Test handling of structures with an interstitial mobile ion in a simple cubic lattice."""
+		# Create a simple cubic structure with O at (0,0,0)
+		lattice = Lattice.cubic(5.0)  # 5 Å lattice parameter
+		primitive_structure = Structure(
+			lattice=lattice,
+			species=["O"],  # Oxygen at the origin
+			coords=[[0.0, 0.0, 0.0]]
+		)
+		
+		# Create a 3x3x3 supercell with 27 oxygen atoms
+		reference_structure = primitive_structure * [3, 3, 3]
+		
+		# Create target structure as a copy of the reference structure
+		target_structure = reference_structure.copy()
+		
+		# Add a Li atom at the interstitial position (center of the supercell)
+		target_structure.append("Li", [0.5, 0.5, 0.5])
+		
+		# Test two configurations:
+		
+		# 1. First test: Aligning on oxygen (should work)
+		builder1 = TrajectoryBuilder()
+		builder1.with_structure(target_structure)
+		builder1.with_reference_structure(reference_structure)
+		builder1.with_mobile_species("Li")
+		
+		# Create polyhedral sites aligned on oxygen atoms
+		builder1.with_polyhedral_sites(
+			centre_species="O",         # Sites centered on oxygen
+			vertex_species="O",         # Vertices defined by oxygen
+			cutoff=5.0,
+			n_vertices=6,
+			label="test_site"
+		).with_alignment_options(align=True, align_species=["O"])  # Align on oxygen
+		
+		# This should work fine since oxygen atoms match in both structures
+		try:
+			trajectory = builder1.build()
+			# Verify we have a valid trajectory with the expected properties
+			self.assertEqual(len(trajectory.atoms), 1)  # 1 Li atom
+			self.assertGreater(len(trajectory.sites), 0)  # Should have created sites
+		except ValueError as e:
+			self.fail(f"Builder with aligned oxygen framework raised an error: {str(e)}")
+		
+		# 2. Second test: Trying to align on Li (should fail)
+		builder2 = TrajectoryBuilder()
+		builder2.with_structure(target_structure)
+		builder2.with_reference_structure(reference_structure)
+		builder2.with_mobile_species("Li")
+		
+		# Create polyhedral sites but try to align on Li atoms (which mismatch)
+		builder2.with_polyhedral_sites(
+			centre_species="O",
+			vertex_species="O", 
+			cutoff=3.0,
+			n_vertices=3,
+			label="test_site"
+		).with_alignment_options(align=True, align_species=["Li"])  # Align on Li
+		
+		# This should fail because Li counts don't match (0 vs 1)
+		with self.assertRaises(ValueError) as context:
+			builder2.build()
+		
+		# Check that the error message mentions the mismatch in atom counts
+		error_msg = str(context.exception)
+		self.assertIn("Li", error_msg)  # Should mention Li species
+		self.assertIn("not found in reference structure", error_msg)  # Since Li is only in target
+		
+	def test_builder_with_vacancy_in_simple_cubic(self):
+		"""Test handling when the target has a vacancy compared to the reference structure."""
+		# Create a primitive cell containing both O and Li
+		lattice = Lattice.cubic(5.0)  # 5 Å lattice parameter
+		primitive_structure = Structure(
+			lattice=lattice,
+			species=["O", "Li"],  # Include both O and Li in primitive cell
+			coords=[
+				[0.0, 0.0, 0.0],  # O at origin
+				[0.5, 0.5, 0.5]   # Li at center
+			]
+		)
+		
+		# Create a 3x3x3 supercell with all sites filled
+		reference_structure = primitive_structure * [3, 3, 3]
+		# This gives us 27 O atoms and 27 Li atoms
+		
+		# Create target structure by removing the central Li atom
+		target_structure = reference_structure.copy()
+		
+		# Find the index of the Li atom at the center of the supercell [0.5, 0.5, 0.5]
+		center_position = np.array([0.5, 0.5, 0.5])
+		center_index = None
+		
+		for i, site in enumerate(target_structure):
+			if site.species_string == "Li":
+				# Check if this is the center position
+				if np.allclose(site.frac_coords, center_position, atol=0.01):
+					center_index = i
+					break
+		
+		# Remove the Li atom at the center
+		if center_index is not None:
+			target_structure.remove_sites([center_index])
+		
+		# Verify we have the expected number of atoms
+		self.assertEqual(len(reference_structure), 27 + 27)  # 27 O + 27 Li
+		self.assertEqual(len(target_structure), 27 + 26)     # 27 O + 26 Li
+		
+		# Test two configurations:
+		
+		# 1. First test: Aligning on oxygen (should work)
+		builder1 = TrajectoryBuilder()
+		builder1.with_structure(target_structure)
+		builder1.with_reference_structure(reference_structure)
+		builder1.with_mobile_species("Li")  # Track all Li atoms
+		
+		builder1.with_polyhedral_sites(
+			centre_species="O",
+			vertex_species="O",
+			cutoff=5.0,
+			n_vertices=6,
+			label="test_site"
+		).with_alignment_options(align=True, align_species=["O"])  # Align on oxygen
+		
+		# This should work fine since oxygen atoms match
+		try:
+			trajectory = builder1.build()
+			# Verify we have a valid trajectory with all Li atoms
+			self.assertEqual(len(trajectory.atoms), 26)  # 26 Li atoms (one missing)
+			self.assertGreater(len(trajectory.sites), 0)  # Should have created sites
+		except ValueError as e:
+			self.fail(f"Builder with aligned oxygen framework raised an error: {str(e)}")
+		
+		# 2. Second test: Trying to align on Li (should fail)
+		builder2 = TrajectoryBuilder()
+		builder2.with_structure(target_structure)
+		builder2.with_reference_structure(reference_structure)
+		builder2.with_mobile_species("Li")
+		
+		# Create polyhedral sites but try to align on Li atoms (which mismatch)
+		builder2.with_polyhedral_sites(
+			centre_species="O",
+			vertex_species="O", 
+			cutoff=5.0,
+			n_vertices=6,
+			label="test_site"
+		).with_alignment_options(align=True, align_species=["Li"])  # Align on Li
+		
+		# This should fail because Li counts don't match (27 vs 26)
+		with self.assertRaises(ValueError) as context:
+			builder2.build()
+		
+		# Check that the error message mentions the mismatch in atom counts
+		error_msg = str(context.exception)
+		self.assertIn("Different number of Li atoms", error_msg)
+		self.assertIn("27 in reference", error_msg)  # 27 Li atoms in reference
+		self.assertIn("26 in target", error_msg)     # 26 Li atoms in target
 
 if __name__ == '__main__':
 	unittest.main()

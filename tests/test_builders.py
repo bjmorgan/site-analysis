@@ -9,7 +9,8 @@ from site_analysis.builders import (
 	TrajectoryBuilder,
 	create_trajectory_with_spherical_sites,
 	create_trajectory_with_voronoi_sites,
-	create_trajectory_with_polyhedral_sites
+	create_trajectory_with_polyhedral_sites,
+	create_trajectory_with_dynamic_voronoi_sites
 )
 
 class TestTrajectoryBuilder(unittest.TestCase):
@@ -234,7 +235,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				vertex_species="O",
 				cutoff=2.0,
 				n_vertices=4,
-				label="tetrahedral"
+				label="tetrahedral",
+				target_species=None
 			)
 	
 	def test_flexible_method_call_order(self):
@@ -348,13 +350,13 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		args, kwargs = mock_trajectory_class.call_args
 		self.assertEqual(kwargs['atoms'], mock_atoms)
 		
-	def test_with_alignment_options(self):
+	def test_with_structure_alignment(self):
 		"""Test setting alignment options."""
 		# Start with a fresh builder
 		builder = TrajectoryBuilder()
 		
 		# Set alignment options with a list of species
-		result = builder.with_alignment_options(
+		result = builder.with_structure_alignment(
 			align=False,
 			align_species=["Li"],
 			align_metric="max_dist"
@@ -369,7 +371,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertEqual(builder._align_metric, "max_dist")
 		
 		# Test with a single species string
-		builder.with_alignment_options(
+		builder.with_structure_alignment(
 			align=True,
 			align_species="Na",
 			align_metric="rmsd"
@@ -381,7 +383,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertEqual(builder._align_metric, "rmsd")
 		
 		# Test with default align value
-		builder.with_alignment_options(
+		builder.with_structure_alignment(
 			align_species="Ca",
 			align_metric="max_dist"
 		)
@@ -542,7 +544,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			cutoff=5.0,
 			n_vertices=6,
 			label="test_site"
-		).with_alignment_options(align=True, align_species=["O"])  # Align on oxygen
+		).with_structure_alignment(align=True, align_species=["O"])  # Align on oxygen
 		
 		# This should work fine since oxygen atoms match in both structures
 		try:
@@ -566,7 +568,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			cutoff=3.0,
 			n_vertices=3,
 			label="test_site"
-		).with_alignment_options(align=True, align_species=["Li"])  # Align on Li
+		).with_structure_alignment(align=True, align_species=["Li"])  # Align on Li
 		
 		# This should fail because Li counts don't match (0 vs 1)
 		with self.assertRaises(ValueError) as context:
@@ -630,7 +632,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			cutoff=5.0,
 			n_vertices=6,
 			label="test_site"
-		).with_alignment_options(align=True, align_species=["O"])  # Align on oxygen
+		).with_structure_alignment(align=True, align_species=["O"])  # Align on oxygen
 		
 		# This should work fine since oxygen atoms match
 		try:
@@ -654,7 +656,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			cutoff=5.0,
 			n_vertices=6,
 			label="test_site"
-		).with_alignment_options(align=True, align_species=["Li"])  # Align on Li
+		).with_structure_alignment(align=True, align_species=["Li"])  # Align on Li
 		
 		# This should fail because Li counts don't match (27 vs 26)
 		with self.assertRaises(ValueError) as context:
@@ -797,6 +799,185 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertEqual(min(site.index for site in trajectory.sites), 0)
 		expected_count = len(tetrahedral_sites) + len(octahedral_sites)
 		self.assertEqual(max(site.index for site in trajectory.sites), expected_count - 1)
+		
+	def test_with_site_mapping(self):
+		"""Test setting site mapping options."""
+		# Start with a fresh builder
+		builder = TrajectoryBuilder()
+		
+		# Set mapping options with a list of species
+		result = builder.with_site_mapping(
+			mapping_species=["Li"]
+		)
+		
+		# Verify chaining works
+		self.assertIs(result, builder)
+		
+		# Verify options were stored
+		self.assertEqual(builder._mapping_species, ["Li"])
+		
+		# Test with a single species string
+		builder.with_site_mapping(
+			mapping_species="Na"
+		)
+		
+		# Verify single species string is converted to list
+		self.assertEqual(builder._mapping_species, ["Na"])
+		
+	def test_mapping_species_passed_to_reference_based_sites(self):
+		"""Test that mapping species are correctly passed to ReferenceBasedSites."""
+		# Configure the builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(self.structure)
+		builder.with_reference_structure(self.reference_structure)
+		builder.with_mobile_species("Li")
+		
+		# Set different species for alignment and mapping
+		builder.with_structure_alignment(align=True, align_species=["O"])
+		builder.with_site_mapping(mapping_species=["Na"])
+		
+		# Set up polyhedral sites
+		builder.with_polyhedral_sites(
+			centre_species="Li",
+			vertex_species="O",
+			cutoff=2.0,
+			n_vertices=4,
+			label="tetrahedral"
+		)
+		
+		# Mock ReferenceBasedSites to verify correct parameters are passed
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock to return a mock RBS instance
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure mock to return site objects
+			mock_sites = [Mock(), Mock()]
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			
+			# Call build to trigger site creation
+			builder.build()
+			
+			# Verify ReferenceBasedSites was created with the correct alignment parameters
+			mock_rbs_class.assert_called_once_with(
+				reference_structure=self.reference_structure,
+				target_structure=self.structure,
+				align=True,
+				align_species=["O"],
+				align_metric='rmsd'
+			)
+			
+			# Verify create_polyhedral_sites was called with the correct mapping parameters
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
+				center_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral",
+				target_species=["Na"]  # This is the key assertion - mapping species should be passed here
+			)
+			
+	def test_mapping_uses_alignment_species_by_default(self):
+		"""Test that mapping uses alignment species when mapping species is not specified."""
+		# Configure the builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(self.structure)
+		builder.with_reference_structure(self.reference_structure)
+		builder.with_mobile_species("Li")
+		
+		# Set alignment species but NOT mapping species
+		builder.with_structure_alignment(align=True, align_species=["O"])
+		# Deliberately NOT calling with_site_mapping()
+		
+		# Set up polyhedral sites
+		builder.with_polyhedral_sites(
+			centre_species="Li",
+			vertex_species="O",
+			cutoff=2.0,
+			n_vertices=4,
+			label="tetrahedral"
+		)
+		
+		# Mock ReferenceBasedSites to verify correct parameters are passed
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock to return a mock RBS instance
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure mock to return site objects
+			mock_sites = [Mock(), Mock()]
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			
+			# Call build to trigger site creation
+			builder.build()
+			
+			# Verify create_polyhedral_sites was called with the alignment species as target_species
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
+				center_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral",
+				target_species=["O"]  # This should be the same as align_species
+			)
+			
+	def test_factory_function_with_mapping_species(self):
+		"""Test that factory functions correctly use mapping_species."""
+		# Mock the necessary classes
+		with patch('site_analysis.builders.TrajectoryBuilder') as mock_builder_class, \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock builder
+			mock_builder = Mock()
+			mock_builder_class.return_value = mock_builder
+			
+			# Configure method chaining
+			for method in ['with_structure', 'with_reference_structure', 'with_mobile_species',
+						'with_structure_alignment', 'with_site_mapping', 'with_polyhedral_sites', 'build']:
+				setattr(mock_builder, method, Mock(return_value=mock_builder))
+			
+			# Call the factory function with mapping_species
+			create_trajectory_with_polyhedral_sites(
+				structure=self.structure,
+				reference_structure=self.reference_structure,
+				mobile_species="Li",
+				centre_species="O",
+				vertex_species="Li",
+				cutoff=2.0,
+				n_vertices=4,
+				label="test",
+				align_species=["O"],
+				mapping_species=["Li"]
+			)
+			
+			# Verify with_site_mapping was called with correct parameter
+			mock_builder.with_site_mapping.assert_called_once_with(["Li"])
+			
+			# Reset the mock
+			mock_builder.reset_mock()
+			
+			# Also test with dynamic Voronoi sites
+			create_trajectory_with_dynamic_voronoi_sites(
+				structure=self.structure,
+				reference_structure=self.reference_structure,
+				mobile_species="Li",
+				centre_species="O",
+				reference_species="Li",
+				cutoff=2.0,
+				n_reference=4,
+				label="test",
+				align_species=["O"],
+				mapping_species=["Li"]
+			)
+			
+			# Verify with_site_mapping was called for dynamic sites too
+			mock_builder.with_site_mapping.assert_called_once_with(["Li"])
 	
 if __name__ == '__main__':
 	unittest.main()

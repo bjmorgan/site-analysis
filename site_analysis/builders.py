@@ -98,6 +98,9 @@ class TrajectoryBuilder:
 		self._align_species: Optional[list[str]] = None
 		self._align_metric: str = 'rmsd'
 		
+		# Mapping options
+		self._mapping_species: Optional[list[str]] = None
+		
 		# Functions to be called during build() to create sites
 		self._site_generators: list[Callable[[], Sequence[Site]]] = []
 		
@@ -138,16 +141,20 @@ class TrajectoryBuilder:
 		self._mobile_species = species
 		return self
 	
-	def with_alignment_options(self, 
-						 align: bool = True, 
-						 align_species: Optional[Union[str, list[str]]] = None, 
-						 align_metric: str = 'rmsd') -> TrajectoryBuilder:
+	def with_structure_alignment(self, 
+					align: bool = True, 
+					align_species: Optional[Union[str, list[str]]] = None, 
+					align_metric: str = 'rmsd') -> TrajectoryBuilder:
 		"""Set options for aligning reference and target structures.
+		
+		Structure alignment finds the optimal translation vector to superimpose
+		the reference structure onto the target structure, minimizing distances
+		between corresponding atoms.
 		
 		Args:
 			align: Whether to perform structure alignment. Default is True.
 			align_species: Species to use for alignment. Can be a string or list of strings.
-				Default is all species.
+				If None, all species will be used.
 			align_metric: Metric for alignment ('rmsd', 'max_dist'). 
 				Default is 'rmsd'.
 				
@@ -163,6 +170,28 @@ class TrajectoryBuilder:
 			self._align_species = align_species
 			
 		self._align_metric = align_metric
+		return self
+		
+	def with_site_mapping(self,
+		mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
+		"""Set the species to use for mapping sites between reference and target structures.
+		
+		Site mapping identifies corresponding sites between structures even when
+		atom counts differ, for example when structures have different numbers
+		of mobile ions but the same framework atoms.
+		
+		Args:
+			mapping_species: Species to use for mapping. Can be a string or list of strings.
+				If None, alignment species will be used for mapping.
+				
+		Returns:
+			self: For method chaining
+		"""
+		# Convert single species string to a list
+		if isinstance(mapping_species, str):
+			self._mapping_species = [mapping_species]
+		else:
+			self._mapping_species = mapping_species
 		return self
 		
 	def with_spherical_sites(self, 
@@ -240,14 +269,19 @@ class TrajectoryBuilder:
 				align_metric=self._align_metric
 			)
 			
+			# Determine mapping species (use alignment species if mapping species not specified)
+			target_species = self._mapping_species if self._mapping_species is not None else self._align_species
+			
 			# Create sites
 			sites = rbs.create_polyhedral_sites(
 						center_species=centre_species,
 						vertex_species=vertex_species,
 						cutoff=cutoff,
 						n_vertices=n_vertices,
-						label=label
+						label=label,
+						target_species=target_species
 					)
+		
 			
 			# Check if any sites were found
 			if not sites:
@@ -288,13 +322,17 @@ class TrajectoryBuilder:
 				align_metric=self._align_metric
 			)
 			
+			# Determine mapping species (use alignment species if mapping species not specified)
+			target_species = self._mapping_species if self._mapping_species is not None else self._align_species
+			
 			# Create sites
 			sites = rbs.create_dynamic_voronoi_sites(
 						center_species=centre_species,
 						reference_species=reference_species,
 						cutoff=cutoff,
 						n_reference=n_reference,
-						label=label
+						label=label,
+						target_species=target_species
 					)
 			
 			# Check if any sites were found
@@ -446,34 +484,18 @@ def create_trajectory_with_polyhedral_sites(
 	n_vertices: int, 
 	label: Optional[str] = None,
 	align: bool = True,
-	align_species: Optional[list[str]] = None,
-	align_metric: str = 'rmsd'
+	align_species: Optional[Union[str, list[str]]] = None,
+	align_metric: str = 'rmsd',
+	mapping_species: Optional[Union[str, list[str]]] = None
 ) -> Trajectory:
-	"""Create a Trajectory with polyhedral sites.
-	
-	Args:
-		structure: Structure to analyse
-		reference_structure: Reference structure for site definition
-		mobile_species: Species string or list of species strings for mobile atoms
-		centre_species: Species at the centre of coordination environments
-		vertex_species: Species at vertices of coordination environments
-		cutoff: Cutoff distance for coordination environment
-		n_vertices: Number of vertices per environment
-		label: Label to apply to all created sites
-		align: Whether to perform structure alignment. Default is True.
-		align_species: Species to use for alignment. Default is all species.
-		align_metric: Metric for alignment ('rmsd', 'max_dist'). 
-			Default is 'rmsd'.
-		
-	Returns:
-		Trajectory: The constructed Trajectory object
-	"""
+	"""Create a Trajectory with polyhedral sites."""
 	builder = TrajectoryBuilder()
 	return (builder
 			.with_structure(structure)
 			.with_reference_structure(reference_structure)
 			.with_mobile_species(mobile_species)
-			.with_alignment_options(align, align_species, align_metric)
+			.with_structure_alignment(align, align_species, align_metric)
+			.with_site_mapping(mapping_species)
 			.with_polyhedral_sites(centre_species, vertex_species, cutoff, n_vertices, label)
 			.build())
 
@@ -488,33 +510,17 @@ def create_trajectory_with_dynamic_voronoi_sites(
 	n_reference: int, 
 	label: Optional[str] = None,
 	align: bool = True,
-	align_species: Optional[list[str]] = None,
-	align_metric: str = 'rmsd'
+	align_species: Optional[Union[str, list[str]]] = None,
+	align_metric: str = 'rmsd',
+	mapping_species: Optional[Union[str, list[str]]] = None
 ) -> Trajectory:
-	"""Create a Trajectory with dynamic Voronoi sites.
-	
-	Args:
-		structure: Structure to analyse
-		reference_structure: Reference structure for site definition
-		mobile_species: Species string or list of species strings for mobile atoms
-		centre_species: Species at the centre of coordination environments
-		reference_species: Species of reference atoms for dynamic site centres
-		cutoff: Cutoff distance for finding reference atoms
-		n_reference: Number of reference atoms per site
-		label: Label to apply to all created sites
-		align: Whether to perform structure alignment. Default is True.
-		align_species: Species to use for alignment. Default is all species.
-		align_metric: Metric for alignment ('rmsd', 'max_dist'). 
-			Default is 'rmsd'.
-		
-	Returns:
-		Trajectory: The constructed Trajectory object
-	"""
+	"""Create a Trajectory with dynamic Voronoi sites."""
 	builder = TrajectoryBuilder()
 	return (builder
 			.with_structure(structure)
 			.with_reference_structure(reference_structure)
 			.with_mobile_species(mobile_species)
-			.with_alignment_options(align, align_species, align_metric)
+			.with_structure_alignment(align, align_species, align_metric)
+			.with_site_mapping(mapping_species)
 			.with_dynamic_voronoi_sites(centre_species, reference_species, cutoff, n_reference, label)
 			.build())

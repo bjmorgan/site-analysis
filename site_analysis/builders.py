@@ -51,10 +51,12 @@ from site_analysis.atom import Atom, atoms_from_structure
 from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
+from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 import numpy as np
-from typing import Union, Optional, cast, Callable
+from typing import Union, Optional, cast, Callable, Sequence
 
 
 class TrajectoryBuilder:
@@ -97,7 +99,7 @@ class TrajectoryBuilder:
 		self._align_metric: str = 'rmsd'
 		
 		# Function to be called during build() to create sites
-		self._site_generator: Optional[Callable[[], list[Site]]] = None
+		self._site_generator: Optional[Callable[[], Sequence[Site]]] = None
 		
 	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
@@ -175,7 +177,7 @@ class TrajectoryBuilder:
 			raise ValueError("Number of centres must match number of radii")
 			
 		# Define the site generation function but don't execute it yet
-		def create_spherical_sites() -> list[Site]:
+		def create_spherical_sites() -> Sequence[SphericalSite]:
 			# Create spherical sites
 			sites = []
 			for i, (centre, radius) in enumerate(zip(centres, radii)):
@@ -199,7 +201,7 @@ class TrajectoryBuilder:
 		Note: Sites will be generated when build() is called.
 		"""
 		# Define the site generation function but don't execute it yet
-		def create_voronoi_sites() -> list[Site]:
+		def create_voronoi_sites() -> Sequence[VoronoiSite]:
 			# Create Voronoi sites
 			sites = []
 			for i, centre in enumerate(centres):
@@ -225,7 +227,7 @@ class TrajectoryBuilder:
 		Note: Sites will be generated when build() is called.
 		"""
 		# Define the site generation function but don't execute it yet
-		def create_polyhedral_sites() -> list[Site]:
+		def create_polyhedral_sites() -> Sequence[PolyhedralSite]:
 			if not self._structure or not self._reference_structure:
 				raise ValueError("Both structure and reference_structure must be set for polyhedral sites")
 				
@@ -239,15 +241,13 @@ class TrajectoryBuilder:
 			)
 			
 			# Create sites
-			sites = cast(list[Site], 
-				rbs.create_polyhedral_sites(
-					center_species=centre_species,
-					vertex_species=vertex_species,
-					cutoff=cutoff,
-					n_vertices=n_vertices,
-					label=label
-				)
-			)
+			sites = rbs.create_polyhedral_sites(
+						center_species=centre_species,
+						vertex_species=vertex_species,
+						cutoff=cutoff,
+						n_vertices=n_vertices,
+						label=label
+					)
 			
 			# Check if any sites were found
 			if not sites:
@@ -275,7 +275,7 @@ class TrajectoryBuilder:
 		Note: Sites will be generated when build() is called.
 		"""
 		# Define the site generation function but don't execute it yet
-		def create_dynamic_voronoi_sites() -> list[Site]:
+		def create_dynamic_voronoi_sites() -> Sequence[DynamicVoronoiSite]:
 			if not self._structure or not self._reference_structure:
 				raise ValueError("Both structure and reference_structure must be set for dynamic Voronoi sites")
 				
@@ -289,15 +289,13 @@ class TrajectoryBuilder:
 			)
 			
 			# Create sites
-			sites = cast(list[Site],
-				rbs.create_dynamic_voronoi_sites(
-					center_species=centre_species,
-					reference_species=reference_species,
-					cutoff=cutoff,
-					n_reference=n_reference,
-					label=label
-				)
-			)
+			sites = rbs.create_dynamic_voronoi_sites(
+						center_species=centre_species,
+						reference_species=reference_species,
+						cutoff=cutoff,
+						n_reference=n_reference,
+						label=label
+					)
 			
 			# Check if any sites were found
 			if not sites:

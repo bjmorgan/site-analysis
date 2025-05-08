@@ -11,23 +11,23 @@ from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .site_collection import SiteCollection
 from .site import Site
 from .atom import Atom
-from typing import List, Union, Optional, Dict, Type
+from typing import Union, Optional, Type, Sequence
 from pymatgen.core import Structure
 
 class Trajectory(object):
     """Class for performing sites analysis on simulation trajectories."""
 
     def __init__(self,
-            sites: List[Site],
-            atoms: List[Atom]) -> None:
+            sites: Sequence[Site],
+            atoms: list[Atom]) -> None:
         """Initialize a Trajectory object for site analysis of simulation trajectories.
         
         This constructor ensures all sites are of the same type and initializes the
         appropriate site collection based on the type of sites provided.
         
         Args:
-            sites: List of Site objects (must all be of the same type).
-            atoms: List of Atom objects to track during the trajectory analysis.
+            sites: list of Site objects (must all be of the same type).
+            atoms: list of Atom objects to track during the trajectory analysis.
             
         Raises:
             ValueError: If sites or atoms list is empty.
@@ -46,7 +46,7 @@ class Trajectory(object):
             raise TypeError("A Trajectory cannot be initialised with mixed Site types")
         
         # Map site types to their corresponding collection classes
-        site_collection_map: Dict[Type[Site], Type[SiteCollection]] = {
+        site_collection_map: dict[Type[Site], Type[SiteCollection]] = {
             PolyhedralSite: PolyhedralSiteCollection,
             VoronoiSite: VoronoiSiteCollection,
             SphericalSite: SphericalSiteCollection,
@@ -64,7 +64,7 @@ class Trajectory(object):
         
         self.sites = sites
         self.atoms = atoms
-        self.timesteps: List[int] = []
+        self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
 
@@ -122,7 +122,7 @@ class Trajectory(object):
         """
         return Counter([s.coordination_number for s in self.sites])
 
-    def site_labels(self) -> List[Optional[str]]:
+    def site_labels(self) -> list[Optional[str]]:
         """Return the labels of all sites.
         
         Returns:
@@ -131,7 +131,7 @@ class Trajectory(object):
         return [s.label for s in self.sites]
    
     @property
-    def atom_sites(self) -> List[Optional[int]]:
+    def atom_sites(self) -> list[Optional[int]]:
         """Return the sites that each atom currently occupies.
         
         Returns:
@@ -140,7 +140,7 @@ class Trajectory(object):
         return [atom.in_site for atom in self.atoms]
         
     @property
-    def site_occupations(self) -> List[List[int]]:
+    def site_occupations(self) -> list[list[int]]:
         """Return the atoms occupying each site.
         
         Returns:
@@ -229,7 +229,7 @@ class Trajectory(object):
         for each one.
         
         Args:
-            structures: List of pymatgen Structure objects to analyse.
+            structures: list of pymatgen Structure objects to analyse.
             progress: If False, no progress is shown. If True, a progress bar is displayed.
                 If 'notebook', a notebook-friendly progress bar is displayed.
                 

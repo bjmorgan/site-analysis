@@ -12,39 +12,48 @@
 The code is built on top of [`pymatgen`](https://pymatgen.org) and takes VASP XDATCAR files as molecular dynamics trajectory inputs.
 
 The code can use the following definitions for assigning mobile ions to sites:
-1. Spherical cutoff: Atoms occupy a site if they lie within a spherical cutoff from a fixed position.
-2. Voronoi decomposition: Atoms are assigned to sites based on a Voronoi decomposition of the lattice into discrete volumes.
-3. Polyhedral decomposition: Atoms are assigned to sites based on occupation of polyhedra defined by the instantaneous positions of lattice atoms.
+1. **Spherical cutoff**: Atoms occupy a site if they lie within a spherical cutoff from a fixed position.
+2. **Voronoi decomposition**: Atoms are assigned to sites based on a Voronoi decomposition of the lattice into discrete volumes.
+3. **Polyhedral decomposition**: Atoms are assigned to sites based on occupation of polyhedra defined by the instantaneous positions of lattice atoms.
+4. **Dynamic Voronoi sites**: Sites using Voronoi decomposition but with centres calculated dynamically based on framework atom positions.
 
 ## Installation
 
-From PyPI:
-```
+### Standard Installation
+
+```bash
 pip install site-analysis
 ```
 
-Or clone the latest development version from [GitHub](https://github.com/bjmorgan/site-analysis) and install
-```
-git clone git@github.com:bjmorgan/site-analysis.git
-cd site-analysis
-python setup.py install
-```
+### Development Installation
 
-Alternatively you can install the latest version using `pip`, direct from GitHub, e.g.
-```
-pip3 install git+https://github.com/bjmorgan/site-analysis.git
+For development or to access the latest features:
+
+```bash
+# Clone the repository
+git clone https://github.com/bjmorgan/site-analysis.git
+cd site-analysis
+
+# Install in development mode with dev dependencies
+pip install -e ".[dev]"
 ```
 
 ## Documentation
-Documentation and tutorials live at [Read the Docs](https://site-analysis.readthedocs.io/en/latest/).
 
-Example notebooks are also available of [GitHub](https://github.com/bjmorgan/site-analysis/examples).
+Complete documentation, including tutorials, examples, and API reference, is available at [Read the Docs](https://site-analysis.readthedocs.io/en/latest/).
 
-## Tests
-Automated testing of the latest build happens [here](https://travis-ci.org/github/bjmorgan/site-analysis).
+## Testing
 
-Manual tests can be run using 
+Automated testing of the latest build happens on [GitHub Actions](https://github.com/bjmorgan/site-analysis/actions).
+
+To run tests locally:
+
+```bash
+# Using pytest (recommended)
+pytest
+
+# Using unittest
+python -m unittest discover
 ```
-python3 -m unittest discover
-```
-The code has been tested with Python versions 3.6 and above.
+
+The code requires Python 3.10 or above.

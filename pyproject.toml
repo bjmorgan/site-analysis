@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "site_analysis"
 version = "0.2.0"
@@ -25,14 +21,15 @@ dependencies = [
     "monty",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "sphinx>=1.6.3",
+    "nbsphinx",
+    "sphinx-rtd-theme",
+    "myst-parser",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/username/site_analysis"
 "Bug Tracker" = "https://github.com/username/site_analysis/issues"
-
-[tool.setuptools]
-package-dir = {"" = "."}
-packages = ["site_analysis"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"

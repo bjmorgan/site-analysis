@@ -40,7 +40,7 @@ class Atom(object):
         self.index = index
         self.in_site: Optional[int] = None
         self._frac_coords: Optional[np.ndarray] = None
-        self.trajectory: list[int] = []
+        self.trajectory: list[int|None] = []
         self.species_string = species_string
 
     def __str__(self) -> str:

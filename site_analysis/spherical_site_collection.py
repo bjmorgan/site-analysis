@@ -21,15 +21,15 @@ class SphericalSiteCollection(SiteCollection):
         for atom in atoms:
             if atom.in_site:
                 # first check the site last occupied
-                previous_site = next(s for s in self.sites if s.index == atom.in_site)
+                previous_site = next(site for site in self.sites if site.index == atom.in_site)
                 if previous_site.contains_atom(atom, structure.lattice):
-                    self.update_occupation( previous_site, atom )
+                    self.update_occupation(previous_site, atom)
                     continue # atom has not moved
                 else: # default is atom does not occupy any sites
                     atom.in_site = None
-            for s in self.sites:
-                if s.contains_atom(atom, structure.lattice):
-                    self.update_occupation( s, atom )
+            for site in self.sites:
+                if site.contains_atom(atom, structure.lattice):
+                    self.update_occupation(site, atom)
                     break
 
  

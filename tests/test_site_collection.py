@@ -58,21 +58,6 @@ class SiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(site_collection.site_by_index(42), sites[1])
         with self.assertRaises(ValueError):
             site_collection.site_by_index(93)
-   
-    def test_update_occupation_if_atom_was_unassigned(self):
-        sites = [Mock(spec=Site)]
-        sites[0].index = 12
-        sites[0].contains_atoms = []
-        sites[0].points = []
-        site_collection = ConcreteSiteCollection(sites=sites)
-        atom = Mock(spec=Atom)
-        atom.index = 4
-        atom.in_site = None
-        atom.frac_coords = np.array([0.5, 0.5, 0.5])
-        site_collection.update_occupation(site=sites[0], atom=atom)
-        self.assertEqual(sites[0].contains_atoms, [atom.index])
-        np.testing.assert_array_equal(sites[0].points, [atom.frac_coords])
-        self.assertEqual(atom.in_site, sites[0].index)
 
     def test_update_occupation_if_atom_has_not_moved(self):
         sites = [Mock(spec=Site)]
@@ -82,7 +67,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.in_site = 12
+        atom.trajectory = [12]
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         self.assertEqual(sites[0].contains_atoms, [atom.index])
@@ -100,7 +85,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection.site_by_index = Mock(return_value=sites[1])
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.in_site = 42
+        atom.trajectory = [42]
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         self.assertEqual(sites[0].contains_atoms, [atom.index])

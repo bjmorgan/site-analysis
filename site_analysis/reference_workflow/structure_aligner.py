@@ -123,6 +123,7 @@ class StructureAligner:
 			ValueError: If structures cannot be aligned
 		"""
 		# Check if species is provided
+		print(species)
 		if species is None:
 			# No specific species provided - get all species from reference
 			ref_species_counts = reference.composition.as_dict()

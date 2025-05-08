@@ -134,14 +134,15 @@ class TrajectoryBuilder:
 		return self
 	
 	def with_alignment_options(self, 
-							 align: bool = True, 
-							 align_species: Optional[list[str]] = None, 
-							 align_metric: str = 'rmsd') -> TrajectoryBuilder:
+						 align: bool = True, 
+						 align_species: Optional[Union[str, list[str]]] = None, 
+						 align_metric: str = 'rmsd') -> TrajectoryBuilder:
 		"""Set options for aligning reference and target structures.
 		
 		Args:
 			align: Whether to perform structure alignment. Default is True.
-			align_species: Species to use for alignment. Default is all species.
+			align_species: Species to use for alignment. Can be a string or list of strings.
+				Default is all species.
 			align_metric: Metric for alignment ('rmsd', 'max_dist'). 
 				Default is 'rmsd'.
 				
@@ -149,7 +150,13 @@ class TrajectoryBuilder:
 			self: For method chaining
 		"""
 		self._align = align
-		self._align_species = align_species
+		
+		# Convert single species string to a list
+		if isinstance(align_species, str):
+			self._align_species = [align_species]
+		else:
+			self._align_species = align_species
+			
 		self._align_metric = align_metric
 		return self
 		
@@ -226,6 +233,7 @@ class TrajectoryBuilder:
 			
 		Raises:
 			ValueError: If reference_structure or structure is not set
+			ValueError: If no sites are found with the given parameters
 		"""
 		if not self._structure or not self._reference_structure:
 			raise ValueError("Both structure and reference_structure must be set")
@@ -240,7 +248,7 @@ class TrajectoryBuilder:
 		)
 		
 		# Create sites
-		self._sites = cast(list[Site], 
+		sites = cast(list[Site], 
 			rbs.create_polyhedral_sites(
 				center_species=centre_species,
 				vertex_species=vertex_species,
@@ -250,14 +258,24 @@ class TrajectoryBuilder:
 			)
 		)
 		
+		# Check if any sites were found
+		if not sites:
+			raise ValueError(
+				f"No polyhedral sites found for centre_species='{centre_species}', "
+				f"vertex_species='{vertex_species}', cutoff={cutoff}, n_vertices={n_vertices}. "
+				f"Try adjusting these parameters or verify that the specified species exist "
+				f"in the structure."
+			)
+		
+		self._sites = sites
 		return self
 		
-	def with_dynamic_voronoi_sites(self, 
-								 centre_species: str, 
-								 reference_species: Union[str, list[str]], 
-								 cutoff: float, 
-								 n_reference: int, 
-								 label: Optional[str] = None) -> TrajectoryBuilder:
+	def with_dynamic_voronoi_sites(self,
+		centre_species: str,
+		reference_species: Union[str, list[str]],
+		cutoff: float,
+		n_reference: int,
+		label: Optional[str] = None) -> TrajectoryBuilder:
 		"""Define dynamic Voronoi sites using the ReferenceBasedSites workflow.
 		
 		Args:
@@ -272,6 +290,7 @@ class TrajectoryBuilder:
 			
 		Raises:
 			ValueError: If reference_structure or structure is not set
+			ValueError: If no sites are found with the given parameters
 		"""
 		if not self._structure or not self._reference_structure:
 			raise ValueError("Both structure and reference_structure must be set")
@@ -286,7 +305,7 @@ class TrajectoryBuilder:
 		)
 		
 		# Create sites
-		self._sites = cast(list[Site],
+		sites = cast(list[Site],
 			rbs.create_dynamic_voronoi_sites(
 				center_species=centre_species,
 				reference_species=reference_species,
@@ -296,6 +315,16 @@ class TrajectoryBuilder:
 			)
 		)
 		
+		# Check if any sites were found
+		if not sites:
+			raise ValueError(
+				f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
+				f"reference_species='{reference_species}', cutoff={cutoff}, n_reference={n_reference}. "
+				f"Try adjusting these parameters or verify that the specified species exist "
+				f"in the structure."
+			)
+		
+		self._sites = sites
 		return self
 		
 	def with_existing_sites(self, sites: list) -> TrajectoryBuilder:

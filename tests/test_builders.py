@@ -290,12 +290,76 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Sites should be stored in the builder
 			self.assertEqual(self.builder._sites, mock_sites)
 	
+	def test_with_polyhedral_sites_no_sites_found(self):
+		"""Test that with_polyhedral_sites raises an error when no sites are found."""
+		# Configure the mock ReferenceBasedSites to return empty site list
+		mock_rbs = Mock()
+		mock_rbs.create_polyhedral_sites.return_value = []
+		
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
+			# Configure mock to return our mock_rbs instance
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure the builder with structures
+			self.builder.with_structure(self.structure)
+			self.builder.with_reference_structure(self.reference_structure)
+			
+			# Call the method and verify it raises ValueError
+			with self.assertRaises(ValueError) as context:
+				self.builder.with_polyhedral_sites(
+					centre_species="Li",
+					vertex_species="O",
+					cutoff=2.0,
+					n_vertices=4,
+					label="tetrahedral"
+				)
+			
+			# Check the error message contains useful information
+			error_msg = str(context.exception)
+			self.assertIn("No polyhedral sites found", error_msg)
+			self.assertIn("Li", error_msg)  # centre_species
+			self.assertIn("O", error_msg)   # vertex_species
+			self.assertIn("2.0", error_msg) # cutoff
+			self.assertIn("4", error_msg)   # n_vertices
+	
+	def test_with_dynamic_voronoi_sites_no_sites_found(self):
+		"""Test that with_dynamic_voronoi_sites raises an error when no sites are found."""
+		# Configure the mock ReferenceBasedSites to return empty site list
+		mock_rbs = Mock()
+		mock_rbs.create_dynamic_voronoi_sites.return_value = []
+		
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
+			# Configure mock to return our mock_rbs instance
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure the builder with structures
+			self.builder.with_structure(self.structure)
+			self.builder.with_reference_structure(self.reference_structure)
+			
+			# Call the method and verify it raises ValueError
+			with self.assertRaises(ValueError) as context:
+				self.builder.with_dynamic_voronoi_sites(
+					centre_species="Li",
+					reference_species="O",
+					cutoff=2.0,
+					n_reference=4,
+					label="tetrahedral"
+				)
+			
+			# Check the error message contains useful information
+			error_msg = str(context.exception)
+			self.assertIn("No dynamic Voronoi sites found", error_msg)
+			self.assertIn("Li", error_msg)  # centre_species
+			self.assertIn("O", error_msg)   # reference_species
+			self.assertIn("2.0", error_msg) # cutoff
+			self.assertIn("4", error_msg)   # n_reference
+			
 	def test_with_alignment_options(self):
 		"""Test setting alignment options."""
 		# Start with a fresh builder
 		builder = TrajectoryBuilder()
 		
-		# Set alignment options
+		# Set alignment options with a list of species
 		result = builder.with_alignment_options(
 			align=False,
 			align_species=["Li"],
@@ -308,6 +372,29 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Verify options were stored
 		self.assertEqual(builder._align, False)
 		self.assertEqual(builder._align_species, ["Li"])
+		self.assertEqual(builder._align_metric, "max_dist")
+		
+		# Test with a single species string
+		builder.with_alignment_options(
+			align=True,
+			align_species="Na",
+			align_metric="rmsd"
+		)
+		
+		# Verify single species string is converted to list
+		self.assertEqual(builder._align, True)
+		self.assertEqual(builder._align_species, ["Na"])
+		self.assertEqual(builder._align_metric, "rmsd")
+		
+		# Test with default align value
+		builder.with_alignment_options(
+			align_species="Ca",
+			align_metric="max_dist"
+		)
+		
+		# Verify align defaulted to True
+		self.assertEqual(builder._align, True)
+		self.assertEqual(builder._align_species, ["Ca"])
 		self.assertEqual(builder._align_metric, "max_dist")
 		
 		# Test with polyhedral sites to verify options are passed correctly
@@ -332,8 +419,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			mock_rbs_class.assert_called_once_with(
 				reference_structure=self.reference_structure,
 				target_structure=self.structure,
-				align=False,
-				align_species=["Li"],
+				align=True,
+				align_species=["Ca"],
 				align_metric="max_dist"
 			)
 	

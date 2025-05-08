@@ -978,6 +978,52 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Verify with_site_mapping was called for dynamic sites too
 			mock_builder.with_site_mapping.assert_called_once_with(["Li"])
+			
+	def test_mapping_species_used_for_alignment_when_align_species_not_set(self):
+		"""Test that mapping species are used for alignment when alignment species are not set."""
+		# Configure the builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(self.structure)
+		builder.with_reference_structure(self.reference_structure)
+		builder.with_mobile_species("Li")
+		
+		# Set mapping species but NOT alignment species
+		# Don't call with_structure_alignment()
+		builder.with_site_mapping(mapping_species=["O"])
+		
+		# Set up polyhedral sites
+		builder.with_polyhedral_sites(
+			centre_species="Li",
+			vertex_species="O",
+			cutoff=2.0,
+			n_vertices=4,
+			label="tetrahedral"
+		)
+		
+		# Mock ReferenceBasedSites to verify correct parameters are passed
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock to return a mock RBS instance
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure mock to return site objects
+			mock_sites = [Mock(), Mock()]
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			
+			# Call build to trigger site creation
+			builder.build()
+			
+			# Verify ReferenceBasedSites was created with the mapping species as alignment species
+			mock_rbs_class.assert_called_once_with(
+				reference_structure=self.reference_structure,
+				target_structure=self.structure,
+				align=True,  # Alignment should be enabled
+				align_species=["O"],  # Should use mapping species for alignment
+				align_metric='rmsd'
+			)
 	
 if __name__ == '__main__':
 	unittest.main()

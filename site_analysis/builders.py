@@ -65,6 +65,24 @@ class TrajectoryBuilder:
 	This class provides a step-by-step approach to creating a Trajectory
 	object for analysing site occupations in crystal structures.
 	
+	Structure Alignment and Site Mapping:
+	------------------------------------
+	The builder supports separate control over structure alignment (finding optimal
+	translations) and site mapping (identifying corresponding sites):
+	
+	- Structure alignment: Use with_structure_alignment() to control whether and how
+	structures are aligned before site creation.
+	
+	- Site mapping: Use with_site_mapping() to specify which species are used to
+	identify corresponding sites between structures.
+	
+	Default Behaviors:
+	- Alignment is enabled by default
+	- If mapping species are specified but alignment species are not, mapping species
+	will be used for alignment
+	- If alignment species are specified but mapping species are not, alignment species
+	will be used for mapping
+	
 	Example:
 		```python
 		# Create a builder
@@ -72,17 +90,19 @@ class TrajectoryBuilder:
 		
 		# Configure it
 		builder.with_structure(structure)
-			   .with_mobile_species("Li")
-			   .with_spherical_sites(
-				   centres=[[0.5, 0.5, 0.5]],
-				   radii=[2.0]
-			   )
+			.with_reference_structure(reference_structure)
+			.with_mobile_species("Li")
+			.with_structure_alignment(align=True, align_species=["O"])  # Align on framework
+			.with_site_mapping(mapping_species=["Na"])  # Map using Na atoms
+			.with_polyhedral_sites(
+				centre_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4
+			)
 		
 		# Build the trajectory
 		trajectory = builder.build()
-		
-		# Analyse a trajectory
-		trajectory.trajectory_from_structures(structures)
 		```
 	"""
 	
@@ -142,19 +162,23 @@ class TrajectoryBuilder:
 		return self
 	
 	def with_structure_alignment(self, 
-					align: bool = True, 
-					align_species: Optional[Union[str, list[str]]] = None, 
-					align_metric: str = 'rmsd') -> TrajectoryBuilder:
+					 align: bool = True, 
+					 align_species: Optional[Union[str, list[str]]] = None, 
+					 align_metric: str = 'rmsd') -> TrajectoryBuilder:
 		"""Set options for aligning reference and target structures.
 		
 		Structure alignment finds the optimal translation vector to superimpose
 		the reference structure onto the target structure, minimizing distances
 		between corresponding atoms.
 		
+		By default, alignment is enabled. If alignment species are not specified:
+		- If mapping species have been set with with_site_mapping(), those species will be used for alignment
+		- Otherwise, all common species between structures will be used
+		
 		Args:
 			align: Whether to perform structure alignment. Default is True.
 			align_species: Species to use for alignment. Can be a string or list of strings.
-				If None, all species will be used.
+				If None, mapping species will be used if specified, otherwise all common species.
 			align_metric: Metric for alignment ('rmsd', 'max_dist'). 
 				Default is 'rmsd'.
 				
@@ -172,13 +196,18 @@ class TrajectoryBuilder:
 		self._align_metric = align_metric
 		return self
 		
-	def with_site_mapping(self,
-		mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
+	def with_site_mapping(self, mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
 		"""Set the species to use for mapping sites between reference and target structures.
 		
 		Site mapping identifies corresponding sites between structures even when
 		atom counts differ, for example when structures have different numbers
 		of mobile ions but the same framework atoms.
+		
+		If mapping species are specified but alignment species are not:
+		- The mapping species will also be used for alignment (unless alignment is disabled)
+		
+		If mapping species are not specified:
+		- The alignment species will be used for mapping
 		
 		Args:
 			mapping_species: Species to use for mapping. Can be a string or list of strings.
@@ -259,13 +288,19 @@ class TrajectoryBuilder:
 		def create_polyhedral_sites() -> Sequence[PolyhedralSite]:
 			if not self._structure or not self._reference_structure:
 				raise ValueError("Both structure and reference_structure must be set for polyhedral sites")
+			
+			# If alignment is enabled but no alignment species are specified, 
+			# use mapping species for alignment if available 
+			align_species = self._align_species
+			if self._align and align_species is None and self._mapping_species is not None:
+				align_species = self._mapping_species
 				
 			# Create ReferenceBasedSites
 			rbs = ReferenceBasedSites(
 				reference_structure=self._reference_structure,
 				target_structure=self._structure,
 				align=self._align,
-				align_species=self._align_species,
+				align_species=align_species,
 				align_metric=self._align_metric
 			)
 			
@@ -312,13 +347,19 @@ class TrajectoryBuilder:
 		def create_dynamic_voronoi_sites() -> Sequence[DynamicVoronoiSite]:
 			if not self._structure or not self._reference_structure:
 				raise ValueError("Both structure and reference_structure must be set for dynamic Voronoi sites")
+			
+			# If alignment is enabled but no alignment species are specified, 
+			# use mapping species for alignment if available 
+			align_species = self._align_species
+			if self._align and align_species is None and self._mapping_species is not None:
+				align_species = self._mapping_species
 				
 			# Create ReferenceBasedSites
 			rbs = ReferenceBasedSites(
 				reference_structure=self._reference_structure,
 				target_structure=self._structure,
 				align=self._align,
-				align_species=self._align_species,
+				align_species=align_species,
 				align_metric=self._align_metric
 			)
 			

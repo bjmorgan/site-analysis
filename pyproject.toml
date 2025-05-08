@@ -36,6 +36,7 @@ dev = [
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme
     "myst-parser",          # For markdown in Sphinx
+    "matplorlib",           # For plots in the docs
 ]
 
 [project.urls]

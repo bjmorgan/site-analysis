@@ -98,8 +98,8 @@ class TrajectoryBuilder:
 		self._align_species: Optional[list[str]] = None
 		self._align_metric: str = 'rmsd'
 		
-		# Function to be called during build() to create sites
-		self._site_generator: Optional[Callable[[], Sequence[Site]]] = None
+		# Functions to be called during build() to create sites
+		self._site_generators: list[Callable[[], Sequence[Site]]] = []
 		
 	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
@@ -190,7 +190,7 @@ class TrajectoryBuilder:
 			return sites
 			
 		# Store the function for later execution
-		self._site_generator = create_spherical_sites
+		self._site_generators.append(create_spherical_sites)
 		return self
 		
 	def with_voronoi_sites(self, 
@@ -213,7 +213,7 @@ class TrajectoryBuilder:
 			return sites
 			
 		# Store the function for later execution
-		self._site_generator = create_voronoi_sites
+		self._site_generators.append(create_voronoi_sites)
 		return self
 		
 	def with_polyhedral_sites(self, 
@@ -261,7 +261,7 @@ class TrajectoryBuilder:
 			return sites
 			
 		# Store the function for later execution
-		self._site_generator = create_polyhedral_sites
+		self._site_generators.append(create_polyhedral_sites)
 		return self
 		
 	def with_dynamic_voronoi_sites(self,
@@ -309,7 +309,7 @@ class TrajectoryBuilder:
 			return sites
 			
 		# Store the function for later execution
-		self._site_generator = create_dynamic_voronoi_sites
+		self._site_generators.append(create_dynamic_voronoi_sites)
 		return self
 		
 	def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
@@ -319,7 +319,7 @@ class TrajectoryBuilder:
 			return sites
 			
 		# Store the function for later execution
-		self._site_generator = return_existing_sites
+		self._site_generators.append(return_existing_sites)
 		return self
 		
 	def with_existing_atoms(self, atoms: list) -> TrajectoryBuilder:
@@ -349,14 +349,28 @@ class TrajectoryBuilder:
 		# Validate basic requirements
 		if not self._structure:
 			raise ValueError("Structure must be set")
-		if not self._site_generator:
+		if not self._site_generators:
 			raise ValueError("Site type must be defined using one of the with_*_sites methods")
 			
 		# Reset the site index counter
 		Site.reset_index()
 			
-		# Generate sites using the stored site generator function
-		sites = self._site_generator()
+		# Generate all sites
+		sites: list[Site] = []
+		site_type = None
+		
+		for generator in self._site_generators:
+			generated_sites = generator()
+			
+			# Verify site type consistency
+			if generated_sites:
+				current_type = type(generated_sites[0])
+				if site_type is None:
+					site_type = current_type
+				elif site_type != current_type:
+					raise TypeError(f"Cannot mix site types: {site_type.__name__} and {current_type.__name__}")
+			
+			sites.extend(generated_sites)
 		
 		# Create atoms if not already set
 		if not self._atoms:

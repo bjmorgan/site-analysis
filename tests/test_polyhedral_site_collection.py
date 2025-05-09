@@ -64,7 +64,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(collection.sites, self.sites)
         
         # Test with mock sites
-        sites = [Mock(spec=PolyhedralSite), Mock(spec=PolyhedralSite)]
+        sites = [Mock(spec=PolyhedralSite, index=0),
+                 Mock(spec=PolyhedralSite, index=1)]
         with patch('site_analysis.polyhedral_site_collection.construct_neighbouring_sites') as mock_construct_neighbouring_sites:
             mock_construct_neighbouring_sites.return_value = 'mocked_neighbours'
             site_collection = PolyhedralSiteCollection(sites=sites)
@@ -283,6 +284,33 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         # Test with None structure
         with self.assertRaises(AssertionError):
             self.collection.sites_contain_points(points, None)
+            
+    def test_checks_most_recent_site(self):
+        """Test that assign_site_occupations checks most_recent_site when in_site is None."""
+        # Create a real PolyhedralSiteCollection with a basic mock site
+        site = Mock(spec=PolyhedralSite, index=5)
+        site.contains_atom = Mock(return_value=True)  # Make contains_atom return True
+        collection = PolyhedralSiteCollection(sites=[site])
+        
+        # Create a real atom with no current site but a most_recent_site value
+        atom = Atom(index=42)
+        atom.in_site = None
+        atom.trajectory = [5]  # This will make most_recent_site return 5
+        
+        # Mock site_by_index to verify it's called with the correct site index
+        collection.site_by_index = Mock(return_value=site)
+        
+        # Mock update_occupation to avoid side effects
+        collection.update_occupation = Mock()
+        
+        # Call the actual method we want to test
+        collection.assign_site_occupations([atom], Mock())
+        
+        # Verify site_by_index was called with the correct index (5)
+        collection.site_by_index.assert_called_with(5)
+        
+        # Verify update_occupation was called with the right site and atom
+        collection.update_occupation.assert_called_with(site, atom)
 
 
 class ConstructNeighbouringSitesTestCase(unittest.TestCase):

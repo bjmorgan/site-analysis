@@ -172,6 +172,16 @@ class Atom(object):
         with zopen(filename, "rt") as f:
             contents = f.read()
         return cls.from_str(contents)
+        
+    @property
+    def most_recent_site(self) -> Optional[int]:
+        """Return the most recent non-None site from the trajectory.
+        
+        Returns:
+            The index of the most recent non-None site visited by this atom,
+            or None if no site has been visited yet.
+        """
+        return next((site_index for site_index in reversed(self.trajectory) if site_index is not None), None)
 
 
 def atoms_from_species_string(

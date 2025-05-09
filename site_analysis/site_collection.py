@@ -34,15 +34,24 @@ class SiteCollection(ABC):
 
     """
 
-    def __init__(self,
-            sites: Sequence[Site]) -> None:
+    def __init__(self, sites: Sequence[Site]) -> None:
         """Create a SiteCollection object.
-
+        
         Args:
             sites (list): List of ``Site`` objects.
-
+            
+        Raises:
+            ValueError: If there are duplicate site indices.
+        
         """
         self.sites = sites
+        
+        # Create lookup dictionary for efficient site access by index
+        self._site_lookup = {}
+        for site in sites:
+            if site.index in self._site_lookup:
+                raise ValueError(f"Duplicate site index detected: {site.index}. Site indices must be unique.")
+            self._site_lookup[site.index] = site
 
     @abstractmethod
     def assign_site_occupations(self, atoms, structure):
@@ -98,22 +107,22 @@ class SiteCollection(ABC):
 
     def site_by_index(self, index):
         """Returns the site with a specific index.
-
+        
         Args:
             index (int): index for the site to be returned.
-
+        
         Returns:
             (Site)
-
+        
         Raises:
             ValueError: If a site with the specified index is not contained
                 in this SiteCollection.
-
+        
         """
-        for site in self.sites:
-            if site.index == index:
-                return site
-        raise ValueError(f'No site with index {index} found')
+        site = self._site_lookup.get(index)
+        if site is None:
+            raise ValueError(f'No site with index {index} found')
+        return site
 
     def update_occupation(self, site, atom):
         """Updates site and atom attributes for this atom occupying this site.

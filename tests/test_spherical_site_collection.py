@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 
@@ -154,6 +154,29 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		
 		# Verify transition was recorded in site2
 		self.assertEqual(self.site2.transitions[self.site1.index], 1)
+		
+	def test_assign_site_occupations_uses_most_recent_site(self):
+		"""Test that assign_site_occupations checks most_recent_site first."""
+		# Create sites and collection
+		site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.5)
+		site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.5)
+		collection = SphericalSiteCollection(sites=[site1, site2])
+		
+		# Create atom with history in site2
+		atom = Atom(index=0)
+		atom.trajectory = [site2.index]
+		
+		# Mock the lookup method to verify order of access
+		with patch.object(collection, 'site_by_index') as mock_site_by_index:
+			# Configure the mock to return our sites
+			mock_site_by_index.side_effect = lambda idx: site2 if idx == site2.index else site1
+			
+			# Patch contains_atom to always return True for simplicity
+			with patch.object(site2, 'contains_atom', return_value=True):
+				collection.assign_site_occupations([atom], Mock())
+			
+			# Verify site2 was looked up first (based on most_recent_site)
+			mock_site_by_index.assert_called_with(site2.index)
 
 
 if __name__ == '__main__':

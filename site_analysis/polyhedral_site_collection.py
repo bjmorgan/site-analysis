@@ -66,19 +66,33 @@ class PolyhedralSiteCollection(SiteCollection):
             s.assign_vertex_coords(structure)
         self.assign_site_occupations(atoms, structure)
 
-    def assign_site_occupations(self,
-                                atoms: List[Atom],
-                                structure: Structure):
+    def assign_site_occupations(self, atoms, structure):
+        """Assign atoms to polyhedral sites based on their positions.
+        
+        This method implements an improved assignment logic:
+        1. All site occupations are reset (emptied) at the beginning
+        2. For each atom, check if it's still in its current site, or if not, check
+        its most recent site from trajectory history
+        3. If the atom is not in either of these sites, check all sites sequentially
+        
+        Args:
+            atoms: List of Atom objects to be assigned to sites
+            structure: Pymatgen Structure containing the atom positions
+        """
         self.reset_site_occupations()
         for atom in atoms:
-            if atom.in_site:
-                # first check the site last occupied
-                previous_site = next(site for site in self.sites if site.index == atom.in_site)
-                if previous_site.contains_atom(atom):
-                    self.update_occupation(previous_site, atom)
-                    continue # atom has not moved
-                else: # default is atom does not occupy any sites
-                    atom.in_site = None
+            # Check current site or most recent site first
+            site_idx = atom.most_recent_site
+            if site_idx is not None:
+                site = self._site_lookup.get(site_idx)
+                if site and site.contains_atom(atom):
+                    self.update_occupation(site, atom)
+                    continue
+            
+            # Reset in_site since we didn't find the atom in its previous site
+            atom.in_site = None
+            
+            # Check all sites sequentially
             for site in self.sites:
                 if site.contains_atom(atom):
                     self.update_occupation(site, atom)

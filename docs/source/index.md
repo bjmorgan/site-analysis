@@ -34,6 +34,7 @@ quickstart
 
 context
 concepts/sites
+concepts/site_collections
 
 ```
 

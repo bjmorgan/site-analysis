@@ -1,3 +1,19 @@
+"""Abstract base class for site definitions in crystal structures.
+
+This module defines the core Site abstraction, which represents a bounded volume
+in a crystal structure that can contain zero or more atoms. The Site class
+serves as the abstract base class that all specific site types (polyhedral,
+spherical, Voronoi, etc.) in the site_analysis package must inherit from.
+
+Concrete site implementations must override the abstract methods to define:
+- How to determine whether a point is contained within the site
+- How to calculate the center of the site
+- Site-specific properties like coordination number
+
+This class should not be instantiated directly; use one of the concrete 
+subclasses instead.
+"""
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import Counter

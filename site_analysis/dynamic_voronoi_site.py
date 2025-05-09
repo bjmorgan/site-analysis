@@ -1,3 +1,24 @@
+"""Dynamic Voronoi site representation for crystal structure analysis.
+
+This module provides the DynamicVoronoiSite class, which represents a site with
+a center that is dynamically calculated from the positions of a set of reference
+atoms. Unlike standard VoronoiSite objects, which have fixed centers, the positions
+of DynamicVoronoiSite objects adapt to structural changes as the reference atoms move.
+
+The site center is calculated as the mean position of the reference atoms, with special
+handling for periodic boundary conditions. This makes DynamicVoronoiSite particularly
+useful for tracking sites in mobile frameworks where the crystal structure deforms
+during simulation.
+
+Similar to standard Voronoi sites, a single DynamicVoronoiSite cannot determine
+whether an atom is contained within it, as this depends on the positions of all
+other sites. This class is designed to be used with DynamicVoronoiSiteCollection,
+which handles the Voronoi tessellation logic.
+
+The coordination number of a DynamicVoronoiSite is defined as the number of 
+reference atoms used to calculate its center.
+"""
+
 from __future__ import annotations
 import numpy as np
 from typing import List, Optional, Any, Dict

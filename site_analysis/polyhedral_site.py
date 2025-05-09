@@ -1,3 +1,21 @@
+"""Polyhedral site representation for crystal structure analysis.
+
+This module provides the PolyhedralSite class, which represents a site defined
+by a polyhedron formed by a set of vertex atoms. These sites are commonly used
+to represent coordination environments in crystal structures, such as tetrahedral
+or octahedral sites.
+
+PolyhedralSite determines whether atoms are inside the site volume by constructing
+a convex polyhedron from the vertex atoms and checking whether points lie within
+this polyhedron. It supports multiple algorithms for this containment check:
+- 'simplex': Uses Delaunay tessellation to check if a point is in any simplex
+- 'sn': Uses surface normal directions to check if a point is inside all faces
+
+The polyhedron vertices are defined using atom indices in a structure, and
+their coordinates are assigned from the structure when needed. This allows the
+polyhedron shape to adapt to changes in the crystal structure.
+"""
+
 from __future__ import annotations
 
 import itertools

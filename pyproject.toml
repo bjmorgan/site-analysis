@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "0.3.0"
+version = "0.3.1"
 description = "Analysis tools for tracking ion migration pathways through crystallographic sites"
 readme = "README.md"
 authors = [

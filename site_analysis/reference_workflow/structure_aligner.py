@@ -1,7 +1,20 @@
-"""StructureAligner for aligning crystal structures via translation optimization.
+"""Structure alignment tools for comparing and superimposing crystal structures.
 
-This module provides functionality to align reference structures to target structures
-by finding the optimal translation vector that minimizes distances between corresponding atoms.
+This module provides the StructureAligner class, which finds the optimal
+translation vector to superimpose one crystal structure onto another. This
+alignment is important for:
+
+1. Comparing structures from different sources with different coordinate origins
+2. Analyzing structural changes while accounting for rigid translations
+3. Preparing structures for site mapping in reference-based workflows
+
+The alignment algorithm optimizes a translation vector to minimise distances
+between corresponding atoms in the two structures, considering periodic
+boundary conditions. It supports different optimisation metrics (RMSD or
+maximum atom distance) and can align based on specific atom species.
+
+This module is a key component of the reference-based workflow for defining
+sites in one structure based on a template from another structure.
 """
 
 import numpy as np

@@ -143,6 +143,7 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		# Initialize an atom in site2
 		atom = Atom(index=5)
 		atom.in_site = self.site2.index
+		atom.trajectory = [atom.in_site]
 		atom._frac_coords = np.array([0.3, 0.3, 0.3])
 		
 		# Call update_occupation to move the atom to site1

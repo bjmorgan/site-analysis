@@ -1,8 +1,27 @@
-"""site_analysis.tools module
+"""Utility functions for site analysis and crystal structure manipulation.
 
-This module contains tools for [TODO]
+This module provides a collection of helper functions for working with crystal
+structures, finding coordination environments, mapping between structures, and
+handling periodic boundary conditions.
 
+Key functions include:
+
+Coordination and site analysis:
+- get_coordination_indices: Find atoms with specific coordination environments
+- get_nearest_neighbour_indices: Get indices of nearest neighbors for each site
+- get_vertex_indices: (Deprecated) Find vertex atoms for coordination polyhedra
+
+Structure mapping and comparison:
+- site_index_mapping: Map site indices between two structures
+- calculate_species_distances: Calculate distances between matching atoms in structures
+
+Periodic boundary handling:
+- x_pbc: Generate fractional coordinates for all periodic images in neighboring cells
+
+These utilities provide low-level functionality that can be used directly or are
+used internally by the higher-level site and trajectory analysis classes.
 """
+
 import warnings
 import numpy as np
 

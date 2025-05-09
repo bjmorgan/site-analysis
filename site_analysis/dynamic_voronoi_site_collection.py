@@ -1,11 +1,36 @@
+"""Collection manager for dynamic Voronoi sites in crystal structures.
+
+This module provides the DynamicVoronoiSiteCollection class, which manages a
+collection of DynamicVoronoiSite objects and implements methods for assigning
+atoms to these sites based on their positions in a crystal structure.
+
+The DynamicVoronoiSiteCollection extends the base SiteCollection class with
+specific functionality for dynamic Voronoi sites, including:
+1. Calculating the dynamic centers of sites based on reference atom positions
+2. Assigning atoms to sites using Voronoi tessellation principles
+
+For atom assignment, the collection:
+1. First updates each site's center by calculating the mean position of its
+   reference atoms, with special handling for periodic boundary conditions
+2. Calculates distances from each (dynamically determined) site center to each atom
+3. Assigns each atom to the site with the nearest center
+4. Uses the structure's lattice to correctly handle distances across
+   periodic boundaries
+
+This collection is particularly useful for tracking sites in frameworks
+that deform during simulation, as the site centers adapt to the changing
+positions of the reference atoms.
+"""
+
 from __future__ import annotations
+
 import numpy as np
-from typing import List, Optional, Dict, Any
 from pymatgen.core import Structure
-from .site_collection import SiteCollection
-from .site import Site
-from .dynamic_voronoi_site import DynamicVoronoiSite
-from .atom import Atom
+from site_analysis.site_collection import SiteCollection
+from site_analysis.site import Site
+from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis.atom import Atom
+from typing import Optional, Any
 
 class DynamicVoronoiSiteCollection(SiteCollection):
 	"""A collection of DynamicVoronoiSite objects.
@@ -14,15 +39,15 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 	the assignment of atoms to sites based on their dynamically calculated centres.
 	
 	Attributes:
-		sites (List[DynamicVoronoiSite]): List of DynamicVoronoiSite objects.
+		sites (list[DynamicVoronoiSite]): list of DynamicVoronoiSite objects.
 	"""
 	
 	def __init__(self,
-				 sites: List[Site]) -> None:
+				 sites: list[Site]) -> None:
 		"""Create a DynamicVoronoiSiteCollection instance.
 		
 		Args:
-			sites (List[DynamicVoronoiSite]): List of DynamicVoronoiSite objects.
+			sites (list[DynamicVoronoiSite]): list of DynamicVoronoiSite objects.
 			
 		Returns:
 			None
@@ -34,10 +59,10 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 			if not isinstance(s, DynamicVoronoiSite):
 				raise TypeError("All sites must be DynamicVoronoiSite instances")
 		super(DynamicVoronoiSiteCollection, self).__init__(sites)
-		self.sites = self.sites  # type: List[DynamicVoronoiSite]
+		self.sites = self.sites  # type: list[DynamicVoronoiSite]
 		
 	def analyse_structure(self,
-						  atoms: List[Atom],
+						  atoms: list[Atom],
 					      structure: Structure) -> None:
 		"""Analyze a structure to assign atoms to sites.
 		
@@ -47,7 +72,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 		3. Assigns atoms to sites based on these centres
 		
 		Args:
-			atoms (List[Atom]): List of atoms to be assigned to sites.
+			atoms (list[Atom]): list of atoms to be assigned to sites.
 			structure (Structure): Pymatgen Structure containing atom positions.
 			
 		Returns:
@@ -60,7 +85,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 		self.assign_site_occupations(atoms, structure)
 		
 	def assign_site_occupations(self,
-								atoms: List[Atom],
+								atoms: list[Atom],
 								structure: Structure) -> None:
 		"""Assign atoms to sites based on Voronoi tessellation.
 		
@@ -68,7 +93,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 		taking into account periodic boundary conditions.
 		
 		Args:
-			atoms (List[Atom]): List of atoms to be assigned to sites.
+			atoms (list[Atom]): list of atoms to be assigned to sites.
 			structure (Structure): Pymatgen Structure containing atom positions.
 			
 		Returns:

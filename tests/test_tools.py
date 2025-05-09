@@ -7,28 +7,55 @@ from unittest.mock import patch, MagicMock, Mock
 import numpy as np
 from pymatgen.core import Lattice, Structure, PeriodicSite
 from collections import Counter
+import warnings
 
 class ToolsTestCase(unittest.TestCase):
 
     def test_get_vertex_indices(self):
-        # Create a 2x2x2 NaCl supercell
-        lattice = Lattice.from_parameters(a=5.0, b=5.0, c=5.0, 
-                      alpha=90, beta=90, gamma=90)
-        structure = Structure.from_spacegroup(sg='Fm-3m', lattice=lattice, 
-                                              species=['Na','Cl'],
-                                              coords=[[0.0, 0.0, 0.0],
-                                                      [0.5, 0.0, 0.0]])*[2,2,2]
-        vertex_indices = get_vertex_indices(structure=structure, centre_species='Na',
-                                            vertex_species='Cl', cutoff=3.0,
-                                            n_vertices=6)
-        c = Counter()
-        for vi in vertex_indices:
-            self.assertEqual(len(vi), 6)
-            c += Counter(vi)
-            for i in vi:
-                self.assertEqual(structure[i].species_string, 'Cl')
-        for i in range(33,64):
-            self.assertEqual(c[i], 6)
+        # Suppress the deprecation warning for this test
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            
+            # Create a 2x2x2 NaCl supercell
+            lattice = Lattice.from_parameters(a=5.0, b=5.0, c=5.0, 
+                        alpha=90, beta=90, gamma=90)
+            structure = Structure.from_spacegroup(sg='Fm-3m', lattice=lattice, 
+                                                species=['Na','Cl'],
+                                                coords=[[0.0, 0.0, 0.0],
+                                                        [0.5, 0.0, 0.0]])*[2,2,2]
+            vertex_indices = get_vertex_indices(structure=structure, centre_species='Na',
+                                                vertex_species='Cl', cutoff=3.0,
+                                                n_vertices=6)
+            c = Counter()
+            for vi in vertex_indices:
+                self.assertEqual(len(vi), 6)
+                c += Counter(vi)
+                for i in vi:
+                    self.assertEqual(structure[i].species_string, 'Cl')
+            for i in range(33,64):
+                self.assertEqual(c[i], 6)
+    
+    def test_get_vertex_indices_deprecation(self):
+        """Test that get_vertex_indices raises a deprecation warning."""
+        # Create a simple structure
+        lattice = Lattice.cubic(5.0)
+        structure = Structure(lattice, ["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        
+        # Check for the deprecation warning
+        with warnings.catch_warnings(record=True) as w:
+            # Trigger all warnings
+            warnings.simplefilter("always")
+            
+            # Call the deprecated function
+            get_vertex_indices(structure=structure, centre_species='Na',
+                            vertex_species='Cl', cutoff=3.0, n_vertices=1)
+            
+            # Verify that we got a deprecation warning
+            self.assertTrue(len(w) > 0, "No warning was raised")
+            self.assertTrue(any(issubclass(warning.category, DeprecationWarning) for warning in w),
+                            "No DeprecationWarning was raised")
+            self.assertTrue(any("deprecated" in str(warning.message) for warning in w),
+                            "Warning message does not mention 'deprecated'")
 
     def test_x_pbc(self):
         pbc_coords = x_pbc(np.array([0.1, 0.2, 0.3]))

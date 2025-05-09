@@ -1,5 +1,27 @@
-from .site import Site
-from typing import Dict, Any, Optional
+"""Voronoi site representation for crystal structure analysis.
+
+This module provides the VoronoiSite class, which represents a site defined
+by a Voronoi cell centered at a fixed position. Voronoi sites divide space
+into regions where each point in a region is closer to its site center than
+to any other site center.
+
+Unlike other site types, a single VoronoiSite cannot determine whether an atom
+is contained within it, as this calculation depends on the positions of all
+other Voronoi sites in the structure. Therefore, the contains_point method
+is not implemented directly in this class.
+
+VoronoiSite objects are designed to be used within a VoronoiSiteCollection,
+which implements the Voronoi tessellation logic and handles atom assignments
+based on which site center is closest to each atom.
+
+Important:
+    Do not use VoronoiSite.contains_point() directly. Instead, use
+    VoronoiSiteCollection.assign_site_occupations() to determine which
+    atoms belong to which Voronoi sites.
+"""
+
+from site_analysis.site import Site
+from typing import Any, Optional
 import numpy as np
 
 class VoronoiSite(Site):
@@ -27,7 +49,7 @@ class VoronoiSite(Site):
         super(VoronoiSite, self).__init__(label=label)
         self.frac_coords = frac_coords
 
-    def as_dict(self) -> Dict:
+    def as_dict(self) -> dict:
         """Json-serializable dict representation of this VoronoiSite.
 
         Args:

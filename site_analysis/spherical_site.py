@@ -1,3 +1,25 @@
+"""Spherical site representation for crystal structure analysis.
+
+This module provides the SphericalSite class, which represents a site defined
+by a sphere with a specific center position and radius. Spherical sites are the
+simplest site geometry, useful for quick analysis or when the exact shape of
+the site is less important than its location.
+
+SphericalSite determines whether atoms are inside the site volume by checking
+if the distance between the atom and the site center is less than or equal to
+the site's radius. This calculation considers periodic boundary conditions using
+the structure's lattice.
+
+Unlike polyhedral sites, spherical sites have a fixed geometry independent of
+atom positions in the structure, making them suitable for applications where
+consistent site volumes are needed regardless of structural distortions.
+
+Note:
+    SphericalSite objects are typically used with SphericalSiteCollection,
+    which implements specific assignment logic for handling atoms in overlapping
+    sites.
+"""
+
 from __future__ import annotations
 from .site import Site
 from typing import Optional, Dict, Any

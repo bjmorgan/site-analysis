@@ -1,9 +1,23 @@
-"""ReferenceBasedSites for defining sites using a reference structure approach.
+"""Reference-based workflow for defining sites in crystal structures.
 
-This module provides the main orchestrator class for defining crystallographic 
-sites using a reference structure as a template. It integrates all components
-needed to align structures, find coordination environments, map them between
-structures, and create appropriate site objects.
+This module provides the ReferenceBasedSites class, which is the main orchestrator
+for defining crystallographic sites in a target structure based on coordination
+environments identified in a reference structure. This approach is particularly
+useful for:
+
+1. Analyzing structures with distortions relative to an ideal reference
+2. Tracking specific site types across different structures or simulation frames
+3. Creating consistent site definitions across diverse structures
+
+The ReferenceBasedSites class integrates several components to accomplish this workflow:
+- StructureAligner: Aligns the structures to find the optimal translation vector
+- CoordinationEnvironmentFinder: Identifies coordination environments in the reference
+- IndexMapper: Maps atom indices between reference and target structures
+- SiteFactory: Creates appropriate site objects in the target structure
+
+This approach lets users define sites based on ideal coordination environments in
+a reference structure, then create corresponding sites in real or distorted structures
+where those same environments might be harder to identify directly.
 """
 
 import numpy as np

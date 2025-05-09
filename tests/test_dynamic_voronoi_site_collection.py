@@ -17,7 +17,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 	
 	def test_site_collection_is_initialised(self):
 		"""Test that a DynamicVoronoiSiteCollection is correctly initialised."""
-		sites = [Mock(spec=DynamicVoronoiSite), Mock(spec=DynamicVoronoiSite)]
+		sites = [Mock(spec=DynamicVoronoiSite, index=0),
+				 Mock(spec=DynamicVoronoiSite, index=1)]
 		site_collection = DynamicVoronoiSiteCollection(sites=sites)
 		self.assertEqual(site_collection.sites, sites)
 		
@@ -32,10 +33,10 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 			
 	def test_analyse_structure(self):
 		"""Test that analyse_structure correctly processes atoms and updates site centres."""
-		# Create mock sites and atoms
+		# Create mock sites and atoms with proper index attributes
 		sites = [
-			Mock(spec=DynamicVoronoiSite, reference_indices=[0, 1]),
-			Mock(spec=DynamicVoronoiSite, reference_indices=[2, 3])
+			Mock(spec=DynamicVoronoiSite, reference_indices=[0, 1], index=0),
+			Mock(spec=DynamicVoronoiSite, reference_indices=[2, 3], index=1)
 		]
 		atoms = [Mock(spec=Atom) for _ in range(5)]
 		structure = Mock(spec=Structure)

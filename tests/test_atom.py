@@ -267,6 +267,44 @@ class AtomUtilityFunctionsTestCase(unittest.TestCase):
         self.assertEqual(atoms[1].index, -5)
         self.assertEqual(atoms[2].index, 0)   
         
+    def test_most_recent_site_empty_trajectory(self):
+        """Test most_recent_site with an empty trajectory."""
+        atom = Atom(index=1)
+        # Empty trajectory should return None
+        self.assertIsNone(atom.most_recent_site)
+    
+    def test_most_recent_site_none_values(self):
+        """Test most_recent_site when trajectory only contains None values."""
+        atom = Atom(index=1)
+        atom.trajectory = [None, None, None]
+        
+        # Only None values in trajectory should return None
+        self.assertIsNone(atom.most_recent_site)
+    
+    def test_most_recent_site_with_values(self):
+        """Test most_recent_site returns the last non-None value."""
+        atom = Atom(index=1)
+        
+        # Simple case with only site indices
+        atom.trajectory = [2, 4, 6, 8]
+        self.assertEqual(atom.most_recent_site, 8)
+        
+        # With None at the end
+        atom.trajectory = [2, 4, 6, None]
+        self.assertEqual(atom.most_recent_site, 6)
+        
+        # With None values interspersed
+        atom.trajectory = [2, None, 4, None, 6, None]
+        self.assertEqual(atom.most_recent_site, 6)
+        
+        # With None values at the beginning
+        atom.trajectory = [None, None, 6, 8]
+        self.assertEqual(atom.most_recent_site, 8)
+        
+        # Mixed case with None values
+        atom.trajectory = [None, 3, None, None, 7, None]
+        self.assertEqual(atom.most_recent_site, 7)
+        
 if __name__ == '__main__':
     unittest.main()
     

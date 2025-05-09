@@ -1,3 +1,23 @@
+"""Abstract base class for collections of sites in crystal structures.
+
+This module defines the SiteCollection abstraction, which manages groups of
+related Site objects and provides methods for assigning atoms to these sites
+based on their positions in a crystal structure.
+
+The SiteCollection class serves as an abstract base class that all specific
+site collection types (PolyhedralSiteCollection, SphericalSiteCollection, etc.)
+must inherit from. It defines the interface for site-atom assignment logic
+and provides common functionality for managing site occupations.
+
+Concrete site collection classes must implement methods to:
+- Assign atoms to sites for a given structure
+- Analyze structure and update site assignments
+- Define structure-specific site relationships like neighboring sites
+
+This class should not be instantiated directly; use one of the concrete
+subclasses instead.
+"""
+
 from abc import ABC, abstractmethod
 import numpy as np
 from typing import Optional, List, Sequence

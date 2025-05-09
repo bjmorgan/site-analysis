@@ -1,3 +1,28 @@
+"""Collection manager for polyhedral sites in crystal structures.
+
+This module provides the PolyhedralSiteCollection class, which manages a
+collection of PolyhedralSite objects and implements methods for assigning
+atoms to these sites based on their positions in a crystal structure.
+
+The PolyhedralSiteCollection extends the base SiteCollection class with
+specific functionality for polyhedral sites, including:
+- Maintaining a map of neighboring polyhedral sites that share faces
+- Efficiently assigning atoms to sites based on their positions
+- Checking whether a set of sites contains a corresponding set of points
+
+The module also includes a utility function, construct_neighbouring_sites,
+which analyzes a set of polyhedral sites to determine which ones are
+face-sharing neighbors (defined as sites sharing three or more vertices).
+
+For atom assignment, the collection implements an efficient prioritization:
+1. First check if an atom is still in its previously assigned site
+2. If not, sequentially check all sites until a match is found
+3. The first site found to contain the atom claims it (no further checks)
+
+This approach optimizes performance when atom movements between structures
+are small, as most atoms will remain in their previously assigned sites.
+"""
+
 from .site_collection import SiteCollection
 from typing import List, Any, Optional, Dict
 from .polyhedral_site import PolyhedralSite

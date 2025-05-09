@@ -1,7 +1,19 @@
-"""SiteFactory for creating site objects from coordination environments.
+"""Factory for creating site objects from coordination environments.
 
-This module provides functionality to create different types of site objects
-from coordination environments defined as lists of atom indices.
+This module provides the SiteFactory class, which creates different types of site
+objects based on coordination environments defined by atom indices in a crystal
+structure. This factory simplifies the creation of complex site objects by handling
+the details of vertex coordinate assignment and validation.
+
+The SiteFactory supports creating:
+- PolyhedralSite objects: Sites defined by polyhedra with vertices at specific atom positions
+- DynamicVoronoiSite objects: Sites with centers dynamically calculated from reference atom positions
+
+It provides validation of coordination environments, ensures consistent labeling,
+and manages the initialisation of site objects with the appropriate structural data.
+
+This module is part of the reference-based workflow, which creates sites in one
+structure based on coordination environments identified in a reference structure.
 """
 
 from typing import List, Optional, Union, Any

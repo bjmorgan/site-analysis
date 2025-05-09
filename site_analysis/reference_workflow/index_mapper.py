@@ -1,7 +1,21 @@
-"""IndexMapper for mapping coordination environments between crystal structures.
+"""Index mapping between reference and target crystal structures.
 
-This module provides functionality to map coordinating atom indices from reference
-structures to target structures while maintaining structural correspondence.
+This module provides the IndexMapper class, which maps coordinating atom indices
+from a reference structure to corresponding atoms in a target structure. This mapping
+is essential when transferring site definitions from one structure to another,
+particularly when atom orderings differ or when structures have been distorted.
+
+The IndexMapper uses a distance-based approach to find the closest corresponding atoms
+in the target structure for each reference atom, considering periodic boundary conditions.
+It enforces a 1:1 mapping constraint to ensure that each reference atom maps to a distinct
+target atom, which is necessary for preserving the topology of coordination environments.
+
+The mapping can be filtered by atom species to ensure that atoms map only to atoms
+of the same species, which is important for maintaining chemical validity when
+mapping between structures with mixed compositions.
+
+This module is a core component of the reference-based workflow, enabling the transfer
+of site definitions between different structures or timesteps in a simulation.
 """
 
 import numpy as np

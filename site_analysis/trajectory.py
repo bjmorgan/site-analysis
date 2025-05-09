@@ -1,3 +1,32 @@
+"""Trajectory analysis for tracking site occupations over time.
+
+This module provides the Trajectory class, which is responsible for analyzing
+and tracking atom movements through crystallographic sites in a simulation
+trajectory.
+
+The Trajectory class manages the relationship between atoms and sites, analyzes
+structures to assign atoms to sites, and records the movement history of atoms
+between sites over time.
+
+Key functionality includes:
+- Assigning atoms to sites based on their positions in a structure
+- Tracking atom migrations between sites over a sequence of structures
+- Recording site occupation and transition data
+- Supporting different site definitions via appropriate SiteCollection types
+
+Note:
+    Trajectory objects should typically be created using the TrajectoryBuilder class
+    rather than directly instantiated. The builder provides an interface for
+    configuring all aspects of the trajectory:
+
+    >>> from site_analysis.builders import TrajectoryBuilder
+    >>> trajectory = (TrajectoryBuilder()
+    ...              .with_structure(structure)
+    ...              .with_mobile_species("Li")
+    ...              .with_spherical_sites(centres=[[0.5, 0.5, 0.5]], radii=[2.0])
+    ...              .build())
+"""
+
 from collections import Counter
 from tqdm import tqdm, tqdm_notebook # type: ignore
 from .polyhedral_site_collection import PolyhedralSiteCollection
@@ -254,6 +283,26 @@ class Trajectory(object):
         return len(self.timesteps)
  
 def update_occupation(site, atom):
+    """Update the occupation record for a site and atom pair.
+    
+    This utility function updates the occupation records when an atom
+    is assigned to a site. It:
+    
+    1. Adds the atom's index to the site's list of contained atoms
+    2. Sets the atom's in_site attribute to the site's index
+    
+    Args:
+        site (Site): The site that contains the atom
+        atom (Atom): The atom to be assigned to the site
+        
+    Returns:
+        None
+    
+    Note:
+        This is a simplified version of the update_occupation method in
+        SiteCollection classes, used for direct assignments without
+        tracking transitions.
+    """
     site.contains_atoms.append(atom.index)
     atom.in_site = site.index
 

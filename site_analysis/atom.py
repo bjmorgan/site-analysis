@@ -1,3 +1,18 @@
+"""Representation of atoms and utilities for atom creation.
+
+This module provides the Atom class, which represents a single atom in a crystal
+structure, along with utility functions for creating collections of atoms.
+
+The Atom class maintains information about an atom's identity (index), position
+(fractional coordinates), site assignment, and movement history (trajectory).
+
+The module also provides helper functions to create Atom objects from various
+input forms:
+- atoms_from_structure: Create atoms from a Structure based on species
+- atoms_from_species_string: Create atoms for a specific species in a Structure
+- atoms_from_indices: Create atoms with specific atom indices
+"""
+
 from __future__ import annotations
 
 import itertools
@@ -162,6 +177,20 @@ class Atom(object):
 def atoms_from_species_string(
         structure:Structure,
         species_string: str) -> list[Atom]:
+    """Create Atom objects for all atoms of a specific species in a structure.
+    
+    This function creates a list of Atom objects for each atom in the structure
+    that matches the given species string.
+    
+    Args:
+        structure: A pymatgen Structure containing the atoms
+        species_string: The species to match (e.g., "Li", "O")
+        
+    Returns:
+        A list of Atom objects, one for each matching atom in the structure.
+        The Atom objects will have their index set to the corresponding
+        atom's index in the structure, but will not have coordinates assigned.
+    """
     atoms = [
         Atom(index=i)
         for i, s in enumerate(structure)
@@ -172,6 +201,21 @@ def atoms_from_species_string(
 def atoms_from_structure(
     structure: Structure,
     species_string: Union[list[str], str]) -> list[Atom]:
+    """Create Atom objects for atoms of specified species in a structure.
+    
+    Similar to atoms_from_species_string, but accepts either a single species
+    string or a list of species strings, and sets both the species_string
+    attribute and fractional coordinates for each atom.
+    
+    Args:
+        structure: A pymatgen Structure containing the atoms
+        species_string: Either a single species string (e.g., "Li") or a list
+            of species strings (e.g., ["Li", "Na"])
+            
+    Returns:
+        A list of Atom objects, one for each matching atom in the structure.
+        Each Atom will have its index, species_string, and _frac_coords set.
+    """
     if isinstance(species_string, str):
         species_string = [species_string]
     atoms = [
@@ -185,4 +229,22 @@ def atoms_from_structure(
 
 def atoms_from_indices(
         indices: list[int]) -> list[Atom]:
+    """Create Atom objects with the specified indices.
+    
+    This function creates a list of Atom objects with indices exactly matching
+    the provided list. This is useful when you already know which atoms you
+    want to track by their indices.
+    
+    Args:
+        indices: A list of integer indices to use for the Atom objects
+        
+    Returns:
+        A list of Atom objects, one for each index in the input list.
+        The Atom objects will have their index set but no other attributes.
+        
+    Note:
+        This function does not check for uniqueness of indices. If the input
+        contains duplicate indices, the result will contain multiple Atom
+        objects with the same index.
+    """
     return [Atom(index=i) for i in indices]

@@ -82,16 +82,14 @@ class PolyhedralSiteCollection(SiteCollection):
         self.reset_site_occupations()
         for atom in atoms:
             # Check current site or most recent site first
-            site_idx = atom.most_recent_site
-            if site_idx is not None:
-                site = self._site_lookup.get(site_idx)
+            most_recent_site = atom.most_recent_site
+            if most_recent_site is not None:
+                site = self.site_by_index(most_recent_site)
                 if site and site.contains_atom(atom):
                     self.update_occupation(site, atom)
                     continue
-            
             # Reset in_site since we didn't find the atom in its previous site
             atom.in_site = None
-            
             # Check all sites sequentially
             for site in self.sites:
                 if site.contains_atom(atom):

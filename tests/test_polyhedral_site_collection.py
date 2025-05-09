@@ -5,7 +5,7 @@ from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection, c
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.atom import Atom
 from site_analysis.site import Site
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, PropertyMock
 
 
 class PolyhedralSiteCollectionTestCase(unittest.TestCase):
@@ -287,30 +287,37 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             
     def test_checks_most_recent_site(self):
         """Test that assign_site_occupations checks most_recent_site when in_site is None."""
-        # Create a real PolyhedralSiteCollection with a basic mock site
-        site = Mock(spec=PolyhedralSite, index=5)
-        site.contains_atom = Mock(return_value=True)  # Make contains_atom return True
-        collection = PolyhedralSiteCollection(sites=[site])
+        # Create mock structure
+        mock_structure = Mock(spec=Structure)
         
-        # Create a real atom with no current site but a most_recent_site value
-        atom = Atom(index=42)
-        atom.in_site = None
-        atom.trajectory = [5]  # This will make most_recent_site return 5
+        # Create mock site and collection
+        mock_site = Mock(spec=PolyhedralSite, index=5)
+        collection = PolyhedralSiteCollection(sites=[mock_site])
         
-        # Mock site_by_index to verify it's called with the correct site index
-        collection.site_by_index = Mock(return_value=site)
+        # Create mock atom with no current site
+        mock_atom = Mock(spec=Atom, index=42, in_site=None)
         
-        # Mock update_occupation to avoid side effects
-        collection.update_occupation = Mock()
+        # Mock the most_recent_site property
+        most_recent_site_mock = PropertyMock(return_value=5)
+        type(mock_atom).most_recent_site = most_recent_site_mock
         
-        # Call the actual method we want to test
-        collection.assign_site_occupations([atom], Mock())
-        
-        # Verify site_by_index was called with the correct index (5)
-        collection.site_by_index.assert_called_with(5)
-        
-        # Verify update_occupation was called with the right site and atom
-        collection.update_occupation.assert_called_with(site, atom)
+        # Patch methods on the collection
+        with patch.object(collection, 'update_occupation') as mock_update, \
+            patch.object(collection, 'site_by_index') as mock_site_by_index:
+            # Configure site_by_index to return our mock site
+            mock_site_by_index.return_value = mock_site
+            
+            # Call the method we're testing
+            collection.assign_site_occupations([mock_atom], mock_structure)
+            
+            # Verify most_recent_site property was accessed
+            most_recent_site_mock.assert_called_once()
+            
+            # Verify site_by_index was called with the correct index
+            mock_site_by_index.assert_called_with(5)
+            
+            # Verify update_occupation was called with the right site and atom
+            mock_update.assert_called_with(mock_site, mock_atom)
 
 
 class ConstructNeighbouringSitesTestCase(unittest.TestCase):

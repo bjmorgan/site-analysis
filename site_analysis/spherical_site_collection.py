@@ -75,14 +75,15 @@ class SphericalSiteCollection(SiteCollection):
         """
         self.reset_site_occupations()
         for atom in atoms:
-            if atom.in_site:
-                # first check the site last occupied
-                previous_site = next(site for site in self.sites if site.index == atom.in_site)
-                if previous_site.contains_atom(atom, structure.lattice):
-                    self.update_occupation(previous_site, atom)
-                    continue # atom has not moved
-                else: # default is atom does not occupy any sites
-                    atom.in_site = None
+            # Check current site or most recent site first
+            most_recent_site = atom.most_recent_site
+            if most_recent_site is not None:
+                site = self.site_by_index(most_recent_site)
+                if site and site.contains_atom(atom, structure.lattice):
+                    self.update_occupation(site, atom)
+                    continue
+            # Reset in_site since we didn't find the atom in its previous site
+            atom.in_site = None
             for site in self.sites:
                 if site.contains_atom(atom, structure.lattice):
                     self.update_occupation(site, atom)

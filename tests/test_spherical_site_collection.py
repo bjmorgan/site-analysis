@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 
@@ -155,28 +155,44 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		# Verify transition was recorded in site2
 		self.assertEqual(self.site2.transitions[self.site1.index], 1)
 		
-	def test_assign_site_occupations_uses_most_recent_site(self):
-		"""Test that assign_site_occupations checks most_recent_site first."""
-		# Create sites and collection
-		site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.5)
-		site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.5)
-		collection = SphericalSiteCollection(sites=[site1, site2])
+	def test_checks_most_recent_site(self):
+		"""Test that assign_site_occupations checks most_recent_site when in_site is None."""
+		# Create mock lattice and structure
+		mock_lattice = Mock(spec=Lattice)
+		mock_structure = Mock(spec=Structure)
+		mock_structure.lattice = mock_lattice
 		
-		# Create atom with history in site2
-		atom = Atom(index=0)
-		atom.trajectory = [site2.index]
+		# Create mock site and collection
+		mock_site = Mock(spec=SphericalSite, index=5)
+		collection = SphericalSiteCollection(sites=[mock_site])
 		
-		# Mock the lookup method to verify order of access
-		with patch.object(collection, 'site_by_index') as mock_site_by_index:
-			# Configure the mock to return our sites
-			mock_site_by_index.side_effect = lambda idx: site2 if idx == site2.index else site1
+		# Create mock atom with no current site but with history
+		mock_atom = Mock(spec=Atom, index=42, in_site=None)
+		
+		# Mock the most_recent_site property
+		most_recent_site_mock = PropertyMock(return_value=5)
+		type(mock_atom).most_recent_site = most_recent_site_mock
+		
+		# Patch methods on the collection
+		with patch.object(collection, 'update_occupation') as mock_update, \
+			patch.object(collection, 'site_by_index') as mock_site_by_index:
+			# Configure site_by_index to return our mock site
+			mock_site_by_index.return_value = mock_site
 			
-			# Patch contains_atom to always return True for simplicity
-			with patch.object(site2, 'contains_atom', return_value=True):
-				collection.assign_site_occupations([atom], Mock())
+			# Call the method we're testing
+			collection.assign_site_occupations([mock_atom], mock_structure)
 			
-			# Verify site2 was looked up first (based on most_recent_site)
-			mock_site_by_index.assert_called_with(site2.index)
+			# Verify most_recent_site property was accessed
+			most_recent_site_mock.assert_called_once()
+			
+			# Verify site_by_index was called with the correct index
+			mock_site_by_index.assert_called_with(5)
+			
+			# Verify contains_atom was called with the correct parameters
+			mock_site.contains_atom.assert_called_with(mock_atom, mock_lattice)
+			
+			# Verify update_occupation was called with the right site and atom
+			mock_update.assert_called_with(mock_site, mock_atom)
 
 
 if __name__ == '__main__':

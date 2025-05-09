@@ -47,7 +47,7 @@ class SiteCollection(ABC):
         self.sites = sites
         
         # Create lookup dictionary for efficient site access by index
-        self._site_lookup = {}
+        self._site_lookup: dict[int, Site] = {}
         for site in sites:
             if site.index in self._site_lookup:
                 raise ValueError(f"Duplicate site index detected: {site.index}. Site indices must be unique.")

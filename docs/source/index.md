@@ -36,6 +36,7 @@ context
 concepts/sites
 concepts/site_collections
 concepts/atoms
+concepts/trajectories
 
 ```
 

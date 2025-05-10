@@ -1024,6 +1024,105 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				align_species=["O"],  # Should use mapping species for alignment
 				align_metric='rmsd'
 			)
+			
+	def test_with_spherical_sites_single_radius(self):
+		"""Test that a single radius value is expanded to match the number of centres."""
+		centres = [[0.25, 0.25, 0.25], [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]]
+		radius = 1.5  # Single float instead of list
+		
+		builder = self.builder.with_spherical_sites(centres=centres, radii=radius)
+		
+		# Execute the site generator function to see what it produces
+		site_generator = builder._site_generators[0]
+		
+		# Mock SphericalSite to capture what it's called with
+		with patch('site_analysis.builders.SphericalSite') as mock_spherical_site:
+			# Call the generator
+			site_generator()
+			
+			# Check that SphericalSite was called 3 times (once per centre)
+			self.assertEqual(mock_spherical_site.call_count, 3)
+			
+			# Check that each call used the same radius
+			for call in mock_spherical_site.call_args_list:
+				args, kwargs = call
+				self.assertEqual(kwargs['rcut'], 1.5)
+				
+	def test_with_spherical_sites_single_label(self):
+		"""Test that a single label value is expanded to match the number of centres."""
+		centres = [[0.25, 0.25, 0.25], [0.5, 0.5, 0.5], [0.75, 0.75, 0.75]]
+		radii = [1.0, 1.5, 2.0]
+		label = "test_site"  # Single string instead of list
+		
+		builder = self.builder.with_spherical_sites(centres=centres, radii=radii, labels=label)
+		
+		# Execute the site generator function to see what it produces
+		site_generator = builder._site_generators[0]
+		
+		# Mock SphericalSite to capture what it's called with
+		with patch('site_analysis.builders.SphericalSite') as mock_spherical_site:
+			# Call the generator
+			site_generator()
+			
+			# Check that SphericalSite was called 3 times (once per centre)
+			self.assertEqual(mock_spherical_site.call_count, 3)
+			
+			# Check that each call used the same label
+			for call in mock_spherical_site.call_args_list:
+				args, kwargs = call
+				self.assertEqual(kwargs['label'], "test_site")
+				
+	def test_create_trajectory_with_spherical_sites_single_radius(self):
+		"""Test factory function accepts a single radius value."""
+		centres = [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]]
+		radius = 1.0  # Single float
+		
+		# Mock TrajectoryBuilder to verify it receives the single radius
+		with patch('site_analysis.builders.TrajectoryBuilder') as mock_builder_class:
+			mock_builder = Mock()
+			mock_builder_class.return_value = mock_builder
+			
+			# Configure method chaining
+			for method in ['with_structure', 'with_mobile_species', 'with_spherical_sites', 'build']:
+				setattr(mock_builder, method, Mock(return_value=mock_builder))
+			
+			# Call the factory function
+			create_trajectory_with_spherical_sites(
+				structure=self.structure,
+				mobile_species="Li",
+				centres=centres,
+				radii=radius
+			)
+			
+			# Verify with_spherical_sites was called with the single radius
+			mock_builder.with_spherical_sites.assert_called_once_with(centres, radius, None)
+	
+	def test_create_trajectory_with_spherical_sites_single_label(self):
+		"""Test factory function accepts a single label value."""
+		centres = [[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]]
+		radii = [1.0, 1.5]
+		label = "test_site"  # Single string
+		
+		# Mock TrajectoryBuilder to verify it receives the single label
+		with patch('site_analysis.builders.TrajectoryBuilder') as mock_builder_class:
+			mock_builder = Mock()
+			mock_builder_class.return_value = mock_builder
+			
+			# Configure method chaining
+			for method in ['with_structure', 'with_mobile_species', 'with_spherical_sites', 'build']:
+				setattr(mock_builder, method, Mock(return_value=mock_builder))
+			
+			# Call the factory function
+			create_trajectory_with_spherical_sites(
+				structure=self.structure,
+				mobile_species="Li",
+				centres=centres,
+				radii=radii,
+				labels=label
+			)
+			
+			# Verify with_spherical_sites was called with the single label
+			mock_builder.with_spherical_sites.assert_called_once_with(centres, radii, label)
 	
 if __name__ == '__main__':
 	unittest.main()

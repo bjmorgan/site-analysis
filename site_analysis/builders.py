@@ -224,15 +224,37 @@ class TrajectoryBuilder:
 		return self
 		
 	def with_spherical_sites(self, 
-						centres: list[list[float]], 
-						radii: list[float], 
-						labels: Optional[list[str]] = None) -> TrajectoryBuilder:
+					centres: list[list[float]], 
+					radii: Union[float, list[float]], 
+					labels: Optional[Union[str, list[str]]] = None) -> TrajectoryBuilder:
 		"""Define spherical sites.
 		
 		Note: Sites will be generated when build() is called.
+		
+		Args:
+			centres: list of fractional coordinate centres for spherical sites
+			radii: either a single radius (float) to use for all sites, or a list 
+				of radii (one per centre)
+			labels: either a single label (str) to use for all sites, a list of 
+				labels (one per centre), or None
+			
+		Returns:
+			self: For method chaining
 		"""
+		# Convert single radius to list if needed
+		if isinstance(radii, (float, int)):
+			radii = [radii] * len(centres)
+			
+		# Convert single label to list if needed
+		if isinstance(labels, str):
+			labels = [labels] * len(centres)
+			
+		# Validate lengths
 		if len(centres) != len(radii):
 			raise ValueError("Number of centres must match number of radii")
+			
+		if labels is not None and len(centres) != len(labels):
+			raise ValueError("Number of centres must match number of labels")
 			
 		# Define the site generation function but don't execute it yet
 		def create_spherical_sites() -> Sequence[SphericalSite]:
@@ -467,8 +489,8 @@ def create_trajectory_with_spherical_sites(
 	structure, 
 	mobile_species: Union[str, list[str]], 
 	centres: list[list[float]], 
-	radii: list[float], 
-	labels: Optional[list[str]] = None
+	radii: Union[float, list[float]], 
+	labels: Optional[Union[str, list[str]]] = None
 ) -> Trajectory:
 	"""Create a Trajectory with spherical sites.
 	
@@ -476,8 +498,10 @@ def create_trajectory_with_spherical_sites(
 		structure: Structure containing the atoms to analyse
 		mobile_species: Species string or list of species strings for mobile atoms
 		centres: list of fractional coordinate centres for spherical sites
-		radii: list of radii for spherical sites (in Angstroms)
-		labels: Optional list of labels for sites
+		radii: either a single radius (float) to use for all sites, or a list 
+			of radii (one per centre) in Angstroms
+		labels: Optional single label (str) to use for all sites, or list of 
+			labels (one per centre)
 		
 	Returns:
 		Trajectory: The constructed Trajectory object

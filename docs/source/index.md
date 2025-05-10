@@ -45,6 +45,8 @@ concepts/trajectories
 :caption: Guides
 
 guides/builders
+guides/reference_workflow
+guides/spherical_sites
 
 ```
 

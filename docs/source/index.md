@@ -42,6 +42,14 @@ concepts/trajectories
 
 ```{toctree}
 :maxdepth: 1
+:caption: Guides
+
+guides/builders
+
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Tutorials & Examples
 
 examples/shortest_distance_sites

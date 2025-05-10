@@ -13,7 +13,7 @@ Examples:
 				 .with_mobile_species("Li")
 				 .with_spherical_sites(
 					 centres=[[0.5, 0.5, 0.5], [0.0, 0.0, 0.0]],
-					 radii=[2.0, 2.0],
+					 radii=2.0,
 					 labels=["octahedral", "tetrahedral"]
 				 )
 				 .build())
@@ -23,7 +23,7 @@ Examples:
 		structure=structure,
 		mobile_species="Li",
 		centres=[[0.5, 0.5, 0.5], [0.0, 0.0, 0.0]],
-		radii=[2.0, 2.0],
+		radii=2.0,
 		labels=["octahedral", "tetrahedral"]
 	)
 	```

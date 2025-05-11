@@ -32,7 +32,7 @@ quickstart
 :maxdepth: 1
 :caption: Concepts
 
-concepte/what_is_site_analysis
+concepts/what_is_site_analysis
 concepts/sites
 concepts/site_collections
 concepts/atoms

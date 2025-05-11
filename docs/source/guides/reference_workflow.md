@@ -18,7 +18,7 @@ The RBS workflow follows these key steps:
 
 1. **Structure Alignment** (optional): Finds the optimal translation to minimize the mismatch between structures (using specified species or all species)
 2. **Environment Finding**: Identifies coordination environments in the reference structure
-3. **Index Mapping**: Maps atom indices between structures, handling different atom counts
+3. **Index Mapping**: Maps the atoms that define site geometry (vertex atoms for polyhedra, reference atoms for dynamic Voronoi) between structures
 4. **Site Creation**: Creates sites in the target structure using mapped indices
 
 ```mermaid
@@ -84,15 +84,20 @@ builder.with_structure_alignment(
 
 ### Site Mapping
 
-Site mapping identifies corresponding sites between structures:
+Site mapping identifies corresponding atoms between structures - specifically, the atoms that define site geometry:
+
+- For **polyhedral sites**: Maps the vertex atoms that form the polyhedron
+- For **dynamic Voronoi sites**: Maps the reference atoms used to calculate site centres
+
+The purpose of mapping is to track these geometry-defining atoms as the structure undergoes topology-preserving changes (like thermal vibrations), allowing sites to adapt their shapes and positions accordingly.
 
 ```python
 builder.with_site_mapping(
-    mapping_species=["O"]    # Use O atoms to map sites
+    mapping_species=["O"]    # Map oxygen atoms that define site vertices
 )
 ```
 
-**When to use**: When structures have different numbers of mobile ions but the same framework.
+**Why mapping matters**: When the framework vibrates or distorts, the mapped atoms move, and the sites automatically adjust their geometry to match. This creates "dynamic" sites that follow structural changes while maintaining their chemical identity.
 
 ### Default Behaviours
 
@@ -228,19 +233,21 @@ The RBS workflow is particularly useful when:
    - Check for successful site creation (builder will raise errors if none found)
    - Verify alignment quality by visualising aligned structures
 
-## Understanding Coordination Environments
+## Understanding Site Mapping in Detail
 
-The RBS workflow finds coordination environments based on:
+The mapping process is crucial because it identifies which atoms in the target structure correspond to the geometry-defining atoms in the reference structure:
 
-```python
-# These parameters in with_polyhedral_sites():
-centre_species="Li"    # Central atom species
-vertex_species="O"     # Coordinating atom species
-cutoff=2.5            # Maximum distance for coordination
-n_vertices=4          # Exact number of coordinating atoms
-```
+### For Polyhedral Sites
+- **What's mapped**: The vertex atoms that form each polyhedron
+- **Why**: As the structure vibrates or distorts, these vertex positions change, and the polyhedral sites adapt their shape accordingly
+- **Example**: In an octahedral site defined by 6 oxygen vertices, mapping tracks these 6 specific oxygen atoms
 
-The workflow finds all Li atoms with exactly 4 O atoms within 2.5 Å in the reference structure, then maps these to equivalent environments in the target.
+### For Dynamic Voronoi Sites
+- **What's mapped**: The reference atoms used to calculate each site's centre
+- **Why**: The site centre is recalculated at each timestep based on the current positions of these reference atoms
+- **Example**: A site centre defined by 4 framework atoms will move as those atoms vibrate
+
+This mapping enables sites to be "dynamic" - their geometry updates automatically as the structure changes, providing more accurate site assignments in real structures with thermal motion.
 
 ## Troubleshooting
 

@@ -20,6 +20,21 @@ Spherical sites are best suited for:
 - The framework undergoes topology-preserving distortions (use dynamic Voronoi or polyhedral sites)
 - You're analyzing close-packed structures where polyhedral sites provide both complete coverage and correspond to crystallographic coordination environments
 
+## Understanding Spherical Site Properties
+
+Spherical sites have unique characteristics that affect their use:
+
+- **Fixed geometry**: Sites remain spherical regardless of structure
+- **Potential gaps**: Space between non-overlapping spheres remains unassigned
+- **Potential overlaps**: Overlapping spheres create ambiguous regions
+- **Radius dependence**: Site definition requires choosing appropriate radii
+
+The radius parameter presents a fundamental trade-off:
+- Small radii → gaps between sites → unassigned atoms
+- Large radii → overlapping sites → ambiguous assignments
+
+The package handles overlaps through a persistence algorithm: atoms remain in their current site when in overlapping regions, reducing spurious transitions.
+
 ## Creating Spherical Sites
 
 ### Basic Setup
@@ -63,7 +78,7 @@ trajectory = (TrajectoryBuilder()
     .build())
 ```
 
-## Choosing Appropriate Radii
+### Choosing Appropriate Radii
 
 Site radii should be chosen based on:
 - Crystal structure geometry
@@ -91,40 +106,118 @@ for radius in test_radii:
     print(f"Radius {radius}: {assigned_atoms}/{len(trajectory.atoms)} atoms assigned")
 ```
 
+## Example: Interstitial Sites in Close-Packed Structures
+
+```python
+# FCC structure with octahedral and tetrahedral interstitials
+octahedral = [[0.5, 0.5, 0.5], [0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]
+tetrahedral = [
+    [0.25, 0.25, 0.25], [0.75, 0.75, 0.25],
+    [0.75, 0.25, 0.75], [0.25, 0.75, 0.75],
+    [0.75, 0.75, 0.75], [0.25, 0.25, 0.75],
+    [0.25, 0.75, 0.25], [0.75, 0.25, 0.25]
+]
+
+# Different radii for different site types
+trajectory = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_spherical_sites(centres=octahedral, radii=2.0, labels="oct")
+    .with_spherical_sites(centres=tetrahedral, radii=1.5, labels="tet")
+    .build())
+```
+
+## Advanced Usage: Direct Site Creation
+
+For more control over site creation, you can bypass the builder and create spherical sites directly.
+
+### Creating Individual Sites
+
+```python
+from site_analysis.spherical_site import SphericalSite
+from site_analysis.spherical_site_collection import SphericalSiteCollection
+import numpy as np
+
+# Create individual spherical sites
+site1 = SphericalSite(
+    frac_coords=np.array([0.5, 0.5, 0.5]), 
+    rcut=2.0, 
+    label="octahedral"
+)
+site2 = SphericalSite(
+    frac_coords=np.array([0.0, 0.0, 0.0]), 
+    rcut=1.5, 
+    label="tetrahedral"
+)
+
+# Create a collection
+sites = [site1, site2]
+site_collection = SphericalSiteCollection(sites)
+
+# Create atoms and trajectory
+from site_analysis import atoms_from_structure, Trajectory
+atoms = atoms_from_structure(structure, "Li")
+trajectory = Trajectory(sites=sites, atoms=atoms)
+```
+
+### Using Existing Site Objects
+
+```python
+# Create sites from a previous analysis
+from site_analysis import SphericalSite
+
+# Example: Load sites from a previous analysis or create programmatically
+sites = []
+site_data = [
+    {"pos": [0.5, 0.5, 0.5], "radius": 2.0, "label": "oct_1"},
+    {"pos": [0.0, 0.0, 0.0], "radius": 1.8, "label": "tet_1"},
+]
+
+for data in site_data:
+    site = SphericalSite(
+        frac_coords=np.array(data["pos"]),
+        rcut=data["radius"],
+        label=data["label"]
+    )
+    sites.append(site)
+
+# Use sites with the builder
+trajectory = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_existing_sites(sites)
+    .build())
+```
+
+This approach gives you full control over:
+- Manually creating sites with specific properties
+- Reusing sites from previous analyses
+- Integrating with other workflows that generate site objects
+
+## Comparison with Other Site Types
+
+### Advantages
+- Conceptually simple and intuitive
+- Easy to define and visualise
+- Computationally efficient
+
+### Limitations
+- Do not completely fill space (gaps between sites)
+- May overlap, causing ambiguous assignment
+- Size needs to be carefully chosen
+- Less physically meaningful than geometry-based approaches
+- Generally inferior to other site types for most analyses
+
 ## Handling Overlapping Sites
 
 When sites overlap, the assignment algorithm prioritizes stability:
 
-For each atom:
 1. **Check previous assignment**: If the atom was in a site during the previous timestep and that site still contains the atom's current position, keep the atom in that site
 2. **Find new assignment**: If the atom wasn't previously assigned OR has moved outside its previous site, check all sites in order and assign the atom to the first site that contains it
 
 This persistence-based approach means atoms tend to remain in their current sites even when they're in overlapping regions, reducing spurious transitions between overlapping sites.
 
-**Note**: Overlapping sites can be deliberately used to minimize spurious "transitions" caused by large amplitude thermal vibrations that don't represent true diffusive motion. By creating overlap regions between sites, atoms undergoing vibrational motion near site boundaries are less likely to register as having transitioned between sites.
-
-To detect potential overlaps:
-
-```python
-import numpy as np
-
-def check_site_overlaps(centres, radii, lattice):
-    """Check which sites overlap"""
-    overlaps = []
-    for i, (c1, r1) in enumerate(zip(centres, radii)):
-        for j, (c2, r2) in enumerate(zip(centres, radii)):
-            if i >= j:
-                continue
-            
-            # Calculate distance between centres
-            distance = lattice.get_distance_and_image(c1, c2)[0]
-            
-            # Check if sites overlap
-            if distance < (r1 + r2):
-                overlaps.append((i, j, distance, r1 + r2))
-    
-    return overlaps
-```
+**Note**: Overlapping sites can be deliberately used to minimize spurious "transitions" caused by large amplitude thermal vibrations that don't represent true diffusive motion.
 
 ## Handling Gaps Between Sites
 
@@ -152,29 +245,6 @@ if unassigned:
 2. **Add intermediate sites** at key positions
 3. **Switch to space-filling sites** (Voronoi or polyhedral)
 
-## Common Patterns
-
-### Interstitial Sites in Close-Packed Structures
-
-```python
-# FCC structure with octahedral and tetrahedral interstitials
-octahedral = [[0.5, 0.5, 0.5], [0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]
-tetrahedral = [
-    [0.25, 0.25, 0.25], [0.75, 0.75, 0.25],
-    [0.75, 0.25, 0.75], [0.25, 0.75, 0.75],
-    [0.75, 0.75, 0.75], [0.25, 0.25, 0.75],
-    [0.25, 0.75, 0.25], [0.75, 0.25, 0.25]
-]
-
-# Different radii for different site types
-trajectory = (TrajectoryBuilder()
-    .with_structure(structure)
-    .with_mobile_species("Li")
-    .with_spherical_sites(centres=octahedral, radii=2.0, labels="oct")
-    .with_spherical_sites(centres=tetrahedral, radii=1.5, labels="tet")
-    .build())
-```
-
 ## Troubleshooting
 
 ### Problem: Too many unassigned atoms
@@ -201,4 +271,3 @@ for site in trajectory.sites:
 **Solutions**:
 - Adjust radii based on occupancy patterns
 - Use different radii for different site types
-

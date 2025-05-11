@@ -53,6 +53,15 @@ guides/polyhedral_sites
 
 ```
 
+
+```{toctree}
+:maxdepth: 1
+:caption: Resources
+
+resources/references
+
+```
+
 ```{toctree}
 :maxdepth: 2
 :caption: API Reference

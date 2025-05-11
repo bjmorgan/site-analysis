@@ -36,21 +36,10 @@ More sophisticated coordination-based approaches—such as polyhedral sites defi
 
 The package includes a reference-based workflow that automates the generation of coordination-based sites, eliminating the need for manual site specification. Users provide an ideal reference structure and specify coordination criteria; the software identifies all matching environments and automatically maps them to target structures, with sites adapting to thermal distortions while preserving chemical identity.
 
-The builder pattern interface provides an intuitive API:
-```python
-trajectory = (TrajectoryBuilder()
-    .with_structure(structure)
-    .with_mobile_species("Li")
-    .with_polyhedral_sites(
-        centre_species="Li",
-        vertex_species="O",
-        cutoff=2.5,
-        n_vertices=4
-    )
-    .build())
-```
-
+The package employs a builder pattern interface that provides method chaining for intuitive configuration while ensuring parameter validation. 
 This enables researchers to apply sophisticated site definitions without developing custom analysis code for each system. The software supports standard molecular dynamics formats including VASP XDATCAR files and integrates with the pymatgen ecosystem, facilitating incorporation into existing computational workflows. Full documentation and tutorials are available at https://site-analysis.readthedocs.io.
+
+The software has previously been used to elucidate ion-transport mechanisms in a range of materials, including lithium-ion and fluoride-ion solid electrolytes [@Morgan2021][@Mercadier2023][@Krenzer2023]. The package was initially written to reproduce an earlier Fortran code that used dynamically defined coordination polyhedra, which was used to study ion-transport and defect distributions in a range of solid electrolyte materials [@Burbano2016][@Morgan2014].
 
 # Acknowledgements
 

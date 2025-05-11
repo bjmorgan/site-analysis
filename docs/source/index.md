@@ -54,13 +54,6 @@ guides/polyhedral_sites
 ```
 
 ```{toctree}
-:maxdepth: 1
-:caption: Tutorials & Examples
-
-examples/shortest_distance_sites
-```
-
-```{toctree}
 :maxdepth: 2
 :caption: API Reference
 

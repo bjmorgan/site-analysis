@@ -1,5 +1,9 @@
 # Working with Spherical Sites
 
+Spherical sites are the simplest site type in `site_analysis`, defined by a centre position and radius. They represent spherical volumes within a crystal structure where mobile ions can reside. An atom is considered to be within a spherical site if the distance between the atom and the site centre is less than or equal to the site's radius.
+
+For a conceptual overview of spherical sites, see the [spherical sites concepts page](../concepts/sites.md#spherical-sites).
+
 This guide covers practical aspects of using spherical sites in your analysis, including when to use them, how to configure them, and how to handle their limitations.
 
 ## When to Use Spherical Sites

@@ -4,6 +4,7 @@ import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.atom import Atom
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -1123,6 +1124,82 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Verify with_spherical_sites was called with the single label
 			mock_builder.with_spherical_sites.assert_called_once_with(centres, radii, label)
+			
+	def test_builder_state_reset_after_build(self):
+		"""Test that the builder resets its entire state after build() is called."""
+		# Create a builder
+		builder = TrajectoryBuilder()
+		
+		# Set state directly to non-default values
+		builder._structure = Mock(spec=Structure)
+		builder._reference_structure = Mock(spec=Structure)
+		builder._mobile_species = "Li"
+		builder._atoms = [Mock(spec=Atom)]
+		builder._align = False
+		builder._align_species = ["Na"]
+		builder._align_metric = "max_dist"
+		builder._mapping_species = ["Cl"]
+		builder._site_generators = [lambda: []]
+		
+		# Mock the methods called within build
+		with patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'), \
+			patch('site_analysis.builders.Site.reset_index'):
+			
+			# Call build
+			builder.build()
+			
+			# Verify entire state is reset
+			self.assertIsNone(builder._structure)
+			self.assertIsNone(builder._reference_structure)
+			self.assertIsNone(builder._mobile_species)
+			self.assertIsNone(builder._atoms)
+			self.assertTrue(builder._align)  # Default is True
+			self.assertIsNone(builder._align_species)
+			self.assertEqual(builder._align_metric, 'rmsd')
+			self.assertIsNone(builder._mapping_species)
+			self.assertEqual(builder._site_generators, [])
+			
+	def test_reset(self):
+		"""Test that the reset() method returns all builder attributes to default values."""
+		# Create a builder
+		builder = TrajectoryBuilder()
+		
+		# Set state to non-default values
+		builder._structure = Mock(spec=Structure)
+		builder._reference_structure = Mock(spec=Structure)
+		builder._mobile_species = "Li"
+		builder._atoms = [Mock(spec=Atom)]
+		builder._align = False
+		builder._align_species = ["Na"]
+		builder._align_metric = "max_dist"
+		builder._mapping_species = ["Cl"]
+		builder._site_generators = [lambda: []]
+		
+		# Call reset and verify it returns self for chaining
+		result = builder.reset()
+		self.assertIs(result, builder, "reset() should return self for method chaining")
+		
+		# Verify all attributes are reset to defaults
+		self.assertIsNone(builder._structure)
+		self.assertIsNone(builder._reference_structure)
+		self.assertIsNone(builder._mobile_species)
+		self.assertIsNone(builder._atoms)
+		self.assertTrue(builder._align)  # Default is True
+		self.assertIsNone(builder._align_species)
+		self.assertEqual(builder._align_metric, 'rmsd')
+		self.assertIsNone(builder._mapping_species)
+		self.assertEqual(builder._site_generators, [])
+		
+	def test_initialization_calls_reset(self):
+		"""Test that TrajectoryBuilder.__init__() calls reset()."""
+		# Patch the reset method
+		with patch.object(TrajectoryBuilder, 'reset') as mock_reset:
+			# Create a new TrajectoryBuilder instance
+			builder = TrajectoryBuilder()
+			
+			# Verify reset() was called exactly once
+			mock_reset.assert_called_once()
 	
 if __name__ == '__main__':
 	unittest.main()

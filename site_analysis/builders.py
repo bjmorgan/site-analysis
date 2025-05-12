@@ -107,22 +107,40 @@ class TrajectoryBuilder:
 	"""
 	
 	def __init__(self) -> None:
-		"""Initialize a TrajectoryBuilder."""
+		"""Initialize a TrajectoryBuilder.
+		
+		Creates a new builder with all attributes set to their default values.
+		"""
+		# Call reset() to set all attributes to their default values
+		self.reset()
+	
+	def reset(self) -> 'TrajectoryBuilder':
+		"""Reset the builder state to default values.
+		
+		This method clears all configuration and returns the builder to its
+		initial state. It is called automatically during initialization and
+		after build(), but can also be called explicitly if needed.
+		
+		Returns:
+			self: For method chaining
+		"""
 		self._structure: Optional[Structure] = None
-		self._reference_structure: Optional[Structure] = None
-		self._mobile_species: Optional[Union[str, list[str]]] = None
+		self._reference_structure: Optional[Structure]= None
+		self._mobile_species: Optional[str|list[str]] = None
 		self._atoms: Optional[list[Atom]] = None
 		
 		# Alignment options
-		self._align: bool = True
+		self._align = True
 		self._align_species: Optional[list[str]] = None
-		self._align_metric: str = 'rmsd'
+		self._align_metric = 'rmsd'
 		
 		# Mapping options
 		self._mapping_species: Optional[list[str]] = None
 		
 		# Functions to be called during build() to create sites
-		self._site_generators: list[Callable[[], Sequence[Site]]] = []
+		self._site_generators: list[Callable] = []
+		
+		return self
 		
 	def with_structure(self, structure) -> TrajectoryBuilder:
 		"""Set the structure to analyse.
@@ -481,6 +499,9 @@ class TrajectoryBuilder:
 			
 		# Create trajectory
 		trajectory = Trajectory(sites=sites, atoms=self._atoms)
+		
+		# Reset the builder state for future use
+		self.reset()
 		
 		return trajectory
 

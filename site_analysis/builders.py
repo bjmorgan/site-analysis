@@ -124,21 +124,21 @@ class TrajectoryBuilder:
 		Returns:
 			self: For method chaining
 		"""
-		self._structure = None
-		self._reference_structure = None
-		self._mobile_species = None
-		self._atoms = None
+		self._structure: Optional[Structure] = None
+		self._reference_structure: Optional[Structure]= None
+		self._mobile_species: Optional[str|list[str]] = None
+		self._atoms: Optional[list[Atom]] = None
 		
 		# Alignment options
 		self._align = True
-		self._align_species = None
+		self._align_species: Optional[list[str]] = None
 		self._align_metric = 'rmsd'
 		
 		# Mapping options
-		self._mapping_species = None
+		self._mapping_species: Optional[list[str]] = None
 		
 		# Functions to be called during build() to create sites
-		self._site_generators = []
+		self._site_generators: list[Callable] = []
 		
 		return self
 		

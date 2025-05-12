@@ -24,6 +24,11 @@ Please include the full citation with DOI.
 
 ## Publications Using the Python site-analysis Package
 
+- **Enabling ionic transport in Li<sub>3</sub>AlP<sub>2</sub>: the roles of defects and disorder**
+  Hu, J., Squires, A.G., Kondek, J., Johnson, M.J., Youd, A.B., Vadhva, P., Paul, P.P., Withers, P.J., Di Michiel, M., Keeble, D.S., Hansen, M.R., Scanlon, D.O., and Rettie, A.J.E.
+  *Journal of Materials Chemistry A*, 13, 6427-6439 (2025)
+  DOI: [10.1039/D4TA04347B](https://doi.org/10.1039/D4TA04347B)
+
 - **Nature of the Superionic Phase Transition of Lithium Nitride from Machine Learning Force Fields**  
   Krenzer, G., Klarbring, J., Tolborg, K., Rossignol, H., McCluskey, A.R., Morgan, B.J., and Walsh, A.  
   *Chemistry of Materials*, 35, 6133-6140 (2023)  
@@ -82,7 +87,7 @@ The following publications used earlier implementations of tetrahedral site proj
   *Journal of Physics: Condensed Matter*, 13, 9963 (2001)  
   DOI: [10.1088/0953-8984/13/44/311](https://doi.org/10.1088/0953-8984/13/44/311)
 
-- **Polarization effects in the simulation of lead (ii) fluoride**  
+- **Polarization effects in the simulation of lead (II) fluoride**  
   Castiglione, M.J., Wilson, M. and Madden, P.A.  
   *Journal of Physics: Condensed Matter*, 11, 9009-9024 (1999)  
   DOI: [10.1088/0953-8984/11/46/303](https://doi.org/10.1088/0953-8984/11/46/303)

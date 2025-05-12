@@ -58,7 +58,7 @@ guides/polyhedral_sites
 :maxdepth: 1
 :caption: Resources
 
-resources/references
+resources/publications
 
 ```
 

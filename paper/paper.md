@@ -43,6 +43,6 @@ The software has previously been used to elucidate ion-transport mechanisms in a
 
 # Acknowledgements
 
-B.J.M. acknowledges support from the Royal Society (UF130329 and URF\R\191006).
+B.J.M. acknowledges support from the Royal Society (UF130329 and URF/R/191006).
 
 # References

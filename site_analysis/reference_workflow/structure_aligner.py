@@ -19,8 +19,8 @@ sites in one structure based on a template from another structure.
 
 import numpy as np
 from pymatgen.core import Structure
-from scipy.optimize import minimize # type: ignore
-from typing import List, Dict, Tuple, Optional, Union, Any
+from scipy.optimize import minimize
+from typing import Optional, Union, Any
 from site_analysis.tools import calculate_species_distances
 
 class StructureAligner:
@@ -34,15 +34,15 @@ class StructureAligner:
 	def align(self, 
 			reference: Structure, 
 			target: Structure, 
-			species: Optional[List[str]] = None, 
+			species: Optional[list[str]] = None, 
 			metric: str = 'rmsd', 
-			tolerance: float = 0.1) -> Tuple[Structure, np.ndarray, Dict[str, float]]:
+			tolerance: float = 1e-4) -> tuple[Structure, np.ndarray, dict[str, float]]:
 		"""Align reference structure to target structure via translation.
 		
 		Args:
 			reference: Reference structure to be aligned.
 			target: Target structure to align to.
-			species: List of species to use for alignment.
+			species: list of species to use for alignment.
 				If None, all common species will be used.
 			metric: Metric to optimize. Options are:
 				'rmsd': Root mean square deviation
@@ -54,7 +54,7 @@ class StructureAligner:
 			tuple: (aligned_structure, translation_vector, metrics)
 				aligned_structure: The aligned reference structure.
 				translation_vector: The translation vector used for alignment.
-				metrics: Dict with alignment quality metrics.
+				metrics: dict with alignment quality metrics.
 				
 		Raises:
 			ValueError: If the structures cannot be aligned due to different
@@ -89,12 +89,11 @@ class StructureAligner:
 				raise ValueError(f"Unknown metric: {metric}")
 		
 		# Perform optimization
-		from scipy.optimize import minimize
 		result = minimize(
 			objective_function,
 			x0=[0, 0, 0],  # Start with zero translation
 			method='Nelder-Mead',
-			options={'xatol': 1e-4, 'fatol': 1e-4}
+			options={'xatol': tolerance, 'fatol': tolerance}
 		)
 		
 		if not result.success:
@@ -121,16 +120,16 @@ class StructureAligner:
 	def _validate_structures(self, 
 							reference: Structure, 
 							target: Structure, 
-							species: Optional[List[str]] = None) -> List[str]:
+							species: Optional[list[str]] = None) -> list[str]:
 		"""Validate that structures can be aligned and determine species to use.
 		
 		Args:
 			reference: Reference structure
 			target: Target structure
-			species: List of species to use for alignment
+			species: list of species to use for alignment
 			
 		Returns:
-			List of species to use for alignment
+			list of species to use for alignment
 			
 		Raises:
 			ValueError: If structures cannot be aligned

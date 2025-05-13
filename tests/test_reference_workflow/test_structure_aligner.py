@@ -420,6 +420,46 @@ class TestStructureAligner(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             aligner._validate_structures(structure_a, structure_c, ["Na"])
         self.assertIn("Different number of Na atoms", str(context.exception))
+        
+    def test_tolerance_passed_to_minimizer(self):
+        """Test that the tolerance parameter is correctly passed to minimize."""
+        # Mock structures - simple mocks are sufficient
+        reference = Mock(spec=Structure)
+        target = Mock(spec=Structure)
+        
+        # Create aligner
+        aligner = StructureAligner()
+        
+        # Mock _validate_structures to avoid structure validation
+        aligner._validate_structures = Mock(return_value=["Na"])
+        
+        # Mock _apply_translation to return a mock structure
+        aligned_structure = Mock(spec=Structure)
+        aligner._apply_translation = Mock(return_value=aligned_structure)
+        
+        # Custom tolerance value
+        custom_tolerance = 0.05
+        
+        # Mock minimize to check if it receives the correct options
+        with patch('site_analysis.reference_workflow.structure_aligner.minimize') as mock_minimize:
+            # Configure mock to return a valid result
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.x = np.array([0.1, 0.1, 0.1])
+            mock_minimize.return_value = mock_result
+            
+            # Also mock calculate_species_distances for the metrics calculation
+            with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
+                mock_calc_distances.return_value = ({}, [0.1])
+                
+                # Call align with custom tolerance
+                aligner.align(reference, target, tolerance=custom_tolerance)
+                
+                # Check that minimize was called with the correct tolerance values
+                _, kwargs = mock_minimize.call_args
+                options = kwargs['options']
+                self.assertEqual(options['xatol'], custom_tolerance)
+                self.assertEqual(options['fatol'], custom_tolerance)
 
 if __name__ == '__main__':
     unittest.main()

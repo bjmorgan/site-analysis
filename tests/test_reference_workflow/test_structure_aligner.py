@@ -7,7 +7,7 @@ structures by finding optimal translation vectors.
 import unittest
 import numpy as np
 from pymatgen.core import Structure, Lattice
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 from site_analysis.reference_workflow.structure_aligner import StructureAligner
 
@@ -422,7 +422,7 @@ class TestStructureAligner(unittest.TestCase):
         self.assertIn("Different number of Na atoms", str(context.exception))
         
     def test_tolerance_passed_to_minimizer(self):
-        """Test that the tolerance parameter is correctly passed to minimize."""
+        """Test that the tolerance parameter is correctly passed to the minimizer."""
         # Mock structures - simple mocks are sufficient
         reference = Mock(spec=Structure)
         target = Mock(spec=Structure)
@@ -433,20 +433,21 @@ class TestStructureAligner(unittest.TestCase):
         # Mock _validate_structures to avoid structure validation
         aligner._validate_structures = Mock(return_value=["Na"])
         
-        # Mock _apply_translation to return a mock structure
-        aligned_structure = Mock(spec=Structure)
-        aligner._apply_translation = Mock(return_value=aligned_structure)
+        # Mock _create_objective_function to return a simple objective function
+        mock_objective = Mock(return_value=0.1)
+        aligner._create_objective_function = Mock(return_value=mock_objective)
         
         # Custom tolerance value
         custom_tolerance = 0.05
         
-        # Mock minimize to check if it receives the correct options
-        with patch('site_analysis.reference_workflow.structure_aligner.minimize') as mock_minimize:
-            # Configure mock to return a valid result
-            mock_result = Mock()
-            mock_result.success = True
-            mock_result.x = np.array([0.1, 0.1, 0.1])
-            mock_minimize.return_value = mock_result
+        # Mock _run_nelder_mead to check if it receives the correct tolerance
+        with patch.object(aligner, '_run_nelder_mead') as mock_run_nelder_mead:
+            # Configure mock to return a valid translation vector
+            mock_run_nelder_mead.return_value = np.array([0.1, 0.1, 0.1])
+            
+            # Mock _apply_translation to return a mock structure
+            aligned_structure = Mock(spec=Structure)
+            aligner._apply_translation = Mock(return_value=aligned_structure)
             
             # Also mock calculate_species_distances for the metrics calculation
             with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
@@ -455,11 +456,94 @@ class TestStructureAligner(unittest.TestCase):
                 # Call align with custom tolerance
                 aligner.align(reference, target, tolerance=custom_tolerance)
                 
-                # Check that minimize was called with the correct tolerance values
-                _, kwargs = mock_minimize.call_args
-                options = kwargs['options']
-                self.assertEqual(options['xatol'], custom_tolerance)
-                self.assertEqual(options['fatol'], custom_tolerance)
+                # Check that _run_nelder_mead was called with the correct tolerance value
+                mock_run_nelder_mead.assert_called_once()
+                args, kwargs = mock_run_nelder_mead.call_args
+                self.assertEqual(args[0], mock_objective)  # First arg is objective function
+                self.assertEqual(args[1], custom_tolerance)  # Second arg is tolerance
+                
+    def test_create_objective_function(self):
+        """Test that _create_objective_function properly creates an objective function."""
+        # Create aligner
+        aligner = StructureAligner()
+        
+        # Use MagicMock which handles magic methods better
+        reference = MagicMock(spec=Structure)
+        target = MagicMock(spec=Structure)
+        
+        # Set up frac_coords and length behaviour
+        frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+        reference.frac_coords = frac_coords
+        reference.__len__.return_value = 2
+        
+        # Create site mocks
+        site_mocks = []
+        for i in range(2):
+            site_mock = MagicMock()
+            site_mock.species = f"species_{i}"
+            site_mocks.append(site_mock)
+        
+        # Configure indexing behaviour
+        reference.__getitem__.side_effect = lambda i: site_mocks[i]
+        
+        # Create a copy mock with the same behaviour
+        copy_mock = MagicMock(spec=Structure)
+        copy_mock.frac_coords = frac_coords.copy()
+        copy_mock.__len__.return_value = 2
+        copy_mock.__getitem__.side_effect = lambda i: site_mocks[i]
+        reference.copy.return_value = copy_mock
+        
+        # Mock calculate_species_distances
+        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
+            # Configure mock to return a known value
+            mock_calc_distances.return_value = ({}, [0.1, 0.2])
+            
+            # Create the objective function
+            objective_function = aligner._create_objective_function(
+                reference, target, valid_species=["Na"], metric='rmsd')
+            
+            # Verify the objective function is callable
+            self.assertTrue(callable(objective_function))
+            
+            # Test the objective function with a translation vector
+            result = objective_function(np.array([0.1, 0.1, 0.1]))
+            
+            # Verify calculate_species_distances was called
+            mock_calc_distances.assert_called_once()
+            
+            # Verify result is a float (the RMSD value)
+            self.assertIsInstance(result, float)
+            
+    def test_run_nelder_mead(self):
+        """Test that _run_nelder_mead properly runs the Nelder-Mead algorithm."""
+        # Create aligner
+        aligner = StructureAligner()
+        
+        # Create a mock objective function
+        objective_function = Mock(return_value=0.1)
+        
+        # Mock minimize to check if it receives the correct parameters
+        with patch('scipy.optimize.minimize') as mock_minimize:
+            # Configure mock to return a valid result
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.x = np.array([0.1, 0.1, 0.1])
+            mock_minimize.return_value = mock_result
+            
+            # Call the method
+            result = aligner._run_nelder_mead(objective_function, tolerance=0.05)
+            
+            # Verify minimize was called with the correct parameters
+            mock_minimize.assert_called_once()
+            args, kwargs = mock_minimize.call_args
+            self.assertEqual(args[0], objective_function)
+            self.assertEqual(kwargs['method'], 'Nelder-Mead')
+            self.assertEqual(kwargs['x0'].tolist(), [0, 0, 0])
+            self.assertEqual(kwargs['options']['xatol'], 0.05)
+            self.assertEqual(kwargs['options']['fatol'], 0.05)
+            
+            # Verify the result
+            np.testing.assert_array_equal(result, [0.1, 0.1, 0.1])
 
 if __name__ == '__main__':
     unittest.main()

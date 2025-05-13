@@ -20,7 +20,7 @@ sites in one structure based on a template from another structure.
 import numpy as np
 from pymatgen.core import Structure
 from scipy.optimize import minimize
-from typing import Optional, Union, Any
+from typing import Optional, Union, Any, Callable
 from site_analysis.tools import calculate_species_distances
 
 class StructureAligner:
@@ -32,39 +32,58 @@ class StructureAligner:
 	"""
 	
 	def align(self, 
-			reference: Structure, 
-			target: Structure, 
-			species: Optional[list[str]] = None, 
-			metric: str = 'rmsd', 
-			tolerance: float = 1e-4) -> tuple[Structure, np.ndarray, dict[str, float]]:
-		"""Align reference structure to target structure via translation.
-		
-		Args:
-			reference: Reference structure to be aligned.
-			target: Target structure to align to.
-			species: list of species to use for alignment.
-				If None, all common species will be used.
-			metric: Metric to optimize. Options are:
-				'rmsd': Root mean square deviation
-				'max_dist': Maximum distance between any atom pair
-			tolerance: Tolerance for considering atoms as aligned.
-				Default is 0.1 Angstroms.
-				
-		Returns:
-			tuple: (aligned_structure, translation_vector, metrics)
-				aligned_structure: The aligned reference structure.
-				translation_vector: The translation vector used for alignment.
-				metrics: dict with alignment quality metrics.
-				
-		Raises:
-			ValueError: If the structures cannot be aligned due to different
-				composition or if no valid alignment is found.
-		"""
+		reference: Structure, 
+		target: Structure, 
+		species: Optional[list[str]] = None, 
+		metric: str = 'rmsd', 
+		tolerance: float = 1e-4) -> tuple[Structure, np.ndarray, dict[str, float]]:
+		"""Align reference structure to target structure via translation."""
 		# Validate structures and get species to use
 		valid_species = self._validate_structures(reference, target, species)
 		
-		# Define objective function for optimization
-		def objective_function(translation_vector):
+		# Create objective function using the extracted method
+		objective_function = self._create_objective_function(reference, target, valid_species, metric)
+		
+		# Run Nelder-Mead using the extracted method
+		translation_vector = self._run_nelder_mead(objective_function, tolerance)
+		
+		# Apply the translation to get the aligned structure
+		aligned_structure = self._apply_translation(reference, translation_vector)
+		
+		# Calculate final metrics
+		species_distances, all_distances = calculate_species_distances(
+			aligned_structure, target, species=valid_species)
+		
+		metrics = {
+			'rmsd': np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf'),
+			'max_dist': np.max(all_distances) if all_distances else float('inf'),
+			'mean_dist': np.mean(all_distances) if all_distances else float('inf')
+		}
+		
+		return aligned_structure, translation_vector, metrics
+		
+	def _create_objective_function(self, 
+		reference: Structure,
+		target: Structure,
+		valid_species: list[str],
+		metric: str) -> Callable[[np.ndarray], float]:
+		"""Create the objective function for optimization.
+		
+		Args:
+			reference: Reference structure
+			target: Target structure
+			valid_species: List of species to include in alignment
+			metric: Metric to optimize ('rmsd' or 'max_dist')
+			
+		Returns:
+			function: The objective function that takes a translation vector and
+					returns the distance metric value
+		"""
+		def objective_function(
+			translation_vector: np.ndarray) -> float:
+			# Ensure translation is in [0,1) range
+			translation_vector = translation_vector % 1.0
+			
 			# Apply translation to reference coordinates
 			translated_coords = reference.frac_coords + translation_vector
 			translated_coords = translated_coords % 1.0  # Apply PBC
@@ -82,40 +101,13 @@ class StructureAligner:
 				return float('inf')
 				
 			if metric == 'rmsd':
-				return np.sqrt(np.mean(np.array(all_distances)**2))
+				return float(np.sqrt(np.mean(np.array(all_distances)**2)))
 			elif metric == 'max_dist':
-				return np.max(all_distances)
+				return float(np.max(all_distances))
 			else:
 				raise ValueError(f"Unknown metric: {metric}")
 		
-		# Perform optimization
-		result = minimize(
-			objective_function,
-			x0=[0, 0, 0],  # Start with zero translation
-			method='Nelder-Mead',
-			options={'xatol': tolerance, 'fatol': tolerance}
-		)
-		
-		if not result.success:
-			raise ValueError(f"Optimization failed: {result.message}")
-		
-		# Get the optimal translation vector
-		translation_vector = result.x % 1.0  # Ensure in [0,1) range
-		
-		# Apply the translation to get the aligned structure
-		aligned_structure = self._apply_translation(reference, translation_vector)
-		
-		# Calculate final metrics
-		species_distances, all_distances = calculate_species_distances(
-			aligned_structure, target, species=valid_species)
-		
-		metrics = {
-			'rmsd': np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf'),
-			'max_dist': np.max(all_distances) if all_distances else float('inf'),
-			'mean_dist': np.mean(all_distances) if all_distances else float('inf')
-		}
-		
-		return aligned_structure, translation_vector, metrics
+		return objective_function
 	
 	def _validate_structures(self, 
 							reference: Structure, 
@@ -211,3 +203,50 @@ class StructureAligner:
 			new_structure[i] = site.species, frac_coords
 		
 		return new_structure
+		
+	def _run_nelder_mead(self, 
+					objective_function: Callable[[np.ndarray], float], 
+					tolerance: float, 
+					minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+		"""Run Nelder-Mead optimization.
+		
+		Args:
+			objective_function: Function to minimize
+			tolerance: Convergence tolerance
+			minimizer_options: Additional options for the minimizer
+			
+		Returns:
+			np.ndarray: Optimised translation vector
+			
+		Raises:
+			ValueError: If optimization fails
+		"""
+		from scipy.optimize import minimize
+		
+		# Ensure minimizer_options is a dictionary
+		minimizer_options = minimizer_options or {}
+		
+		# Default options - ensure they exactly match the original implementation
+		options: dict[str, Any] = {
+			'xatol': tolerance,
+			'fatol': tolerance
+		}
+		
+		# Update with user-provided options
+		options.update(minimizer_options)
+		
+		# Run optimization
+		result = minimize(
+			objective_function,
+			x0=np.array([0, 0, 0]),  # Start with zero translation
+			method='Nelder-Mead',
+			options=options
+		)
+		
+		if not result.success:
+			raise ValueError(f"Optimization failed: {result.message}")
+		
+		# Ensure in [0,1) range
+		return np.array(result.x) % 1.0
+		
+	

@@ -1,47 +1,31 @@
 # The Reference-Based Sites Workflow
 
-The Reference-Based Sites (RBS) workflow provides a powerful way to define sites in crystal structures based on coordination environments. This guide explains how the workflow operates and how to use it effectively.
+## Introduction
 
-## Overview
+The Reference-Based Sites workflow provides a method for defining crystallographic sites based on coordination environments rather than fixed spatial coordinates. This approach defines sites according to their chemical context within the structure, which persists even as the structure undergoes distortions during molecular dynamics simulations.
 
-The RBS workflow simplifies site definition by allowing you to:
-- Define sites based on coordination environments rather than absolute positions
-- Transfer site definitions from an idealised reference structure to real structures
-- Handle structural distortions and different ion populations
-- Maintain consistency based on chemical environments
+Rather than defining sites at absolute coordinates, this method identifies sites by their coordination environment (e.g., a site where a lithium ion is coordinated by four oxygen atoms). This definition remains meaningful even when atomic positions fluctuate due to thermal motion or structural relaxation.
 
-Most users interact with this workflow indirectly through the `TrajectoryBuilder` when creating polyhedral or dynamic Voronoi sites. Understanding how it works helps you make better choices when configuring the builder.
+The primary advantage of this workflow is its efficiency: it automates the creation of polyhedral and dynamic Voronoi sites, eliminating the need to define these sites manually. This simplifies what would otherwise be a laborious process of identifying and specifying site geometries.
 
-## How It Works
+## Basic Implementation
 
-The RBS workflow follows these key steps:
-
-1. **Structure Alignment** (optional): Finds the optimal translation to minimize the mismatch between structures (using specified species or all species)
-2. **Environment Finding**: Identifies coordination environments in the reference structure
-3. **Index Mapping**: Maps the atoms that define site geometry (vertex atoms for polyhedra, reference atoms for dynamic Voronoi) between structures
-4. **Site Creation**: Creates sites in the target structure using mapped indices
-
-```mermaid
-graph TD
-    A[Reference Structure] --> B[Find Coordination Environments]
-    C[Target Structure] --> D[Structure Alignment - Optional]
-    B --> E[Map Atom Indices]
-    D --> E
-    E --> F[Create Sites in Target]
-```
-
-## Using RBS Through the Builder
-
-The most common way to use the RBS workflow is through the `TrajectoryBuilder`:
+The most common way to use the Reference-Based Sites workflow is through the `TrajectoryBuilder` class, which provides a convenient interface to the underlying functionality:
 
 ```python
-# Define polyhedral sites using RBS workflow
+from site_analysis import TrajectoryBuilder
+from pymatgen.core import Structure
+
+# Load structures
+ideal_structure = Structure.from_file("ideal_structure.cif")
+target_structure = Structure.from_file("md_frame.vasp")
+
+# Create a trajectory with tetrahedral Li sites
+# This uses the RBS workflow internally through the TrajectoryBuilder
 trajectory = (TrajectoryBuilder()
     .with_structure(target_structure)
     .with_reference_structure(reference_structure)
     .with_mobile_species("Li")
-    .with_structure_alignment(align=True, align_species=["O"])
-    .with_site_mapping(mapping_species=["O"])
     .with_polyhedral_sites(
         centre_species="Li",
         vertex_species="O",
@@ -52,110 +36,52 @@ trajectory = (TrajectoryBuilder()
     .build())
 ```
 
-In this example:
-- The builder uses RBS internally to find Li-centered tetrahedral sites
-- Structure alignment uses O atoms as reference points
-- Site mapping also uses O atoms to identify corresponding polyhedra
-- Sites are created in the target structure based on mapped coordination
+This implementation:
+1. Uses an ideal reference structure to define tetrahedral coordination environments
+2. Creates corresponding sites in the target structure 
+3. Automatically aligns the reference structure to the target structure, ensuring the coordination environments can be correctly mapped between them
 
-## Understanding the Components
+The TrajectoryBuilder's `.with_polyhedral_sites()` and `.with_dynamic_voronoi_sites()` methods both utilize the RBS workflow internally, providing a streamlined interface for this functionality.
+
+## Workflow Mechanism
+
+The Reference-Based Sites workflow operates through these steps:
+
+1. Structure alignment between reference and target
+2. Identification of specified coordination environments in the reference structure
+3. Mapping of these environments from reference to target structure
+4. Creation of appropriate site objects in the target structure
+
+## Structure Requirements
+
+For the Reference-Based Sites workflow to function correctly, the reference and target structures must satisfy these essential requirements:
+
+1. **Matching atom counts for alignment species**: 
+   
+   The atomic species used for alignment must have identical counts in both the reference and target structures. This requirement can be satisfied through either full structure alignment (when reference and target have identical stoichiometry) or subset alignment (when they differ).
+   
+   Subset alignment allows sites defined in a stoichiometric reference structure to be mapped onto an off-stoichiometric target structure (containing vacancies or interstitials) by aligning solely on the framework atoms that are present in equal numbers in both structures.
+
+2. **Same supercell dimensions**: 
+   
+   Both structures must use consistent supercell conventions to ensure proper mapping between them. The absolute size of both structures must match to maintain the spatial relationship between coordination environments.
+
+3. **Same orientation**: 
+   
+   The structures must have identical orientations as the alignment process only handles translation, not rotation. Lattice vectors must be oriented consistently between the reference and target structures to ensure proper superposition.
+
+## Configuration Options
 
 ### Structure Alignment
 
-Structure alignment finds the optimal translation to minimize the mismatch between reference and target structures:
+When analyzing structures with different mobile ion content, alignment must be performed using framework atoms:
 
 ```python
-builder.with_structure_alignment(
-    align=True,              # Enable alignment
-    align_species=["O"],     # Use O atoms for alignment
-    align_metric='rmsd',     # Minimise RMSD
-    align_algorithm='Nelder-Mead',  # Optimization algorithm
-    align_minimizer_options={'maxiter': 1000}  # Additional options
-)
-```
-
-**How it works**:
-- If `align_species` is specified: Aligns using only those species (must have same count in both structures)
-- If `align_species` is None: Aligns using all species (structures must have identical stoichiometry)
-- `align_algorithm` controls the optimization method:
-  - 'Nelder-Mead': Default algorithm, works well for most cases
-  - 'differential_evolution': Global optimization that can be more robust for complex cases
-- `align_minimizer_options` allows passing additional parameters to the underlying scipy optimizer
-
-**When to use**: 
-- When structures have different coordinate origins
-- When aligning structures with different mobile ion content (align on framework atoms)
-
-**Note**: This only handles translation, not rotation or distortion.
-
-### Site Mapping
-
-Site mapping identifies corresponding atoms between structures - specifically, the atoms that define site geometry:
-
-- For **polyhedral sites**: Maps the vertex atoms that form the polyhedron
-- For **dynamic Voronoi sites**: Maps the reference atoms used to calculate site centres
-
-The purpose of mapping is to track these geometry-defining atoms as the structure undergoes topology-preserving changes (like thermal vibrations), allowing sites to adapt their shapes and positions accordingly.
-
-```python
-builder.with_site_mapping(
-    mapping_species=["O"]    # Map oxygen atoms that define site vertices
-)
-```
-
-**Why mapping matters**: When the framework vibrates or distorts, the mapped atoms move, and the sites automatically adjust their geometry to match. This creates "dynamic" sites that follow structural changes while maintaining their chemical identity.
-
-### Default Behaviours
-
-The builder implements smart defaults:
-- If you specify mapping species but not alignment species, mapping species are used for alignment
-- If you specify alignment species but not mapping species, alignment species are used for mapping
-- Alignment is enabled by default
-
-## Advanced Usage: Direct Reference Based Sites
-
-For advanced users, you can use the RBS workflow directly:
-
-```python
-from site_analysis.reference_workflow import ReferenceBasedSites
-
-# Create RBS instance
-rbs = ReferenceBasedSites(
-    reference_structure=reference_structure,
-    target_structure=target_structure,
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_algorithm='Nelder-Mead'
-)
-
-# Create polyhedral sites
-sites = rbs.create_polyhedral_sites(
-    center_species="Li",
-    vertex_species="O",
-    cutoff=2.5,
-    n_vertices=4,
-    label="tetrahedral",
-    target_species=["O"]  # Species to map in target
-)
-```
-
-## Common Patterns
-
-### Idealised Reference with Real Target
-
-The most common pattern uses an idealised structure as reference:
-
-```python
-# Load structures
-ideal_structure = Structure.from_file("ideal_LiFePO4.cif")
-md_structure = xdatcar.structures[0]
-
-# Create trajectory using idealised reference
 trajectory = (TrajectoryBuilder()
-    .with_structure(md_structure)
-    .with_reference_structure(ideal_structure)
+    .with_structure(target_structure)
+    .with_reference_structure(reference_structure)
     .with_mobile_species("Li")
+    .with_structure_alignment(align_species=["O", "Ti"])  # Framework atoms only
     .with_polyhedral_sites(
         centre_species="Li",
         vertex_species="O",
@@ -165,259 +91,102 @@ trajectory = (TrajectoryBuilder()
     .build())
 ```
 
-### Different Ion Populations
+This example shows how to specify framework atoms for alignment by using the `align_species` parameter. By selecting only framework species that have consistent counts in both structures, proper alignment can be achieved even when the mobile ion content differs.
 
-Handle structures with different numbers of mobile ions:
+### Site Mapping Configuration
+
+The site mapping process identifies which atoms define site geometry:
 
 ```python
-# Reference has all Li sites occupied, target has some vacancies
 trajectory = (TrajectoryBuilder()
-    .with_structure(partially_delithiated)
-    .with_reference_structure(fully_lithiated)
+    .with_structure(target_structure)
+    .with_reference_structure(reference_structure)
     .with_mobile_species("Li")
-    .with_structure_alignment(align=True, align_species=["O", "P"])  # Align on framework atoms
-    .with_site_mapping(mapping_species=["O"])  # Map using framework
+    .with_structure_alignment(align_species=["O", "Ti"])
+    .with_site_mapping(mapping_species=["O"])  # Use oxygen atoms for site definition
     .with_polyhedral_sites(
         centre_species="Li",
         vertex_species="O",
         cutoff=2.5,
-        n_vertices=6
+        n_vertices=4
     )
     .build())
 ```
 
-In this example, alignment works even though the structures have different Li content, because we align using the framework atoms (O and P) which have the same count in both structures.
+The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centers.
 
-### Framework-Based Alignment
+## Best Practices
 
-For accurate site mapping, align using immobile framework atoms:
+For optimal results:
 
-```python
-trajectory = (TrajectoryBuilder()
-    .with_structure(target)
-    .with_reference_structure(reference)
-    .with_mobile_species(["Li", "Na"])
-    .with_structure_alignment(
-        align=True,
-        align_species=["Ti", "O"]  # Align on framework
-    )
-    .with_site_mapping(
-        mapping_species=["O"]      # Map sites using oxygen positions
-    )
-    .with_polyhedral_sites(
-        centre_species="Li",
-        vertex_species="O",
-        cutoff=3.0,
-        n_vertices=6
-    )
-    .build())
+1. **Use crystallographically defined reference structures**
+   
+   Use structures with well-defined, regular coordination environments as references. Geometry-optimized structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyze in your target structures.
+
+2. **Select appropriate alignment species**
+   
+   Use immobile framework atoms for alignment to ensure reliable mapping between structures. Framework atoms typically maintain more consistent positions compared to mobile species being studied.
+
+3. **Adjust cutoff parameters as needed**
+   
+   Optimize cutoff values based on typical bond distances in your system. Different materials may require different cutoff values to properly identify coordination environments, so some experimentation with these parameters may be necessary.
+
+## Troubleshooting
+
+Common issues and their solutions:
+
+### No Sites Found
+
+```
+ValueError: No polyhedral sites found for centre_species='Li', vertex_species='O'...
 ```
 
-## Optimization Options for Structure Alignment
+This error occurs when the specified coordination environments cannot be found in the reference structure. Adjust the `cutoff` value incrementally to capture the appropriate coordination shells. Verify that the specified species exist in the reference structure, and confirm that `n_vertices` corresponds to the actual coordination environment.
 
-When aligning structures, you can choose between different optimization algorithms with `align_algorithm` and configure their behavior with `align_minimizer_options`. These settings control how the optimal translation vector is found when aligning structures.
+### Alignment Errors
 
-### Available Algorithms
-
-#### Nelder-Mead (Default)
-
-The Nelder-Mead simplex algorithm is a local optimization method that works well for most structure alignment cases.
-
-```python
-# Basic usage with default settings
-builder.with_structure_alignment(
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd'
-)
-
-# With custom options
-builder.with_structure_alignment(
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_algorithm='Nelder-Mead',
-    align_minimizer_options={
-        'maxiter': 1000,    # Maximum number of iterations
-        'xatol': 1e-5,      # Absolute error in x between iterations
-        'fatol': 1e-5       # Absolute error in function value
-    }
-)
 ```
-#### Differential Evolution
-
-Differential Evolution is a global optimization algorithm that can be more robust for complex cases where the local optimization might get stuck in suboptimal solutions.
-
-```python
-builder.with_structure_alignment(
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_algorithm='differential_evolution',
-    align_minimizer_options={
-        'popsize': 15,           # Population size multiplier
-        'strategy': 'best1bin',  # Differential evolution strategy
-        'tol': 1e-4,             # Convergence tolerance
-        'maxiter': 1000,         # Maximum number of iterations
-        'updating': 'immediate'  # Population updating scheme
-    }
-)
+ValueError: Different number of O atoms: 24 in reference vs 20 in target
 ```
-### When to Use Each Algorithm
 
-- **Nelder-Mead (Default)**: Use for most standard alignment cases. It is efficient and works well when structures are reasonably similar.
+This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
 
-- **Differential Evolution**: Consider when:
-  - Nelder-Mead fails to find a good alignment
-  - Structures have significant differences or distortions
-  - You suspect the optimisation might be getting trapped in local minima
-  - You need a more thorough exploration of possible alignments
+### Mapping Conflicts
 
-### Direct Usage with ReferenceBasedSites
+```
+ValueError: 1:1 mapping violation: Multiple reference atoms map to the same target atom(s)
+```
 
-When using `ReferenceBasedSites` directly, you can specify these options:
+This error occurs when the mapping cannot establish a one-to-one correspondence between reference and target atoms. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
+
+## Advanced Implementation
+
+For specialized applications requiring more direct control, the RBS workflow can be accessed directly:
 
 ```python
 from site_analysis.reference_workflow import ReferenceBasedSites
 
-# Using Nelder-Mead with custom options
+# Initialize the reference-based workflow
 rbs = ReferenceBasedSites(
     reference_structure=reference_structure,
     target_structure=target_structure,
     align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_algorithm='Nelder-Mead',
-    align_minimizer_options={'maxiter': 2000, 'xatol': 1e-6}
+    align_species=["O"]
 )
 
-# Using Differential Evolution
-rbs = ReferenceBasedSites(
-    reference_structure=reference_structure,
-    target_structure=target_structure,
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_algorithm='differential_evolution',
-    align_minimizer_options={
-        'popsize': 20,
-        'tol': 1e-5,
-        'strategy': 'best1bin'
-    }
+# Create polyhedral sites
+polyhedral_sites = rbs.create_polyhedral_sites(
+    center_species="Li",
+    vertex_species="O",
+    cutoff=2.5,
+    n_vertices=4,
+    label="tetrahedral"
 )
+
+# These sites can then be used with custom analysis workflows
+from site_analysis import Trajectory, atoms_from_structure
+atoms = atoms_from_structure(target_structure, "Li")
+trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
 ```
 
-### Diagnosing Alignment Issues
-
-If alignment is failing or giving poor results:
-
-1. Try switching algorithms (e.g., from Nelder-Mead to differential_evolution)
-2. Adjust tolerance parameters to be more lenient
-3. Increase iteration limits
-4. Check alignment quality metrics after alignment:
-5. Check your reference and target structures to ensure that alignemnt is possible in principle.
-
-```python
-# When using RBS directly
-rbs = ReferenceBasedSites(...)
-print(f"RMSD: {rbs.alignment_metrics['rmsd']:.6f} Å")
-print(f"Maximum distance: {rbs.alignment_metrics['max_dist']:.6f} Å")
-```
-
-Lower RMSD and maximum distance values indicate better alignment quality.
-
-## When to Use Reference-Based Sites
-
-The RBS workflow is particularly useful when:
-
-1. **You have an idealised reference structure** with well-defined coordination environments
-2. **Target structures are distorted** but maintain the same topology
-3. **Ion populations vary** between structures
-4. **You want consistent site definitions** across multiple structures
-
-## Best Practices
-
-1. **Choose appropriate reference structures**:
-   - Use idealised structures with regular coordination
-   - Ensure the reference has all possible site types
-
-2. **Select alignment species carefully**:
-   - Use framework atoms that move minimally
-   - Avoid using mobile species for alignment
-
-3. **Match mapping species to site definition**:
-   - For polyhedral sites, mapping species should match vertex species
-   - For dynamic Voronoi sites, mapping species should match reference species
-
-4. **Handle edge cases**:
-   - Check for successful site creation (builder will raise errors if none found)
-   - Verify alignment quality by visualising aligned structures
-
-## Understanding Site Mapping in Detail
-
-The mapping process is crucial because it identifies which atoms in the target structure correspond to the geometry-defining atoms in the reference structure:
-
-### For Polyhedral Sites
-- **What's mapped**: The vertex atoms that form each polyhedron
-- **Why**: As the structure vibrates or distorts, these vertex positions change, and the polyhedral sites adapt their shape accordingly
-- **Example**: In an octahedral site defined by 6 oxygen vertices, mapping tracks these 6 specific oxygen atoms
-
-### For Dynamic Voronoi Sites
-- **What's mapped**: The reference atoms used to calculate each site's centre
-- **Why**: The site centre is recalculated at each timestep based on the current positions of these reference atoms
-- **Example**: A site centre defined by 4 framework atoms will move as those atoms vibrate
-
-This mapping enables sites to be "dynamic" - their geometry updates automatically as the structure changes, providing more accurate site assignments in real structures with thermal motion.
-
-## Troubleshooting
-
-### No sites found
-```python
-# ValueError: No polyhedral sites found for centre_species='Li', 
-# vertex_species='O', cutoff=2.5, n_vertices=4. Try adjusting 
-# these parameters or verify that the specified species exist in the structure.
-```
-**Solutions**:
-- Adjust cutoff distance
-- Check n_vertices matches actual coordination
-- Verify species exist in structures
-- Check structure alignment succeeded
-
-### Alignment optimization failure
-```python
-# ValueError: Optimization failed: [optimizer message]
-```
-**Solutions**:
-- Check that structures are related (not completely different materials)
-- Verify alignment species are present in both structures
-- Try different alignment species
-
-### Mapping violations
-```python
-# ValueError: 1:1 mapping violation: Multiple reference atoms map to 
-# the same target atom(s) at indices [5, 12]
-```
-**Solutions**:
-- Use different mapping species
-- Ensure structures have compatible topologies
-- Check for duplicate atoms or overlapping positions
-
-### Structure compatibility issues
-```python
-# ValueError: Different number of O atoms: 24 in reference vs 20 in target
-```
-**Solutions**:
-- Use species that have the same count in both structures
-- For different compositions, align and map using framework atoms only
-
-### Alignment quality
-After successful alignment, check the quality metrics:
-```python
-# When using RBS directly, you can access:
-# rbs.alignment_metrics['rmsd']  # Check if this is reasonable
-# rbs.alignment_metrics['max_dist']
-```
-**Solutions** for high RMSD:
-- Verify structures are actually related
-- Use more representative alignment species
-- Check for significant structural distortions
+This direct approach provides additional control for specialized analyses and can be integrated with custom analysis workflows.

@@ -68,13 +68,19 @@ Structure alignment finds the optimal translation to minimize the mismatch betwe
 builder.with_structure_alignment(
     align=True,              # Enable alignment
     align_species=["O"],     # Use O atoms for alignment
-    align_metric='rmsd'      # Minimise RMSD
+    align_metric='rmsd',     # Minimise RMSD
+    align_algorithm='Nelder-Mead',  # Optimization algorithm
+    align_minimizer_options={'maxiter': 1000}  # Additional options
 )
 ```
 
 **How it works**:
 - If `align_species` is specified: Aligns using only those species (must have same count in both structures)
 - If `align_species` is None: Aligns using all species (structures must have identical stoichiometry)
+- `align_algorithm` controls the optimization method:
+  - 'Nelder-Mead': Default algorithm, works well for most cases
+  - 'differential_evolution': Global optimization that can be more robust for complex cases
+- `align_minimizer_options` allows passing additional parameters to the underlying scipy optimizer
 
 **When to use**: 
 - When structures have different coordinate origins
@@ -106,7 +112,7 @@ The builder implements smart defaults:
 - If you specify alignment species but not mapping species, alignment species are used for mapping
 - Alignment is enabled by default
 
-## Advanced Usage: Direct RBS
+## Advanced Usage: Direct Reference Based Sites
 
 For advanced users, you can use the RBS workflow directly:
 
@@ -119,7 +125,8 @@ rbs = ReferenceBasedSites(
     target_structure=target_structure,
     align=True,
     align_species=["O"],
-    align_metric='rmsd'
+    align_metric='rmsd',
+    align_algorithm='Nelder-Mead'
 )
 
 # Create polyhedral sites
@@ -205,6 +212,132 @@ trajectory = (TrajectoryBuilder()
     )
     .build())
 ```
+
+## Optimization Options for Structure Alignment
+
+When aligning structures, you can choose between different optimization algorithms with `align_algorithm` and configure their behavior with `align_minimizer_options`. These settings control how the optimal translation vector is found when superimposing structures.
+
+### Available Algorithms
+
+#### Nelder-Mead (Default)
+
+The Nelder-Mead simplex algorithm is a local optimization method that works well for most structure alignment cases. It's efficient and doesn't require derivative information.
+
+```python
+# Basic usage with default settings
+builder.with_structure_alignment(
+    align=True,
+    align_species=["O"],
+    align_metric='rmsd'
+)
+
+# With custom options
+builder.with_structure_alignment(
+    align=True,
+    align_species=["O"],
+    align_metric='rmsd',
+    align_algorithm='Nelder-Mead',
+    align_minimizer_options={
+        'maxiter': 1000,    # Maximum number of iterations
+        'xatol': 1e-5,      # Absolute error in x between iterations
+        'fatol': 1e-5       # Absolute error in function value
+    }
+)
+```
+
+**Key options:**
+- `maxiter`: Maximum number of iterations (default varies)
+- `xatol`: Absolute error in x between iterations that is acceptable for convergence
+- `fatol`: Absolute error in function value that is acceptable for convergence
+
+#### Differential Evolution
+
+Differential Evolution is a global optimization algorithm that can be more robust for complex cases where the local optimization might get stuck in suboptimal solutions.
+
+```python
+builder.with_structure_alignment(
+    align=True,
+    align_species=["O"],
+    align_metric='rmsd',
+    align_algorithm='differential_evolution',
+    align_minimizer_options={
+        'popsize': 15,           # Population size multiplier
+        'strategy': 'best1bin',  # Differential evolution strategy
+        'tol': 1e-4,             # Convergence tolerance
+        'maxiter': 1000,         # Maximum number of iterations
+        'updating': 'immediate'  # Population updating scheme
+    }
+)
+```
+
+**Key options:**
+- `popsize`: Population size multiplier (default: 15)
+- `strategy`: Differential evolution strategy (e.g., 'best1bin', 'rand1bin')
+- `tol`: Relative tolerance for convergence
+- `maxiter`: Maximum number of generations
+- `updating`: Population updating scheme ('immediate' or 'deferred')
+
+### When to Use Each Algorithm
+
+- **Nelder-Mead (Default)**: Use for most standard alignment cases. It's efficient and works well when structures are reasonably similar.
+
+- **Differential Evolution**: Consider when:
+  - Nelder-Mead fails to find a good alignment
+  - Structures have significant differences or distortions
+  - You suspect the optimization might be getting trapped in local minima
+  - You need a more thorough exploration of possible alignments
+
+### Direct Usage with ReferenceBasedSites
+
+When using `ReferenceBasedSites` directly, you can specify these options:
+
+```python
+from site_analysis.reference_workflow import ReferenceBasedSites
+
+# Using Nelder-Mead with custom options
+rbs = ReferenceBasedSites(
+    reference_structure=reference_structure,
+    target_structure=target_structure,
+    align=True,
+    align_species=["O"],
+    align_metric='rmsd',
+    align_algorithm='Nelder-Mead',
+    align_minimizer_options={'maxiter': 2000, 'xatol': 1e-6}
+)
+
+# Using Differential Evolution
+rbs = ReferenceBasedSites(
+    reference_structure=reference_structure,
+    target_structure=target_structure,
+    align=True,
+    align_species=["O"],
+    align_metric='rmsd',
+    align_algorithm='differential_evolution',
+    align_minimizer_options={
+        'popsize': 20,
+        'tol': 1e-5,
+        'strategy': 'best1bin'
+    }
+)
+```
+
+### Diagnosing Alignment Issues
+
+If alignment is failing or giving poor results:
+
+1. Try switching algorithms (e.g., from Nelder-Mead to differential_evolution)
+2. Adjust tolerance parameters to be more lenient
+3. Increase iteration limits
+4. Check alignment quality metrics after alignment:
+
+```python
+# When using RBS directly
+rbs = ReferenceBasedSites(...)
+print(f"RMSD: {rbs.alignment_metrics['rmsd']:.6f} Å")
+print(f"Maximum distance: {rbs.alignment_metrics['max_dist']:.6f} Å")
+```
+
+Lower RMSD and maximum distance values indicate better alignment quality.
 
 ## When to Use Reference-Based Sites
 

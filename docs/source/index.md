@@ -50,6 +50,7 @@ guides/spherical_sites
 guides/voronoi_sites
 guides/dynamic_voronoi_sites
 guides/polyhedral_sites
+guides/trajectories
 
 ```
 

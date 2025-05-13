@@ -156,7 +156,12 @@ class TestReferenceBasedSites(unittest.TestCase):
             
             # Check that align was called with correct parameters
             self.mock_structure_aligner.align.assert_called_with(
-                self.reference, self.target, species=['Na'], metric='max_dist'
+                self.reference,
+                self.target,
+                species=['Na'],
+                metric='max_dist',
+                algorithm='Nelder-Mead',
+                minimizer_options=None
             )
             
             # Check that attributes were updated correctly
@@ -614,6 +619,53 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertIs(args[1], self.target)        # Second arg should be target structure
             self.assertEqual(args[2], ref_environments) # Third arg should be environments list
             self.assertEqual(kwargs.get('target_species'), None)
+            
+    def test_align_structures_unit(self):
+        """Unit test for _align_structures - verifies parameters are correctly passed to StructureAligner."""
+        # Create mock structures
+        mock_reference = Mock(spec=Structure)
+        mock_target = Mock(spec=Structure)
+        
+        # Create test parameters
+        align_species = ["Na"]
+        align_metric = "max_dist"
+        align_algorithm = "differential_evolution"
+        align_minimizer_options = {"popsize": 20, "maxiter": 500}
+        
+        # Create ReferenceBasedSites with mocked structures but don't call _align_structures yet
+        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
+            # Configure mock
+            mock_aligner = Mock()
+            MockAligner.return_value = mock_aligner
+            mock_aligner.align.return_value = (Mock(), np.array([0.1, 0.1, 0.1]), {"rmsd": 0.1})
+            
+            # Create instance with align=False to avoid immediate call to _align_structures
+            rbs = ReferenceBasedSites(
+                reference_structure=mock_reference,
+                target_structure=mock_target,
+                align=False  # Important: don't align in the constructor
+            )
+            
+            # Now call _align_structures directly with our parameters
+            rbs._align_structures(
+                align_species=align_species,
+                align_metric=align_metric,
+                align_algorithm=align_algorithm,
+                align_minimizer_options=align_minimizer_options
+            )
+            
+            # Verify StructureAligner was created
+            MockAligner.assert_called_once()
+            
+            # Verify align was called with correct parameters
+            mock_aligner.align.assert_called_once()
+            _, kwargs = mock_aligner.align.call_args
+            
+            # Check each parameter was correctly passed
+            self.assertEqual(kwargs["species"], align_species)
+            self.assertEqual(kwargs["metric"], align_metric)
+            self.assertEqual(kwargs["algorithm"], align_algorithm)
+            self.assertEqual(kwargs["minimizer_options"], align_minimizer_options)
 
 
 if __name__ == '__main__':

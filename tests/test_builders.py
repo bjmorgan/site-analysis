@@ -868,7 +868,9 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				target_structure=self.structure,
 				align=True,
 				align_species=["O"],
-				align_metric='rmsd'
+				align_metric='rmsd',
+				align_algorithm='Nelder-Mead',
+				align_minimizer_options=None
 			)
 			
 			# Verify create_polyhedral_sites was called with the correct mapping parameters
@@ -1023,7 +1025,9 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				target_structure=self.structure,
 				align=True,  # Alignment should be enabled
 				align_species=["O"],  # Should use mapping species for alignment
-				align_metric='rmsd'
+				align_metric='rmsd',
+				align_algorithm='Nelder-Mead',
+				align_minimizer_options=None
 			)
 			
 	def test_with_spherical_sites_single_radius(self):
@@ -1200,6 +1204,86 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Verify reset() was called exactly once
 			mock_reset.assert_called_once()
+			
+	def test_with_structure_alignment_unit(self):
+		"""Unit test that with_structure_alignment correctly stores alignment parameters."""
+		# Create a test builder
+		builder = TrajectoryBuilder()
+		
+		# Define test parameters
+		align = True
+		align_species = ["Na"]
+		align_metric = "max_dist"
+		align_algorithm = "differential_evolution"
+		align_minimizer_options = {"popsize": 20, "maxiter": 500}
+		
+		# Call with_structure_alignment with our parameters
+		result = builder.with_structure_alignment(
+			align=align,
+			align_species=align_species,
+			align_metric=align_metric,
+			align_algorithm=align_algorithm,
+			align_minimizer_options=align_minimizer_options
+		)
+		
+		# Verify method returns self for chaining
+		self.assertIs(result, builder)
+		
+		# Verify parameters are correctly stored in instance variables
+		self.assertEqual(builder._align, align)
+		self.assertEqual(builder._align_species, align_species)
+		self.assertEqual(builder._align_metric, align_metric)
+		self.assertEqual(builder._align_algorithm, align_algorithm)
+		self.assertEqual(builder._align_minimizer_options, align_minimizer_options)
+		
+		# Test with single string for align_species
+		builder.with_structure_alignment(align_species="Ca")
+		self.assertEqual(builder._align_species, ["Ca"], 
+						"Single string species should be converted to a list")
+						
+	def test_factory_functions_with_alignment_options(self):
+		"""Test that factory functions accept and pass alignment algorithm and options."""
+		# Mock necessary classes
+		with patch('site_analysis.builders.TrajectoryBuilder') as MockBuilder, \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock builder
+			mock_builder = Mock()
+			MockBuilder.return_value = mock_builder
+			
+			# Configure method chaining
+			for method in ['with_structure', 'with_reference_structure', 'with_mobile_species',
+						'with_structure_alignment', 'with_polyhedral_sites', 'build']:
+				setattr(mock_builder, method, Mock(return_value=mock_builder))
+			
+			# Test with polyhedral sites
+			algorithm = 'differential_evolution'
+			minimizer_options = {'popsize': 20, 'maxiter': 500}
+			
+			create_trajectory_with_polyhedral_sites(
+				structure=Mock(spec=Structure),
+				reference_structure=Mock(spec=Structure),
+				mobile_species="Li",
+				centre_species="O",
+				vertex_species="Li",
+				cutoff=2.0,
+				n_vertices=4,
+				label="test",
+				align=True,
+				align_species=["O"],
+				align_metric="rmsd",
+				align_algorithm=algorithm,
+				align_minimizer_options=minimizer_options
+			)
+			
+			# Verify with_structure_alignment was called with all parameters
+			mock_builder.with_structure_alignment.assert_called_once()
+			args, kwargs = mock_builder.with_structure_alignment.call_args
+			self.assertEqual(kwargs['align'], True)
+			self.assertEqual(kwargs['align_species'], ["O"])
+			self.assertEqual(kwargs['align_metric'], "rmsd")
+			self.assertEqual(kwargs['align_algorithm'], algorithm)
+			self.assertEqual(kwargs['align_minimizer_options'], minimizer_options)
 	
 if __name__ == '__main__':
 	unittest.main()

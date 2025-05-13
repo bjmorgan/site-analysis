@@ -36,16 +36,18 @@ class StructureAligner:
 		target: Structure, 
 		species: Optional[list[str]] = None, 
 		metric: str = 'rmsd', 
-		tolerance: float = 1e-4) -> tuple[Structure, np.ndarray, dict[str, float]]:
+		tolerance: float = 1e-4,
+		algorithm: str = 'Nelder-Mead',
+		minimizer_options: Optional[dict[str, Any]] = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
 		"""Align reference structure to target structure via translation."""
 		# Validate structures and get species to use
 		valid_species = self._validate_structures(reference, target, species)
 		
-		# Create objective function using the extracted method
+		# Create objective function
 		objective_function = self._create_objective_function(reference, target, valid_species, metric)
 		
-		# Run Nelder-Mead using the extracted method
-		translation_vector = self._run_nelder_mead(objective_function, tolerance)
+		# Run the appropriate optimizer using the dispatcher
+		translation_vector = self._run_minimizer(algorithm, objective_function, tolerance, minimizer_options)
 		
 		# Apply the translation to get the aligned structure
 		aligned_structure = self._apply_translation(reference, translation_vector)
@@ -203,6 +205,55 @@ class StructureAligner:
 			new_structure[i] = site.species, frac_coords
 		
 		return new_structure
+	
+	def _run_minimizer(self,
+		algorithm: str, 
+		objective_function: Callable[[np.ndarray], float],
+		tolerance: float,
+		minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+		"""Run the selected minimization algorithm.
+		
+		Args:
+			algorithm: Name of the algorithm to run
+			objective_function: Function to minimize
+			tolerance: Convergence tolerance
+			minimizer_options: Additional options for the minimizer
+			
+		Returns:
+			np.ndarray: Optimal translation vector
+			
+		Raises:
+			ValueError: If the algorithm is not supported
+		"""
+		# Get the algorithm registry
+		algorithm_registry = self._get_algorithm_registry()
+		
+		# Check if algorithm is supported
+		if algorithm not in algorithm_registry:
+			raise ValueError(f"Unsupported algorithm: {algorithm}. "
+							f"Supported algorithms: {', '.join(algorithm_registry.keys())}")
+		
+		# Get the appropriate implementation method
+		run_algorithm = algorithm_registry[algorithm]
+		
+		# Call the selected algorithm implementation
+		return run_algorithm(objective_function, tolerance, minimizer_options)
+		
+	def _get_algorithm_registry(self) -> dict[str, 
+												Callable[
+													[Callable[[np.ndarray], float],
+													float,
+													Optional[dict[str, Any]]
+												], np.ndarray]]:
+		"""Get the registry of supported optimization algorithms.
+		
+		Returns:
+			dict: Dictionary mapping algorithm names to implementation methods
+		"""
+		return {
+			'Nelder-Mead': self._run_nelder_mead,
+			'differential_evolution': self._run_differential_evolution
+		}
 		
 	def _run_nelder_mead(self, 
 					objective_function: Callable[[np.ndarray], float], 
@@ -235,7 +286,7 @@ class StructureAligner:
 		# Update with user-provided options
 		options.update(minimizer_options)
 		
-		# Run optimization
+		# Run optimisation
 		result = minimize(
 			objective_function,
 			x0=np.array([0, 0, 0]),  # Start with zero translation
@@ -248,5 +299,54 @@ class StructureAligner:
 		
 		# Ensure in [0,1) range
 		return np.array(result.x) % 1.0
+		
+	def _run_differential_evolution(self,
+			objective_function: Callable[[np.ndarray], float],
+			tolerance: float,
+			minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+		"""Run differential evolution optimization.
+		
+		Args:
+			objective_function: Function to minimize
+			tolerance: Convergence tolerance
+			minimizer_options: Additional options for the minimizer
+			
+		Returns:
+			np.ndarray: Optimal translation vector
+		"""
+		from scipy.optimize import differential_evolution
+		
+		# Default options for differential evolution
+		options = {
+			'tol': tolerance,
+			'popsize': 15,
+			'maxiter': 1000,
+			'strategy': 'best1bin',
+			'updating': 'immediate',
+			'workers': 1  # Default to single process for compatibility
+		}
+		
+		# Bounds for translation vector (all components in [0,1))
+		bounds = [(0, 1), (0, 1), (0, 1)]
+		
+		# Update with user-provided options
+		if minimizer_options:
+			options.update(minimizer_options)
+		
+		# Extract bounds if provided in options
+		if minimizer_options and 'bounds' in minimizer_options:
+			bounds = minimizer_options.pop('bounds')
+			
+		# Run optimization
+		result = differential_evolution(
+			objective_function,
+			bounds=bounds,
+			**options
+		)
+		
+		if not result.success:
+			raise ValueError(f"Differential evolution optimization failed: {result.message}")
+		
+		return np.array(result.x) % 1.0  # Ensure in [0,1) range
 		
 	

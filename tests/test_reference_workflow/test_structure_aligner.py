@@ -544,6 +544,183 @@ class TestStructureAligner(unittest.TestCase):
             
             # Verify the result
             np.testing.assert_array_equal(result, [0.1, 0.1, 0.1])
+            
+    def test_run_differential_evolution_basic_functionality(self):
+        """Test that _run_differential_evolution calls the SciPy function correctly."""
+        # Create aligner
+        aligner = StructureAligner()
+        
+        # Create a simple mock objective function
+        objective_function = Mock()
+        
+        # Mock differential_evolution to avoid actual optimization
+        with patch('scipy.optimize.differential_evolution') as mock_de:
+            # Configure mock to return a simple result
+            mock_result = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
+            mock_de.return_value = mock_result
+            
+            # Call the method with minimal parameters
+            aligner._run_differential_evolution(objective_function, tolerance=0.05)
+            
+            # Simply verify that differential_evolution was called with the right function
+            mock_de.assert_called_once()
+            args, _ = mock_de.call_args
+            self.assertEqual(args[0], objective_function)
+    
+    def test_run_differential_evolution_returns_valid_translation(self):
+        """Test that _run_differential_evolution returns a valid translation vector."""
+        aligner = StructureAligner()
+        expected_translation = np.array([0.1, 0.2, 0.3])
+        
+        with patch('scipy.optimize.differential_evolution') as mock_de:
+            # Return a known vector
+            mock_de.return_value = Mock(success=True, x=expected_translation)
+            
+            # Call the method
+            result = aligner._run_differential_evolution(Mock(), tolerance=0.05)
+            
+            # Verify the result is the expected translation
+            np.testing.assert_array_equal(result, expected_translation)
+    
+    def test_run_differential_evolution_handles_optimization_failure(self):
+        """Test that _run_differential_evolution handles optimization failures."""
+        aligner = StructureAligner()
+        
+        with patch('scipy.optimize.differential_evolution') as mock_de:
+            # Mock a failed optimization
+            mock_de.return_value = Mock(success=False, message="Test failure")
+            
+            # Check that it raises the expected error
+            with self.assertRaises(ValueError):
+                aligner._run_differential_evolution(Mock(), tolerance=0.05)
+                
+    def test_run_differential_evolution_passes_options(self):
+        """Test that _run_differential_evolution correctly passes options to the optimizer."""
+        aligner = StructureAligner()
+        
+        with patch('scipy.optimize.differential_evolution') as mock_de:
+            mock_de.return_value = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
+            
+            # Call with custom options
+            aligner._run_differential_evolution(
+                Mock(), 
+                tolerance=0.05,
+                minimizer_options={'popsize': 20, 'strategy': 'rand1bin'}
+            )
+            
+            # Check that the options were passed correctly
+            args, kwargs = mock_de.call_args
+            self.assertEqual(kwargs['tol'], 0.05)
+            self.assertEqual(kwargs['popsize'], 20)
+            self.assertEqual(kwargs['strategy'], 'rand1bin')
+            
+    def test_align_calls_nelder_mead_by_default(self):
+        """Test that align uses Nelder-Mead by default."""
+        aligner = StructureAligner()
+        
+        # Mock all dependencies to isolate just the algorithm selection
+        aligner._validate_structures = Mock(return_value=["Na"])
+        aligner._create_objective_function = Mock(return_value=Mock())
+        aligner._run_nelder_mead = Mock(return_value=np.array([0, 0, 0]))
+        aligner._run_differential_evolution = Mock()
+        aligner._apply_translation = Mock(return_value=Mock())
+        
+        # Mock calculate_species_distances to avoid dependencies
+        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
+            mock_calc.return_value = ({}, [0.1])
+            
+            # Call align with no algorithm specified
+            aligner.align(Mock(), Mock())
+            
+            # Verify Nelder-Mead was called and differential_evolution was not
+            aligner._run_nelder_mead.assert_called_once()
+            aligner._run_differential_evolution.assert_not_called()
+            
+    def test_align_calls_differential_evolution_when_specified(self):
+        """Test that align uses differential_evolution when specified."""
+        aligner = StructureAligner()
+        
+        # Mock all dependencies to isolate just the algorithm selection
+        aligner._validate_structures = Mock(return_value=["Na"])
+        aligner._create_objective_function = Mock(return_value=Mock())
+        aligner._run_nelder_mead = Mock()
+        aligner._run_differential_evolution = Mock(return_value=np.array([0, 0, 0]))
+        aligner._apply_translation = Mock(return_value=Mock())
+        
+        # Mock calculate_species_distances to avoid dependencies
+        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
+            mock_calc.return_value = ({}, [0.1])
+            
+            # Call align with differential_evolution specified
+            aligner.align(Mock(), Mock(), algorithm='differential_evolution')
+            
+            # Verify differential_evolution was called and Nelder-Mead was not
+            aligner._run_differential_evolution.assert_called_once()
+            aligner._run_nelder_mead.assert_not_called()
+    
+    def test_align_raises_error_for_unknown_algorithm(self):
+        """Test that align raises an error for unknown algorithms."""
+        aligner = StructureAligner()
+        
+        # Mock minimum dependencies needed for the test
+        aligner._validate_structures = Mock(return_value=["Na"])
+        aligner._create_objective_function = Mock()
+        
+        # Test with an invalid algorithm
+        with self.assertRaises(ValueError) as context:
+            aligner.align(Mock(), Mock(), algorithm='invalid_algorithm')
+        
+        # Verify error message mentions the unknown algorithm
+        self.assertIn("invalid_algorithm", str(context.exception))
+        
+    def test_algorithm_registry(self):
+        """Test that the algorithm registry correctly maps algorithms to their implementations."""
+        # Create aligner
+        aligner = StructureAligner()
+        
+        # Get the algorithm registry
+        registry = aligner._get_algorithm_registry()
+        
+        # Verify the registry has the expected keys
+        self.assertIn('Nelder-Mead', registry)
+        self.assertIn('differential_evolution', registry)
+        
+        # Verify the registry contains callable functions
+        self.assertTrue(callable(registry['Nelder-Mead']))
+        self.assertTrue(callable(registry['differential_evolution']))
+        
+        # Verify the registry functions are the correct methods
+        self.assertEqual(registry['Nelder-Mead'], aligner._run_nelder_mead)
+        self.assertEqual(registry['differential_evolution'], aligner._run_differential_evolution)
+        
+    def test_run_minimizer(self):
+        """Test that _run_minimizer correctly dispatches to the appropriate algorithm."""
+        aligner = StructureAligner()
+        
+        # Mock the registry methods
+        aligner._run_nelder_mead = Mock(return_value=np.array([0.1, 0.1, 0.1]))
+        aligner._run_differential_evolution = Mock(return_value=np.array([0.2, 0.2, 0.2]))
+        
+        objective_function = Mock()
+        
+        # Test Nelder-Mead dispatching
+        result = aligner._run_minimizer('Nelder-Mead', objective_function, 0.05)
+        aligner._run_nelder_mead.assert_called_once_with(objective_function, 0.05, None)
+        np.testing.assert_array_equal(result, np.array([0.1, 0.1, 0.1]))
+        
+        # Reset mocks
+        aligner._run_nelder_mead.reset_mock()
+        
+        # Test differential_evolution dispatching
+        result = aligner._run_minimizer('differential_evolution', objective_function, 0.05)
+        aligner._run_differential_evolution.assert_called_once_with(objective_function, 0.05, None)
+        np.testing.assert_array_equal(result, np.array([0.2, 0.2, 0.2]))
+        
+        # Test error for unknown algorithm
+        with self.assertRaises(ValueError) as context:
+            aligner._run_minimizer('unknown_algorithm', objective_function, 0.05)
+        self.assertIn("unknown_algorithm", str(context.exception))
+        self.assertIn("Supported algorithms", str(context.exception))
 
 if __name__ == '__main__':
     unittest.main()

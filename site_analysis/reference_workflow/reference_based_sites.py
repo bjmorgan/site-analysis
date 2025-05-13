@@ -53,11 +53,13 @@ class ReferenceBasedSites:
 	"""
 	
 	def __init__(self, 
-				 reference_structure: Structure, 
-				 target_structure: Structure, 
-				 align: bool = True, 
-				 align_species: Optional[List[str]] = None, 
-				 align_metric: str = 'rmsd') -> None:
+			 reference_structure: Structure, 
+			 target_structure: Structure, 
+			 align: bool = True, 
+			 align_species: Optional[list[str]] = None, 
+			 align_metric: str = 'rmsd',
+			 align_algorithm: str = 'Nelder-Mead',
+			 align_minimizer_options: Optional[dict[str, Any]] = None) -> None:
 		"""Initialise ReferenceBasedSites with reference and target structures.
 		
 		Args:
@@ -66,6 +68,9 @@ class ReferenceBasedSites:
 			align: Whether to perform structure alignment. Default is True.
 			align_species: Species to use for alignment. Default is all species.
 			align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
+			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
+							Default is 'Nelder-Mead'.
+			align_minimizer_options: Additional options for the minimizer. Default is None.
 		"""
 		self.reference_structure = reference_structure
 		self.target_structure = target_structure
@@ -77,13 +82,18 @@ class ReferenceBasedSites:
 		
 		# Perform alignment if requested
 		if align:
-			self._align_structures(align_species, align_metric)
+			self._align_structures(
+				align_species, 
+				align_metric, 
+				align_algorithm, 
+				align_minimizer_options
+			)
 		
 		# These will be initialised on first use
 		self._coord_finder: Optional[CoordinationEnvironmentFinder] = None
 		self._index_mapper: Optional[IndexMapper] = None
 		self._site_factory: Optional[SiteFactory] = None
-	
+		
 	def create_polyhedral_sites(self, 
 							  center_species: str, 
 							  vertex_species: Union[str, List[str]], 
@@ -190,13 +200,18 @@ class ReferenceBasedSites:
 		return sites
 	
 	def _align_structures(self, 
-						align_species: Optional[List[str]] = None, 
-						align_metric: str = 'rmsd') -> None:
+						align_species: Optional[list[str]] = None, 
+						align_metric: str = 'rmsd',
+						align_algorithm: str = 'Nelder-Mead',
+						align_minimizer_options: Optional[dict[str, Any]] = None) -> None:
 		"""Align target structure to reference structure.
 		
 		Args:
 			align_species: Species to use for alignment. Default is all species.
 			align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
+			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
+						Default is 'Nelder-Mead'.
+			align_minimizer_options: Additional options for the minimizer. Default is None.
 			
 		Raises:
 			ValueError: If alignment fails.
@@ -210,7 +225,9 @@ class ReferenceBasedSites:
 				self.reference_structure, 
 				self.target_structure, 
 				species=align_species, 
-				metric=align_metric
+				metric=align_metric,
+				algorithm=align_algorithm,
+				minimizer_options=align_minimizer_options
 			)
 			
 			# Update attributes

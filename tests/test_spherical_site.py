@@ -287,6 +287,7 @@ class SphericalSiteTestCase(unittest.TestCase):
         # The result will depend on the specific lattice parameters
         self.assertIsInstance(result, bool)
 
+    
 
 if __name__ == '__main__':
     unittest.main()

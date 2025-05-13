@@ -189,12 +189,6 @@ Reset all trajectory data to start fresh:
 trajectory.reset()  # Clears all trajectory history
 ```
 
-For manually assigning atoms to sites:
-
-```python
-trajectory.assign_site_occupations(atoms, structure)
-```
-
 ### Analysing Transition Statistics
 
 ```python

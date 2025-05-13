@@ -115,7 +115,15 @@ class TrajectoryBuilder:
 		self.reset()
 	
 	def reset(self) -> 'TrajectoryBuilder':
-		"""Reset the builder state to default values."""
+		"""Reset the builder state to default values.
+		
+		 This method clears all configuration and returns the builder to its
+		 initial state. It is called automatically during initialization and
+		 after build(), but can also be called explicitly if needed.
+		 
+		 Returns:
+			 self: For method chaining
+		 """
 		self._structure: Optional[Structure] = None
 		self._reference_structure: Optional[Structure]= None
 		self._mobile_species: Optional[str|list[str]] = None

@@ -215,13 +215,13 @@ trajectory = (TrajectoryBuilder()
 
 ## Optimization Options for Structure Alignment
 
-When aligning structures, you can choose between different optimization algorithms with `align_algorithm` and configure their behavior with `align_minimizer_options`. These settings control how the optimal translation vector is found when superimposing structures.
+When aligning structures, you can choose between different optimization algorithms with `align_algorithm` and configure their behavior with `align_minimizer_options`. These settings control how the optimal translation vector is found when aligning structures.
 
 ### Available Algorithms
 
 #### Nelder-Mead (Default)
 
-The Nelder-Mead simplex algorithm is a local optimization method that works well for most structure alignment cases. It's efficient and doesn't require derivative information.
+The Nelder-Mead simplex algorithm is a local optimization method that works well for most structure alignment cases.
 
 ```python
 # Basic usage with default settings
@@ -244,12 +244,6 @@ builder.with_structure_alignment(
     }
 )
 ```
-
-**Key options:**
-- `maxiter`: Maximum number of iterations (default varies)
-- `xatol`: Absolute error in x between iterations that is acceptable for convergence
-- `fatol`: Absolute error in function value that is acceptable for convergence
-
 #### Differential Evolution
 
 Differential Evolution is a global optimization algorithm that can be more robust for complex cases where the local optimization might get stuck in suboptimal solutions.
@@ -269,22 +263,14 @@ builder.with_structure_alignment(
     }
 )
 ```
-
-**Key options:**
-- `popsize`: Population size multiplier (default: 15)
-- `strategy`: Differential evolution strategy (e.g., 'best1bin', 'rand1bin')
-- `tol`: Relative tolerance for convergence
-- `maxiter`: Maximum number of generations
-- `updating`: Population updating scheme ('immediate' or 'deferred')
-
 ### When to Use Each Algorithm
 
-- **Nelder-Mead (Default)**: Use for most standard alignment cases. It's efficient and works well when structures are reasonably similar.
+- **Nelder-Mead (Default)**: Use for most standard alignment cases. It is efficient and works well when structures are reasonably similar.
 
 - **Differential Evolution**: Consider when:
   - Nelder-Mead fails to find a good alignment
   - Structures have significant differences or distortions
-  - You suspect the optimization might be getting trapped in local minima
+  - You suspect the optimisation might be getting trapped in local minima
   - You need a more thorough exploration of possible alignments
 
 ### Direct Usage with ReferenceBasedSites
@@ -329,6 +315,7 @@ If alignment is failing or giving poor results:
 2. Adjust tolerance parameters to be more lenient
 3. Increase iteration limits
 4. Check alignment quality metrics after alignment:
+5. Check your reference and target structures to ensure that alignemnt is possible in principle.
 
 ```python
 # When using RBS directly

@@ -10,14 +10,6 @@ Site collections are essential for several reasons:
 - They provide methods for analyzing structures and tracking occupations
 - They maintain relationships between sites (e.g., neighboring sites)
 
-```{figure} ../images/site_collection_concept.png
-:alt: Conceptual diagram showing a site collection managing multiple sites
-:width: 600px
-:align: center
-
-Conceptual illustration of a site collection managing multiple sites. The collection orchestrates atom assignment across the entire crystal structure.
-```
-
 ## Core Site Collection Properties
 
 All site collection types in `site_analysis` share common responsibilities:
@@ -131,14 +123,6 @@ The site assignment process is a core function of site collections. While the sp
 3. **Apply site-specific logic**: Determine which atoms belong to which sites
 4. **Update occupation records**: Record the new assignments
 5. **Track transitions**: Identify and count transitions between sites
-
-```{figure} ../images/site_assignment_process.png
-:alt: Diagram showing the process of assigning atoms to sites
-:width: 600px
-:align: center
-
-The site assignment process. Atoms (yellow) are assigned to sites (blue regions) based on their positions and the specific assignment rules of each site collection type.
-```
 
 ## Special Case: Overlapping Sites vs. Gaps
 

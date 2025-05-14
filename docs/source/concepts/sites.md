@@ -6,14 +6,6 @@ A **site** is a fundamental abstraction in `site_analysis` that represents a bou
 
 When analyzing ion migration in solids, it's often useful to think about ions moving between specific locations ("sites") in the crystal structure. These sites typically correspond to local energy minima, where ions tend to reside for extended periods before jumping to adjacent sites. The `site_analysis` package lets you define these sites in various ways and then analyze how mobile ions move between them.
 
-```{figure} ../images/site_concept_diagram.png
-:alt: Conceptual diagram showing ions occupying sites in a crystal structure
-:width: 600px
-:align: center
-
-Conceptual illustration of sites in a crystal structure. Mobile ions (yellow) occupy defined sites (transparent blue regions) within a framework of immobile atoms (grey).
-```
-
 ## Core Site Properties
 
 All site types in `site_analysis` share common attributes:
@@ -32,14 +24,6 @@ The `site_analysis` package provides four different site types, each with specif
 ### Spherical Sites
 
 Spherical sites are the simplest site type, defined by a center position and radius. They represent spherical volumes within the crystal structure.
-
-```{figure} ../images/spherical_sites.png
-:alt: Diagram showing spherical sites in a crystal structure
-:width: 500px
-:align: center
-
-Spherical sites (transparent spheres) defined within a crystal structure. Note that spherical sites may have gaps between them or overlap depending on their radii.
-```
 
 **Advantages**:
 - Conceptually simple and intuitive
@@ -81,14 +65,6 @@ Polyhedral sites are defined by a collection of vertex atoms that form a polyhed
 
 In close-packed lattices where the mobile ions occupy interstitial sites with well-defined coordination environments, polyhedral sites can completely fill space if the set of all coordination polyhedra is used. This makes them particularly valuable for analyzing systems like lithium-ion battery materials or ionic conductors.
 
-```{figure} ../images/polyhedral_sites.png
-:alt: Diagram showing polyhedral sites in a crystal structure
-:width: 500px
-:align: center
-
-Polyhedral sites defined by vertex atoms (orange). The site volumes (transparent polyhedra) are determined by the shape of the polyhedron formed by these vertices.
-```
-
 **Advantages**:
 - Accurately represents coordination environments
 - Shape adapts to the local structure
@@ -111,14 +87,6 @@ Polyhedral sites defined by vertex atoms (orange). The site volumes (transparent
 ### Voronoi Sites
 
 Voronoi sites divide space into regions where each point in a region is closer to its site center than to any other site center. This creates a complete partitioning of space with no gaps or overlaps.
-
-```{figure} ../images/voronoi_sites.png
-:alt: Diagram showing Voronoi sites in a crystal structure
-:width: 500px
-:align: center
-
-Voronoi sites divide space completely. Each colored region represents a different Voronoi site, with boundaries determined by equidistant points between site centers.
-```
 
 **Advantages**:
 - Completely fills space (no gaps or overlaps)
@@ -144,14 +112,6 @@ Voronoi sites divide space completely. Each colored region represents a differen
 ### Dynamic Voronoi Sites
 
 Dynamic Voronoi sites extend the Voronoi approach by calculating site centers dynamically based on the positions of reference atoms. This allows the sites to adapt to structural changes and distortions.
-
-```{figure} ../images/dynamic_voronoi_sites.png
-:alt: Diagram showing dynamic Voronoi sites in a crystal structure
-:width: 500px
-:align: center
-
-Dynamic Voronoi sites adapt to structural changes. As reference atoms (orange) move, the site centers (blue dots) and boundaries adjust accordingly. The progression shows how sites adapt over time or with structural distortions.
-```
 
 **Advantages**:
 - Adapts to structural changes and distortions
@@ -189,14 +149,6 @@ This transition data forms the basis for analyzing diffusion mechanisms, includi
 - Frequency of specific site-to-site jumps
 - Construction of diffusion networks
 - Statistical analysis of migration processes
-
-```{figure} ../images/site_transitions.png
-:alt: Diagram showing ion transitions between sites
-:width: 600px
-:align: center
-
-Visualization of ion transitions between sites. Arrows indicate movement pathways, with thicker arrows representing more frequent transitions.
-```
 
 ## Selecting the Right Site Type
 

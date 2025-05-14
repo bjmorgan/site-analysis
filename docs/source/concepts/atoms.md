@@ -6,14 +6,6 @@ In `site_analysis`, an **Atom** represents a single mobile ion that is tracked t
 
 Each `Atom` has a unique index that corresponds to its position in the original structure and maintains its identity across timesteps as its position changes. This persistent identity allows the package to track how ions move between sites over time.
 
-```{figure} ../images/atom_concept.png
-:alt: Conceptual diagram showing an atom's trajectory through various sites
-:width: 500px
-:align: center
-
-Conceptual illustration of an atom (yellow) moving through different sites (blue regions) during a simulation, with its trajectory tracked over time.
-```
-
 ## Core Atom Properties
 
 The `Atom` class maintains several key attributes:
@@ -33,15 +25,7 @@ The relationship between atoms and sites is bidirectional:
 1. Each atom records which site it currently occupies via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
 
-When analyzing a structure, the appropriate site collection determines which atoms belong to which sites:
-
-```{figure} ../images/atom_site_relationship.png
-:alt: Diagram showing the bidirectional relationship between atoms and sites
-:width: 500px
-:align: center
-
-The bidirectional relationship between atoms and sites. Atoms record which site they occupy, while sites record which atoms they contain.
-```
+When analyzing a structure, the appropriate site collection determines which atoms belong to which sites.
 
 ## Tracking Atom Trajectories
 
@@ -90,11 +74,3 @@ These methods facilitate analysis of diffusion patterns, correlations between at
 2. **Site-centric**: Analyzing which atoms occupy each site over time
 
 The atom-centric view is useful for tracking specific ions and their pathways, while the site-centric view helps identify preferred sites, occupation probabilities, and transition frequencies.
-
-```{figure} ../images/atom_site_perspectives.png
-:alt: Diagram contrasting atom-centric and site-centric analysis perspectives
-:width: 600px
-:align: center
-
-Two complementary perspectives: atom-centric analysis follows individual atoms through sites, while site-centric analysis examines which atoms occupy each site over time.
-```

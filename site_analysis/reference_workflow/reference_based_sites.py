@@ -53,13 +53,14 @@ class ReferenceBasedSites:
 	"""
 	
 	def __init__(self, 
-			 reference_structure: Structure, 
-			 target_structure: Structure, 
-			 align: bool = True, 
-			 align_species: Optional[list[str]] = None, 
-			 align_metric: str = 'rmsd',
-			 align_algorithm: str = 'Nelder-Mead',
-			 align_minimizer_options: Optional[dict[str, Any]] = None) -> None:
+			reference_structure: Structure, 
+			target_structure: Structure, 
+			align: bool = True, 
+			align_species: Optional[list[str]] = None, 
+			align_metric: str = 'rmsd',
+			align_algorithm: str = 'Nelder-Mead',
+			align_minimizer_options: Optional[dict[str, Any]] = None,
+			align_tolerance: float = 1e-4) -> None:
 		"""Initialise ReferenceBasedSites with reference and target structures.
 		
 		Args:
@@ -71,6 +72,7 @@ class ReferenceBasedSites:
 			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
 							Default is 'Nelder-Mead'.
 			align_minimizer_options: Additional options for the minimizer. Default is None.
+			align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
 		"""
 		self.reference_structure = reference_structure
 		self.target_structure = target_structure
@@ -86,7 +88,8 @@ class ReferenceBasedSites:
 				align_species, 
 				align_metric, 
 				align_algorithm, 
-				align_minimizer_options
+				align_minimizer_options,
+				align_tolerance
 			)
 		
 		# These will be initialised on first use
@@ -203,7 +206,8 @@ class ReferenceBasedSites:
 						align_species: Optional[list[str]] = None, 
 						align_metric: str = 'rmsd',
 						align_algorithm: str = 'Nelder-Mead',
-						align_minimizer_options: Optional[dict[str, Any]] = None) -> None:
+						align_minimizer_options: Optional[dict[str, Any]] = None,
+						align_tolerance: float = 1e-4) -> None:
 		"""Align target structure to reference structure.
 		
 		Args:
@@ -212,6 +216,7 @@ class ReferenceBasedSites:
 			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
 						Default is 'Nelder-Mead'.
 			align_minimizer_options: Additional options for the minimizer. Default is None.
+			align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
 			
 		Raises:
 			ValueError: If alignment fails.
@@ -226,8 +231,9 @@ class ReferenceBasedSites:
 				self.target_structure, 
 				species=align_species, 
 				metric=align_metric,
+				tolerance=align_tolerance,
 				algorithm=align_algorithm,
-				minimizer_options=align_minimizer_options
+				minimizer_options=align_minimizer_options,
 			)
 			
 			# Update attributes

@@ -160,6 +160,7 @@ class TestReferenceBasedSites(unittest.TestCase):
                 self.target,
                 species=['Na'],
                 metric='max_dist',
+                tolerance=0.0001,
                 algorithm='Nelder-Mead',
                 minimizer_options=None
             )
@@ -666,6 +667,66 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertEqual(kwargs["metric"], align_metric)
             self.assertEqual(kwargs["algorithm"], align_algorithm)
             self.assertEqual(kwargs["minimizer_options"], align_minimizer_options)
+            
+    def test_tolerance_passed_to_structure_aligner(self):
+        """Test that align_tolerance is correctly passed to StructureAligner.align()."""
+        # Create mock structures
+        mock_reference = Mock(spec=Structure)
+        mock_target = Mock(spec=Structure)
+        
+        # Custom tolerance value to test
+        align_tolerance = 1e-5
+        
+        # Create ReferenceBasedSites with mocked structures
+        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
+            # Configure mock
+            mock_aligner = Mock()
+            MockAligner.return_value = mock_aligner
+            mock_aligner.align.return_value = (Mock(), np.array([0]), {"rmsd": 0})
+            
+            # Create instance with align=True to trigger call to aligner
+            rbs = ReferenceBasedSites(
+                reference_structure=mock_reference,
+                target_structure=mock_target,
+                align=True,
+                align_tolerance=align_tolerance
+            )
+            
+            # Verify align was called with correct tolerance
+            mock_aligner.align.assert_called_once()
+            _, kwargs = mock_aligner.align.call_args
+            self.assertEqual(kwargs["tolerance"], align_tolerance)
+            
+    def test_align_structures_passes_tolerance(self):
+        """Test that _align_structures correctly passes tolerance to the StructureAligner."""
+        # Mock structures
+        mock_reference = Mock(spec=Structure)
+        mock_target = Mock(spec=Structure)
+        
+        # Custom tolerance value to test
+        align_tolerance = 1e-5
+        
+        # Create ReferenceBasedSites with mocked structures but don't align immediately
+        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
+            # Configure mock aligner
+            mock_aligner = Mock()
+            MockAligner.return_value = mock_aligner
+            mock_aligner.align.return_value = (Mock(), np.array([0]), {"rmsd": 0})
+            
+            # Create instance without alignment
+            rbs = ReferenceBasedSites(
+                reference_structure=mock_reference,
+                target_structure=mock_target,
+                align=False  # Don't align in constructor
+            )
+            
+            # Now directly call _align_structures with our custom tolerance
+            rbs._align_structures(align_tolerance=align_tolerance)
+            
+            # Verify align was called with correct tolerance
+            mock_aligner.align.assert_called_once()
+            _, kwargs = mock_aligner.align.call_args
+            self.assertEqual(kwargs["tolerance"], align_tolerance)
 
 
 if __name__ == '__main__':

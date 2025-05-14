@@ -117,13 +117,13 @@ class TrajectoryBuilder:
 	def reset(self) -> 'TrajectoryBuilder':
 		"""Reset the builder state to default values.
 		
-		 This method clears all configuration and returns the builder to its
-		 initial state. It is called automatically during initialization and
-		 after build(), but can also be called explicitly if needed.
-		 
-		 Returns:
-			 self: For method chaining
-		 """
+		This method clears all configuration and returns the builder to its
+		initial state. It is called automatically during initialization and
+		after build(), but can also be called explicitly if needed.
+		
+		Returns:
+			self: For method chaining
+		"""
 		self._structure: Optional[Structure] = None
 		self._reference_structure: Optional[Structure]= None
 		self._mobile_species: Optional[str|list[str]] = None
@@ -135,6 +135,7 @@ class TrajectoryBuilder:
 		self._align_metric = 'rmsd'
 		self._align_algorithm = 'Nelder-Mead'
 		self._align_minimizer_options: Optional[dict[str, Any]] = None
+		self._align_tolerance = 1e-4  # Default tolerance value
 		
 		# Mapping options
 		self._mapping_species: Optional[list[str]] = None
@@ -182,11 +183,12 @@ class TrajectoryBuilder:
 		return self
 	
 	def with_structure_alignment(self, 
-					align: bool = True, 
-					align_species: Optional[Union[str, list[str]]] = None, 
-					align_metric: str = 'rmsd',
-					align_algorithm: str = 'Nelder-Mead',
-					align_minimizer_options: Optional[dict[str, Any]] = None) -> 'TrajectoryBuilder':
+				align: bool = True, 
+				align_species: Optional[Union[str, list[str]]] = None, 
+				align_metric: str = 'rmsd',
+				align_algorithm: str = 'Nelder-Mead',
+				align_minimizer_options: Optional[dict[str, Any]] = None,
+				align_tolerance: float = 1e-4) -> 'TrajectoryBuilder':
 		"""Set options for aligning reference and target structures.
 		
 		Structure alignment finds the optimal translation vector to superimpose
@@ -206,6 +208,7 @@ class TrajectoryBuilder:
 			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
 							Default is 'Nelder-Mead'.
 			align_minimizer_options: Additional options for the minimizer. Default is None.
+			align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
 				
 		Returns:
 			self: For method chaining
@@ -221,6 +224,7 @@ class TrajectoryBuilder:
 		self._align_metric = align_metric
 		self._align_algorithm = align_algorithm
 		self._align_minimizer_options = align_minimizer_options
+		self._align_tolerance = align_tolerance
 		return self
 		
 	def with_site_mapping(self, mapping_species: Optional[Union[str, list[str]]]) -> TrajectoryBuilder:
@@ -352,7 +356,8 @@ class TrajectoryBuilder:
 				align_species=align_species,
 				align_metric=self._align_metric,
 				align_algorithm=self._align_algorithm,
-				align_minimizer_options=self._align_minimizer_options
+				align_minimizer_options=self._align_minimizer_options,
+				align_tolerance=self._align_tolerance  # Pass the tolerance
 			)
 			
 			# Determine mapping species (use alignment species if mapping species not specified)
@@ -413,7 +418,8 @@ class TrajectoryBuilder:
 				align_species=align_species,
 				align_metric=self._align_metric,
 				align_algorithm=self._align_algorithm,
-				align_minimizer_options=self._align_minimizer_options
+				align_minimizer_options=self._align_minimizer_options,
+				align_tolerance=self._align_tolerance 
 			)
 			
 			# Determine mapping species (use alignment species if mapping species not specified)
@@ -587,7 +593,8 @@ def create_trajectory_with_polyhedral_sites(
 	align_metric: str = 'rmsd',
 	align_algorithm: str = 'Nelder-Mead',
 	align_minimizer_options: Optional[dict[str, Any]] = None,
-	mapping_species: Optional[Union[str, list[str]]] = None
+	mapping_species: Optional[Union[str, list[str]]] = None,
+	align_tolerance: float = 1e-4 
 ) -> Trajectory:
 	"""Create a Trajectory with polyhedral sites."""
 	builder = TrajectoryBuilder()
@@ -600,7 +607,8 @@ def create_trajectory_with_polyhedral_sites(
 				align_species=align_species,
 				align_metric=align_metric,
 				align_algorithm=align_algorithm,
-				align_minimizer_options=align_minimizer_options
+				align_minimizer_options=align_minimizer_options,
+				align_tolerance=align_tolerance
 			)
 			.with_site_mapping(mapping_species)
 			.with_polyhedral_sites(centre_species, vertex_species, cutoff, n_vertices, label)
@@ -621,7 +629,8 @@ def create_trajectory_with_dynamic_voronoi_sites(
 	align_metric: str = 'rmsd',
 	align_algorithm: str = 'Nelder-Mead',
 	align_minimizer_options: Optional[dict[str, Any]] = None,
-	mapping_species: Optional[Union[str, list[str]]] = None
+	mapping_species: Optional[Union[str, list[str]]] = None,
+	align_tolerance: float = 1e-4 
 ) -> Trajectory:
 	"""Create a Trajectory with dynamic Voronoi sites."""
 	builder = TrajectoryBuilder()
@@ -634,7 +643,8 @@ def create_trajectory_with_dynamic_voronoi_sites(
 				align_species=align_species,
 				align_metric=align_metric,
 				align_algorithm=align_algorithm,
-				align_minimizer_options=align_minimizer_options
+				align_minimizer_options=align_minimizer_options,
+				align_tolerance=align_tolerance
 			)
 			.with_site_mapping(mapping_species)
 			.with_dynamic_voronoi_sites(centre_species, reference_species, cutoff, n_reference, label)

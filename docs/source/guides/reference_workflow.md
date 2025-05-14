@@ -74,7 +74,9 @@ For the Reference-Based Sites workflow to function correctly, the reference and 
 
 ### Structure Alignment
 
-When working with reference and target structures that have different numbers of mobile atoms (such as when analyzing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species:
+When working with reference and target structures that have different numbers of mobile atoms (such as when analyzing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
+
+**Important**: Structure alignment is **enabled by default** for the reference-based workflow, even if not explicitly configured. To disable alignment, you must explicitly set `align=False`.
 
 ```python
 trajectory = (TrajectoryBuilder()
@@ -84,9 +86,9 @@ trajectory = (TrajectoryBuilder()
     .with_structure_alignment(
         align=True,                  # Enable alignment (default)
         align_species=["O", "Ti"],   # Framework atoms only
-        align_metric='rmsd',         # Optimize root-mean-square distance
+        align_metric='rmsd',         # Optimise root-mean-square distance (default)
         align_algorithm='Nelder-Mead',  # Default local optimizer
-        align_tolerance=1e-4         # Control alignment precision
+        align_tolerance=1e-4         # Default alignment precision
     )
     .with_polyhedral_sites(
         centre_species="Li",
@@ -101,6 +103,8 @@ This example shows how to specify framework atoms for alignment by using the `al
 
 #### Alignment Parameters
 
+All alignment parameters are optional and have sensible defaults:
+
 - **Enable/Disable**: The `align` parameter (default: `True`) controls whether structure alignment is performed at all. Setting `align=False` disables alignment, which may be appropriate when structures are already perfectly aligned or when testing alternative workflows.
 
 - **Species Selection**: The `align_species` parameter specifies which atomic species are used for alignment. This should be species that have consistent counts in both reference and target structures:
@@ -108,9 +112,9 @@ This example shows how to specify framework atoms for alignment by using the `al
   - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
   - Typically framework atoms are used to avoid issues with different mobile ion counts
 
-- **Alignment Metric**: The `align_metric` parameter (default: `'rmsd'`) determines what distance measurement is minimized:
-  - `'rmsd'`: Root-mean-square deviation - minimizes the average distance between corresponding atoms across both structures
-  - `'max_dist'`: Maximum distance - minimizes the maximum distance between any corresponding atom pair (focuses on the largest misalignment)
+- **Alignment Metric**: The `align_metric` parameter (default: `'rmsd'`) determines what distance measurement is minimised:
+  - `'rmsd'`: Root-mean-square deviation - minimises the average distance between corresponding atoms across both structures
+  - `'max_dist'`: Maximum distance - minimises the maximum distance between any corresponding atom pair (focuses on the largest misalignment)
 
 - **Tolerance**: The `align_tolerance` parameter (default: `1e-4`) controls the convergence criteria for the alignment optimization algorithm. A smaller value (e.g., 1e-5) requires more precise alignment, while a larger value (e.g., 1e-3) allows quicker convergence with potentially less precise alignment.
 

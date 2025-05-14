@@ -228,21 +228,44 @@ builder.with_reference_structure(reference_structure)
 #### `with_structure_alignment(align=True, align_species=None, align_metric='rmsd', align_algorithm='Nelder-Mead', align_minimizer_options=None, align_tolerance=1e-4)`
 Controls structure alignment between reference and target structures.
 
-**Parameters:**
-- `align`: Whether to perform alignment (default: True)
-- `align_species`: Species to use for alignment (default: None, uses mapping species if set)
-- `align_metric`: Metric for alignment ('rmsd' or 'max_dist', default: 'rmsd')
-- `align_algorithm`: Algorithm for optimization ('Nelder-Mead' or 'differential_evolution', default: 'Nelder-Mead')
-- `align_minimizer_options`: Additional options for the minimizer (default: None)
-- `align_tolerance`: Convergence tolerance for the alignment optimization (default: 1e-4)
+**Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-**Example:**
+All parameters are optional and have sensible defaults:
+
+**Parameters:**
+- `align`: Whether to perform alignment (default: `True`)
+- `align_species`: Species to use for alignment (default: `None`)
+  - If `None`, mapping species will be used if specified, otherwise all common species
+  - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
+  - Typically framework atoms are used to avoid issues with different mobile ion counts
+- `align_metric`: Metric for alignment (default: `'rmsd'`)
+  - `'rmsd'`: Root-mean-square deviation - minimises the average distance between corresponding atoms
+  - `'max_dist'`: Maximum distance - minimises the largest distance between any corresponding atom pair
+- `align_algorithm`: Algorithm for optimization (default: `'Nelder-Mead'`)
+  - `'Nelder-Mead'`: Local optimization, faster but may find local minima
+  - `'differential_evolution'`: Global optimization, more robust but slower
+- `align_minimizer_options`: Additional options for the minimizer as a dictionary (default: `None`)
+- `align_tolerance`: Convergence tolerance for the alignment optimization (default: `1e-4`)
+  - Lower values (e.g., `1e-5`) give more precise alignment but may take longer
+
+**Examples:**
 ```python
+# Use default alignment (enabled, all species)
+builder.with_reference_structure(reference)
+       .with_polyhedral_sites(...)
+
+# Specify alignment species explicitly
+builder.with_structure_alignment(align_species=["O", "Ti"])
+       .with_polyhedral_sites(...)
+
+# Disable alignment
+builder.with_structure_alignment(align=False)
+       .with_polyhedral_sites(...)
+
+# Use global optimization for challenging alignments
 builder.with_structure_alignment(
-    align=True,
-    align_species=["O"],
-    align_metric='rmsd',
-    align_tolerance=1e-5  # Stricter tolerance for more precise alignment
+    align_algorithm='differential_evolution',
+    align_minimizer_options={'popsize': 20}
 )
 ```
 

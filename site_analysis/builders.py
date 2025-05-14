@@ -13,7 +13,7 @@ Examples:
 				 .with_mobile_species("Li")
 				 .with_spherical_sites(
 					 centres=[[0.5, 0.5, 0.5], [0.0, 0.0, 0.0]],
-					 radii=[2.0, 2.0],
+					 radii=2.0,
 					 labels=["octahedral", "tetrahedral"]
 				 )
 				 .build())
@@ -23,7 +23,7 @@ Examples:
 		structure=structure,
 		mobile_species="Li",
 		centres=[[0.5, 0.5, 0.5], [0.0, 0.0, 0.0]],
-		radii=[2.0, 2.0],
+		radii=2.0,
 		labels=["octahedral", "tetrahedral"]
 	)
 	```
@@ -195,23 +195,51 @@ class TrajectoryBuilder:
 		the reference structure onto the target structure, minimizing distances
 		between corresponding atoms.
 		
-		By default, alignment is enabled. If alignment species are not specified:
-		- If mapping species have been set with with_site_mapping(), those species will be used for alignment
-		- Otherwise, all common species between structures will be used
+		Note:
+			Structure alignment is ENABLED by default when using polyhedral or dynamic
+			Voronoi sites, even if this method is not explicitly called. To disable
+			alignment, call this method with align=False.
+		
+		All parameters are optional and have sensible defaults:
 		
 		Args:
 			align: Whether to perform structure alignment. Default is True.
 			align_species: Species to use for alignment. Can be a string or list of strings.
-				If None, mapping species will be used if specified, otherwise all common species.
-			align_metric: Metric for alignment ('rmsd', 'max_dist'). 
-				Default is 'rmsd'.
-			align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
-							Default is 'Nelder-Mead'.
-			align_minimizer_options: Additional options for the minimizer. Default is None.
+				Default is None, which means:
+				- If mapping species have been set with with_site_mapping(), those species will be used
+				- Otherwise, all common species between structures will be used
+			align_metric: Metric for alignment. Options are:
+				- 'rmsd': Root-mean-square deviation (default)
+				- 'max_dist': Maximum distance between any atom pair
+			align_algorithm: Algorithm for optimization. Options are:
+				- 'Nelder-Mead': Local optimizer, faster but may find local minima (default)
+				- 'differential_evolution': Global optimizer, more robust but slower
+			align_minimizer_options: Additional options for the minimizer as a dictionary.
+				Default is None (use algorithm defaults).
 			align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
+				Lower values (e.g., 1e-5) give more precise alignment but may take longer.
 				
 		Returns:
 			self: For method chaining
+			
+		Examples:
+			# Use default alignment (enabled, all species)
+			builder.with_reference_structure(reference)
+				.with_polyhedral_sites(...)
+			
+			# Specify alignment species explicitly
+			builder.with_structure_alignment(align_species=["O", "Ti"])
+				.with_polyhedral_sites(...)
+			
+			# Disable alignment
+			builder.with_structure_alignment(align=False)
+				.with_polyhedral_sites(...)
+			
+			# Use global optimization for challenging alignments
+			builder.with_structure_alignment(
+					align_algorithm='differential_evolution',
+					align_minimizer_options={'popsize': 20}
+				)
 		"""
 		self._align = align
 		

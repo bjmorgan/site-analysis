@@ -32,14 +32,35 @@ quickstart
 :maxdepth: 1
 :caption: Concepts
 
-context
+concepts/what_is_site_analysis
+concepts/sites
+concepts/site_collections
+concepts/atoms
+concepts/trajectories
+
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Tutorials & Examples
+:caption: Guides
 
-examples/shortest_distance_sites
+guides/builders
+guides/reference_workflow
+guides/spherical_sites
+guides/voronoi_sites
+guides/dynamic_voronoi_sites
+guides/polyhedral_sites
+guides/trajectories
+
+```
+
+
+```{toctree}
+:maxdepth: 1
+:caption: Resources
+
+resources/publications
+
 ```
 
 ```{toctree}

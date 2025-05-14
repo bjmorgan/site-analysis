@@ -1,4 +1,4 @@
-# Context
+# What is &ldquo;Site Analysis&rdquo;?
 
 The diffusion of ions through solid materials is a fundamental physical process that underpins applications such as lithium-ion batteries, fuel cells, and chemical sensors. One common technique for studying atomic scale diffusion processes in solids is [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) simulation, which can be used to directly calculate macroscopic transport coefficients, i.e. diffusion coefficients and ionic conductivities, and also to examine the detailed atomic scale mechanisms of ionic transport. While molecular dynamics simulations, in principle, provides a description of all atomic scale dynamical processes that occur on a simulation timescale, analysing the resulting raw data to extract quantitative data about diffusion mechanisms can be challenging. 
 

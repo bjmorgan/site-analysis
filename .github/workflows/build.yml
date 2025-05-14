@@ -36,6 +36,7 @@ jobs:
         with:
           path-to-lcov: ./coverage.lcov
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel: true
       
       - name: Static type checking
         run: |

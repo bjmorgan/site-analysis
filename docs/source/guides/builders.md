@@ -225,7 +225,7 @@ Sets a reference structure for polyhedral and dynamic Voronoi sites.
 builder.with_reference_structure(reference_structure)
 ```
 
-#### `with_structure_alignment(align=True, align_species=None, align_metric='rmsd', align_algorithm='Nelder-Mead', align_minimizer_options=None)`
+#### `with_structure_alignment(align=True, align_species=None, align_metric='rmsd', align_algorithm='Nelder-Mead', align_minimizer_options=None, align_tolerance=1e-4)`
 Controls structure alignment between reference and target structures.
 
 **Parameters:**
@@ -234,13 +234,15 @@ Controls structure alignment between reference and target structures.
 - `align_metric`: Metric for alignment ('rmsd' or 'max_dist', default: 'rmsd')
 - `align_algorithm`: Algorithm for optimization ('Nelder-Mead' or 'differential_evolution', default: 'Nelder-Mead')
 - `align_minimizer_options`: Additional options for the minimizer (default: None)
+- `align_tolerance`: Convergence tolerance for the alignment optimization (default: 1e-4)
 
 **Example:**
 ```python
 builder.with_structure_alignment(
     align=True,
     align_species=["O"],
-    align_metric='rmsd'
+    align_metric='rmsd',
+    align_tolerance=1e-5  # Stricter tolerance for more precise alignment
 )
 ```
 

@@ -59,6 +59,8 @@ guides/trajectories
 
 tutorials/argyrodite_site_definitions
 
+```
+
 ```{toctree}
 :maxdepth: 1
 :caption: Resources

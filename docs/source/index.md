@@ -53,7 +53,11 @@ guides/polyhedral_sites
 guides/trajectories
 
 ```
+```{toctree}
+:maxdepth: 1
+:caption: Tutorials
 
+tutorials/argyrodite_site_definitions
 
 ```{toctree}
 :maxdepth: 1

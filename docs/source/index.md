@@ -57,6 +57,7 @@ guides/trajectories
 :maxdepth: 1
 :caption: Tutorials
 
+tutorials/simple_fcc_example
 tutorials/argyrodite_site_definitions
 
 ```

@@ -37,6 +37,25 @@ class VoronoiSiteTestCase(unittest.TestCase):
         site = VoronoiSite(frac_coords=np.array([0.1, 0.1, 0.1]))
         with self.assertRaises(NotImplementedError):
             site.contains_point(np.array([0.5, 0.5, 0.5]))
+            
+    def test_repr(self):
+        """Test the __repr__ method for VoronoiSite."""
+        frac_coords = np.array([0.1, 0.2, 0.3])
+        label = "voronoi_site"
+        site = VoronoiSite(frac_coords=frac_coords, label=label)
+        site.index = 3  # Set index explicitly for testing
+        site.contains_atoms = [4, 5]  # Add some atoms for testing
+        
+        # Generate the string representation
+        repr_str = repr(site)
+        
+        # Verify all key attributes are included
+        self.assertIn("site_analysis.VoronoiSite", repr_str)
+        self.assertIn(f"index={site.index}", repr_str)
+        self.assertIn(f"label={site.label}", repr_str)
+        self.assertIn(f"contains_atoms={site.contains_atoms}", repr_str)
+        # Don't check for exact frac_coords representation as it varies
+        self.assertIn("frac_coords=", repr_str)
 
 if __name__ == '__main__':
     unittest.main()

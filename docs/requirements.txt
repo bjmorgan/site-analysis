@@ -1,3 +1,4 @@
 sphinx==7.2.6
 snowballstemmer==2.2.0
 docutils==0.18.1
+figure-formatting @ git+git@github.com:bjmorgan/figure_formatting.git

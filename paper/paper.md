@@ -8,13 +8,17 @@ tags:
   - diffusion
   - crystallography
   - solid-state ionics
+
 authors:
   - name: Benjamin J. Morgan 
     affiliation: "1, 2" 
     orcid: 0000-0002-3056-8233 
+
 affiliations:
-  - name: Department of Chemistry, University of Bath, Claverton Down, Bath, BA2 7AY, United Kingdom index: 1
-  - name: The Faraday Institution, Quad One, Harwell Science and Innovation Campus, Didcot, OX11 0RA, United Kingdom index: 2 
+  - index: 1
+    name: Department of Chemistry, University of Bath, Claverton Down, Bath, BA2 7AY, United Kingdom
+  - index: 2
+    name: The Faraday Institution, Quad One, Harwell Science and Innovation Campus, Didcot, OX11 0RA, United Kingdom
 date: 23 May 2025 
 bibliography: paper.bib
 ---

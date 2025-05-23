@@ -56,3 +56,4 @@ The software has been used to analyse ion-transport mechanisms in lithium-ion an
 
 B.J.M. acknowledges support from the Royal Society (UF130329 and URF/R/191006) and the Faraday Institution (FIRG016).
 
+# Bibliography

@@ -16,6 +16,9 @@ class ConcreteSite(Site):
                        *args: Any,
                        **kwargs: Any) -> bool:
         raise NotImplementedError
+        
+    def __repr__(self) -> str:
+        raise NotImplementedError
 
 class SiteTestCase(unittest.TestCase):
 
@@ -121,6 +124,11 @@ class SiteTestCase(unittest.TestCase):
         np.testing.assert_array_equal(site.points, site_dict['points'])
         self.assertEqual(site.label, site_dict['label'])
         self.assertEqual(site.transitions, site_dict['transitions'])
+        
+    def test_repr_is_abstract_method(self):
+        """Test that __repr__ is an abstract method in Site class."""
+        abstract_methods = getattr(Site, "__abstractmethods__", set())
+        self.assertIn("__repr__", abstract_methods)
      
 if __name__ == '__main__':
     unittest.main()

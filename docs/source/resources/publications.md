@@ -1,4 +1,4 @@
-# Publications Using site-analysis
+# Publications using site-analysis
 
 This page lists scientific publications that have used the `site_analysis` package and its predecessor implementations. The polyhedral site analysis methodology, particularly the surface normal algorithm, was originally developed as a Fortran code before being reimplemented and expanded in the current Python package.
 

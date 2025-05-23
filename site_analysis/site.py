@@ -212,4 +212,17 @@ class Site(ABC):
         """
         raise NotImplementedError('coordination_number should be implemented '
                                   'in the derived class')
+                                  
+    @abstractmethod
+    def __repr__(self) -> str:
+        """Return a string representation of this site.
+        
+        This method should be implemented in the derived subclass.
+        
+        Returns:
+            str: A string representation of the site including its 
+                 class name and important attributes.
+        """
+        raise NotImplementedError('__repr__ should be implemented '
+                                 'in the derived class')
 

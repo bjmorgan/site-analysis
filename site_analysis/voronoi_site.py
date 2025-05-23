@@ -48,6 +48,20 @@ class VoronoiSite(Site):
         """
         super(VoronoiSite, self).__init__(label=label)
         self.frac_coords = frac_coords
+        
+    def __repr__(self) -> str:
+        """Return a string representation of this Voronoi site.
+        
+        Returns:
+            str: A string representation of the site including its 
+                class name and important attributes.
+        """
+        string = ('site_analysis.VoronoiSite('
+                f'index={self.index}, '
+                f'label={self.label}, '
+                f'frac_coords={self.frac_coords}, '
+                f'contains_atoms={self.contains_atoms})')
+        return string
 
     def as_dict(self) -> dict:
         """Json-serializable dict representation of this VoronoiSite.

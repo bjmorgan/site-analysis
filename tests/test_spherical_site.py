@@ -286,6 +286,27 @@ class SphericalSiteTestCase(unittest.TestCase):
         # We don't assert a specific result here, just make sure it runs
         # The result will depend on the specific lattice parameters
         self.assertIsInstance(result, bool)
+        
+    def test_repr(self):
+        """Test the __repr__ method for SphericalSite."""
+        frac_coords = np.array([0.25, 0.25, 0.25])
+        rcut = 1.5
+        label = "tetrahedral"
+        site = SphericalSite(frac_coords=frac_coords, rcut=rcut, label=label)
+        site.index = 5  # Set index explicitly for testing
+        site.contains_atoms = [1, 2, 3]  # Add some atoms for testing
+        
+        # Generate the string representation
+        repr_str = repr(site)
+        
+        # Verify all key attributes are included
+        self.assertIn("site_analysis.SphericalSite", repr_str)
+        self.assertIn(f"index={site.index}", repr_str)
+        self.assertIn(f"label={site.label}", repr_str)
+        self.assertIn(f"rcut={site.rcut}", repr_str)
+        self.assertIn(f"contains_atoms={site.contains_atoms}", repr_str)
+        # Don't check for exact frac_coords representation as it varies based on NumPy formatting
+        self.assertIn("frac_coords=", repr_str)
 
     
 

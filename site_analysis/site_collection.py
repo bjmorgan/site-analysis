@@ -180,6 +180,7 @@ class SiteCollection(ABC):
 
         Returns:
             (bool)
+            
         Notes:
             Specific SiteCollection subclass implementations may require
             additional arguments to be passed.

@@ -64,6 +64,21 @@ class SphericalSite(Site):
         super(SphericalSite, self).__init__(label=label)
         self.frac_coords = frac_coords
         self.rcut = rcut
+        
+    def __repr__(self) -> str:
+        """Return a string representation of this spherical site.
+        
+        Returns:
+            str: A string representation of the site including its 
+                class name and important attributes.
+        """
+        string = ('site_analysis.SphericalSite('
+                 f'index={self.index}, '
+                 f'label={self.label}, '
+                 f'frac_coords={self.frac_coords}, '
+                 f'rcut={self.rcut}, '
+                 f'contains_atoms={self.contains_atoms})')
+        return string
 
     @property
     def centre(self) -> np.ndarray:

@@ -1,4 +1,4 @@
-# Site Types and Concepts
+# Sites
 
 ## What is a Site?
 

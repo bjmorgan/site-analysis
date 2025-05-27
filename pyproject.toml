@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "0.5.0"
+version = "1.0.0"
 description = "Analysis tools for tracking ion migration through crystallographic sites"
 readme = "README.md"
 authors = [
-    {name = "Benjamin J. Morgan", email = "example@email.com"}
+    {name = "Benjamin J. Morgan", email = "b.j.morgan@bath.ac.uk"}
 ]
 license = "MIT"
 classifiers = [

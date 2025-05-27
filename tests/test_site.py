@@ -129,7 +129,14 @@ class SiteTestCase(unittest.TestCase):
         """Test that __repr__ is an abstract method in Site class."""
         abstract_methods = getattr(Site, "__abstractmethods__", set())
         self.assertIn("__repr__", abstract_methods)
-     
+   
+    def test_coordination_number_raises_not_implemented_error(self):
+        """Test coordination_number raises NotImplementedError in abstract Site."""
+        site = ConcreteSite()
+
+        with self.assertRaises(NotImplementedError):
+            _ = site.coordination_number
+
 if __name__ == '__main__':
     unittest.main()
     

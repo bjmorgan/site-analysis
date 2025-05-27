@@ -240,5 +240,74 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
 		# Check that no sites were created
 		self.assertEqual(len(sites), 0)
 
+class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
+    """Test centre coordinate serialisation for DynamicVoronoiSite."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_as_dict_excludes_centre_when_not_calculated(self):
+        """Test as_dict excludes centre_coords when centre not calculated."""
+        site = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+        # _centre_coords remains None
+
+        site_dict = site.as_dict()
+
+        self.assertNotIn('centre_coords', site_dict)
+
+    def test_as_dict_includes_centre_when_calculated(self):
+        """Test as_dict includes centre_coords when centre calculated."""
+        site = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+        site._centre_coords = np.array([0.25, 0.5, 0.75])
+
+        site_dict = site.as_dict()
+
+        self.assertIn('centre_coords', site_dict)
+        self.assertEqual(site_dict['centre_coords'], [0.25, 0.5, 0.75])
+
+    def test_from_dict_restores_centre_when_present(self):
+        """Test from_dict restores centre coordinates when present in dict."""
+        site_dict = {
+            'reference_indices': [4, 5, 6],
+            'centre_coords': [0.1, 0.2, 0.3]
+        }
+
+        site = DynamicVoronoiSite.from_dict(site_dict)
+
+        np.testing.assert_array_equal(site._centre_coords, [0.1, 0.2, 0.3])
+
+    def test_from_dict_leaves_centre_none_when_absent(self):
+        """Test from_dict leaves centre as None when not in dict."""
+        site_dict = {
+            'reference_indices': [4, 5, 6]
+        }
+
+        site = DynamicVoronoiSite.from_dict(site_dict)
+
+        self.assertIsNone(site._centre_coords)
+
+    def test_centre_property_works_after_deserialisation(self):
+        """Test centre property works correctly after from_dict."""
+        site_dict = {
+            'reference_indices': [1, 2],
+            'centre_coords': [0.4, 0.5, 0.6]
+        }
+
+        site = DynamicVoronoiSite.from_dict(site_dict)
+
+        np.testing.assert_array_equal(site.centre, [0.4, 0.5, 0.6])
+
+    def test_centre_property_raises_error_when_not_calculated_after_deserialisation(self):
+        """Test centre property raises error when centre not calculated after deserialisation."""
+        site_dict = {
+            'reference_indices': [1, 2]
+            # No centre_coords
+        }
+
+        site = DynamicVoronoiSite.from_dict(site_dict)
+
+        with self.assertRaises(RuntimeError):
+            _ = site.centre
+            
 if __name__ == '__main__':
 	unittest.main()

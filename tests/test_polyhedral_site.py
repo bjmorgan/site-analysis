@@ -347,7 +347,93 @@ def example_structure(species=None):
                           species=species,
                           coords_are_cartesian=True)
     return structure
- 
+
+class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
+    """Simple unit tests for PolyhedralSite serialisation."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_as_dict_includes_vertex_indices(self):
+        """Test as_dict includes vertex_indices."""
+        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+
+        site_dict = site.as_dict()
+
+        self.assertEqual(site_dict['vertex_indices'], [1, 2, 3, 4])
+        self.assertIn('vertex_coords', site_dict)
+
+    def test_as_dict_includes_vertex_coords_when_set(self):
+        """Test as_dict includes vertex_coords when they exist."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site.vertex_coords = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+
+        site_dict = site.as_dict()
+
+        np.testing.assert_array_equal(site_dict['vertex_coords'], site.vertex_coords)
+
+    def test_as_dict_includes_none_vertex_coords_when_not_set(self):
+        """Test as_dict includes None for vertex_coords when not set."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+
+        site_dict = site.as_dict()
+
+        self.assertIsNone(site_dict['vertex_coords'])
+
+    def test_from_dict_creates_site_with_vertex_indices(self):
+        """Test from_dict creates site with correct vertex_indices."""
+        site_dict = {
+            'vertex_indices': [5, 6, 7, 8],
+            'vertex_coords': None,
+            'contains_atoms': []
+        }
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertEqual(site.vertex_indices, [5, 6, 7, 8])
+        self.assertIsNone(site.vertex_coords)
+
+    def test_from_dict_creates_site_with_vertex_coords(self):
+        """Test from_dict creates site with vertex coordinates."""
+        vertex_coords = np.array([[0.1, 0.1, 0.1], [0.9, 0.9, 0.9]])
+        site_dict = {
+            'vertex_indices': [1, 2],
+            'vertex_coords': vertex_coords,
+            'contains_atoms': [],
+            'label': 'test_site'
+        }
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertEqual(site.vertex_indices, [1, 2])
+        np.testing.assert_array_equal(site.vertex_coords, vertex_coords)
+        self.assertEqual(site.label, 'test_site')
+
+    def test_from_dict_handles_missing_label(self):
+        """Test from_dict handles missing label field."""
+        site_dict = {
+            'vertex_indices': [1, 2, 3, 4],
+            'vertex_coords': None,
+            'contains_atoms': []
+        }
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertIsNone(site.label)
+
+    def test_round_trip_serialisation(self):
+        """Test as_dict -> from_dict preserves site data."""
+        original = PolyhedralSite(vertex_indices=[10, 11, 12, 13], label="original")
+        original.vertex_coords = np.array([[0.2, 0.2, 0.2], [0.8, 0.8, 0.8]])
+
+        site_dict = original.as_dict()
+        reconstructed = PolyhedralSite.from_dict(site_dict)
+
+        self.assertEqual(reconstructed.vertex_indices, original.vertex_indices)
+        self.assertEqual(reconstructed.label, original.label)
+        np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
+
+
 if __name__ == '__main__':
     unittest.main()
     

@@ -32,7 +32,7 @@ jobs:
           pytest --cov-config=.coveragerc --cov=site_analysis --cov-report lcov
       
       - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@v2.3.6
         with:
           path-to-lcov: ./coverage.lcov
           github-token: ${{ secrets.GITHUB_TOKEN }}

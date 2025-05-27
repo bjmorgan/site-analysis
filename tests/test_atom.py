@@ -1,4 +1,7 @@
 import unittest
+import tempfile
+import json
+import os
 from unittest.mock import patch, MagicMock, Mock
 from pymatgen.core import Structure, Lattice
 import numpy as np
@@ -304,7 +307,109 @@ class AtomUtilityFunctionsTestCase(unittest.TestCase):
         # Mixed case with None values
         atom.trajectory = [None, 3, None, None, 7, None]
         self.assertEqual(atom.most_recent_site, 7)
-        
+
+class AtomSerialisationTestCase(unittest.TestCase):
+    """Simple unit tests for Atom serialisation methods."""
+
+    def test_from_dict_creates_atom_with_correct_attributes(self):
+        """Test from_dict sets all attributes correctly."""
+        atom_dict = {
+            "index": 5,
+            "in_site": 2,
+            "frac_coords": [0.1, 0.2, 0.3],
+            "species_string": "Li"
+        }
+
+        atom = Atom.from_dict(atom_dict)
+
+        self.assertEqual(atom.index, 5)
+        self.assertEqual(atom.in_site, 2)
+        self.assertEqual(atom.species_string, "Li")
+        np.testing.assert_array_equal(atom._frac_coords, [0.1, 0.2, 0.3])
+
+    def test_from_dict_handles_none_values(self):
+        """Test from_dict handles None values correctly."""
+        atom_dict = {
+            "index": 1,
+            "in_site": None,
+            "frac_coords": [0.0, 0.0, 0.0]
+        }
+
+        atom = Atom.from_dict(atom_dict)
+
+        self.assertEqual(atom.index, 1)
+        self.assertIsNone(atom.in_site)
+        self.assertIsNone(atom.species_string)
+
+    def test_to_returns_json_string(self):
+        """Test to() method returns valid JSON string."""
+        atom = Atom(index=10, species_string="Na")
+        atom._frac_coords = np.array([0.5, 0.5, 0.5])
+        atom.in_site = 3
+
+        json_string = atom.to()
+
+        # Should be valid JSON
+        parsed = json.loads(json_string)
+        self.assertEqual(parsed["index"], 10)
+        self.assertEqual(parsed["species_string"], "Na")
+
+    def test_to_writes_file_when_filename_provided(self):
+        """Test to() writes to file when filename given."""
+        atom = Atom(index=1)
+        atom._frac_coords = np.array([0.1, 0.1, 0.1])
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            filename = tmp_file.name
+
+        try:
+            atom.to(filename=filename)
+
+            # File should exist and contain JSON
+            self.assertTrue(os.path.exists(filename))
+            with open(filename, 'r') as f:
+                data = json.load(f)
+            self.assertEqual(data["index"], 1)
+        finally:
+            os.unlink(filename)
+
+    def test_from_str_creates_atom_from_json(self):
+        """Test from_str creates atom from JSON string."""
+        json_string = '{"index": 7, "in_site": null, "frac_coords": [0.2, 0.3, 0.4]}'
+
+        atom = Atom.from_str(json_string)
+
+        self.assertEqual(atom.index, 7)
+        self.assertIsNone(atom.in_site)
+
+    def test_from_str_raises_error_for_invalid_json(self):
+        """Test from_str raises JSONDecodeError for invalid JSON."""
+        invalid_json = "not valid json"
+
+        with self.assertRaises(json.JSONDecodeError):
+            Atom.from_str(invalid_json)
+
+    def test_from_file_reads_atom_from_file(self):
+        """Test from_file reads atom from JSON file."""
+        atom_data = {"index": 15, "in_site": 5, "frac_coords": [0.7, 0.8, 0.9]}
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp_file:
+            json.dump(atom_data, tmp_file)
+            filename = tmp_file.name
+
+        try:
+            atom = Atom.from_file(filename)
+
+            self.assertEqual(atom.index, 15)
+            self.assertEqual(atom.in_site, 5)
+        finally:
+            os.unlink(filename)
+
+    def test_from_file_raises_error_for_missing_file(self):
+        """Test from_file raises FileNotFoundError for missing file."""
+        with self.assertRaises(FileNotFoundError):
+            Atom.from_file("nonexistent_file.json")
+    
 if __name__ == '__main__':
     unittest.main()
     

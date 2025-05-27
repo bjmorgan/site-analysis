@@ -48,12 +48,27 @@ extensions = [
     'nbsphinx'
 ]
 
-# Configure MyST Markdown
+# Configure MyST-Parser
 myst_enable_extensions = [
-    'colon_fence',  # Important for proper directive rendering
-    'deflist',
-    'tasklist',
+    'dollarmath',      # Support for math
+    'amsmath',         # For advanced math
+    'html_admonition', # For HTML blocks 
+    'html_image',      # For HTML images
+    'colon_fence',     # For easier code blocks
+    'smartquotes',     # Converts quotes to typographic form
+    'replacements',    # Common text replacements
+    'deflist',         # Definition lists
 ]
+
+# Enable HTML pass-through
+myst_html_meta = {
+    "html_context": {
+        "raw_enabled": True,
+    }
+}
+
+# Allow all HTML tags to remain during conversion (important for superscripts/subscripts)
+myst_allow_html = True
 
 # Configure sphinx search to use 'english' stemmer instead of 'porter'
 search_language_stemming_code = 'english'

@@ -41,8 +41,21 @@ def unwrap_vertices_to_reference_centre(frac_coords: np.ndarray, reference_centr
 		lattice: Lattice object for distance calculations.
 		
 	Returns:
-		Unwrapped fractional coordinates with the same shape.
+		Unwrapped fractional coordinates with the same shape, shifted to ensure all coordinates >= 0.
 	"""
-	# TODO: Implement vectorised reference centre-based unwrapping
-	# For now, just return the input (stub implementation)
-	return frac_coords.copy()
+	# Handle empty input
+	if len(frac_coords) == 0:
+		return frac_coords.copy()
+	
+	result = np.zeros_like(frac_coords)
+	
+	for i, vertex in enumerate(frac_coords):
+		_, image = lattice.get_distance_and_image(reference_centre, vertex)
+		result[i] = vertex + image
+	
+	# Apply uniform shift to ensure all coordinates are non-negative
+	min_coords = np.min(result, axis=0)
+	shift = np.maximum(0, np.ceil(-min_coords))
+	result += shift
+	
+	return result

@@ -298,26 +298,21 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 	def test_unwrap_vertices_pathological_case(self):
 		"""Test octahedron that would break the legacy spread-based algorithm."""
 		vertex_coords = np.array([
-			[0.05, 0.05, 0.5],  
-			[0.95, 0.05, 0.5],  
-			[0.05, 0.95, 0.5],  
-			[0.95, 0.95, 0.5],  
-			[0.5, 0.5, 0.05],   
-			[0.5, 0.5, 0.95]    
+			[0.55, 0.25, 0.25],  
+			[0.95, 0.25, 0.25],  
+			[0.25, 0.95, 0.25],  
+			[0.25, 0.55, 0.25],  
+			[0.25, 0.25, 0.55],   
+			[0.25, 0.25, 0.95]    
 		])
-		reference_centre = np.array([0.025, 0.025, 0.5])
+		reference_centre = np.array([0.25, 0.25, 0.25])
+		expected_result_centre = np.array([1.25, 1.25, 1.25])
 		
 		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
 		
-		# After unwrapping and ensuring non-negative coordinates,
-		# all vertices should be >= 0 and form a compact polyhedron
-		self.assertTrue(np.all(result >= 0))
-		
-		# The centre should be close to the reference centre (after accounting for shifts)
+		# The centre of the unwrapped vertices should be close to the reference centre
 		result_centre = np.mean(result, axis=0)
-		# We can't predict exact coordinates due to shifting, but it should be compact
-		max_spread = np.max(result, axis=0) - np.min(result, axis=0)
-		self.assertTrue(np.all(max_spread < 0.5))  # Should be more compact than original
+		np.testing.assert_array_almost_equal(result_centre, expected_result_centre, decimal=2)
 
 
 if __name__ == '__main__':

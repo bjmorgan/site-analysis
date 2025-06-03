@@ -8,8 +8,6 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
-
-# Import the class (assuming it will be defined in this module)
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 
 
@@ -727,6 +725,17 @@ class TestReferenceBasedSites(unittest.TestCase):
             mock_aligner.align.assert_called_once()
             _, kwargs = mock_aligner.align.call_args
             self.assertEqual(kwargs["tolerance"], align_tolerance)
+
+class ReferenceWorkflowImportTestCase(unittest.TestCase):
+    """Test that reference workflow classes can be imported at package level."""
+
+    def test_can_import_reference_based_sites(self):
+        """Test that ReferenceBasedSites can be imported from reference_workflow package."""
+        try:
+            from site_analysis.reference_workflow import ReferenceBasedSites
+        except ImportError as e:
+            self.fail(f"Could not import ReferenceBasedSites from reference_workflow: {e}")
+
 
 
 if __name__ == '__main__':

@@ -44,7 +44,10 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
-packages = ["site_analysis"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["site_analysis*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

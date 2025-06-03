@@ -2,7 +2,6 @@
 
 import numpy as np
 from pymatgen.core import Lattice
-from typing import cast
 
 def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
 	"""Apply the legacy spread-based periodic boundary condition handling.

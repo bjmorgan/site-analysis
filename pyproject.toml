@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "1.0.0"
+version = "1.0.1"
 description = "Analysis tools for tracking ion migration through crystallographic sites"
 readme = "README.md"
 authors = [
@@ -44,7 +44,10 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
-packages = ["site_analysis"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["site_analysis*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -59,3 +59,50 @@ def unwrap_vertices_to_reference_centre(frac_coords: np.ndarray, reference_centr
 	result += shift
 	
 	return result
+	
+	
+def unwrap_vertices_vectorised(frac_coords: np.ndarray, reference_centre: np.ndarray, lattice) -> np.ndarray:
+	"""Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
+	
+	Args:
+		frac_coords: Array of fractional coordinates with shape (n, 3).
+		reference_centre: Reference centre position for unwrapping.
+		lattice: Lattice object for distance calculations.
+		
+	Returns:
+		Unwrapped fractional coordinates with the same shape, shifted to ensure all coordinates >= 0.
+	"""
+	# Handle empty input
+	if len(frac_coords) == 0:
+		return frac_coords.copy()
+	
+	# Generate all 27 possible shifts: [-1,0,1] for each dimension
+	shifts = np.array([[dx, dy, dz] for dx in [-1, 0, 1] 
+									for dy in [-1, 0, 1] 
+									for dz in [-1, 0, 1]])  # (27, 3)
+	
+	# Apply all shifts using broadcasting: (n_vertices, 27, 3)
+	vertex_images = frac_coords[:, np.newaxis, :] + shifts[np.newaxis, :, :]
+	
+	# Convert to Cartesian coordinates for true distance calculation
+	ref_cart = lattice.get_cartesian_coords(reference_centre)  # (3,)
+	n_vertices = len(frac_coords)
+	vertex_images_flat = vertex_images.reshape(n_vertices * 27, 3)  # (n_vertices * 27, 3)
+	vertex_images_cart = lattice.get_cartesian_coords(vertex_images_flat)  # (n_vertices * 27, 3)
+	
+	# Calculate Euclidean distances from reference centre to all images
+	distances_flat = np.linalg.norm(vertex_images_cart - ref_cart, axis=1)  # (n_vertices * 27,)
+	
+	# Reshape distances back to (n_vertices, 27)
+	distances = distances_flat.reshape(n_vertices, 27)
+	
+	# Select closest image for each vertex
+	best_indices = np.argmin(distances, axis=1)
+	result = vertex_images[np.arange(n_vertices), best_indices]
+	
+	# Apply uniform shift to ensure all coordinates are non-negative
+	min_coords = np.min(result, axis=0)
+	shift = np.maximum(0, np.ceil(-min_coords))
+	result += shift
+	
+	return result

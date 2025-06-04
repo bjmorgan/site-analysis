@@ -38,7 +38,8 @@ class TestReferenceBasedSites(unittest.TestCase):
         self.target = Structure(lattice, species2, coords2)
         
         # Sample coordination environments
-        self.ref_environments = {0: [1, 3]}  # One environment with Cl atoms at indices 1 and 3
+        self.ref_environments = {0: [1, 3]} # One environment with Cl atoms at indices 1 and 3
+        self.ref_environments_list = [[1, 3]] 
         self.mapped_environments = [[1, 3]]  # Same indices after mapping (for simplicity in tests)
         
         # Set up mock objects
@@ -189,7 +190,7 @@ class TestReferenceBasedSites(unittest.TestCase):
                 cutoff=3.0
             )
             
-            # Check returned environments (converted from dict to list of lists)
+            # Check returned environments (should be dictionary format)
             self.assertEqual(environments, self.ref_environments)
     
     def test_map_environments(self):
@@ -313,7 +314,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
                 self.reference,
                 self.target,
-                self.ref_environments,
+                self.ref_environments_list,
                 target_species='Cl'
             )
             
@@ -356,7 +357,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertIs(args[1], self.target)
             
             # Verify other arguments
-            self.assertEqual(args[2], list(self.ref_environments.values()))
+            self.assertEqual(args[2], self.ref_environments_list)
             self.assertEqual(kwargs['target_species'], 'Cl')
             
             # Verify expected sites are returned
@@ -391,7 +392,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertIs(args[1], self.target)
             
             # Verify other arguments
-            self.assertEqual(args[2], self.ref_environments)
+            self.assertEqual(args[2], self.ref_environments_list)
             self.assertEqual(kwargs['target_species'], 'Cl')
             
             # Verify expected sites are returned

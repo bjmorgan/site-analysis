@@ -192,7 +192,10 @@ class ReferenceBasedSites:
 		self._validate_unique_environments(ref_environments)
 		
 		# Map environments to target structure
-		mapped_environments = self._map_environments(ref_environments, target_species)
+		mapped_environments = self._map_environments(
+			list(ref_environments.values()),
+			target_species
+		)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -364,7 +367,7 @@ class ReferenceBasedSites:
 		for center_idx, env in environments.items():
 			if len(env) != len(set(env)):
 				# Find the duplicates
-				counts = {}
+				counts: dict[int, int] = {}
 				for idx in env:
 					counts[idx] = counts.get(idx, 0) + 1
 				duplicates = [idx for idx, count in counts.items() if count > 1]

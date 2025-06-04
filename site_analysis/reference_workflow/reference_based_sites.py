@@ -135,7 +135,10 @@ class ReferenceBasedSites:
 		self._validate_unique_environments(ref_environments)
 		
 		# Map environments to target structure
-		mapped_environments = self._map_environments(ref_environments, target_species)
+		mapped_environments = self._map_environments(
+			list(ref_environments.values()),
+			target_species
+		)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -145,7 +148,9 @@ class ReferenceBasedSites:
 		# At this point we know self._site_factory is not None
 		assert self._site_factory is not None
 		sites = self._site_factory.create_polyhedral_sites(
-			mapped_environments, label=label, labels=labels
+			mapped_environments,
+			label=label,
+			labels=labels
 		)
 		
 		return sites
@@ -247,9 +252,9 @@ class ReferenceBasedSites:
 	
 	def _find_coordination_environments(self, 
 									  center_species: str, 
-									  coordination_species: Union[str, List[str]], 
+									  coordination_species: Union[str, list[str]], 
 									  cutoff: float, 
-									  n_coord: int) -> List[List[int]]:
+									  n_coord: int) -> dict[int, list[int]]:
 		"""Find coordination environments in the reference structure.
 		
 		Args:
@@ -259,7 +264,8 @@ class ReferenceBasedSites:
 			n_coord: Number of coordination atoms per environment
 			
 		Returns:
-			List of environments, where each environment is a list of atom indices
+			Dictionary mapping center atom indices to lists of coordinating atom indices.
+			Keys are indices of center atoms, values are lists of coordinating atom indices.
 			
 		Raises:
 			ValueError: If coordination environments cannot be found.
@@ -279,10 +285,7 @@ class ReferenceBasedSites:
 				cutoff=cutoff
 			)
 			
-			# Convert from dict of {center_idx: [vertex_indices]} to list of vertex index lists
-			environments_list = [coordinating for coordinating in environments_dict.values()]
-			
-			return environments_list
+			return environments_dict
 			
 		except Exception as e:
 			# Re-raise with more context
@@ -348,16 +351,17 @@ class ReferenceBasedSites:
 			self._site_factory = SiteFactory(self.target_structure)
 		return self._site_factory
 	
-	def _validate_unique_environments(self, environments):
+	def _validate_unique_environments(self, environments: dict[int, list[int]]) -> None:
 		"""Validate that each environment contains unique atom indices.
 		
 		Args:
-			environments: List of environments, where each environment is a list of atom indices.
+			environments: Dict of environments, where keys are center atom indices 
+				and values are lists of coordinating atom indices.
 			
 		Raises:
 			ValueError: If any environment contains duplicate atom indices.
 		"""
-		for i, env in enumerate(environments):
+		for center_idx, env in environments.items():
 			if len(env) != len(set(env)):
 				# Find the duplicates
 				counts = {}
@@ -366,7 +370,7 @@ class ReferenceBasedSites:
 				duplicates = [idx for idx, count in counts.items() if count > 1]
 				
 				raise ValueError(
-					f"Environment {i} contains duplicate atom indices {duplicates}. "
+					f"Environment for center atom {center_idx} contains duplicate atom indices {duplicates}. "
 					f"This typically occurs in small unit cells where the same atom "
 					f"appears as a neighbor in multiple periodic images. "
 					f"Please use a larger supercell for your analysis."

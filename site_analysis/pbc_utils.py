@@ -53,6 +53,9 @@ def unwrap_vertices_to_reference_centre(
 	Returns:
 		Unwrapped fractional coordinates with the same shape, shifted to ensure all coordinates >= 0.
 	"""
+	if frac_coords.size == 0:
+		return frac_coords
+		
 	# Apply all shifts using broadcasting: (n_vertices, 27, 3)
 	vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
 	

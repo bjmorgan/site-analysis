@@ -38,7 +38,7 @@ class TestReferenceBasedSites(unittest.TestCase):
         self.target = Structure(lattice, species2, coords2)
         
         # Sample coordination environments
-        self.ref_environments = [[1, 3]]  # One environment with Cl atoms at indices 1 and 3
+        self.ref_environments = {0: [1, 3]}  # One environment with Cl atoms at indices 1 and 3
         self.mapped_environments = [[1, 3]]  # Same indices after mapping (for simplicity in tests)
         
         # Set up mock objects
@@ -272,7 +272,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
                 self.reference,
                 self.target,
-                self.ref_environments,
+                self.mapped_environments,
                 target_species='Cl'
             )
             
@@ -356,7 +356,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertIs(args[1], self.target)
             
             # Verify other arguments
-            self.assertEqual(args[2], self.ref_environments)
+            self.assertEqual(args[2], list(self.ref_environments.values()))
             self.assertEqual(kwargs['target_species'], 'Cl')
             
             # Verify expected sites are returned
@@ -475,11 +475,11 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
             # Valid environments with unique indices
-            valid_environments = [
-                [1, 2, 3, 4],       # All unique
-                [5, 6, 7],          # All unique
-                [8]                 # Single index
-            ]
+            valid_environments = {
+                0: [1, 2, 3, 4],       # All unique
+                1: [5, 6, 7],          # All unique
+                2: [8]                 # Single index
+            }
             
             # Should not raise any exception
             rbs._validate_unique_environments(valid_environments)
@@ -490,10 +490,10 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
             # Empty environments
-            empty_environments = [
-                [],                 # Empty list
-                []                  # Another empty list
-            ]
+            empty_environments = {
+                0: [],                 # Empty list
+                1: []                  # Another empty list
+            }
             
             # Should not raise any exception
             rbs._validate_unique_environments(empty_environments)
@@ -504,17 +504,17 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
             # Environments with duplicate indices
-            duplicate_environments = [
-                [1, 2, 2, 3],       # Duplicate 2
-                [4, 5, 6]           # All unique (but earlier list has duplicates)
-            ]
+            duplicate_environments = {
+                0: [1, 2, 2, 3],       # Duplicate 2
+                1: [4, 5, 6]           # All unique (but earlier list has duplicates)
+            }
             
             # Should raise ValueError due to duplicates in the first environment
             with self.assertRaises(ValueError) as context:
                 rbs._validate_unique_environments(duplicate_environments)
             
             # Check error message
-            self.assertIn("Environment 0 contains duplicate atom indices", str(context.exception))
+            self.assertIn("Environment for center atom 0 contains duplicate atom indices", str(context.exception))
             self.assertIn("2", str(context.exception))  # Should mention the duplicated index
     
     def test_validate_unique_environments_multiple_duplicates(self):
@@ -523,9 +523,9 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
             # Environment with multiple duplicates
-            multi_duplicate_environments = [
-                [1, 2, 3, 1, 2, 4]  # Duplicates 1 and 2
-            ]
+            multi_duplicate_environments = {
+                0: [1, 2, 3, 1, 2, 4]  # Duplicates 1 and 2
+            }
             
             # Should raise ValueError
             with self.assertRaises(ValueError) as context:

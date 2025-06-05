@@ -809,8 +809,9 @@ def create_trajectory_with_polyhedral_sites(
 		mapping_species: Species to use for mapping sites between structures. 
 			If None, align_species will be used.
 		align_tolerance: Convergence tolerance for alignment optimiser.
-		use_reference_centers: Whether to use reference centre-based periodic 
-			boundary condition handling (recommended) or legacy spread-based handling.
+		use_reference_centers: Whether to use reference centers for 
+			PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+			Default is True.
 			
 	Returns:
 		Trajectory: Configured trajectory object ready for site analysis.
@@ -894,8 +895,9 @@ def create_trajectory_with_dynamic_voronoi_sites(
 		mapping_species: Species to use for mapping sites between structures. 
 			If None, align_species will be used.
 		align_tolerance: Convergence tolerance for alignment optimiser.
-		use_reference_centers: Whether to use reference centre-based periodic 
-			boundary condition handling (recommended) or legacy spread-based handling.
+		use_reference_centers: Whether to use reference centers for 
+			PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+			Default is True.
 			
 	Returns:
 		Trajectory: Configured trajectory object ready for site analysis.

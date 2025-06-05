@@ -326,18 +326,18 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _ = site.centre
             
-    def test_dynamic_voronoi_site_init_with_reference_centre(self):
+    def test_dynamic_voronoi_site_init_with_reference_center(self):
         """Test DynamicVoronoiSite can be initialised with a reference centre."""
         reference_indices = [0, 1, 2, 3]
-        reference_centre = np.array([0.25, 0.5, 0.75])
-        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_centre=reference_centre)
-        np.testing.assert_array_equal(site.reference_centre, reference_centre)
+        reference_center = np.array([0.25, 0.5, 0.75])
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=reference_center)
+        np.testing.assert_array_equal(site.reference_center, reference_center)
         self.assertEqual(site.reference_indices, reference_indices)
         
-    def test_calculate_centre_uses_legacy_when_no_reference_centre(self):
-        """Test that legacy PBC correction is used when reference_centre is None."""
+    def test_calculate_centre_uses_legacy_when_no_reference_center(self):
+        """Test that legacy PBC correction is used when reference_center is None."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)  # No reference_centre
+        site = DynamicVoronoiSite(reference_indices=reference_indices)  # No reference_center
         
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1], [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
@@ -350,17 +350,17 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
             
             mock_legacy.assert_called_once()
     
-    def test_calculate_centre_uses_reference_centre_when_provided(self):
-        """Test that reference centre-based unwrapping is used when reference_centre is provided."""
+    def test_calculate_centre_uses_reference_center_when_provided(self):
+        """Test that reference centre-based unwrapping is used when reference_center is provided."""
         reference_indices = [0, 1, 2, 3]
-        reference_centre = np.array([0.5, 0.5, 0.5])
-        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_centre=reference_centre)
+        reference_center = np.array([0.5, 0.5, 0.5])
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=reference_center)
         
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1], [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         
-        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_centre') as mock_unwrap:
+        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
             mock_unwrap.return_value = np.array(coords)
             
             site.calculate_centre(structure)

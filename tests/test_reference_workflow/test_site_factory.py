@@ -239,29 +239,29 @@ class TestSiteFactory(unittest.TestCase):
 			sites = self.site_factory.create_dynamic_voronoi_sites([])
 			self.assertEqual(len(sites), 0)
 			
-	def test_create_polyhedral_sites_with_reference_centres(self):
+	def test_create_polyhedral_sites_with_reference_centers(self):
 		"""Test creating polyhedral sites with reference centres."""
 		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]
-		reference_centres = [
+		reference_centers = [
 			np.array([0.1, 0.1, 0.1]),
 			np.array([0.2, 0.2, 0.2])
 		]
 		
 		sites = self.site_factory.create_polyhedral_sites(
 			environments,
-			reference_centres=reference_centres,
+			reference_centers=reference_centers,
 			label="test_label"
 		)
 		
 		# Check that sites were created with reference centres
 		self.assertEqual(len(sites), 2)
 		
-		for site, expected_centre in zip(sites, reference_centres):
+		for site, expected_centre in zip(sites, reference_centers):
 			self.assertIsInstance(site, PolyhedralSite)
-			self.assertIsNotNone(site.reference_centre)
-			np.testing.assert_array_equal(site.reference_centre, expected_centre)
+			self.assertIsNotNone(site.reference_center)
+			np.testing.assert_array_equal(site.reference_center, expected_centre)
 	
-	def test_create_polyhedral_sites_without_reference_centres(self):
+	def test_create_polyhedral_sites_without_reference_centers(self):
 		"""Test creating polyhedral sites without reference centres (existing behaviour)."""
 		environments = [[1, 2, 3, 4], [0, 1, 2, 3]]
 		
@@ -272,31 +272,31 @@ class TestSiteFactory(unittest.TestCase):
 		
 		for site in sites:
 			self.assertIsInstance(site, PolyhedralSite)
-			self.assertIsNone(site.reference_centre)
+			self.assertIsNone(site.reference_center)
 	
-	def test_create_dynamic_voronoi_sites_with_reference_centres(self):
+	def test_create_dynamic_voronoi_sites_with_reference_centers(self):
 		"""Test creating dynamic voronoi sites with reference centres."""
 		environments = [[1, 2], [3, 4]]
-		reference_centres = [
+		reference_centers = [
 			np.array([0.3, 0.3, 0.3]),
 			np.array([0.4, 0.4, 0.4])
 		]
 		
 		sites = self.site_factory.create_dynamic_voronoi_sites(
 			environments,
-			reference_centres=reference_centres,
+			reference_centers=reference_centers,
 			label="test_label"
 		)
 		
 		# Check that sites were created with reference centres
 		self.assertEqual(len(sites), 2)
 		
-		for site, expected_centre in zip(sites, reference_centres):
+		for site, expected_centre in zip(sites, reference_centers):
 			self.assertIsInstance(site, DynamicVoronoiSite)
-			self.assertIsNotNone(site.reference_centre)
-			np.testing.assert_array_equal(site.reference_centre, expected_centre)
+			self.assertIsNotNone(site.reference_center)
+			np.testing.assert_array_equal(site.reference_center, expected_centre)
 	
-	def test_create_dynamic_voronoi_sites_without_reference_centres(self):
+	def test_create_dynamic_voronoi_sites_without_reference_centers(self):
 		"""Test creating dynamic voronoi sites without reference centres (existing behaviour)."""
 		environments = [[1, 2], [3, 4]]
 		
@@ -307,34 +307,34 @@ class TestSiteFactory(unittest.TestCase):
 		
 		for site in sites:
 			self.assertIsInstance(site, DynamicVoronoiSite)
-			self.assertIsNone(site.reference_centre)
+			self.assertIsNone(site.reference_center)
 	
 	def test_create_polyhedral_sites_mismatched_lengths_raises_error(self):
 		"""Test that mismatched lengths between environments and reference centres raises error."""
 		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]  # 2 environments
-		reference_centres = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
+		reference_centers = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
 		
 		with self.assertRaises(ValueError) as context:
 			self.site_factory.create_polyhedral_sites(
 				environments,
-				reference_centres=reference_centres
+				reference_centers=reference_centers
 			)
 		
-		self.assertIn("reference_centres", str(context.exception))
+		self.assertIn("reference_centers", str(context.exception))
 		self.assertIn("environments", str(context.exception))
 		
 	def test_create_dynamic_voronoi_sites_mismatched_lengths_raises_error(self):
 		"""Test that mismatched lengths between environments and reference centres raises error."""
 		environments = [[1, 2], [3, 4]]  # 2 environments
-		reference_centres = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
+		reference_centers = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
 		
 		with self.assertRaises(ValueError) as context:
 			self.site_factory.create_dynamic_voronoi_sites(
 				environments,
-				reference_centres=reference_centres
+				reference_centers=reference_centers
 			)
 		
-		self.assertIn("reference_centres", str(context.exception))
+		self.assertIn("reference_centers", str(context.exception))
 		self.assertIn("environments", str(context.exception))
 
 

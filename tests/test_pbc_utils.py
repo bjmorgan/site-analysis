@@ -5,7 +5,7 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
-from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_centre
+from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 
 
 class TestLegacyPBCCorrection(unittest.TestCase):
@@ -263,9 +263,9 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 			[0.6, 0.4, 0.6],
 			[0.4, 0.6, 0.6]
 		])
-		reference_centre = np.array([0.5, 0.5, 0.5])
+		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
 		
 		# Should remain unchanged since all vertices are already close
 		np.testing.assert_array_almost_equal(result, vertex_coords, decimal=7)
@@ -281,9 +281,9 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 			[0.05, 0.5, 0.6],  # +z vertex
 			[0.05, 0.5, 0.4]   # -z vertex
 		])
-		reference_centre = np.array([0.05, 0.5, 0.5])
+		reference_center = np.array([0.05, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
 		
 		# After unwrapping and shifting to ensure non-negative coordinates
 		expected = np.array([
@@ -306,10 +306,10 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 			[0.25, 0.25, 0.55],   
 			[0.25, 0.25, 0.95]    
 		])
-		reference_centre = np.array([0.25, 0.25, 0.25])
+		reference_center = np.array([0.25, 0.25, 0.25])
 		expected_result_centre = np.array([1.25, 1.25, 1.25])
 		
-		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
 		
 		# The centre of the unwrapped vertices should be close to the reference centre
 		result_centre = np.mean(result, axis=0)
@@ -323,9 +323,9 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 			[0.6, 0.4, 0.6],
 			[0.4, 0.6, 0.6]
 		])
-		reference_centre = np.array([0.5, 0.5, 0.5])
+		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
 		
 		# Should remain unchanged since all vertices are already close
 		np.testing.assert_array_almost_equal(result, vertex_coords, decimal=7)
@@ -333,9 +333,9 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 	def test_unwrap_vertices_empty_input(self):
 		"""Test that empty input is handled correctly."""
 		vertex_coords = np.array([]).reshape(0, 3)
-		reference_centre = np.array([0.5, 0.5, 0.5])
+		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_centre(vertex_coords, reference_centre, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
 		
 		# Should return empty array with correct shape
 		self.assertEqual(result.shape, (0, 3))

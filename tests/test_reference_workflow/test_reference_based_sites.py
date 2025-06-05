@@ -728,7 +728,7 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertEqual(kwargs["tolerance"], align_tolerance)
             
 class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
-    """Unit tests for _calculate_reference_centres_from_indices method."""
+    """Unit tests for _calculate_reference_centers_from_indices method."""
     
     def setUp(self):
         """Set up simple test structures."""
@@ -750,7 +750,7 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         # Target structure (same for these unit tests)
         self.target_structure = self.reference_structure.copy()
         
-    def test_calculate_reference_centres_single_index(self):
+    def test_calculate_reference_centers_single_index(self):
         """Test calculating reference centre for a single center index."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -759,16 +759,16 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         )
         
         center_indices = [0]  # Li at [0.0, 0.0, 0.0]
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Should return one centre
-        self.assertEqual(len(reference_centres), 1)
+        self.assertEqual(len(reference_centers), 1)
         
         # Centre should match the coordinate of atom 0
         expected = np.array([0.0, 0.0, 0.0])
-        np.testing.assert_array_equal(reference_centres[0], expected)
+        np.testing.assert_array_equal(reference_centers[0], expected)
         
-    def test_calculate_reference_centres_multiple_indices(self):
+    def test_calculate_reference_centers_multiple_indices(self):
         """Test calculating reference centres for multiple center indices."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -777,10 +777,10 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         )
         
         center_indices = [0, 2, 4]  # Three Li atoms
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Should return three centres
-        self.assertEqual(len(reference_centres), 3)
+        self.assertEqual(len(reference_centers), 3)
         
         # Centres should match the coordinates of atoms 0, 2, 4
         expected_centres = [
@@ -790,9 +790,9 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         ]
         
         for i, expected in enumerate(expected_centres):
-            np.testing.assert_array_equal(reference_centres[i], expected)
+            np.testing.assert_array_equal(reference_centers[i], expected)
             
-    def test_calculate_reference_centres_uses_reference_structure_when_no_alignment(self):
+    def test_calculate_reference_centers_uses_reference_structure_when_no_alignment(self):
         """Test that method uses reference_structure when no alignment was performed."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -804,13 +804,13 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         self.assertIsNone(rbs.aligned_structure)
         
         center_indices = [2]  # Li at [0.2, 0.2, 0.2]
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Should use reference_structure coordinates
         expected = self.reference_structure[2].frac_coords
-        np.testing.assert_array_equal(reference_centres[0], expected)
+        np.testing.assert_array_equal(reference_centers[0], expected)
         
-    def test_calculate_reference_centres_uses_aligned_structure_when_available(self):
+    def test_calculate_reference_centers_uses_aligned_structure_when_available(self):
         """Test that method uses aligned_structure when alignment was performed."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -833,17 +833,17 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         rbs.aligned_structure = aligned_structure
         
         center_indices = [2]  # Li atom
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Should use aligned_structure coordinates, not reference_structure
         expected = aligned_structure[2].frac_coords  # [0.3, 0.3, 0.3]
-        np.testing.assert_array_equal(reference_centres[0], expected)
+        np.testing.assert_array_equal(reference_centers[0], expected)
         
         # Verify it's different from reference_structure
         reference_coord = self.reference_structure[2].frac_coords  # [0.2, 0.2, 0.2]
-        self.assertFalse(np.array_equal(reference_centres[0], reference_coord))
+        self.assertFalse(np.array_equal(reference_centers[0], reference_coord))
         
-    def test_calculate_reference_centres_empty_list(self):
+    def test_calculate_reference_centers_empty_list(self):
         """Test calculating reference centres for empty list of indices."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -852,13 +852,13 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         )
         
         center_indices = []
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Should return empty list
-        self.assertEqual(len(reference_centres), 0)
-        self.assertEqual(reference_centres, [])
+        self.assertEqual(len(reference_centers), 0)
+        self.assertEqual(reference_centers, [])
         
-    def test_calculate_reference_centres_copies_coordinates(self):
+    def test_calculate_reference_centers_copies_coordinates(self):
         """Test that returned coordinates are copies, not references."""
         rbs = ReferenceBasedSites(
             reference_structure=self.reference_structure,
@@ -867,11 +867,11 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         )
         
         center_indices = [0]
-        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        reference_centers = rbs._calculate_reference_centers_from_indices(center_indices)
         
         # Modify the returned coordinate
-        original_value = reference_centres[0][0]
-        reference_centres[0][0] = 0.9
+        original_value = reference_centers[0][0]
+        reference_centers[0][0] = 0.9
         
         # Original structure should be unchanged
         structure_value = self.reference_structure[0].frac_coords[0]

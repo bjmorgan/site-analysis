@@ -24,13 +24,14 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		
 		# Create a simple test structure
 		lattice = Lattice.cubic(5.0)
-		species = ["Na", "Cl", "Na", "Cl", "Na"]
+		species = ["Na", "Cl", "Na", "Cl", "Na", "Cl"]
 		coords = [
 			[0.0, 0.0, 0.0],  # Na0
 			[0.2, 0.2, 0.2],  # Cl1
 			[0.5, 0.0, 0.0],  # Na2
 			[0.7, 0.2, 0.2],  # Cl3
 			[0.0, 0.5, 0.0],  # Na4
+			[0.3, 0.3, 0.3],  # Cl5
 		]
 		self.structure = Structure(lattice, species, coords)
 		
@@ -93,9 +94,9 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		factory = SiteFactory(self.structure)
 		
 		# Create multiple sites of the same type
-		polyhedral_sites_1 = factory.create_polyhedral_sites([[1, 2, 3]])
-		polyhedral_sites_2 = factory.create_polyhedral_sites([[2, 3, 4]])
-		polyhedral_sites_3 = factory.create_polyhedral_sites([[0, 1, 2]])
+		polyhedral_sites_1 = factory.create_polyhedral_sites([[1, 2, 3, 4]])
+		polyhedral_sites_2 = factory.create_polyhedral_sites([[2, 3, 4, 5]])
+		polyhedral_sites_3 = factory.create_polyhedral_sites([[0, 1, 2, 3]])
 		
 		# Check that site indices increment as expected
 		self.assertEqual(polyhedral_sites_1[0].index, 0)

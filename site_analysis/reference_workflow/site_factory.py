@@ -46,7 +46,7 @@ class SiteFactory:
 	def create_polyhedral_sites(
 		self, 
 		environments: list[list[int]], 
-		reference_centres: list[np.ndarray] | None = None,
+		reference_centers: list[np.ndarray] | None = None,
 		label: str | None = None,
 		labels: list[str] | None = None
 	) -> list[PolyhedralSite]:
@@ -55,7 +55,7 @@ class SiteFactory:
 		Args:
 			environments: List of environments, where each environment is a list
 				of atom indices defining the vertices of a polyhedral site.
-			reference_centres: Optional list of reference centres for PBC handling.
+			reference_centers: Optional list of reference centres for PBC handling.
 				If provided, must have the same length as environments.
 			label: Optional label to assign to all sites.
 			labels: Optional list of labels, one for each environment.
@@ -65,7 +65,7 @@ class SiteFactory:
 			
 		Raises:
 			ValueError: If environments are invalid, if minimum vertex count
-				is not met, or if reference_centres length doesn't match environments.
+				is not met, or if reference_centers length doesn't match environments.
 		"""
 		# Validate inputs
 		self._validate_environments(environments)
@@ -80,10 +80,10 @@ class SiteFactory:
 				)
 				
 		# Validate number of environments == number of reference centres
-		if reference_centres is not None:
-			if len(reference_centres) != len(environments):
+		if reference_centers is not None:
+			if len(reference_centers) != len(environments):
 				raise ValueError(
-					f"Length of reference_centres ({len(reference_centres)}) must match "
+					f"Length of reference_centers ({len(reference_centers)}) must match "
 					f"length of environments ({len(environments)})"
 				)
 		
@@ -96,13 +96,13 @@ class SiteFactory:
 			)
 			
 			# Determine reference centre for this site
-			ref_centre = reference_centres[i] if reference_centres is not None else None
+			ref_centre = reference_centers[i] if reference_centers is not None else None
 			
 			# Create site
 			site = PolyhedralSite(
 				vertex_indices=env, 
 				label=site_label,
-				reference_centre=ref_centre
+				reference_center=ref_centre
 			)
 			
 			# Assign vertex coordinates
@@ -115,7 +115,7 @@ class SiteFactory:
 	def create_dynamic_voronoi_sites(
 		self, 
 		environments: list[list[int]], 
-		reference_centres: list[np.ndarray] | None = None,
+		reference_centers: list[np.ndarray] | None = None,
 		label: str | None = None,
 		labels: list[str] | None = None
 	) -> list[DynamicVoronoiSite]:
@@ -125,7 +125,7 @@ class SiteFactory:
 			environments: List of environments, where each environment is a list
 				of atom indices defining the reference atoms for a dynamic
 				Voronoi site.
-			reference_centres: Optional list of reference centres for PBC handling.
+			reference_centers: Optional list of reference centres for PBC handling.
 				If provided, must have the same length as environments.
 			label: Optional label to assign to all sites.
 			labels: Optional list of labels, one for each environment.
@@ -141,10 +141,10 @@ class SiteFactory:
 		self._validate_labels(label, labels, len(environments))
 		
 		# Validate number of environments == number of reference centres
-		if reference_centres is not None:
-			if len(reference_centres) != len(environments):
+		if reference_centers is not None:
+			if len(reference_centers) != len(environments):
 				raise ValueError(
-					f"Length of reference_centres ({len(reference_centres)}) must match "
+					f"Length of reference_centers ({len(reference_centers)}) must match "
 					f"length of environments ({len(environments)})"
 				)
 			
@@ -157,13 +157,13 @@ class SiteFactory:
 			)
 			
 			# Determine reference centre for this site  
-			ref_centre = reference_centres[i] if reference_centres is not None else None
+			ref_centre = reference_centers[i] if reference_centers is not None else None
 			
 			# Create site
 			site = DynamicVoronoiSite(
 				reference_indices=env, 
 				label=site_label,
-				reference_centre=ref_centre
+				reference_center=ref_centre
 			)
 			
 			sites.append(site)

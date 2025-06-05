@@ -25,7 +25,7 @@ from pymatgen.core import Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
-from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_centre
+from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 from typing import Optional, Any
 
 
@@ -55,13 +55,13 @@ class PolyhedralSite(Site):
     def __init__(self,
         vertex_indices: list[int],
         label: Optional[str]=None,
-        reference_centre: Optional[np.ndarray]=None):
+        reference_center: Optional[np.ndarray]=None):
         """Create a PolyhedralSite instance.
         
         Args:
             vertex_indices: List of integer indices for the vertex atoms (counting from 0).
             label: Optional label for this site.
-            reference_centre: Optional reference centre for PBC handling.
+            reference_center: Optional reference centre for PBC handling.
         
         Returns:
             None
@@ -80,7 +80,7 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: Optional[np.ndarray] = None
         self._delaunay: Optional[Delaunay] = None
-        self.reference_centre = reference_centre
+        self.reference_center = reference_center
 
     def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('
@@ -167,8 +167,8 @@ class PolyhedralSite(Site):
         """
         frac_coords = np.array([s.frac_coords for s in 
             [structure[i] for i in self.vertex_indices]])
-        if self.reference_centre is not None:
-            frac_coords = unwrap_vertices_to_reference_centre(frac_coords, self.reference_centre, structure.lattice)
+        if self.reference_center is not None:
+            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, structure.lattice)
         else:
             frac_coords = apply_legacy_pbc_correction(frac_coords)
         self.vertex_coords = frac_coords

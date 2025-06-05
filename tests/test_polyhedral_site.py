@@ -466,20 +466,20 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         self.assertEqual(reconstructed.label, original.label)
         np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
         
-    def test_polyhedral_site_init_with_reference_centre(self):
+    def test_polyhedral_site_init_with_reference_center(self):
         """Test PolyhedralSite can be initialised with a reference centre."""
         vertex_indices = [0, 1, 2, 3]
-        reference_centre = np.array([0.5, 0.5, 0.5])
+        reference_center = np.array([0.5, 0.5, 0.5])
         
-        site = PolyhedralSite(vertex_indices=vertex_indices, reference_centre=reference_centre)
+        site = PolyhedralSite(vertex_indices=vertex_indices, reference_center=reference_center)
         
-        np.testing.assert_array_equal(site.reference_centre, reference_centre)
+        np.testing.assert_array_equal(site.reference_center, reference_center)
         self.assertEqual(site.vertex_indices, vertex_indices)
         
-    def test_assign_vertex_coords_uses_legacy_when_no_reference_centre(self):
-        """Test that legacy PBC correction is used when reference_centre is None."""
+    def test_assign_vertex_coords_uses_legacy_when_no_reference_center(self):
+        """Test that legacy PBC correction is used when reference_center is None."""
         structure = example_structure()
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])  # No reference_centre
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])  # No reference_center
         
         with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy:
             mock_legacy.return_value = np.array([[0.1, 0.1, 0.1]])
@@ -488,13 +488,13 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
             
             mock_legacy.assert_called_once()
             
-    def test_assign_vertex_coords_uses_reference_centre_when_provided(self):
-        """Test that reference centre-based unwrapping is used when reference_centre is provided."""
+    def test_assign_vertex_coords_uses_reference_center_when_provided(self):
+        """Test that reference centre-based unwrapping is used when reference_center is provided."""
         structure = example_structure()
-        reference_centre = np.array([0.5, 0.5, 0.5])
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_centre=reference_centre)
+        reference_center = np.array([0.5, 0.5, 0.5])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=reference_center)
         
-        with patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_centre') as mock_unwrap:
+        with patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
             mock_unwrap.return_value = np.array([[0.1, 0.1, 0.1]])
             
             site.assign_vertex_coords(structure)

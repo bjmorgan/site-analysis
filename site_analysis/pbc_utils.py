@@ -38,16 +38,16 @@ _PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
   										  for dy in [-1, 0, 1] 
   										  for dz in [-1, 0, 1]])
 										
-def unwrap_vertices_to_reference_centre(
+def unwrap_vertices_to_reference_center(
 	frac_coords: np.ndarray,
-	reference_centre: np.ndarray,
+	reference_center: np.ndarray,
 	lattice: Lattice
 ) -> np.ndarray:
 	"""Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
 	
 	Args:
 		frac_coords: Array of fractional coordinates with shape (n, 3).
-		reference_centre: Reference centre position for unwrapping.
+		reference_center: Reference centre position for unwrapping.
 		lattice: Lattice object for distance calculations.
 		
 	Returns:
@@ -60,7 +60,7 @@ def unwrap_vertices_to_reference_centre(
 	vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
 	
 	# Convert to Cartesian coordinates for true distance calculation
-	ref_cart = lattice.get_cartesian_coords(reference_centre)  # (3,)
+	ref_cart = lattice.get_cartesian_coords(reference_center)  # (3,)
 	n_vertices = len(frac_coords)
 	vertex_images_flat = vertex_images.reshape(n_vertices * 27, 3)  # (n_vertices * 27, 3)
 	vertex_images_cart = lattice.get_cartesian_coords(vertex_images_flat)  # (n_vertices * 27, 3)

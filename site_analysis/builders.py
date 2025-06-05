@@ -385,10 +385,23 @@ class TrajectoryBuilder:
 				part of the coordination environment.
 			n_vertices: Number of vertex atoms required for each polyhedral site.
 			label: Optional label to assign to all created sites. Default is None.
-			use_reference_centers: Whether to use reference centre positions for 
-				improved periodic boundary condition handling. Default is True.
-				- True: Uses reference-based PBC correction (recommended for small/dense structures)
-				- False: Uses legacy spread-based PBC correction
+			use_reference_centers: Controls periodic boundary condition handling for 
+				reference-based sites (polyhedral and dynamic Voronoi sites). Default is True.
+				
+				- True (recommended): Reference-based PBC correction. Defines a reference 
+				center for each site and unwraps vertex coordinates relative to this center.
+				Correctly handles sites that naturally span >50% of unit cell dimensions,
+				even in small simulation cells.
+				
+				- False (advanced usage): Spread-based PBC correction. If vertex coordinates 
+				span >50% of the unit cell in any dimension, assumes this indicates PBC 
+				wrapping and shifts coordinates accordingly. 
+				
+				WARNING: Gives incorrect results when sites legitimately span >50% of 
+				the unit cell (e.g., octahedral sites in a 2×2×2 FCC supercell). May 
+				offer performance benefits for some setups.
+				
+				Only use False after verifying it works correctly for your structures.
 				
 		Returns:
 			self: For method chaining
@@ -499,10 +512,23 @@ class TrajectoryBuilder:
 				part of the coordination environment.
 			n_reference: Number of reference atoms required for each dynamic site.
 			label: Optional label to assign to all created sites. Default is None.
-			use_reference_centers: Whether to use reference centre positions for 
-				improved periodic boundary condition handling. Default is True.
-				- True: Uses reference-based PBC correction (recommended for small/dense structures)  
-				- False: Uses legacy spread-based PBC correction
+			use_reference_centers: Controls periodic boundary condition handling for 
+				reference-based sites (polyhedral and dynamic Voronoi sites). Default is True.
+				
+				- True (recommended): Reference-based PBC correction. Defines a reference 
+				center for each site and unwraps vertex coordinates relative to this center.
+				Correctly handles sites that naturally span >50% of unit cell dimensions,
+				even in small simulation cells.
+				
+				- False (advanced usage): Spread-based PBC correction. If vertex coordinates 
+				span >50% of the unit cell in any dimension, assumes this indicates PBC 
+				wrapping and shifts coordinates accordingly. 
+				
+				WARNING: Gives incorrect results when sites legitimately span >50% of 
+				the unit cell (e.g., octahedral sites in a 2×2×2 FCC supercell). May 
+				offer performance benefits for some setups.
+				
+				Only use False after verifying it works correctly for your structures.
 				
 		Returns:
 			self: For method chaining

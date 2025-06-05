@@ -21,7 +21,7 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import List, Optional, Union, Dict, Any, Tuple
+from typing import Any, Optional
 
 from pymatgen.core import Structure
 
@@ -56,10 +56,10 @@ class ReferenceBasedSites:
 			reference_structure: Structure, 
 			target_structure: Structure, 
 			align: bool = True, 
-			align_species: Optional[list[str]] = None, 
+			align_species: list[str] | None = None, 
 			align_metric: str = 'rmsd',
 			align_algorithm: str = 'Nelder-Mead',
-			align_minimizer_options: Optional[dict[str, Any]] = None,
+			align_minimizer_options: dict[str, Any] | None = None,
 			align_tolerance: float = 1e-4) -> None:
 		"""Initialise ReferenceBasedSites with reference and target structures.
 		
@@ -78,9 +78,9 @@ class ReferenceBasedSites:
 		self.target_structure = target_structure
 		
 		# Initialise alignment attributes
-		self.aligned_structure: Optional[Structure] = None
-		self.translation_vector: Optional[np.ndarray] = None
-		self.alignment_metrics: Optional[Dict[str, float]] = None
+		self.aligned_structure: Structure | None = None
+		self.translation_vector: np.ndarray | None = None
+		self.alignment_metrics: dict[str, float] | None = None
 		
 		# Perform alignment if requested
 		if align:
@@ -93,19 +93,19 @@ class ReferenceBasedSites:
 			)
 		
 		# These will be initialised on first use
-		self._coord_finder: Optional[CoordinationEnvironmentFinder] = None
-		self._index_mapper: Optional[IndexMapper] = None
-		self._site_factory: Optional[SiteFactory] = None
+		self._coord_finder: CoordinationEnvironmentFinder | None = None
+		self._index_mapper: IndexMapper | None = None
+		self._site_factory: SiteFactory | None = None
 		
 	def create_polyhedral_sites(self, 
 							center_species: str, 
-							vertex_species: Union[str, List[str]], 
+							vertex_species: str | list[str], 
 							cutoff: float, 
 							n_vertices: int,
-							label: Optional[str] = None, 
-							labels: Optional[List[str]] = None, 
-							target_species: Optional[Union[str, List[str]]] = None,
-							use_reference_centers: bool = True) -> List[PolyhedralSite]:
+							label: str | None = None, 
+							labels: list[str] | None = None, 
+							target_species: str | list[str] | None = None,
+							use_reference_centers: bool = True) -> list[PolyhedralSite]:
 		"""Create PolyhedralSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -168,13 +168,13 @@ class ReferenceBasedSites:
 	
 	def create_dynamic_voronoi_sites(self, 
 								center_species: str, 
-								reference_species: Union[str, List[str]], 
+								reference_species: str | list[str], 
 								cutoff: float, 
 								n_reference: int,
-								label: Optional[str] = None, 
-								labels: Optional[List[str]] = None, 
-								target_species: Optional[Union[str, List[str]]] = None,
-								use_reference_centers: bool = True) -> List[DynamicVoronoiSite]:
+								label: str | None = None, 
+								labels: list[str] | None = None, 
+								target_species: str | list[str] | None = None,
+								use_reference_centers: bool = True) -> list[DynamicVoronoiSite]:
 		"""Create DynamicVoronoiSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -235,10 +235,10 @@ class ReferenceBasedSites:
 		return sites
 	
 	def _align_structures(self, 
-						align_species: Optional[list[str]] = None, 
+						align_species: list[str] | None = None, 
 						align_metric: str = 'rmsd',
 						align_algorithm: str = 'Nelder-Mead',
-						align_minimizer_options: Optional[dict[str, Any]] = None,
+						align_minimizer_options: dict[str, Any] | None = None,
 						align_tolerance: float = 1e-4) -> None:
 		"""Align target structure to reference structure.
 		
@@ -279,7 +279,7 @@ class ReferenceBasedSites:
 	
 	def _find_coordination_environments(self, 
 									  center_species: str, 
-									  coordination_species: Union[str, list[str]], 
+									  coordination_species: str | list[str], 
 									  cutoff: float, 
 									  n_coord: int) -> dict[int, list[int]]:
 		"""Find coordination environments in the reference structure.
@@ -322,8 +322,8 @@ class ReferenceBasedSites:
 			) from e
 	
 	def _map_environments(self, 
-		ref_environments: List[List[int]], 
-		target_species: Optional[Union[str, List[str]]] = None) -> List[List[int]]:
+		ref_environments: list[list[int]], 
+		target_species: str | list[str] | None = None) -> list[list[int]]:
 		"""Map coordination environments from reference to target structure.
 		
 		Args:

@@ -25,6 +25,7 @@ from pymatgen.core import Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
+from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 from typing import Optional, Any
 
 
@@ -53,12 +54,14 @@ class PolyhedralSite(Site):
 
     def __init__(self,
         vertex_indices: list[int],
-        label: Optional[str]=None):
+        label: Optional[str]=None,
+        reference_center: Optional[np.ndarray]=None):
         """Create a PolyhedralSite instance.
         
         Args:
-            vertex_indices (list(int)): list of integer indices for the vertex atoms (counting from 0).
-            label (:obj:`str`, optional): Optional label for this site.
+            vertex_indices: List of integer indices for the vertex atoms (counting from 0).
+            label: Optional label for this site.
+            reference_center: Optional reference centre for PBC handling.
         
         Returns:
             None
@@ -77,6 +80,7 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: Optional[np.ndarray] = None
         self._delaunay: Optional[Delaunay] = None
+        self.reference_center = reference_center
 
     def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('
@@ -148,33 +152,25 @@ class PolyhedralSite(Site):
             structure: Structure) -> None:
         """Assign fractional coordinates to the polyhedra vertices
         from the corresponding atom positions in a pymatgen Structure.
-
+        
         Args:
             structure (Structure): The pymatgen Structure used to assign
-                the vertices fractional coordinates.
-
+                the fractional coordinates of the vertices.
+        
         Returns:
             None
-
+        
         Notes:
             This method assumes the coordinates of the vertices may 
             have changed, so unsets the Delaunay tesselation for this site.
-
+        
         """
-        frac_coords = np.array([ s.frac_coords for s in 
-            [ structure[i] for i in self.vertex_indices ] ] )
-        # Handle periodic boundary conditions:
-        # If the range of fractional coordinates along x, y, or z 
-        # exceeds 0.5, assume that this polyhedron wraps around the 
-        # periodic boundary in that dimension. 
-        # Fractional coordinates for that dimension that are less 
-        # than 0.5 will be incremented by 1.0 
-        for i in range(3):
-            spread = max(frac_coords[:,i]) - min(frac_coords[:,i])
-            if spread > 0.5:
-                for j, fc in enumerate(frac_coords):
-                    if fc[i] < 0.5:
-                        frac_coords[j,i] += 1.0
+        frac_coords = np.array([s.frac_coords for s in 
+            [structure[i] for i in self.vertex_indices]])
+        if self.reference_center is not None:
+            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, structure.lattice)
+        else:
+            frac_coords = apply_legacy_pbc_correction(frac_coords)
         self.vertex_coords = frac_coords
         self._delaunay = None
 

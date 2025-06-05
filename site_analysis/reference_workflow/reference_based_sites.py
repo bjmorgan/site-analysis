@@ -21,7 +21,7 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import List, Optional, Union, Dict, Any, Tuple
+from typing import Any, Optional
 
 from pymatgen.core import Structure
 
@@ -56,10 +56,10 @@ class ReferenceBasedSites:
 			reference_structure: Structure, 
 			target_structure: Structure, 
 			align: bool = True, 
-			align_species: Optional[list[str]] = None, 
+			align_species: list[str] | None = None, 
 			align_metric: str = 'rmsd',
 			align_algorithm: str = 'Nelder-Mead',
-			align_minimizer_options: Optional[dict[str, Any]] = None,
+			align_minimizer_options: dict[str, Any] | None = None,
 			align_tolerance: float = 1e-4) -> None:
 		"""Initialise ReferenceBasedSites with reference and target structures.
 		
@@ -78,9 +78,9 @@ class ReferenceBasedSites:
 		self.target_structure = target_structure
 		
 		# Initialise alignment attributes
-		self.aligned_structure: Optional[Structure] = None
-		self.translation_vector: Optional[np.ndarray] = None
-		self.alignment_metrics: Optional[Dict[str, float]] = None
+		self.aligned_structure: Structure | None = None
+		self.translation_vector: np.ndarray | None = None
+		self.alignment_metrics: dict[str, float] | None = None
 		
 		# Perform alignment if requested
 		if align:
@@ -93,18 +93,19 @@ class ReferenceBasedSites:
 			)
 		
 		# These will be initialised on first use
-		self._coord_finder: Optional[CoordinationEnvironmentFinder] = None
-		self._index_mapper: Optional[IndexMapper] = None
-		self._site_factory: Optional[SiteFactory] = None
+		self._coord_finder: CoordinationEnvironmentFinder | None = None
+		self._index_mapper: IndexMapper | None = None
+		self._site_factory: SiteFactory | None = None
 		
 	def create_polyhedral_sites(self, 
-							  center_species: str, 
-							  vertex_species: Union[str, List[str]], 
-							  cutoff: float, 
-							  n_vertices: int,
-							  label: Optional[str] = None, 
-							  labels: Optional[List[str]] = None, 
-							  target_species: Optional[Union[str, List[str]]] = None) -> List[PolyhedralSite]:
+							center_species: str, 
+							vertex_species: str | list[str], 
+							cutoff: float, 
+							n_vertices: int,
+							label: str | None = None, 
+							labels: list[str] | None = None, 
+							target_species: str | list[str] | None = None,
+							use_reference_centers: bool = True) -> list[PolyhedralSite]:
 		"""Create PolyhedralSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -115,6 +116,8 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
+			use_reference_centers: Whether to calculate and use reference centers for 
+				improved PBC handling. Default is True.
 			
 		Returns:
 			List of PolyhedralSite objects
@@ -134,8 +137,18 @@ class ReferenceBasedSites:
 		# Check we do not have repeat periodic images in the coordination environments
 		self._validate_unique_environments(ref_environments)
 		
+		# Calculate reference centers if requested
+		if use_reference_centers:
+			center_indices = list(ref_environments.keys())
+			reference_centers = self._calculate_reference_centers_from_indices(center_indices)
+		else:
+			reference_centers = None
+			
 		# Map environments to target structure
-		mapped_environments = self._map_environments(ref_environments, target_species)
+		mapped_environments = self._map_environments(
+			list(ref_environments.values()),
+			target_species
+		)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -145,19 +158,23 @@ class ReferenceBasedSites:
 		# At this point we know self._site_factory is not None
 		assert self._site_factory is not None
 		sites = self._site_factory.create_polyhedral_sites(
-			mapped_environments, label=label, labels=labels
+			mapped_environments,
+			reference_centers=reference_centers,
+			label=label,
+			labels=labels
 		)
 		
 		return sites
 	
 	def create_dynamic_voronoi_sites(self, 
-								   center_species: str, 
-								   reference_species: Union[str, List[str]], 
-								   cutoff: float, 
-								   n_reference: int,
-								   label: Optional[str] = None, 
-								   labels: Optional[List[str]] = None, 
-								   target_species: Optional[Union[str, List[str]]] = None) -> List[DynamicVoronoiSite]:
+								center_species: str, 
+								reference_species: str | list[str], 
+								cutoff: float, 
+								n_reference: int,
+								label: str | None = None, 
+								labels: list[str] | None = None, 
+								target_species: str | list[str] | None = None,
+								use_reference_centers: bool = True) -> list[DynamicVoronoiSite]:
 		"""Create DynamicVoronoiSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -168,6 +185,8 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
+			use_reference_centers: Whether to calculate and use reference centers for 
+				improved PBC handling. Default is True.
 			
 		Returns:
 			List of DynamicVoronoiSite objects
@@ -175,7 +194,7 @@ class ReferenceBasedSites:
 		Raises:
 			ValueError: If coordination environments cannot be found or mapped,
 				or if both label and labels are provided.
-		"""
+	"""
 		# Find coordination environments in reference structure
 		# Note: CoordinationEnvironmentFinder uses vertex_species terminology,
 		# but conceptually these are reference atoms for dynamic Voronoi sites
@@ -186,8 +205,18 @@ class ReferenceBasedSites:
 		# Check we do not have repeat periodic images in the coordination environments
 		self._validate_unique_environments(ref_environments)
 		
+		# Calculate reference centers if requested
+		if use_reference_centers:
+			center_indices = list(ref_environments.keys())
+			reference_centers = self._calculate_reference_centers_from_indices(center_indices)
+		else:
+			reference_centers = None
+			
 		# Map environments to target structure
-		mapped_environments = self._map_environments(ref_environments, target_species)
+		mapped_environments = self._map_environments(
+			list(ref_environments.values()),
+			target_species
+		)
 		
 		# Create site factory if not already initialised
 		if self._site_factory is None:
@@ -197,16 +226,19 @@ class ReferenceBasedSites:
 		# At this point we know self._site_factory is not None
 		assert self._site_factory is not None
 		sites = self._site_factory.create_dynamic_voronoi_sites(
-			mapped_environments, label=label, labels=labels
+			mapped_environments,
+			reference_centers=reference_centers,
+			label=label,
+			labels=labels
 		)
 		
 		return sites
 	
 	def _align_structures(self, 
-						align_species: Optional[list[str]] = None, 
+						align_species: list[str] | None = None, 
 						align_metric: str = 'rmsd',
 						align_algorithm: str = 'Nelder-Mead',
-						align_minimizer_options: Optional[dict[str, Any]] = None,
+						align_minimizer_options: dict[str, Any] | None = None,
 						align_tolerance: float = 1e-4) -> None:
 		"""Align target structure to reference structure.
 		
@@ -247,9 +279,9 @@ class ReferenceBasedSites:
 	
 	def _find_coordination_environments(self, 
 									  center_species: str, 
-									  coordination_species: Union[str, List[str]], 
+									  coordination_species: str | list[str], 
 									  cutoff: float, 
-									  n_coord: int) -> List[List[int]]:
+									  n_coord: int) -> dict[int, list[int]]:
 		"""Find coordination environments in the reference structure.
 		
 		Args:
@@ -259,7 +291,8 @@ class ReferenceBasedSites:
 			n_coord: Number of coordination atoms per environment
 			
 		Returns:
-			List of environments, where each environment is a list of atom indices
+			Dictionary mapping center atom indices to lists of coordinating atom indices.
+			Keys are indices of center atoms, values are lists of coordinating atom indices.
 			
 		Raises:
 			ValueError: If coordination environments cannot be found.
@@ -279,10 +312,7 @@ class ReferenceBasedSites:
 				cutoff=cutoff
 			)
 			
-			# Convert from dict of {center_idx: [vertex_indices]} to list of vertex index lists
-			environments_list = [coordinating for coordinating in environments_dict.values()]
-			
-			return environments_list
+			return environments_dict
 			
 		except Exception as e:
 			# Re-raise with more context
@@ -292,8 +322,8 @@ class ReferenceBasedSites:
 			) from e
 	
 	def _map_environments(self, 
-		ref_environments: List[List[int]], 
-		target_species: Optional[Union[str, List[str]]] = None) -> List[List[int]]:
+		ref_environments: list[list[int]], 
+		target_species: str | list[str] | None = None) -> list[list[int]]:
 		"""Map coordination environments from reference to target structure.
 		
 		Args:
@@ -348,26 +378,38 @@ class ReferenceBasedSites:
 			self._site_factory = SiteFactory(self.target_structure)
 		return self._site_factory
 	
-	def _validate_unique_environments(self, environments):
+	def _validate_unique_environments(self, environments: dict[int, list[int]]) -> None:
 		"""Validate that each environment contains unique atom indices.
 		
 		Args:
-			environments: List of environments, where each environment is a list of atom indices.
+			environments: Dict of environments, where keys are center atom indices 
+				and values are lists of coordinating atom indices.
 			
 		Raises:
 			ValueError: If any environment contains duplicate atom indices.
 		"""
-		for i, env in enumerate(environments):
+		for center_idx, env in environments.items():
 			if len(env) != len(set(env)):
 				# Find the duplicates
-				counts = {}
+				counts: dict[int, int] = {}
 				for idx in env:
 					counts[idx] = counts.get(idx, 0) + 1
 				duplicates = [idx for idx, count in counts.items() if count > 1]
 				
 				raise ValueError(
-					f"Environment {i} contains duplicate atom indices {duplicates}. "
+					f"Environment for center atom {center_idx} contains duplicate atom indices {duplicates}. "
 					f"This typically occurs in small unit cells where the same atom "
 					f"appears as a neighbor in multiple periodic images. "
 					f"Please use a larger supercell for your analysis."
 				)
+	def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
+		"""Calculate reference centres from center atom indices."""
+		# Use aligned reference structure if available, otherwise original
+		structure_to_use = self.aligned_structure if self.aligned_structure else self.reference_structure
+		
+		reference_centers = []
+		for center_idx in center_indices:
+			reference_center = structure_to_use[center_idx].frac_coords.copy()
+			reference_centers.append(reference_center)
+		
+		return reference_centers

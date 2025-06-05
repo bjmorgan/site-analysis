@@ -237,6 +237,15 @@ def get_vertex_indices(
     
     return vertex_indices
 
+_SHIFTS = np.array([[0,0,0],
+                    [1,0,0],
+                    [0,1,0],
+                    [0,0,1],
+                    [1,1,0],
+                    [1,0,1],
+                    [0,1,1],
+                    [1,1,1]])
+                    
 def x_pbc(x: np.ndarray):
     """Return an array of fractional coordinates mapped into all positive neighbouring 
     periodic cells.
@@ -261,15 +270,7 @@ def x_pbc(x: np.ndarray):
                [1.1, 1.2, 1.3]])
 
     """       
-    all_x =  np.array([[0,0,0],
-                       [1,0,0],
-                       [0,1,0],
-                       [0,0,1],
-                       [1,1,0],
-                       [1,0,1],
-                       [0,1,1],
-                       [1,1,1]]) + x
-    return all_x
+    return _SHIFTS + x
 
 def species_string_from_site(site: Site) -> str:
     """Extract the species string from a pymatgen Site object.

@@ -237,7 +237,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				cutoff=2.0,
 				n_vertices=4,
 				label="tetrahedral",
-				target_species=None
+				target_species=None,
+				use_reference_centers=True
 			)
 	
 	def test_flexible_method_call_order(self):
@@ -881,7 +882,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				cutoff=2.0,
 				n_vertices=4,
 				label="tetrahedral",
-				target_species=["Na"]  # This is the key assertion - mapping species should be passed here
+				target_species=["Na"],  # This is the key assertion - mapping species should be passed here
+				use_reference_centers=True
 			)
 			
 	def test_mapping_uses_alignment_species_by_default(self):
@@ -928,7 +930,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				cutoff=2.0,
 				n_vertices=4,
 				label="tetrahedral",
-				target_species=["O"]  # This should be the same as align_species
+				target_species=["O"],  # This should be the same as align_species
+				use_reference_centers=True
 			)
 			
 	def test_factory_function_with_mapping_species(self):
@@ -1410,6 +1413,96 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			mock_rbs_class.assert_called_once()
 			_, kwargs = mock_rbs_class.call_args
 			self.assertEqual(kwargs["align_tolerance"], custom_tolerance)
+		
+	def test_use_reference_centers_passed_to_reference_based_sites(self):
+		"""Test that use_reference_centers parameter is correctly passed to ReferenceBasedSites."""
+		# Configure the builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(self.structure)
+		builder.with_reference_structure(self.reference_structure)
+		builder.with_mobile_species("Li")
+		
+		# Set up polyhedral sites with use_reference_centers=False
+		builder.with_polyhedral_sites(
+			centre_species="Li",
+			vertex_species="O",
+			cutoff=2.0,
+			n_vertices=4,
+			label="tetrahedral",
+			use_reference_centers=False
+		)
+		
+		# Mock ReferenceBasedSites to verify correct parameters are passed
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock to return a mock RBS instance
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure mock to return site objects
+			mock_sites = [Mock(), Mock()]
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			
+			# Call build to trigger site creation
+			builder.build()
+			
+			# Verify create_polyhedral_sites was called with use_reference_centers=False
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
+				center_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral",
+				target_species=None,
+				use_reference_centers=False
+			)
+			
+	def test_use_reference_centers_passed_to_reference_based_sites_for_dynamic_voronoi(self):
+		"""Test that use_reference_centers parameter is correctly passed to ReferenceBasedSites for dynamic voronoi sites."""
+		# Configure the builder
+		builder = TrajectoryBuilder()
+		builder.with_structure(self.structure)
+		builder.with_reference_structure(self.reference_structure)
+		builder.with_mobile_species("Li")
+		
+		# Set up dynamic voronoi sites with use_reference_centers=False
+		builder.with_dynamic_voronoi_sites(
+			centre_species="Li",
+			reference_species="O",
+			cutoff=2.0,
+			n_reference=4,
+			label="tetrahedral",
+			use_reference_centers=False
+		)
+		
+		# Mock ReferenceBasedSites to verify correct parameters are passed
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			
+			# Configure mock to return a mock RBS instance
+			mock_rbs = Mock()
+			mock_rbs_class.return_value = mock_rbs
+			
+			# Configure mock to return site objects
+			mock_sites = [Mock(), Mock()]
+			mock_rbs.create_dynamic_voronoi_sites.return_value = mock_sites
+			
+			# Call build to trigger site creation
+			builder.build()
+			
+			# Verify create_dynamic_voronoi_sites was called with use_reference_centers=False
+			mock_rbs.create_dynamic_voronoi_sites.assert_called_once_with(
+				center_species="Li",
+				reference_species="O",
+				cutoff=2.0,
+				n_reference=4,
+				label="tetrahedral",
+				target_species=None,
+				use_reference_centers=False
+			)
 	
 if __name__ == '__main__':
 	unittest.main()

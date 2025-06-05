@@ -138,22 +138,34 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertIs(self.trajectory.site_by_index(self.site1.index), self.site1)
         self.assertIs(self.trajectory.site_by_index(self.site2.index), self.site2)
     
-    def test_analyse_structure(self):
-        """Test that analyse_structure correctly processes a structure."""
-        # Run analyse_structure
-        self.trajectory.analyse_structure(self.structure)
+    def test_analyse_structure_delegates_to_site_collection(self):
+        """Test that analyse_structure delegates to site_collection.analyse_structure."""
+        # Create minimal real sites (required for Trajectory initialization)
+        from site_analysis.spherical_site import SphericalSite
+        import numpy as np
         
-        # Check that atoms have frac_coords assigned
-        self.assertIsNotNone(self.atom1._frac_coords)
-        self.assertIsNotNone(self.atom2._frac_coords)
+        real_sites = [SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)]
         
-        # Check atoms are assigned to sites
-        self.assertEqual(self.atom1.in_site, self.site1.index)
-        self.assertEqual(self.atom2.in_site, self.site2.index)
+        # Create mock atoms with required attributes
+        mock_atom1 = Mock(spec=Atom)
+        mock_atom1.index = 0
+        mock_atom2 = Mock(spec=Atom) 
+        mock_atom2.index = 1
+        mock_atoms = [mock_atom1, mock_atom2]
         
-        # Check sites contain the atoms
-        self.assertIn(0, self.site1.contains_atoms)
-        self.assertIn(1, self.site2.contains_atoms)
+        mock_structure = Mock(spec=Structure)
+        
+        # Create trajectory (this will create a real site_collection)
+        trajectory = Trajectory(sites=real_sites, atoms=mock_atoms)
+        
+        # Mock the site_collection that was created
+        trajectory.site_collection = Mock()
+        
+        # Call the method
+        trajectory.analyse_structure(mock_structure)
+        
+        # Verify it delegates correctly
+        trajectory.site_collection.analyse_structure.assert_called_once_with(mock_atoms, mock_structure)
     
     def test_append_timestep(self):
         """Test that append_timestep correctly adds a timestep."""

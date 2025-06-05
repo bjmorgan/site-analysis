@@ -12,6 +12,9 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis.trajectory import Trajectory
+from site_analysis.atom import atoms_from_structure
+from site_analysis.site import Site
 from ..test_helpers import apply_random_displacement
 
 
@@ -480,6 +483,75 @@ class TestCoordinationValidation(unittest.TestCase):
         error_msg = str(context.exception)
         self.assertIn("contains duplicate atom indices", error_msg)
         self.assertIn("Please use a larger supercell", error_msg)
+        
+class TestPBCImplemenetation(unittest.TestCase):
+    
+    def setUp(self):
+        Site._newid = 0
+    
+    def test_legacy_pbc_method_incorrectly_unwraps_large_spread_polyhedra(self):
+        """Test that legacy PBC method incorrectly unwraps polyhedra with large spread that don't actually span boundaries."""
+        # Create 2x2x2 NaCl structure  
+        a = 5.64
+        lattice = Lattice.cubic(a)
+        unit_cell = Structure.from_spacegroup(
+            sg="Fm-3m", lattice=lattice,
+            species=["Cl", "Na"], coords=[[0, 0, 0], [0.5, 0, 0]]
+        )
+        reference_structure = unit_cell * [2, 2, 2]
+        
+        # Create target with shifted Cl to create large spread  
+        target_structure = reference_structure.copy()
+        target_structure[7] = "Cl", [0.6, 0.5, 0.5]
+        
+        # Test legacy method
+        rbs = ReferenceBasedSites(reference_structure, target_structure, align=True)
+        sites = rbs.create_polyhedral_sites(
+            center_species="Na", vertex_species="Cl", 
+            cutoff=3.5, n_vertices=6, use_reference_centers=False  # Legacy method
+        )
+        
+        # Test that site 3 gets incorrectly unwrapped by legacy method
+        sites[3].assign_vertex_coords(target_structure)
+        
+        # Check for incorrect unwrapping - coordinates should not match target structure
+        expected_coords = target_structure.frac_coords[sites[3].vertex_indices]
+        actual_coords = sites[3].vertex_coords
+        
+        self.assertFalse(np.allclose(actual_coords, expected_coords, atol=1e-10),
+            "Legacy method should incorrectly unwrap site 3")
+    
+    def test_reference_center_pbc_method_correctly_handles_large_spread_polyhedra(self):
+        """Test that reference_center PBC method correctly handles polyhedra with large spread."""
+        # Create 2x2x2 NaCl structure  
+        a = 5.64
+        lattice = Lattice.cubic(a)
+        unit_cell = Structure.from_spacegroup(
+            sg="Fm-3m", lattice=lattice,
+            species=["Cl", "Na"], coords=[[0, 0, 0], [0.5, 0, 0]]
+        )
+        reference_structure = unit_cell * [2, 2, 2]
+        
+        # Create target with shifted Cl to create large spread  
+        target_structure = reference_structure.copy()
+        target_structure[7] = "Cl", [0.6, 0.5, 0.5]
+        
+        # Test new method
+        rbs = ReferenceBasedSites(reference_structure, target_structure, align=True)
+        sites = rbs.create_polyhedral_sites(
+            center_species="Na", vertex_species="Cl", 
+            cutoff=3.5, n_vertices=6, use_reference_centers=True  # New method
+        )
+        
+        # Test that site 3 is correctly handled by new method
+        sites[3].assign_vertex_coords(target_structure)
+        
+        # Verify vertex coordinates match target structure exactly
+        expected_coords = target_structure.frac_coords[sites[3].vertex_indices]
+        actual_coords = sites[3].vertex_coords
+        
+        np.testing.assert_allclose(actual_coords, expected_coords, atol=1e-10,
+            err_msg="Site 3 vertices should match target structure exactly")
 
 
 if __name__ == "__main__":

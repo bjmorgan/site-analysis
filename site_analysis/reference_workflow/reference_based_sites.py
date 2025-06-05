@@ -378,3 +378,14 @@ class ReferenceBasedSites:
 					f"appears as a neighbor in multiple periodic images. "
 					f"Please use a larger supercell for your analysis."
 				)
+	def _calculate_reference_centres_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
+		"""Calculate reference centres from center atom indices."""
+		# Use aligned reference structure if available, otherwise original
+		structure_to_use = self.aligned_structure if self.aligned_structure else self.reference_structure
+		
+		reference_centres = []
+		for center_idx in center_indices:
+			reference_centre = structure_to_use[center_idx].frac_coords.copy()
+			reference_centres.append(reference_centre)
+		
+		return reference_centres

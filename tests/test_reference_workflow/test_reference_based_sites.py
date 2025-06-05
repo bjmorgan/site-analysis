@@ -726,6 +726,157 @@ class TestReferenceBasedSites(unittest.TestCase):
             mock_aligner.align.assert_called_once()
             _, kwargs = mock_aligner.align.call_args
             self.assertEqual(kwargs["tolerance"], align_tolerance)
+            
+class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
+    """Unit tests for _calculate_reference_centres_from_indices method."""
+    
+    def setUp(self):
+        """Set up simple test structures."""
+        self.lattice = Lattice.cubic(5.0)
+        
+        # Reference structure with known coordinates
+        self.reference_structure = Structure(
+            lattice=self.lattice,
+            species=["Li", "O", "Li", "O", "Li"],
+            coords=[
+                [0.0, 0.0, 0.0],    # Li at index 0
+                [0.1, 0.0, 0.0],    # O at index 1
+                [0.2, 0.2, 0.2],    # Li at index 2
+                [0.3, 0.3, 0.3],    # O at index 3
+                [0.5, 0.5, 0.5]     # Li at index 4
+            ]
+        )
+        
+        # Target structure (same for these unit tests)
+        self.target_structure = self.reference_structure.copy()
+        
+    def test_calculate_reference_centres_single_index(self):
+        """Test calculating reference centre for a single center index."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=False
+        )
+        
+        center_indices = [0]  # Li at [0.0, 0.0, 0.0]
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Should return one centre
+        self.assertEqual(len(reference_centres), 1)
+        
+        # Centre should match the coordinate of atom 0
+        expected = np.array([0.0, 0.0, 0.0])
+        np.testing.assert_array_equal(reference_centres[0], expected)
+        
+    def test_calculate_reference_centres_multiple_indices(self):
+        """Test calculating reference centres for multiple center indices."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=False
+        )
+        
+        center_indices = [0, 2, 4]  # Three Li atoms
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Should return three centres
+        self.assertEqual(len(reference_centres), 3)
+        
+        # Centres should match the coordinates of atoms 0, 2, 4
+        expected_centres = [
+            np.array([0.0, 0.0, 0.0]),  # Li at index 0
+            np.array([0.2, 0.2, 0.2]),  # Li at index 2
+            np.array([0.5, 0.5, 0.5])   # Li at index 4
+        ]
+        
+        for i, expected in enumerate(expected_centres):
+            np.testing.assert_array_equal(reference_centres[i], expected)
+            
+    def test_calculate_reference_centres_uses_reference_structure_when_no_alignment(self):
+        """Test that method uses reference_structure when no alignment was performed."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=False  # No alignment
+        )
+        
+        # Verify no aligned structure exists
+        self.assertIsNone(rbs.aligned_structure)
+        
+        center_indices = [2]  # Li at [0.2, 0.2, 0.2]
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Should use reference_structure coordinates
+        expected = self.reference_structure[2].frac_coords
+        np.testing.assert_array_equal(reference_centres[0], expected)
+        
+    def test_calculate_reference_centres_uses_aligned_structure_when_available(self):
+        """Test that method uses aligned_structure when alignment was performed."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=True  # Enable alignment
+        )
+        
+        # Manually set aligned_structure to simulate alignment
+        aligned_structure = Structure(
+            lattice=self.lattice,
+            species=["Li", "O", "Li", "O", "Li"],
+            coords=[
+                [0.1, 0.1, 0.1],    # Li at index 0 (shifted)
+                [0.2, 0.1, 0.1],    # O at index 1 (shifted)
+                [0.3, 0.3, 0.3],    # Li at index 2 (shifted)
+                [0.4, 0.4, 0.4],    # O at index 3 (shifted)
+                [0.6, 0.6, 0.6]     # Li at index 4 (shifted)
+            ]
+        )
+        rbs.aligned_structure = aligned_structure
+        
+        center_indices = [2]  # Li atom
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Should use aligned_structure coordinates, not reference_structure
+        expected = aligned_structure[2].frac_coords  # [0.3, 0.3, 0.3]
+        np.testing.assert_array_equal(reference_centres[0], expected)
+        
+        # Verify it's different from reference_structure
+        reference_coord = self.reference_structure[2].frac_coords  # [0.2, 0.2, 0.2]
+        self.assertFalse(np.array_equal(reference_centres[0], reference_coord))
+        
+    def test_calculate_reference_centres_empty_list(self):
+        """Test calculating reference centres for empty list of indices."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=False
+        )
+        
+        center_indices = []
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Should return empty list
+        self.assertEqual(len(reference_centres), 0)
+        self.assertEqual(reference_centres, [])
+        
+    def test_calculate_reference_centres_copies_coordinates(self):
+        """Test that returned coordinates are copies, not references."""
+        rbs = ReferenceBasedSites(
+            reference_structure=self.reference_structure,
+            target_structure=self.target_structure,
+            align=False
+        )
+        
+        center_indices = [0]
+        reference_centres = rbs._calculate_reference_centres_from_indices(center_indices)
+        
+        # Modify the returned coordinate
+        original_value = reference_centres[0][0]
+        reference_centres[0][0] = 0.9
+        
+        # Original structure should be unchanged
+        structure_value = self.reference_structure[0].frac_coords[0]
+        self.assertEqual(structure_value, original_value)
+        self.assertNotEqual(structure_value, 0.9)    
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):
     """Test that reference workflow classes can be imported at package level."""

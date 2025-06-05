@@ -116,8 +116,9 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
-			use_reference_centers: Whether to calculate and use reference centers for 
-				improved PBC handling. Default is True.
+			use_reference_centers: Whether to use reference centers for 
+				PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+				Default is True.
 			
 		Returns:
 			List of PolyhedralSite objects
@@ -185,8 +186,9 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
-			use_reference_centers: Whether to calculate and use reference centers for 
-				improved PBC handling. Default is True.
+			use_reference_centers: Whether to use reference centers for 
+				PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+				Default is True.
 			
 		Returns:
 			List of DynamicVoronoiSite objects

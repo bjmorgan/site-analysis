@@ -690,19 +690,30 @@ def create_trajectory_with_spherical_sites(
 	radii: float | list[float], 
 	labels: str | list[str] | None = None
 ) -> Trajectory:
-	"""Create a Trajectory with spherical sites.
+	"""Create a Trajectory with spherical sites for site analysis.
+	
+	Creates a trajectory object configured with spherical sites defined by centres
+	and radii. Each spherical site represents a spherical volume in the crystal
+	structure where atoms can be assigned based on distance from the centre.
 	
 	Args:
-		structure: Structure containing the atoms to analyse
-		mobile_species: Species string or list of species strings for mobile atoms
-		centres: list of fractional coordinate centres for spherical sites
-		radii: either a single radius (float) to use for all sites, or a list 
-			of radii (one per centre) in Angstroms
-		labels: Optional single label (str) to use for all sites, or list of 
-			labels (one per centre)
-		
+		structure: Pymatgen Structure object containing the crystal structure to analyse.
+		mobile_species: Species string (e.g., "Li") or list of species strings 
+			(e.g., ["Li", "Na"]) identifying the mobile atoms to track.
+		centres: List of fractional coordinate triplets defining the centres of 
+			spherical sites. Each centre should be a list of three floats [x, y, z].
+		radii: Cutoff radius in Ångströms for spherical sites. If a single float 
+			is provided, all sites use the same radius. If a list is provided, 
+			it must have the same length as centres.
+		labels: Optional labels for the sites. Can be a single string applied to 
+			all sites, a list of strings (one per site), or None for no labels.
+			
 	Returns:
-		Trajectory: The constructed Trajectory object
+		Trajectory: Configured trajectory object ready for site analysis.
+		
+	Raises:
+		ValueError: If the number of centres doesn't match the number of radii 
+			or labels when lists are provided.
 	"""
 	builder = TrajectoryBuilder()
 	return (builder
@@ -718,16 +729,26 @@ def create_trajectory_with_voronoi_sites(
 	centres: list[list[float]], 
 	labels: list[str] | None = None
 ) -> Trajectory:
-	"""Create a Trajectory with Voronoi sites.
+	"""Create a Trajectory with Voronoi sites for site analysis.
+	
+	Creates a trajectory object configured with Voronoi sites that partition space
+	based on proximity to site centres. Each point in space is assigned to the
+	Voronoi site with the nearest centre, ensuring complete space-filling coverage.
 	
 	Args:
-		structure: Structure containing the atoms to analyse
-		mobile_species: Species string or list of species strings for mobile atoms
-		centres: list of fractional coordinate centres for Voronoi sites
-		labels: Optional list of labels for sites
-		
+		structure: Pymatgen Structure object containing the crystal structure to analyse.
+		mobile_species: Species string (e.g., "Li") or list of species strings 
+			(e.g., ["Li", "Na"]) identifying the mobile atoms to track.
+		centres: List of fractional coordinate triplets defining the centres of 
+			Voronoi sites. Each centre should be a list of three floats [x, y, z].
+		labels: Optional list of string labels for the sites. Must have the same 
+			length as centres if provided, or None for no labels.
+			
 	Returns:
-		Trajectory: The constructed Trajectory object
+		Trajectory: Configured trajectory object ready for site analysis.
+		
+	Raises:
+		ValueError: If the number of labels doesn't match the number of centres.
 	"""
 	builder = TrajectoryBuilder()
 	return (builder
@@ -755,7 +776,49 @@ def create_trajectory_with_polyhedral_sites(
 	align_tolerance: float = 1e-4,
 	use_reference_centers: bool = True
 ) -> Trajectory:
-	"""Create a Trajectory with polyhedral sites."""
+	"""Create a Trajectory with polyhedral sites using reference-based workflow.
+	
+	Creates a trajectory object with polyhedral sites by identifying coordination
+	environments in a reference structure and mapping them to corresponding sites
+	in the target structure. Each site is defined by a polyhedron formed by vertex
+	atoms around a central atom.
+	
+	Args:
+		structure: Pymatgen Structure object containing the target structure to analyse.
+		reference_structure: Pymatgen Structure object defining ideal coordination 
+			environments to identify and map.
+		mobile_species: Species string (e.g., "Li") or list of species strings 
+			identifying the mobile atoms to track.
+		centre_species: Atomic species at the centre of coordination environments
+			in the reference structure.
+		vertex_species: Atomic species at vertices of coordination polyhedra. 
+			Can be a single species string or list of species strings.
+		cutoff: Maximum distance in Ångströms for vertex atoms to be considered 
+			part of the coordination environment.
+		n_vertices: Number of vertex atoms required for each polyhedral site.
+		label: Optional string label to assign to all created sites.
+		align: Whether to perform structure alignment before site mapping.
+		align_species: Species to use for structure alignment. If None and 
+			mapping_species is specified, mapping_species will be used.
+		align_metric: Alignment metric. Options are 'rmsd' for root-mean-square 
+			deviation or 'max_dist' for maximum distance.
+		align_algorithm: Optimisation algorithm. Options are 'Nelder-Mead' for 
+			local optimisation or 'differential_evolution' for global optimisation.
+		align_minimizer_options: Additional options dictionary for the alignment 
+			optimiser.
+		mapping_species: Species to use for mapping sites between structures. 
+			If None, align_species will be used.
+		align_tolerance: Convergence tolerance for alignment optimiser.
+		use_reference_centers: Whether to use reference centre-based periodic 
+			boundary condition handling (recommended) or legacy spread-based handling.
+			
+	Returns:
+		Trajectory: Configured trajectory object ready for site analysis.
+		
+	Raises:
+		ValueError: If no coordination environments are found, if required 
+			structures are not set, or if structure alignment fails.
+	"""
 	builder = TrajectoryBuilder()
 	return (builder
 			.with_structure(structure)
@@ -798,7 +861,49 @@ def create_trajectory_with_dynamic_voronoi_sites(
 	align_tolerance: float = 1e-4,
 	use_reference_centers: bool = True
 ) -> Trajectory:
-	"""Create a Trajectory with dynamic Voronoi sites."""
+	"""Create a Trajectory with dynamic Voronoi sites using reference-based workflow.
+	
+	Creates a trajectory object with dynamic Voronoi sites where site centres are
+	dynamically calculated from the positions of reference atoms. Unlike fixed 
+	Voronoi sites, these adapt to structural changes as the reference atoms move,
+	making them suitable for analysing deformable frameworks.
+	
+	Args:
+		structure: Pymatgen Structure object containing the target structure to analyse.
+		reference_structure: Pymatgen Structure object defining coordination 
+			environments to identify and map.
+		mobile_species: Species string (e.g., "Li") or list of species strings 
+			identifying the mobile atoms to track.
+		centre_species: Atomic species at centres where dynamic sites will be located
+			in the reference structure.
+		reference_species: Atomic species used as reference atoms to define dynamic 
+			site centres. Can be a single species string or list of species strings.
+		cutoff: Maximum distance in Ångströms for reference atoms to be considered 
+			part of the coordination environment.
+		n_reference: Number of reference atoms required for each dynamic site.
+		label: Optional string label to assign to all created sites.
+		align: Whether to perform structure alignment before site mapping.
+		align_species: Species to use for structure alignment. If None and 
+			mapping_species is specified, mapping_species will be used.
+		align_metric: Alignment metric. Options are 'rmsd' for root-mean-square 
+			deviation or 'max_dist' for maximum distance.
+		align_algorithm: Optimisation algorithm. Options are 'Nelder-Mead' for 
+			local optimisation or 'differential_evolution' for global optimisation.
+		align_minimizer_options: Additional options dictionary for the alignment 
+			optimiser.
+		mapping_species: Species to use for mapping sites between structures. 
+			If None, align_species will be used.
+		align_tolerance: Convergence tolerance for alignment optimiser.
+		use_reference_centers: Whether to use reference centre-based periodic 
+			boundary condition handling (recommended) or legacy spread-based handling.
+			
+	Returns:
+		Trajectory: Configured trajectory object ready for site analysis.
+		
+	Raises:
+		ValueError: If no coordination environments are found, if required 
+			structures are not set, or if structure alignment fails.
+	"""
 	builder = TrajectoryBuilder()
 	return (builder
 			.with_structure(structure)

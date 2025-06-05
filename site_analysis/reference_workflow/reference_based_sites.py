@@ -137,8 +137,6 @@ class ReferenceBasedSites:
 		# Check we do not have repeat periodic images in the coordination environments
 		self._validate_unique_environments(ref_environments)
 		
-		print(ref_environments)
-		
 		# Calculate reference centers if requested
 		if use_reference_centers:
 			center_indices = list(ref_environments.keys())

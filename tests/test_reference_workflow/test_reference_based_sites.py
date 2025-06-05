@@ -251,118 +251,101 @@ class TestReferenceBasedSites(unittest.TestCase):
         with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
-            # Create polyhedral sites
-            sites = rbs.create_polyhedral_sites(
-                center_species='Na',
-                vertex_species='Cl',
-                cutoff=3.0,
-                n_vertices=2,
-                label='test_label',
-                target_species='Cl'
-            )
-            
-            # Check that find_coordination_environments was called
-            self.mock_coord_finder.find_environments.assert_called_with(
-                center_species='Na',
-                coordination_species='Cl',
-                n_coord=2,
-                cutoff=3.0
-            )
-            
-            # Check that map_coordinating_atoms was called
-            self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
-                self.reference,
-                self.target,
-                self.mapped_environments,
-                target_species='Cl'
-            )
-            
-            # Check that create_polyhedral_sites was called
-            self.mock_site_factory.create_polyhedral_sites.assert_called_with(
-                self.mapped_environments,
-                label='test_label',
-                labels=None
-            )
-            
-            # Check returned sites
-            self.assertEqual(sites, self.mock_site_factory.create_polyhedral_sites.return_value)
+            # Mock the _calculate_reference_centers_from_indices method
+            mock_reference_centers = [np.array([0.1, 0.1, 0.1])]
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Create polyhedral sites
+                sites = rbs.create_polyhedral_sites(
+                    center_species='Na',
+                    vertex_species='Cl',
+                    cutoff=3.0,
+                    n_vertices=2,
+                    label='test_label',
+                    target_species='Cl'
+                )
+                
+                # Check that find_coordination_environments was called
+                self.mock_coord_finder.find_environments.assert_called_with(
+                    center_species='Na',
+                    coordination_species='Cl',
+                    n_coord=2,
+                    cutoff=3.0
+                )
+                
+                # Check that _calculate_reference_centers_from_indices was called
+                mock_calc_centers.assert_called_once_with([0])  # center indices from ref_environments.keys()
+                
+                # Check that map_coordinating_atoms was called
+                self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
+                    self.reference,
+                    self.target,
+                    self.mapped_environments,
+                    target_species='Cl'
+                )
+                
+                # Check that create_polyhedral_sites was called with reference_centers
+                self.mock_site_factory.create_polyhedral_sites.assert_called_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label='test_label',
+                    labels=None
+                )
+                
+                # Check returned sites
+                self.assertEqual(sites, self.mock_site_factory.create_polyhedral_sites.return_value)
     
     def test_create_dynamic_voronoi_sites(self):
         """Test the create_dynamic_voronoi_sites method."""
         with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
             
-            # Create dynamic voronoi sites
-            sites = rbs.create_dynamic_voronoi_sites(
-                center_species='Na',
-                reference_species='Cl',
-                cutoff=3.0,
-                n_reference=2,
-                labels=['site1'],
-                target_species='Cl'
-            )
-            
-            # Check that find_coordination_environments was called
-            self.mock_coord_finder.find_environments.assert_called_with(
-                center_species='Na',
-                coordination_species='Cl',  # vertex_species is used internally
-                n_coord=2,  # n_vertices is used internally
-                cutoff=3.0
-            )
-            
-            # Check that map_coordinating_atoms was called
-            self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
-                self.reference,
-                self.target,
-                self.ref_environments_list,
-                target_species='Cl'
-            )
-            
-            # Check that create_dynamic_voronoi_sites was called
-            self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_with(
-                self.mapped_environments,
-                label=None,
-                labels=['site1']
-            )
-            
-            # Check returned sites
-            self.assertEqual(sites, self.mock_site_factory.create_dynamic_voronoi_sites.return_value)
-            
-    def test_create_polyhedral_sites_with_alignment_using_setup_mock(self):
-        """Test the create_polyhedral_sites method when alignment has been performed using the setup mock."""
-        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch, self.structure_aligner_patch:
-            # Get the aligned reference mock from setup
-            aligned_reference, _, _ = self.mock_structure_aligner.align.return_value
-            
-            # Initialize with alignment
-            rbs = ReferenceBasedSites(self.reference, self.target, align=True)
-            
-            # Create polyhedral sites
-            sites = rbs.create_polyhedral_sites(
-                center_species='Na',
-                vertex_species='Cl',
-                cutoff=3.0,
-                n_vertices=2,
-                label='test_label',
-                target_species='Cl'
-            )
-            
-            # Check map_coordinating_atoms call
-            args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
-            
-            # First arg should be the aligned reference
-            self.assertIs(args[0], aligned_reference)
-            
-            # Second arg should be the target
-            self.assertIs(args[1], self.target)
-            
-            # Verify other arguments
-            self.assertEqual(args[2], self.ref_environments_list)
-            self.assertEqual(kwargs['target_species'], 'Cl')
-            
-            # Verify expected sites are returned
-            self.assertEqual(sites, self.mock_site_factory.create_polyhedral_sites.return_value)
-            
+            # Mock the _calculate_reference_centers_from_indices method
+            mock_reference_centers = [np.array([0.1, 0.1, 0.1])]
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Create dynamic voronoi sites
+                sites = rbs.create_dynamic_voronoi_sites(
+                    center_species='Na',
+                    reference_species='Cl',
+                    cutoff=3.0,
+                    n_reference=2,
+                    labels=['site1'],
+                    target_species='Cl'
+                )
+                
+                # Check that find_coordination_environments was called
+                self.mock_coord_finder.find_environments.assert_called_with(
+                    center_species='Na',
+                    coordination_species='Cl',  # vertex_species is used internally
+                    n_coord=2,  # n_vertices is used internally
+                    cutoff=3.0
+                )
+                
+                # Check that _calculate_reference_centers_from_indices was called
+                mock_calc_centers.assert_called_once_with([0])  # center indices from ref_environments.keys()
+                
+                # Check that map_coordinating_atoms was called
+                self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
+                    self.reference,
+                    self.target,
+                    self.ref_environments_list,
+                    target_species='Cl'
+                )
+                
+                # Check that create_dynamic_voronoi_sites was called with reference_centers
+                self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label=None,
+                    labels=['site1']
+                )
+                
+                # Check returned sites
+                self.assertEqual(sites, self.mock_site_factory.create_dynamic_voronoi_sites.return_value)
+                
     def test_create_dynamic_voronoi_sites_with_alignment(self):
         """Test the create_dynamic_voronoi_sites method when alignment has been performed."""
         with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch, self.structure_aligner_patch:
@@ -372,31 +355,98 @@ class TestReferenceBasedSites(unittest.TestCase):
             # Initialize with alignment
             rbs = ReferenceBasedSites(self.reference, self.target, align=True)
             
-            # Create dynamic voronoi sites
-            sites = rbs.create_dynamic_voronoi_sites(
-                center_species='Na',
-                reference_species='Cl',
-                cutoff=3.0,
-                n_reference=2,
-                labels=['site1'],
-                target_species='Cl'
-            )
+            # Mock the _calculate_reference_centers_from_indices method
+            mock_reference_centers = [np.array([0.1, 0.1, 0.1])]
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Create dynamic voronoi sites
+                sites = rbs.create_dynamic_voronoi_sites(
+                    center_species='Na',
+                    reference_species='Cl',
+                    cutoff=3.0,
+                    n_reference=2,
+                    labels=['site1'],
+                    target_species='Cl'
+                )
+                
+                # Check that _calculate_reference_centers_from_indices was called
+                mock_calc_centers.assert_called_once_with([0])
+                
+                # Check map_coordinating_atoms call
+                args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
+                
+                # First arg should be the aligned reference
+                self.assertIs(args[0], aligned_reference)
+                
+                # Second arg should be the target
+                self.assertIs(args[1], self.target)
+                
+                # Verify other arguments
+                self.assertEqual(args[2], self.ref_environments_list)
+                self.assertEqual(kwargs['target_species'], 'Cl')
+                
+                # Check that create_dynamic_voronoi_sites was called with reference_centers
+                self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label=None,
+                    labels=['site1']
+                )
+                
+                # Verify expected sites are returned
+                self.assertEqual(sites, self.mock_site_factory.create_dynamic_voronoi_sites.return_value)
+    
+    def test_create_polyhedral_sites_with_alignment_using_setup_mock(self):
+        """Test the create_polyhedral_sites method when alignment has been performed using the setup mock."""
+        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch, self.structure_aligner_patch:
+            # Get the aligned reference mock from setup
+            aligned_reference, _, _ = self.mock_structure_aligner.align.return_value
             
-            # Check map_coordinating_atoms call
-            args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
+            # Initialize with alignment
+            rbs = ReferenceBasedSites(self.reference, self.target, align=True)
             
-            # First arg should be the aligned reference
-            self.assertIs(args[0], aligned_reference)
-            
-            # Second arg should be the target
-            self.assertIs(args[1], self.target)
-            
-            # Verify other arguments
-            self.assertEqual(args[2], self.ref_environments_list)
-            self.assertEqual(kwargs['target_species'], 'Cl')
-            
-            # Verify expected sites are returned
-            self.assertEqual(sites, self.mock_site_factory.create_dynamic_voronoi_sites.return_value)
+            # Mock the _calculate_reference_centers_from_indices method
+            mock_reference_centers = [np.array([0.1, 0.1, 0.1])]
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Create polyhedral sites
+                sites = rbs.create_polyhedral_sites(
+                    center_species='Na',
+                    vertex_species='Cl',
+                    cutoff=3.0,
+                    n_vertices=2,
+                    label='test_label',
+                    target_species='Cl'
+                )
+                
+                # Check that _calculate_reference_centers_from_indices was called
+                mock_calc_centers.assert_called_once_with([0])
+                
+                # Check map_coordinating_atoms call
+                args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
+                
+                # First arg should be the aligned reference
+                self.assertIs(args[0], aligned_reference)
+                
+                # Second arg should be the target
+                self.assertIs(args[1], self.target)
+                
+                # Verify other arguments
+                self.assertEqual(args[2], self.ref_environments_list)
+                self.assertEqual(kwargs['target_species'], 'Cl')
+                
+                # Check that create_polyhedral_sites was called with reference_centers
+                self.mock_site_factory.create_polyhedral_sites.assert_called_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label='test_label',
+                    labels=None
+                )
+                
+                # Verify expected sites are returned
+                self.assertEqual(sites, self.mock_site_factory.create_polyhedral_sites.return_value)
 
     
     def test_error_handling_in_find_coordination_environments(self):
@@ -726,6 +776,116 @@ class TestReferenceBasedSites(unittest.TestCase):
             mock_aligner.align.assert_called_once()
             _, kwargs = mock_aligner.align.call_args
             self.assertEqual(kwargs["tolerance"], align_tolerance)
+            
+    def test_create_polyhedral_sites_passes_calculated_reference_centers_to_site_factory(self):
+        """Test that create_polyhedral_sites passes calculated reference centers to site factory."""
+        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Mock calculated reference centers
+            mock_reference_centers = [np.array([0.1, 0.1, 0.1])]
+            
+            # Mock the _calculate_reference_centers_from_indices method
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Call create_polyhedral_sites
+                rbs.create_polyhedral_sites(
+                    center_species='Na',
+                    vertex_species='Cl',
+                    cutoff=3.0,
+                    n_vertices=2,
+                    label='test_label'
+                )
+                
+                # Verify that create_polyhedral_sites was called with reference_centers
+                self.mock_site_factory.create_polyhedral_sites.assert_called_once_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label='test_label',
+                    labels=None
+                )
+    
+    def test_create_polyhedral_sites_passes_none_reference_centers_when_disabled(self):
+        """Test that create_polyhedral_sites passes None for reference_centers when use_reference_centers=False."""
+        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Mock the _calculate_reference_centers_from_indices method
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                
+                # Call create_polyhedral_sites with use_reference_centers=False
+                rbs.create_polyhedral_sites(
+                    center_species='Na',
+                    vertex_species='Cl',
+                    cutoff=3.0,
+                    n_vertices=2,
+                    use_reference_centers=False,
+                    label='test_label'
+                )
+                
+                # Verify that create_polyhedral_sites was called with reference_centers=None
+                self.mock_site_factory.create_polyhedral_sites.assert_called_once_with(
+                    self.mapped_environments,
+                    reference_centers=None,
+                    label='test_label',
+                    labels=None
+                )
+    
+    def test_create_dynamic_voronoi_sites_passes_calculated_reference_centers_to_site_factory(self):
+        """Test that create_dynamic_voronoi_sites passes calculated reference centers to site factory."""
+        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Mock calculated reference centers
+            mock_reference_centers = [np.array([0.2, 0.2, 0.2])]
+            
+            # Mock the _calculate_reference_centers_from_indices method
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                mock_calc_centers.return_value = mock_reference_centers
+                
+                # Call create_dynamic_voronoi_sites
+                rbs.create_dynamic_voronoi_sites(
+                    center_species='Na',
+                    reference_species='Cl',
+                    cutoff=3.0,
+                    n_reference=2,
+                    labels=['test_site']
+                )
+                
+                # Verify that create_dynamic_voronoi_sites was called with reference_centers
+                self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_once_with(
+                    self.mapped_environments,
+                    reference_centers=mock_reference_centers,
+                    label=None,
+                    labels=['test_site']
+                )
+    
+    def test_create_dynamic_voronoi_sites_passes_none_reference_centers_when_disabled(self):
+        """Test that create_dynamic_voronoi_sites passes None for reference_centers when use_reference_centers=False."""
+        with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch:
+            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
+            
+            # Mock the _calculate_reference_centers_from_indices method
+            with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
+                
+                # Call create_dynamic_voronoi_sites with use_reference_centers=False
+                rbs.create_dynamic_voronoi_sites(
+                    center_species='Na',
+                    reference_species='Cl',
+                    cutoff=3.0,
+                    n_reference=2,
+                    use_reference_centers=False,
+                    labels=['test_site']
+                )
+                
+                # Verify that create_dynamic_voronoi_sites was called with reference_centers=None
+                self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_once_with(
+                    self.mapped_environments,
+                    reference_centers=None,
+                    label=None,
+                    labels=['test_site']
+                )
             
 class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
     """Unit tests for _calculate_reference_centers_from_indices method."""

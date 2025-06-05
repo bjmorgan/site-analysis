@@ -98,13 +98,14 @@ class ReferenceBasedSites:
 		self._site_factory: Optional[SiteFactory] = None
 		
 	def create_polyhedral_sites(self, 
-							  center_species: str, 
-							  vertex_species: Union[str, List[str]], 
-							  cutoff: float, 
-							  n_vertices: int,
-							  label: Optional[str] = None, 
-							  labels: Optional[List[str]] = None, 
-							  target_species: Optional[Union[str, List[str]]] = None) -> List[PolyhedralSite]:
+							center_species: str, 
+							vertex_species: Union[str, List[str]], 
+							cutoff: float, 
+							n_vertices: int,
+							label: Optional[str] = None, 
+							labels: Optional[List[str]] = None, 
+							target_species: Optional[Union[str, List[str]]] = None,
+							use_reference_centers: bool = True) -> List[PolyhedralSite]:
 		"""Create PolyhedralSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -115,6 +116,8 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
+			use_reference_centers: Whether to calculate and use reference centers for 
+				improved PBC handling. Default is True.
 			
 		Returns:
 			List of PolyhedralSite objects
@@ -134,6 +137,13 @@ class ReferenceBasedSites:
 		# Check we do not have repeat periodic images in the coordination environments
 		self._validate_unique_environments(ref_environments)
 		
+		# Calculate reference centers if requested
+		if use_reference_centers:
+			center_indices = list(ref_environments.keys())
+			reference_centers = self._calculate_reference_centers_from_indices(center_indices)
+		else:
+			reference_centers = None
+			
 		# Map environments to target structure
 		mapped_environments = self._map_environments(
 			list(ref_environments.values()),
@@ -149,6 +159,7 @@ class ReferenceBasedSites:
 		assert self._site_factory is not None
 		sites = self._site_factory.create_polyhedral_sites(
 			mapped_environments,
+			reference_centers=reference_centers,
 			label=label,
 			labels=labels
 		)
@@ -156,13 +167,14 @@ class ReferenceBasedSites:
 		return sites
 	
 	def create_dynamic_voronoi_sites(self, 
-								   center_species: str, 
-								   reference_species: Union[str, List[str]], 
-								   cutoff: float, 
-								   n_reference: int,
-								   label: Optional[str] = None, 
-								   labels: Optional[List[str]] = None, 
-								   target_species: Optional[Union[str, List[str]]] = None) -> List[DynamicVoronoiSite]:
+								center_species: str, 
+								reference_species: Union[str, List[str]], 
+								cutoff: float, 
+								n_reference: int,
+								label: Optional[str] = None, 
+								labels: Optional[List[str]] = None, 
+								target_species: Optional[Union[str, List[str]]] = None,
+								use_reference_centers: bool = True) -> List[DynamicVoronoiSite]:
 		"""Create DynamicVoronoiSite objects based on coordination environments in the reference structure.
 		
 		Args:
@@ -173,6 +185,8 @@ class ReferenceBasedSites:
 			label: Label to apply to all created sites. Default is None.
 			labels: List of labels for each site. Default is None.
 			target_species: Species to map to in the target structure. Default is None.
+			use_reference_centers: Whether to calculate and use reference centers for 
+				improved PBC handling. Default is True.
 			
 		Returns:
 			List of DynamicVoronoiSite objects
@@ -180,7 +194,7 @@ class ReferenceBasedSites:
 		Raises:
 			ValueError: If coordination environments cannot be found or mapped,
 				or if both label and labels are provided.
-		"""
+	"""
 		# Find coordination environments in reference structure
 		# Note: CoordinationEnvironmentFinder uses vertex_species terminology,
 		# but conceptually these are reference atoms for dynamic Voronoi sites
@@ -191,6 +205,13 @@ class ReferenceBasedSites:
 		# Check we do not have repeat periodic images in the coordination environments
 		self._validate_unique_environments(ref_environments)
 		
+		# Calculate reference centers if requested
+		if use_reference_centers:
+			center_indices = list(ref_environments.keys())
+			reference_centers = self._calculate_reference_centers_from_indices(center_indices)
+		else:
+			reference_centers = None
+			
 		# Map environments to target structure
 		mapped_environments = self._map_environments(
 			list(ref_environments.values()),
@@ -205,7 +226,10 @@ class ReferenceBasedSites:
 		# At this point we know self._site_factory is not None
 		assert self._site_factory is not None
 		sites = self._site_factory.create_dynamic_voronoi_sites(
-			mapped_environments, label=label, labels=labels
+			mapped_environments,
+			reference_centers=reference_centers,
+			label=label,
+			labels=labels
 		)
 		
 		return sites

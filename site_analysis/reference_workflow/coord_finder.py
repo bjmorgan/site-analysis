@@ -101,11 +101,4 @@ class CoordinationEnvironmentFinder:
             n_coord=n_coord
         )
         
-        # Convert to dictionary format
-        result = {}
-        center_indices = self._atom_indices[center_species]
-        for i, coordinating in enumerate(environments):
-            center_idx = center_indices[i]
-            result[center_idx] = coordinating
-        
-        return result
+        return environments

@@ -29,11 +29,11 @@ from typing import Optional, Union, cast
 from pymatgen.core import Structure, Site, PeriodicSite
 
 def get_coordination_indices(
-        structure: Structure,
-        centre_species: str, 
-        coordination_species: Union[str, list[str]],
-        cutoff: float,
-        n_coord: Union[int, list[int]]) -> list[list[int]]:
+    structure: Structure,
+    centre_species: str, 
+    coordination_species: Union[str, list[str]],
+    cutoff: float,
+    n_coord: Union[int, list[int]]) -> dict[int, list[int]]:
     """
     Find atoms with exactly the specified coordination environment.
     
@@ -52,9 +52,9 @@ def get_coordination_indices(
             the number of centre atoms found.
             
     Returns:
-        list(list(int)): Nested list of integers, giving the atom indices for each
-            complete coordination environment. Only includes environments with 
-            exactly n_coord coordinating atoms within cutoff.
+        dict[int, list[int]]: Dictionary mapping center atom indices to lists of 
+            coordinating atom indices. Only includes environments with exactly 
+            n_coord coordinating atoms within cutoff.
             
     Raises:
         ValueError: If no centre atoms are found, or if a list of n_coord
@@ -77,20 +77,17 @@ def get_coordination_indices(
     else:
         if len(n_coord) != len(centre_atoms):
             raise ValueError(f"Length of n_coord list ({len(n_coord)}) does not match "
-                             f"number of {centre_species} atoms ({len(centre_atoms)})")
+                            f"number of {centre_species} atoms ({len(centre_atoms)})")
         required_coord = n_coord
     
     # Find coordinating environments
-    complete_environments = []
+    complete_environments = {}
     
     for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
         centre_site = structure[centre_idx]
         
         # Get all neighbors within cutoff that match coordination_species
         neighbors = []
-        # structure.get_neighbors returns a list of PeriodicNeighbor objects
-        # PeriodicNeighbor is a PeriodicSite subclass with additional properties
-        # for neighbor info (nn_distance, index, image)
         for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
             if neighbor.species_string in coordination_species:
                 neighbors.append((int(neighbor.index), int(neighbor.nn_distance)))
@@ -100,7 +97,7 @@ def get_coordination_indices(
             # Sort by distance
             neighbors.sort(key=lambda x: x[1])
             neighbor_indices = [idx for idx, _ in neighbors]
-            complete_environments.append(neighbor_indices)
+            complete_environments[centre_idx] = neighbor_indices
     
     return complete_environments
 
@@ -237,6 +234,15 @@ def get_vertex_indices(
     
     return vertex_indices
 
+_SHIFTS = np.array([[0,0,0],
+                    [1,0,0],
+                    [0,1,0],
+                    [0,0,1],
+                    [1,1,0],
+                    [1,0,1],
+                    [0,1,1],
+                    [1,1,1]])
+                    
 def x_pbc(x: np.ndarray):
     """Return an array of fractional coordinates mapped into all positive neighbouring 
     periodic cells.
@@ -261,15 +267,7 @@ def x_pbc(x: np.ndarray):
                [1.1, 1.2, 1.3]])
 
     """       
-    all_x =  np.array([[0,0,0],
-                       [1,0,0],
-                       [0,1,0],
-                       [0,0,1],
-                       [1,1,0],
-                       [1,0,1],
-                       [0,1,1],
-                       [1,1,1]]) + x
-    return all_x
+    return _SHIFTS + x
 
 def species_string_from_site(site: Site) -> str:
     """Extract the species string from a pymatgen Site object.

@@ -143,6 +143,41 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         self.assertEqual(len(environments), 1)
         self.assertIn(0, environments)
         self.assertEqual(len(environments[0]), 6)
+        
+    def test_find_environments_maps_to_correct_center_index_minimal(self):
+        """Test that find_environments correctly maps environment to the right center atom."""
+        lattice = Lattice.cubic(5.0)
+        
+        # Only 2 Li atoms - one isolated, one with S coordination
+        species = ["Li", "Li", "S", "S", "S", "S"]
+        coords = [
+            [0.1, 0.1, 0.1],  # Li index 0 - isolated, no S neighbors
+            [0.5, 0.5, 0.5],  # Li index 1 - has tetrahedral S coordination
+            [0.4, 0.4, 0.4],  # S index 2 - coordinates Li index 1
+            [0.6, 0.4, 0.4],  # S index 3 - coordinates Li index 1  
+            [0.4, 0.6, 0.4],  # S index 4 - coordinates Li index 1
+            [0.4, 0.4, 0.6],  # S index 5 - coordinates Li index 1
+        ]
+        
+        structure = Structure(lattice, species, coords)
+        finder = CoordinationEnvironmentFinder(structure)
+        
+        environments = finder.find_environments(
+            center_species="Li",
+            coordination_species="S", 
+            n_coord=4,
+            cutoff=2.0
+        )
+        
+        # Should correctly map to Li index 1 (which actually has the coordination)
+        self.assertEqual(len(environments), 1)
+        self.assertIn(1, environments)  # Li at index 1
+        self.assertEqual(len(environments[1]), 4)
+        
+        # Verify it contains the correct S atom indices
+        expected_s_indices = {2, 3, 4, 5}
+        actual_s_indices = set(environments[1])
+        self.assertEqual(actual_s_indices, expected_s_indices)
 
 
 if __name__ == '__main__':

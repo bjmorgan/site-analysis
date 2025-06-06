@@ -107,7 +107,7 @@ class Atom(object):
             None
 
         """
-        self._frac_coords = structure[self.index].frac_coords
+        self._frac_coords = structure[self.index].frac_coords % 1.0
 
     @property
     def frac_coords(self) -> np.ndarray:

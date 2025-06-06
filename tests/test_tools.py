@@ -315,6 +315,7 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         
         # Should find exactly one environment (Na1)
         self.assertEqual(len(environments_4), 1)
+        self.assertIn(0, environments_4)  # Na at index 0
         self.assertEqual(len(environments_4[0]), 4)
         
         # Verify correct atoms were identified
@@ -332,10 +333,11 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         
         # Should find exactly one environment (Na2)
         self.assertEqual(len(environments_6), 1)
-        self.assertEqual(len(environments_6[0]), 6)
+        self.assertIn(1, environments_6)  # Na at index 1
+        self.assertEqual(len(environments_6[1]), 6)
         
         # Verify correct atoms were identified
-        neighbor_indices = set(environments_6[0])
+        neighbor_indices = set(environments_6[1])
         self.assertEqual(neighbor_indices, self.na2_expected_coords)
         
         # Test no environments with 5 Cl neighbors
@@ -503,8 +505,9 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         
         # Should find all Na atoms with 0 coordinating atoms
         self.assertEqual(len(environments), 3)
-        for env in environments:
-            self.assertEqual(len(env), 0)
+        for center_idx in [0, 1, 2]:
+            self.assertIn(center_idx, environments)
+            self.assertEqual(len(environments[center_idx]), 0)
 
     def test_cutoff_sensitivity(self):
         """Test sensitivity to cutoff distance."""

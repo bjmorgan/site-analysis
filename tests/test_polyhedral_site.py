@@ -85,31 +85,64 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                    new_callable=PropertyMock, return_value=12) as mock_coordination_number:
             self.assertEqual(site.cn, 12)
 
-    def test_assign_vertex_coords(self):
-        structure = example_structure()
-        site = self.site
+    def test_assign_vertex_coords_no_wrapping(self):
+        """Test assign_vertex_coords when PBC correction doesn't cross boundaries."""
+        # Create structure with coordinates that don't need PBC correction
+        lattice = Lattice.cubic(10.0)
+        coords = [[0.1, 0.1, 0.1],
+                [0.2, 0.2, 0.2],
+                [0.3, 0.3, 0.3],
+                [0.4, 0.4, 0.4]]
+        structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
+        
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         site._delaunay = 'foo'
-        site.assign_vertex_coords(structure)
-        expected_frac_coords = np.array([[1.1, 1.1, 1.1],
-                                         [0.9, 1.1, 1.1],
-                                         [1.1, 0.9, 0.9],
-                                         [0.9, 0.9, 0.9]])
-        np.testing.assert_array_almost_equal(site.vertex_coords,
-            expected_frac_coords)
-        self.assertEqual(site._delaunay, None)
-                                    
-    def test_assign_vertex_coords_across_periodic_boundary(self):
-        structure = example_structure()
-        site = self.site
+        
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_pbc:
+            # Mock returns the same coordinates (no correction needed)
+            expected_frac_coords = np.array(coords)
+            mock_pbc.return_value = expected_frac_coords
+            
+            site.assign_vertex_coords(structure)
+            
+            # Verify PBC function was called with the raw coordinates
+            mock_pbc.assert_called_once()
+            np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
+            
+            # Verify site uses the coordinates and resets Delaunay
+            np.testing.assert_array_almost_equal(site.vertex_coords, expected_frac_coords)
+            self.assertEqual(site._delaunay, None)
+            
+    def test_assign_vertex_coords_with_wrapping(self):
+        """Test assign_vertex_coords when PBC correction crosses boundaries."""
+        # Create structure with coordinates that span boundaries (need PBC correction)
+        lattice = Lattice.cubic(10.0)
+        coords = [[0.1, 0.1, 0.1],
+                  [0.9, 0.1, 0.1], 
+                  [0.1, 0.9, 0.9],
+                  [0.9, 0.9, 0.9]]
+        structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
+        
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         site._delaunay = 'foo'
-        site.assign_vertex_coords(structure)
-        expected_fractional_coords = np.array([[1.1, 1.1, 1.1],
-                                               [0.9, 1.1, 1.1],
-                                               [1.1, 0.9, 0.9],
-                                               [0.9, 0.9, 0.9]])
-        np.testing.assert_array_almost_equal(site.vertex_coords,
-            expected_fractional_coords)
-        self.assertEqual(site._delaunay, None)
+        
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_pbc:
+            # Mock returns coordinates that have been wrapped across boundaries
+            expected_frac_coords = np.array([[1.1, 1.1, 1.1],
+                                             [0.9, 1.1, 1.1],
+                                             [1.1, 0.9, 0.9],
+                                             [0.9, 0.9, 0.9]])
+            mock_pbc.return_value = expected_frac_coords
+            
+            site.assign_vertex_coords(structure)
+            
+            # Verify PBC function was called with the raw coordinates
+            mock_pbc.assert_called_once()
+            np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
+            
+            # Verify site uses the PBC-corrected coordinates and resets Delaunay
+            np.testing.assert_array_almost_equal(site.vertex_coords, expected_frac_coords)
+            self.assertEqual(site._delaunay, None)
 
     def test_get_vertex_species(self):
         structure = example_structure(species=['S', 'P', 'O', 'I', 'Cl'])
@@ -432,6 +465,41 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         self.assertEqual(reconstructed.vertex_indices, original.vertex_indices)
         self.assertEqual(reconstructed.label, original.label)
         np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
+        
+    def test_polyhedral_site_init_with_reference_center(self):
+        """Test PolyhedralSite can be initialised with a reference centre."""
+        vertex_indices = [0, 1, 2, 3]
+        reference_center = np.array([0.5, 0.5, 0.5])
+        
+        site = PolyhedralSite(vertex_indices=vertex_indices, reference_center=reference_center)
+        
+        np.testing.assert_array_equal(site.reference_center, reference_center)
+        self.assertEqual(site.vertex_indices, vertex_indices)
+        
+    def test_assign_vertex_coords_uses_legacy_when_no_reference_center(self):
+        """Test that legacy PBC correction is used when reference_center is None."""
+        structure = example_structure()
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])  # No reference_center
+        
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy:
+            mock_legacy.return_value = np.array([[0.1, 0.1, 0.1]])
+            
+            site.assign_vertex_coords(structure)
+            
+            mock_legacy.assert_called_once()
+            
+    def test_assign_vertex_coords_uses_reference_center_when_provided(self):
+        """Test that reference centre-based unwrapping is used when reference_center is provided."""
+        structure = example_structure()
+        reference_center = np.array([0.5, 0.5, 0.5])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=reference_center)
+        
+        with patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            mock_unwrap.return_value = np.array([[0.1, 0.1, 0.1]])
+            
+            site.assign_vertex_coords(structure)
+            
+            mock_unwrap.assert_called_once()
 
 
 if __name__ == '__main__':

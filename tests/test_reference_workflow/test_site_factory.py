@@ -25,42 +25,40 @@ class TestSiteFactory(unittest.TestCase):
 		
 		# Create a simple test structure
 		lattice = Lattice.cubic(5.0)
-		species = ["Na", "Cl", "Na", "Cl", "Na"]
+		species = ["Na", "Cl", "Na", "Cl", "Na", "Cl"]
 		coords = [
-			[0.0, 0.0, 0.0],  # Na0
-			[0.2, 0.2, 0.2],  # Cl1
-			[0.5, 0.0, 0.0],  # Na2
-			[0.7, 0.2, 0.2],  # Cl3
-			[0.0, 0.5, 0.0],  # Na4
+			[0.0, 0.0, 0.0], 
+			[0.2, 0.2, 0.2], 
+			[0.5, 0.0, 0.0], 
+			[0.7, 0.2, 0.2], 
+			[0.0, 0.5, 0.0],
+			[0.3, 0.3, 0.3] 
 		]
 		self.structure = Structure(lattice, species, coords)
+		self.site_factory = SiteFactory(self.structure)
 		
 		# Define some coordination environments as lists of atom indices
 		self.tetrahedral_env = [[1, 2, 3, 4]]  # A tetrahedral environment
 		self.multiple_envs = [
-			[1, 2, 4],     # First environment (3 atoms)
-			[0, 1, 3, 4]   # Second environment (4 atoms)
+			[1, 2, 4, 5],  # First environment (4 atoms)
+			[0, 1, 3, 4, 5]   # Second environment (5 atoms)
 		]
 	
 	def test_validate_environments_valid(self):
 		"""Test environment validation with valid environments."""
-		factory = SiteFactory(self.structure)
-		
 		# This should not raise any exception
-		factory._validate_environments(self.tetrahedral_env)
-		factory._validate_environments(self.multiple_envs)
+		self.site_factory._validate_environments(self.tetrahedral_env)
+		self.site_factory._validate_environments(self.multiple_envs)
 	
 	def test_validate_environments_invalid_type(self):
 		"""Test environment validation with invalid environment type."""
-		factory = SiteFactory(self.structure)
-		
 		# Not a list
 		with self.assertRaises(ValueError):
-			factory._validate_environments(123)
+			self.site_factory._validate_environments(123)
 		
 		# Not a list of lists
 		with self.assertRaises(ValueError):
-			factory._validate_environments([1, 2, 3])
+			self.site_factory._validate_environments([1, 2, 3])
 	
 	def test_validate_environments_invalid_indices(self):
 		"""Test environment validation with invalid indices."""
@@ -76,32 +74,26 @@ class TestSiteFactory(unittest.TestCase):
 	
 	def test_validate_labels_valid(self):
 		"""Test label validation with valid labels."""
-		factory = SiteFactory(self.structure)
-		
 		# Valid cases
-		factory._validate_labels(None, None, 2)  # No labels
-		factory._validate_labels("label", None, 2)  # Single label
-		factory._validate_labels(None, ["label1", "label2"], 2)  # Multiple labels
+		self.site_factory._validate_labels(None, None, 2)  # No labels
+		self.site_factory._validate_labels("label", None, 2)  # Single label
+		self.site_factory._validate_labels(None, ["label1", "label2"], 2)  # Multiple labels
 	
 	def test_validate_labels_invalid(self):
 		"""Test label validation with invalid labels."""
-		factory = SiteFactory(self.structure)
-		
 		# Both label and labels provided
 		with self.assertRaises(ValueError):
-			factory._validate_labels("label", ["label1", "label2"], 2)
+			self.site_factory._validate_labels("label", ["label1", "label2"], 2)
 		
 		# Wrong number of labels
 		with self.assertRaises(ValueError):
-			factory._validate_labels(None, ["label1"], 2)  # Too few
+			self.site_factory._validate_labels(None, ["label1"], 2)  # Too few
 		
 		with self.assertRaises(ValueError):
-			factory._validate_labels(None, ["label1", "label2", "label3"], 2)  # Too many
+			self.site_factory._validate_labels(None, ["label1", "label2", "label3"], 2)  # Too many
 	
 	def test_create_polyhedral_sites(self):
 		"""Test creation of PolyhedralSite objects."""
-		factory = SiteFactory(self.structure)
-		
 		# Mock the PolyhedralSite class
 		with patch('site_analysis.reference_workflow.site_factory.PolyhedralSite') as mock_class:
 			# Configure mock to store the parameters it was called with
@@ -116,7 +108,7 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.side_effect = side_effect
 			
 			# Test with single environment
-			sites = factory.create_polyhedral_sites(self.tetrahedral_env)
+			sites = self.site_factory.create_polyhedral_sites(self.tetrahedral_env)
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 1)
@@ -129,14 +121,14 @@ class TestSiteFactory(unittest.TestCase):
 			
 			# Test with multiple environments and custom label
 			mock_sites.clear()
-			sites = factory.create_polyhedral_sites(self.multiple_envs, label="test_label")
+			sites = self.site_factory.create_polyhedral_sites(self.multiple_envs, label="test_label")
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 2)
 			
 			# Check that vertex indices are correct
-			self.assertEqual(mock_sites[0].creation_kwargs['vertex_indices'], [1, 2, 4])
-			self.assertEqual(mock_sites[1].creation_kwargs['vertex_indices'], [0, 1, 3, 4])
+			self.assertEqual(mock_sites[0].creation_kwargs['vertex_indices'], [1, 2, 4, 5])
+			self.assertEqual(mock_sites[1].creation_kwargs['vertex_indices'], [0, 1, 3, 4, 5])
 			
 			# Check that labels are set correctly
 			self.assertEqual(mock_sites[0].creation_kwargs['label'], "test_label")
@@ -144,7 +136,6 @@ class TestSiteFactory(unittest.TestCase):
 	
 	def test_create_dynamic_voronoi_sites(self):
 		"""Test creation of DynamicVoronoiSite objects."""
-		factory = SiteFactory(self.structure)
 		
 		# Mock the DynamicVoronoiSite class
 		with patch('site_analysis.reference_workflow.site_factory.DynamicVoronoiSite') as mock_class:
@@ -160,7 +151,7 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.side_effect = side_effect
 			
 			# Test with single environment
-			sites = factory.create_dynamic_voronoi_sites(self.tetrahedral_env)
+			sites = self.site_factory.create_dynamic_voronoi_sites(self.tetrahedral_env)
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 1)
@@ -173,7 +164,7 @@ class TestSiteFactory(unittest.TestCase):
 			
 			# Test with multiple environments and multiple labels
 			mock_sites.clear()
-			sites = factory.create_dynamic_voronoi_sites(
+			sites = self.site_factory.create_dynamic_voronoi_sites(
 				self.multiple_envs, labels=["label1", "label2"]
 			)
 			
@@ -181,8 +172,8 @@ class TestSiteFactory(unittest.TestCase):
 			self.assertEqual(len(sites), 2)
 			
 			# Check that reference indices are correct
-			self.assertEqual(mock_sites[0].creation_kwargs['reference_indices'], [1, 2, 4])
-			self.assertEqual(mock_sites[1].creation_kwargs['reference_indices'], [0, 1, 3, 4])
+			self.assertEqual(mock_sites[0].creation_kwargs['reference_indices'], [1, 2, 4, 5])
+			self.assertEqual(mock_sites[1].creation_kwargs['reference_indices'], [0, 1, 3, 4, 5])
 			
 			# Check that labels are set correctly
 			self.assertEqual(mock_sites[0].creation_kwargs['label'], "label1")
@@ -190,21 +181,17 @@ class TestSiteFactory(unittest.TestCase):
 	
 	def test_assign_vertex_coords(self):
 		"""Test assignment of vertex coordinates to PolyhedralSite."""
-		factory = SiteFactory(self.structure)
-		
 		# Create a mock PolyhedralSite
 		mock_site = Mock(spec=PolyhedralSite)
 		
 		# Call the method directly with the mock
-		factory._assign_vertex_coords(mock_site)
+		self.site_factory._assign_vertex_coords(mock_site)
 		
 		# Verify method was called with correct argument
 		mock_site.assign_vertex_coords.assert_called_once_with(self.structure)
 	
 	def test_vertex_coords_assignment(self):
 		"""Test that vertex coordinates are correctly assigned for PolyhedralSite."""
-		factory = SiteFactory(self.structure)
-		
 		# Mock the PolyhedralSite class
 		with patch('site_analysis.reference_workflow.site_factory.PolyhedralSite') as mock_class:
 			# Return a mock site with a mock assign_vertex_coords method
@@ -212,32 +199,28 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.return_value = mock_site
 			
 			# Test creating a single site
-			factory.create_polyhedral_sites(self.tetrahedral_env)
+			self.site_factory.create_polyhedral_sites(self.tetrahedral_env)
 			
 			# Verify assign_vertex_coords was called with the correct structure
 			mock_site.assign_vertex_coords.assert_called_once_with(self.structure)
 	
 	def test_minimum_vertices_for_polyhedral_sites(self):
 		"""Test minimum vertices validation for PolyhedralSite."""
-		factory = SiteFactory(self.structure)
-		
 		# Not enough vertices for a polyhedron (need at least 3)
 		with self.assertRaises(ValueError):
-			factory.create_polyhedral_sites([[1, 2]])
+			self.site_factory.create_polyhedral_sites([[1, 2]])
 	
 	def test_both_labels_error(self):
 		"""Test error when both label and labels are provided."""
-		factory = SiteFactory(self.structure)
-		
 		with self.assertRaises(ValueError):
-			factory.create_polyhedral_sites(
+			self.site_factory.create_polyhedral_sites(
 				self.multiple_envs,
 				label="single_label",
 				labels=["label1", "label2"]
 			)
 		
 		with self.assertRaises(ValueError):
-			factory.create_dynamic_voronoi_sites(
+			self.site_factory.create_dynamic_voronoi_sites(
 				self.multiple_envs,
 				label="single_label",
 				labels=["label1", "label2"]
@@ -245,18 +228,114 @@ class TestSiteFactory(unittest.TestCase):
 	
 	def test_empty_environments(self):
 		"""Test behavior with empty environments list."""
-		factory = SiteFactory(self.structure)
-		
 		# Mock the site classes to ensure we're testing in isolation
 		with patch('site_analysis.reference_workflow.site_factory.PolyhedralSite'):
 			# Create sites with empty environments
-			sites = factory.create_polyhedral_sites([])
+			sites = self.site_factory.create_polyhedral_sites([])
 			self.assertEqual(len(sites), 0)
 		
 		with patch('site_analysis.reference_workflow.site_factory.DynamicVoronoiSite'):
 			# Create sites with empty environments
-			sites = factory.create_dynamic_voronoi_sites([])
+			sites = self.site_factory.create_dynamic_voronoi_sites([])
 			self.assertEqual(len(sites), 0)
+			
+	def test_create_polyhedral_sites_with_reference_centers(self):
+		"""Test creating polyhedral sites with reference centres."""
+		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]
+		reference_centers = [
+			np.array([0.1, 0.1, 0.1]),
+			np.array([0.2, 0.2, 0.2])
+		]
+		
+		sites = self.site_factory.create_polyhedral_sites(
+			environments,
+			reference_centers=reference_centers,
+			label="test_label"
+		)
+		
+		# Check that sites were created with reference centres
+		self.assertEqual(len(sites), 2)
+		
+		for site, expected_centre in zip(sites, reference_centers):
+			self.assertIsInstance(site, PolyhedralSite)
+			self.assertIsNotNone(site.reference_center)
+			np.testing.assert_array_equal(site.reference_center, expected_centre)
+	
+	def test_create_polyhedral_sites_without_reference_centers(self):
+		"""Test creating polyhedral sites without reference centres (existing behaviour)."""
+		environments = [[1, 2, 3, 4], [0, 1, 2, 3]]
+		
+		sites = self.site_factory.create_polyhedral_sites(environments, label="test_label")
+		
+		# Check that sites were created without reference centres
+		self.assertEqual(len(sites), 2)
+		
+		for site in sites:
+			self.assertIsInstance(site, PolyhedralSite)
+			self.assertIsNone(site.reference_center)
+	
+	def test_create_dynamic_voronoi_sites_with_reference_centers(self):
+		"""Test creating dynamic voronoi sites with reference centres."""
+		environments = [[1, 2], [3, 4]]
+		reference_centers = [
+			np.array([0.3, 0.3, 0.3]),
+			np.array([0.4, 0.4, 0.4])
+		]
+		
+		sites = self.site_factory.create_dynamic_voronoi_sites(
+			environments,
+			reference_centers=reference_centers,
+			label="test_label"
+		)
+		
+		# Check that sites were created with reference centres
+		self.assertEqual(len(sites), 2)
+		
+		for site, expected_centre in zip(sites, reference_centers):
+			self.assertIsInstance(site, DynamicVoronoiSite)
+			self.assertIsNotNone(site.reference_center)
+			np.testing.assert_array_equal(site.reference_center, expected_centre)
+	
+	def test_create_dynamic_voronoi_sites_without_reference_centers(self):
+		"""Test creating dynamic voronoi sites without reference centres (existing behaviour)."""
+		environments = [[1, 2], [3, 4]]
+		
+		sites = self.site_factory.create_dynamic_voronoi_sites(environments, label="test_label")
+		
+		# Check that sites were created without reference centres
+		self.assertEqual(len(sites), 2)
+		
+		for site in sites:
+			self.assertIsInstance(site, DynamicVoronoiSite)
+			self.assertIsNone(site.reference_center)
+	
+	def test_create_polyhedral_sites_mismatched_lengths_raises_error(self):
+		"""Test that mismatched lengths between environments and reference centres raises error."""
+		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]  # 2 environments
+		reference_centers = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
+		
+		with self.assertRaises(ValueError) as context:
+			self.site_factory.create_polyhedral_sites(
+				environments,
+				reference_centers=reference_centers
+			)
+		
+		self.assertIn("reference_centers", str(context.exception))
+		self.assertIn("environments", str(context.exception))
+		
+	def test_create_dynamic_voronoi_sites_mismatched_lengths_raises_error(self):
+		"""Test that mismatched lengths between environments and reference centres raises error."""
+		environments = [[1, 2], [3, 4]]  # 2 environments
+		reference_centers = [np.array([0.1, 0.1, 0.1])]  # 1 reference centre
+		
+		with self.assertRaises(ValueError) as context:
+			self.site_factory.create_dynamic_voronoi_sites(
+				environments,
+				reference_centers=reference_centers
+			)
+		
+		self.assertIn("reference_centers", str(context.exception))
+		self.assertIn("environments", str(context.exception))
 
 
 if __name__ == '__main__':

@@ -25,6 +25,7 @@ from typing import List, Optional, Any, Dict
 from .site import Site
 from .atom import Atom
 from pymatgen.core import Structure
+from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 
 class DynamicVoronoiSite(Site):
 	"""Site subclass corresponding to Voronoi cells with centres
@@ -41,13 +42,14 @@ class DynamicVoronoiSite(Site):
 		
 	def __init__(self,
 		reference_indices: List[int],
-		label: Optional[str] = None) -> None:
-		"""Create a ``DynamicVoronoiSite`` instance.__abs__()
+		label: Optional[str] = None,
+		reference_center: Optional[np.ndarray] = None) -> None:
+		"""Create a ``DynamicVoronoiSite`` instance.
 			
 		Args:
-			reference_indices (List[int]): List of atom indices whose
-			positions will be used to dynamically calculate the centre of this site.
-			label (str, optional): Optional label for this site. Default is `None`.
+			reference_indices: List of atom indices whose positions will be used to dynamically calculate the centre of this site.
+			label: Optional label for this site.
+			reference_center: Optional reference centre for PBC handling.
 		
 		Returns:
 			None
@@ -55,6 +57,7 @@ class DynamicVoronoiSite(Site):
 		super(DynamicVoronoiSite, self).__init__(label=label)
 		self.reference_indices = reference_indices
 		self._centre_coords: Optional[np.ndarray] = None
+		self.reference_center = reference_center
 		
 	def __repr__(self) -> str:
 		string = ('site_analysis.DynamicVoronoiSite('
@@ -94,24 +97,14 @@ class DynamicVoronoiSite(Site):
 		"""
 		# Get fractional coordinates of reference atoms
 		ref_coords = np.array([structure[i].frac_coords for i in self.reference_indices])
-		
-		# Handle periodic boundary conditions:
-		# If the range of fractional coordinates along x, y, or z 
-		# exceeds 0.5, assume that this site wraps around the 
-		# periodic boundary in that dimension. 
-		# Fractional coordinates for that dimension that are less 
-		# than 0.5 will be incremented by 1.0 
-		for dim in range(3):
-			spread = np.max(ref_coords[:, dim]) - np.min(ref_coords[:, dim])
-			if spread > 0.5:
-				ref_coords[ref_coords[:, dim] < 0.5, dim] += 1.0
-		
-		# Calculate the centre as the mean of the reference atom coordinates
+		# Handle periodic boundary conditions
+		if self.reference_center is not None:
+			ref_coords = unwrap_vertices_to_reference_center(ref_coords, self.reference_center, structure.lattice)
+		else:
+			ref_coords = apply_legacy_pbc_correction(ref_coords)
 		centre = np.mean(ref_coords, axis=0)
-		
 		# Wrap the centre back into the unit cell [0, 1)
 		centre = centre % 1.0
-		
 		self._centre_coords = centre
 		
 	@property

@@ -185,6 +185,55 @@ trajectory = (TrajectoryBuilder()
 
 The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centers.
 
+### Periodic Boundary Condition Handling
+
+The Reference-Based Sites workflow provides control over how periodic boundary conditions are handled when creating polyhedral and dynamic Voronoi sites. **Reference centre unwrapping is enabled by default** and is the recommended approach for all use cases.
+
+```python
+trajectory = (TrajectoryBuilder()
+    .with_structure(target_structure)
+    .with_reference_structure(reference_structure)
+    .with_mobile_species("Li")
+    .with_polyhedral_sites(
+        centre_species="Li",
+        vertex_species="O",
+        cutoff=2.5,
+        n_vertices=4,
+        use_reference_centers=True  # Default: reference centre unwrapping
+    )
+    .build())
+
+# Alternative: spread-based detection (advanced usage only)
+trajectory = (TrajectoryBuilder()
+    .with_structure(target_structure)
+    .with_reference_structure(reference_structure)
+    .with_mobile_species("Li")
+    .with_polyhedral_sites(
+        centre_species="Li",
+        vertex_species="O",
+        cutoff=2.5,
+        n_vertices=4,
+        use_reference_centers=False  # Use spread-based method
+    )
+    .build())
+```
+
+#### PBC Handling Methods
+
+The `use_reference_centers` parameter controls which of two methods is used:
+
+- **Reference centre unwrapping** (`use_reference_centers=True`, default): Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images. This method works correctly even in small supercells where sites may legitimately span more than 50% of unit cell dimensions.
+
+- **Spread-based detection** (`use_reference_centers=False`): Identifies wrapped sites based on the spatial distribution of reference atoms. This method should only be used when you are confident that all sites have spans well below 0.5 times the simulation cell dimensions in all directions, and is inappropriate for relatively small simulation cells.
+
+#### When to Use Each Method
+
+**Default choice (recommended)**: Use reference centre unwrapping for all analyses. This method handles small supercells correctly and is robust across different system types.
+
+**Advanced usage only**: The spread-based method may provide modest performance improvements in some large systems, but should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
+
+For detailed explanations of both methods, their trade-offs, and guidance on when to use each approach, see {doc}`../concepts/pbc_handling`.
+
 ## Best Practices
 
 For optimal results:

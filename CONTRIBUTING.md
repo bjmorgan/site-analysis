@@ -124,5 +124,5 @@ Documentation improvements follow the same process as code contributions:
 2. Create a pull request that references the issue (e.g., "Fixes #123")
 
 ## Style Guidelines
-
 - The project uses British English in documentation and comments
+- **Exception**: Use American spelling "center" (not "centre") in all API parameter names, method names, and public interfaces for consistency with the Python scientific ecosystem (NumPy, SciPy, PyMatGen)

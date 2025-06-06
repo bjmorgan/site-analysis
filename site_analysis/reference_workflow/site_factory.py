@@ -16,7 +16,7 @@ This module is part of the reference-based workflow, which creates sites in one
 structure based on coordination environments identified in a reference structure.
 """
 
-from typing import List, Optional, Union, Any
+from typing import Any
 import numpy as np
 from pymatgen.core import Structure
 
@@ -45,15 +45,18 @@ class SiteFactory:
 	
 	def create_polyhedral_sites(
 		self, 
-		environments: List[List[int]], 
-		label: Optional[str] = None,
-		labels: Optional[List[str]] = None
-	) -> List[PolyhedralSite]:
+		environments: list[list[int]], 
+		reference_centers: list[np.ndarray] | None = None,
+		label: str | None = None,
+		labels: list[str] | None = None
+	) -> list[PolyhedralSite]:
 		"""Create PolyhedralSite objects from coordination environments.
 		
 		Args:
 			environments: List of environments, where each environment is a list
 				of atom indices defining the vertices of a polyhedral site.
+			reference_centers: Optional list of reference centres for PBC handling.
+				If provided, must have the same length as environments.
 			label: Optional label to assign to all sites.
 			labels: Optional list of labels, one for each environment.
 			
@@ -61,19 +64,27 @@ class SiteFactory:
 			List of PolyhedralSite objects.
 			
 		Raises:
-			ValueError: If environments are invalid or if minimum vertex count
-				is not met for polyhedral sites (must have at least 3 vertices).
+			ValueError: If environments are invalid, if minimum vertex count
+				is not met, or if reference_centers length doesn't match environments.
 		"""
 		# Validate inputs
 		self._validate_environments(environments)
 		self._validate_labels(label, labels, len(environments))
 		
-		# Validate minimum vertices for PolyhedralSite (3 for a polygon)
+		# Validate minimum vertices for PolyhedralSite (4 for a tetrahedron)
 		for i, env in enumerate(environments):
-			if len(env) < 3:
+			if len(env) < 4:
 				raise ValueError(
 					f"Environment {i} has {len(env)} vertices, but PolyhedralSite "
-					f"requires at least 3 vertices to form a polyhedron."
+					f"requires at least 4 vertices to form a polyhedron."
+				)
+				
+		# Validate number of environments == number of reference centres
+		if reference_centers is not None:
+			if len(reference_centers) != len(environments):
+				raise ValueError(
+					f"Length of reference_centers ({len(reference_centers)}) must match "
+					f"length of environments ({len(environments)})"
 				)
 		
 		# Create sites
@@ -84,8 +95,15 @@ class SiteFactory:
 				labels[i] if labels is not None else None
 			)
 			
+			# Determine reference centre for this site
+			ref_centre = reference_centers[i] if reference_centers is not None else None
+			
 			# Create site
-			site = PolyhedralSite(vertex_indices=env, label=site_label)
+			site = PolyhedralSite(
+				vertex_indices=env, 
+				label=site_label,
+				reference_center=ref_centre
+			)
 			
 			# Assign vertex coordinates
 			self._assign_vertex_coords(site)
@@ -96,16 +114,19 @@ class SiteFactory:
 	
 	def create_dynamic_voronoi_sites(
 		self, 
-		environments: List[List[int]], 
-		label: Optional[str] = None,
-		labels: Optional[List[str]] = None
-	) -> List[DynamicVoronoiSite]:
+		environments: list[list[int]], 
+		reference_centers: list[np.ndarray] | None = None,
+		label: str | None = None,
+		labels: list[str] | None = None
+	) -> list[DynamicVoronoiSite]:
 		"""Create DynamicVoronoiSite objects from coordination environments.
 		
 		Args:
 			environments: List of environments, where each environment is a list
 				of atom indices defining the reference atoms for a dynamic
 				Voronoi site.
+			reference_centers: Optional list of reference centres for PBC handling.
+				If provided, must have the same length as environments.
 			label: Optional label to assign to all sites.
 			labels: Optional list of labels, one for each environment.
 			
@@ -119,6 +140,14 @@ class SiteFactory:
 		self._validate_environments(environments)
 		self._validate_labels(label, labels, len(environments))
 		
+		# Validate number of environments == number of reference centres
+		if reference_centers is not None:
+			if len(reference_centers) != len(environments):
+				raise ValueError(
+					f"Length of reference_centers ({len(reference_centers)}) must match "
+					f"length of environments ({len(environments)})"
+				)
+			
 		# Create sites
 		sites = []
 		for i, env in enumerate(environments):
@@ -127,14 +156,24 @@ class SiteFactory:
 				labels[i] if labels is not None else None
 			)
 			
+			# Determine reference centre for this site  
+			ref_centre = reference_centers[i] if reference_centers is not None else None
+			
 			# Create site
-			site = DynamicVoronoiSite(reference_indices=env, label=site_label)
+			site = DynamicVoronoiSite(
+				reference_indices=env, 
+				label=site_label,
+				reference_center=ref_centre
+			)
 			
 			sites.append(site)
 		
 		return sites
 	
-	def _validate_environments(self, environments: Any) -> None:
+	def _validate_environments(
+		self,
+		environments: Any
+	) -> None:
 		"""Validate that environments have the correct format.
 		
 		Args:
@@ -176,8 +215,8 @@ class SiteFactory:
 	
 	def _validate_labels(
 		self, 
-		label: Optional[str], 
-		labels: Optional[List[str]], 
+		label: str | None, 
+		labels: list[str] | None, 
 		num_environments: int
 	) -> None:
 		"""Validate label options.
@@ -204,7 +243,10 @@ class SiteFactory:
 				f"number of environments ({num_environments})"
 			)
 	
-	def _assign_vertex_coords(self, site: PolyhedralSite) -> None:
+	def _assign_vertex_coords(
+		self,
+		site: PolyhedralSite
+	) -> None:
 		"""Assign vertex coordinates to a PolyhedralSite.
 		
 		Args:

@@ -163,7 +163,7 @@ builder.with_voronoi_sites(
 )
 ```
 
-#### `with_polyhedral_sites(centre_species, vertex_species, cutoff, n_vertices, label=None)`
+#### `with_polyhedral_sites(centre_species, vertex_species, cutoff, n_vertices, label=None, use_reference_centers=True)`
 Defines polyhedral sites using coordination environments.
 
 This method benefits from using an idealised structure in the builder, as regular coordination environments are easier to identify and define. However, the ReferenceBasedSites workflow (which this uses internally) can handle some degree of structural distortion.
@@ -174,13 +174,13 @@ This method benefits from using an idealised structure in the builder, as regula
 - `cutoff`: Distance cutoff for coordination environment
 - `n_vertices`: Number of vertices per environment
 - `label`: Optional label for all sites
+- `use_reference_centers`: Whether to use reference centre unwrapping for periodic boundary conditions (default: `True`)
+  - `True`: Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images
+  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms
 
 **Example:**
 ```python
-# Using an idealised structure makes coordination environments clearer
-ideal_structure = Structure.from_file("ideal_structure.cif")
-builder.with_structure(ideal_structure)
-       .with_reference_structure(reference_structure)
+builder.with_reference_structure(reference_structure)
        .with_polyhedral_sites(
            centre_species="Li",
            vertex_species="O",
@@ -190,7 +190,9 @@ builder.with_structure(ideal_structure)
        )
 ```
 
-#### `with_dynamic_voronoi_sites(centre_species, reference_species, cutoff, n_reference, label=None)`
+For detailed explanations of periodic boundary condition handling, see {doc}`../concepts/pbc_handling`.
+
+#### `with_dynamic_voronoi_sites(centre_species, reference_species, cutoff, n_reference, label=None, use_reference_centers=True)`
 Defines dynamic Voronoi sites using reference atom positions.
 
 **Parameters:**
@@ -199,6 +201,9 @@ Defines dynamic Voronoi sites using reference atom positions.
 - `cutoff`: Distance cutoff for finding reference atoms
 - `n_reference`: Number of reference atoms per site
 - `label`: Optional label for all sites
+- `use_reference_centers`: Whether to use reference centre unwrapping for periodic boundary conditions (default: `True`)
+  - `True`: Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images
+  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms
 
 **Example:**
 ```python
@@ -211,6 +216,8 @@ builder.with_reference_structure(reference_structure)
            label="dynamic_octahedral"
        )
 ```
+
+For detailed explanations of periodic boundary condition handling, see {doc}`../concepts/pbc_handling`.
 
 ### Advanced Configuration Methods
 

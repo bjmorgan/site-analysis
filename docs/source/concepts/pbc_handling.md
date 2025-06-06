@@ -54,7 +54,7 @@ builder.with_polyhedral_sites(..., use_reference_centers=True)
 builder.with_polyhedral_sites(..., use_reference_centers=False)
 ```
 
-For more details on using these workflows, see :doc:`trajectory_builder` and :doc:`reference_workflow`.
+For more details on using these workflows, see {doc}`trajectory_builder` and {doc}`reference_workflow`.
 
 ### Manual Site Creation
 

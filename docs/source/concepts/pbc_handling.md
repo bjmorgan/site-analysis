@@ -20,7 +20,7 @@ This method works well provided all sites have spans less than 0.5 times the sim
 ```{figure} ../_static/figures/pbcs_spread_method.png
 :width: 90%
 
-**Caption:** (a) If a site spans < &frac12 of the simulation cell in all dimensions it is considered to not wrap around the periodic boundaries and no unwrapping is needed. (b) Sites with spans > &frac12 of the simulation cell along any one dimension are assumed to wrap around the periodic boundaries (as in this figure). Unwrapping is performed to restore the correct site geometry. (c) In small supercells where sites naturally span &asymp; &frac12; of unit cell dimensions the method becomes unreliable, as legitimate site geometries can erroneously be assigned as wrapping around the periodic boundaries. These sites are then &ldquo;unwrapped&rdquo; to produce incorrect site geometries and false site assignments.
+**Caption:** (a) If a site spans < &frac12; of the simulation cell in all dimensions it is considered to not wrap around the periodic boundaries and no unwrapping is needed. (b) Sites with spans > &frac12; of the simulation cell along any one dimension are assumed to wrap around the periodic boundaries (as in this figure). Unwrapping is performed to restore the correct site geometry. (c) In small supercells where sites naturally span &asymp; &frac12; of unit cell dimensions the method becomes unreliable, as legitimate site geometries can erroneously be assigned as wrapping around the periodic boundaries. These sites are then &ldquo;unwrapped&rdquo; to produce incorrect site geometries and false site assignments.
 
 ### Reference Centre Unwrapping (**default**)
 

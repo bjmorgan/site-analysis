@@ -37,6 +37,7 @@ concepts/sites
 concepts/site_collections
 concepts/atoms
 concepts/trajectories
+concepts/pbc_handling
 
 ```
 

@@ -28,11 +28,14 @@ from pymatgen.io.vasp import Xdatcar
 xdatcar = Xdatcar("XDATCAR")
 md_structures = xdatcar.structures
 
-# Define sites and track Li+ ion movements through the trajectory
+# Define multiple sites and track Li+ ion movements between them
 trajectory = (TrajectoryBuilder()
               .with_structure(md_structures[0])  # Use first frame as reference
               .with_mobile_species("Li")
-              .with_spherical_sites(centres=[[0.0, 0.0, 0.0]], radii=[1.5])
+              .with_spherical_sites(centres=[[0.0, 0.0, 0.0], 
+                                             [0.5, 0.5, 0.5], 
+                                             [0.0, 0.5, 0.0]], 
+                                   radii=1.5)
               .build())
 
 trajectory.trajectory_from_structures(md_structures)

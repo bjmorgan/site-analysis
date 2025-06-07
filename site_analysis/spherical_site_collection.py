@@ -5,19 +5,25 @@ collection of SphericalSite objects and implements methods for assigning
 atoms to these sites based on their positions in a crystal structure.
 
 The SphericalSiteCollection extends the base SiteCollection class with
-specific functionality for spherical sites, focusing primarily on efficient
-atom assignment.
+specific functionality for spherical sites, including maintaining a map of 
+neighbouring sites within a distance cutoff and optimized atom assignment 
+that leverages spatial relationships and learned transition patterns for 
+improved performance in large systems.
 
-For atom assignment, the collection implements an efficient prioritization:
-1. First check if an atom is still in its previously assigned site
-2. If not, sequentially check all sites until a match is found
-3. The first site found to contain the atom claims it (no further checks)
+For atom assignment, the collection uses a priority-based approach:
 
-This approach handles overlapping spherical sites in a consistent way - 
-if an atom is in a region where multiple sites overlap, it will remain assigned
-to its original site as long as it stays within that site's volume. This 
-persistence can be useful for tracking atoms through small oscillations
-without generating spurious site transitions.
+1. First check if an atom is still in its most recently assigned site
+2. Then check observed transition destinations from that site in decreasing 
+   frequency order
+3. Then check neighbouring sites within the distance cutoff of the most recent site 
+   (if these have not yet been checked)
+4. Finally check all remaining sites if not found in the priority categories
+
+This handles overlapping spherical sites in a consistent way - if an atom is 
+in a region where multiple sites overlap, it will remain assigned to its 
+original site as long as it stays within that site's volume. This persistence 
+can be useful for tracking atoms through small oscillations without generating 
+spurious site transitions.
 """
 
 import numpy as np
@@ -33,15 +39,28 @@ class SphericalSiteCollection(SiteCollection):
     def __init__(self,
         sites: list[SphericalSite],
         neighbour_cutoff: float = 10.0) -> None:
-        """Create a SphericalSiteCollection instance.
+        """A collection of SphericalSite objects with optimised atom assignment.
+        
+        Extends the base SiteCollection class with specific functionality for 
+        spherical sites, including maintaining a map of neighboring spherical 
+        sites within a distance cutoff and implementing optimized atom assignment 
+        based on spatial relationships and learned transition patterns.
+        
+        The collection uses a priority-based site checking approach that leverages:
+        - Most recently occupied sites (spatial locality)
+        - Observed transition frequencies (learned behavior)  
+        - Distance-based site neighborhoods (spatial relationships)
+        
+        This provides improved performance for large systems while handling 
+        overlapping sites consistently.
         
         Args:
-            sites: List of SphericalSite objects.
-            neighbour_cutoff: Distance cutoff in Ångström for 
+            sites (list): List of ``SphericalSite`` objects.
+            neighbour_cutoff (float, optional): Distance cutoff in Ångström for 
                 determining neighbouring sites. Default is 10.0 Å.
         
-        Returns:
-            None
+        Attributes:
+            sites (list): List of ``SphericalSite`` objects.
         
         """
         for s in sites:

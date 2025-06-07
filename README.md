@@ -18,6 +18,35 @@ The code can use the following definitions for assigning mobile ions to sites:
 3. **Polyhedral decomposition**: Atoms are assigned to sites based on occupation of polyhedra defined by the instantaneous positions of lattice atoms.
 4. **Dynamic Voronoi sites**: Sites using Voronoi decomposition but with centres calculated dynamically based on framework atom positions.
 
+## Quick Start
+
+```python
+from site_analysis.builders import TrajectoryBuilder
+from pymatgen.io.vasp import Xdatcar
+
+# Load MD trajectory from VASP XDATCAR file
+xdatcar = Xdatcar("XDATCAR")
+md_structures = xdatcar.structures
+
+# Define multiple sites and track Li+ ion movements between them
+trajectory = (TrajectoryBuilder()
+              .with_structure(md_structures[0])  # Use first frame as reference
+              .with_mobile_species("Li")
+              .with_spherical_sites(centres=[[0.0, 0.0, 0.0], 
+                                             [0.5, 0.5, 0.5], 
+                                             [0.0, 0.5, 0.0]], 
+                                    radii=1.5)
+              .build())
+
+trajectory.trajectory_from_structures(md_structures)
+
+# Get site occupancies over time
+print(trajectory.atoms_trajectory)  # Which site each atom occupies
+print(trajectory.sites_trajectory)  # Which atoms in each site
+```
+
+For detailed examples and tutorials, see the [documentation](https://site-analysis.readthedocs.io/en/latest/).
+
 ## Installation
 
 ### Standard Installation

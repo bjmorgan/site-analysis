@@ -128,7 +128,7 @@ class IndexMapper:
 		
 		# Get coordinates of target atoms in the target structure
 		target_indices = np.where(target_mask)[0]
-		target_coords = np.array([target[i].frac_coords for i in target_indices])
+		target_coords = np.array([target[int(i)].frac_coords for i in target_indices])
 		
 		# Calculate distances between reference and target atoms (with PBC)
 		dr_ij = reference.lattice.get_all_distances(ref_coords, target_coords)

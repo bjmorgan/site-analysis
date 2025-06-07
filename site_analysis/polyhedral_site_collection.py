@@ -18,8 +18,10 @@ For atom assignment, the collection implements an intelligent optimisation
 that reduces average search complexity from O(N) to O(k):
 
 1. First check if an atom is still in its most recently assigned site
-2. Then check observed transition destinations from that site in decreasing frequency order
-3. Then check neighbouring sites that share faces with the most recent site (if these have not yet been checked)
+2. Then check observed transition destinations from that site in decreasing 
+    frequency order
+3. Then check neighbouring sites that share faces with the most recent site 
+    (if these have not yet been checked)
 4. Finally check all remaining sites if not found in the priority categories
 
 This approach leverages both spatial relationships (face-sharing neighbors)

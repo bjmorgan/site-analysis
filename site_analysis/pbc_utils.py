@@ -23,7 +23,7 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
 		centre-based approaches for robust PBC handling.
 	"""
 	# Work with a copy to avoid modifying the input
-	corrected_coords = frac_coords.copy()
+	corrected_coords: np.ndarray = frac_coords.copy()
 	
 	# Handle periodic boundary conditions for each dimension
 	for dim in range(3):

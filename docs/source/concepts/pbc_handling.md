@@ -15,12 +15,12 @@ For site types defined using reference atoms ({class}`~site_analysis.polyhedral_
 
 This approach detects when reference atoms have wrapped around periodic boundaries by examining their spatial distribution. When the coordinate range of reference atoms exceeds 0.5 (half the unit cell) in any dimension, the algorithm assumes the site spans a periodic boundary and shifts coordinates accordingly to unwrap the site.
 
-This method works well provided all sites have spans less than 0.5 times the simulation cell dimension, even under thermal distortions. However, it produces incorrect results when sites legitimately span more than 50% of the unit cell dimension. This situation commonly arises in small supercells—for example, in 2×2×2 expansions of FCC structures, octahedral sites extend exactly across half the simulation cell in the ideal structure and can extend beyond this under simulation dynamics.
+This method works well provided all sites have spans less than 0.5 times the simulation cell dimension, even under thermal distortions. However, it produces incorrect results when sites legitimately span more than 50% of the unit cell dimension. This situation commonly arises in small supercells—for example, in 2&times;2&times;2 expansions of FCC structures, octahedral sites extend exactly across half the simulation cell in the perfect crystal structure and can extend beyond this under simulation dynamics.
 
 ```{figure} ../_static/figures/pbcs_spread_method.png
 :width: 90%
 
-**Caption:** Spread-based detection in different scenarios: (a) Site with spans < &frac12; in all dimensions - method works correctly. (b) Site wrapping around periodic boundary with span > &frac12; in one dimension - method fails and produces incorrect geometry. (c) Small supercell where sites naturally span ≈ &frac12; of unit cell dimensions - the method becomes unreliable even for legitimate site geometries.
+**Caption:** (a) If a site spans < &frac12; of the simulation cell in all dimensions it is considered to not wrap around the periodic boundaries and no unwrapping is needed. (b) Sites with spans > &frac12; of the simulation cell along any one dimension are assumed to wrap around the periodic boundaries (as in this figure). Unwrapping is performed to restore the correct site geometry. (c) In small supercells where sites naturally span &asymp; &frac12; of unit cell dimensions the method becomes unreliable, as legitimate site geometries can erroneously be assigned as wrapping around the periodic boundaries. These sites are then &ldquo;unwrapped&rdquo; to produce incorrect site geometries and false site assignments.
 
 ### Reference Centre Unwrapping (**default**)
 
@@ -38,7 +38,7 @@ The reference centre for each site is the fractional coordinates of the central 
 
 ### Performance Considerations
 
-The two methods give similar performance, but for some molecular dynamics analyses there may be a moderate speed improvement from using one method over the other. The specific performance characteristics depend on your system—the number of sites, system size, and coordination environments all influence computational cost. The reference-center method is the default and recommended approach for all cases due to its reliability. Some systems may show improved analysis speed with the spread-based method, but this should only be used when you are confident that all sites have spreads well below 0.5 times the simulation cell dimensions in all directions.
+For some systems the spread-based method can be up to 20% faster than the reference centre method, which may be advantageous when analysing large simulation trajectories. The specific performance characteristics depend on your system&mdash;the number of sites, system size, and coordination environments all influence computational cost. The reference-center method is the default approach when using the {class}`~site_analysis.builders.TrajectoryBuilder` or {class}`~site_analysis.reference_workflow.ReferenceBasedSites` workflows, due to its correctness in small simulation cells. If you are certain that all sites have spreads well below &frac12; the simulation cell dimensions, even under dynamic distortions, you may wish to try the spread-based method (e.g., by setting `use_reference_centers=True`) to compare the relative performance of the two methods.
 
 ## Controlling PBC Handling in Your Code
 

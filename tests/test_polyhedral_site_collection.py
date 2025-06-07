@@ -60,7 +60,7 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         self.collection = PolyhedralSiteCollection(sites=self.sites)
 
     def test_site_collection_is_initialised(self):
-        """Test that PolyhedralSiteCollection is correctly initialized."""
+        """Test that PolyhedralSiteCollection is correctly initialised."""
         # Test with real sites
         collection = PolyhedralSiteCollection(sites=self.sites)
         self.assertEqual(collection.sites, self.sites)
@@ -506,6 +506,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
             self.collection.assign_site_occupations(self.atoms, self.structure)
             self.assertIsNone(self.atom.in_site)
+            
             
 class TestGetPrioritySites(unittest.TestCase):
     """Test _get_priority_sites generator behavior."""

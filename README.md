@@ -35,7 +35,7 @@ trajectory = (TrajectoryBuilder()
               .with_spherical_sites(centres=[[0.0, 0.0, 0.0], 
                                              [0.5, 0.5, 0.5], 
                                              [0.0, 0.5, 0.0]], 
-                                   radii=1.5)
+                                    radii=1.5)
               .build())
 
 trajectory.trajectory_from_structures(md_structures)

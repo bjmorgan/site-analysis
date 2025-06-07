@@ -6,21 +6,27 @@ atoms to these sites based on their positions in a crystal structure.
 
 The PolyhedralSiteCollection extends the base SiteCollection class with
 specific functionality for polyhedral sites, including:
-- Maintaining a map of neighboring polyhedral sites that share faces
-- Efficiently assigning atoms to sites based on their positions
-- Checking whether a set of sites contains a corresponding set of points
+- Maintaining a map of neighbouring polyhedral sites that share faces
+- Optimised atom assignment using priority-based site checking
+- Using observed transition patterns between sites for performance optimisation
 
 The module also includes a utility function, construct_neighbouring_sites,
-which analyzes a set of polyhedral sites to determine which ones are
-face-sharing neighbors (defined as sites sharing three or more vertices).
+which analyses a set of polyhedral sites to determine which ones are
+face-sharing neighbours (defined as sites sharing three or more vertices).
 
-For atom assignment, the collection implements an efficient prioritization:
-1. First check if an atom is still in its previously assigned site
-2. If not, sequentially check all sites until a match is found
-3. The first site found to contain the atom claims it (no further checks)
+For atom assignment, the collection implements an intelligent optimisation
+that reduces average search complexity from O(N) to O(k):
 
-This approach optimizes performance when atom movements between structures
-are small, as most atoms will remain in their previously assigned sites.
+1. First check if an atom is still in its most recently assigned site
+2. Then check observed transition destinations from that site in decreasing 
+    frequency order
+3. Then check neighbouring sites that share faces with the most recent site 
+    (if these have not yet been checked)
+4. Finally check all remaining sites if not found in the priority categories
+
+This approach leverages both spatial relationships (face-sharing neighbors)
+and learned behavior (observed transition patterns) to dramatically reduce
+the number of containment checks required.
 """
 
 from .site_collection import SiteCollection
@@ -33,10 +39,15 @@ import numpy as np
 
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
-
+    
+    Extends the base SiteCollection class with specific functionality for 
+    polyhedral sites, including maintaining a map of neighboring polyhedral 
+    sites that share faces and implementing optimized atom assignment based 
+    on spatial relationships and learned transition patterns.
+    
     Attributes:
-        sites (list): List of ``Site``-like objects.
-
+        sites (list): List of ``PolyhedralSite`` objects.
+    
     """
 
     def __init__(self,
@@ -65,15 +76,12 @@ class PolyhedralSiteCollection(SiteCollection):
         for s in self.sites:
             s.assign_vertex_coords(structure)
         self.assign_site_occupations(atoms, structure)
-
-    def assign_site_occupations(self, atoms, structure):
+                    
+    def assign_site_occupations(self, atoms, structure) -> None:
         """Assign atoms to polyhedral sites based on their positions.
         
-        This method implements an improved assignment logic:
-        1. All site occupations are reset (emptied) at the beginning
-        2. For each atom, check if it's still in its current site, or if not, check
-        its most recent site from trajectory history
-        3. If the atom is not in either of these sites, check all sites sequentially
+        This method implements an optimised assignment logic using a priority-based
+        site checking approach.
         
         Args:
             atoms: List of Atom objects to be assigned to sites
@@ -81,20 +89,69 @@ class PolyhedralSiteCollection(SiteCollection):
         """
         self.reset_site_occupations()
         for atom in atoms:
-            # Check current site or most recent site first
-            most_recent_site = atom.most_recent_site
-            if most_recent_site is not None:
-                site = self.site_by_index(most_recent_site)
-                if site and site.contains_atom(atom):
-                    self.update_occupation(site, atom)
-                    continue
-            # Reset in_site since we didn't find the atom in its previous site
             atom.in_site = None
-            # Check all sites sequentially
-            for site in self.sites:
+            
+            # Check sites in priority order until found
+            for site in self._get_priority_sites(atom):
                 if site.contains_atom(atom):
                     self.update_occupation(site, atom)
                     break
+    
+    def _get_priority_sites(self, atom):
+        """Generator that yields sites in priority order for optimised atom assignment.
+        
+        This generator implements an optimised site-checking sequence:
+        1. First yield the most recent site from atom.most_recent_site (if atom has trajectory history)
+        2. Then yield transition destinations from that site in frequency order using site.most_frequent_transitions()
+        3. Then yield neighbouring sites of the most recent site using self.neighbouring_sites() 
+        4. Finally yield all remaining sites not already checked
+        
+        Each site is yielded at most once by tracking checked indices. If the atom
+        has no trajectory history (atom.most_recent_site is None), steps 1-3 are
+        skipped and only step 4 (all sites) is performed.
+        
+        The optimisation reduces average search complexity from O(N) to O(k) where:
+        - N = total number of sites in the collection
+        - k = typical number of sites checked before finding atom (usually much smaller)
+        
+        Args:
+            atom (Atom): Atom object with trajectory history used to determine
+                site priorities.
+        
+        Yields:
+            PolyhedralSite: Sites in optimal checking order, stopping when the
+                calling method finds the atom.
+        
+        Notes:
+            This method is called internally by assign_site_occupations()
+            and should not be called directly.
+        """
+        checked_indices = set()
+        
+        # 1. Most recent site first (if atom has trajectory)
+        most_recent_index = atom.most_recent_site
+        if most_recent_index is not None:
+            most_recent_site = self.site_by_index(most_recent_index)
+            yield most_recent_site
+            checked_indices.add(most_recent_site.index)
+            
+            # 2. Transition destinations in frequency order
+            for dest_index in most_recent_site.most_frequent_transitions():
+                if dest_index not in checked_indices:
+                    dest_site = self.site_by_index(dest_index)
+                    yield dest_site
+                    checked_indices.add(dest_index)
+            
+            # 3. neighbouring sites not already checked
+            for neighbour_site in self.neighbouring_sites(most_recent_index):
+                if neighbour_site.index not in checked_indices:
+                    yield neighbour_site
+                    checked_indices.add(neighbour_site.index)
+        
+        # 4. All remaining sites
+        for site in self.sites:
+            if site.index not in checked_indices:
+                yield site
 
     def neighbouring_sites(self,
             index: int) -> List[PolyhedralSite]:

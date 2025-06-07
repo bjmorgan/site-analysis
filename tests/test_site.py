@@ -136,6 +136,23 @@ class SiteTestCase(unittest.TestCase):
 
         with self.assertRaises(NotImplementedError):
             _ = site.coordination_number
+            
+    def test_most_frequent_transitions_ordered_by_frequency(self):
+        """Test that most_frequent_transitions returns site indices ordered by frequency."""
+        site = ConcreteSite()  # Using the existing test concrete class
+        site.transitions[1] = 5  # Most frequent
+        site.transitions[3] = 2  # Least frequent  
+        site.transitions[2] = 3  # Middle
+        
+        result = site.most_frequent_transitions()
+        self.assertEqual(result, [1, 2, 3])  # Ordered by frequency: 5, 3, 2
+    
+    def test_most_frequent_transitions_empty_transitions(self):
+        """Test that most_frequent_transitions returns empty list when no transitions."""
+        site = ConcreteSite()
+        
+        result = site.most_frequent_transitions()
+        self.assertEqual(result, [])
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,10 +2,12 @@ import unittest
 import numpy as np
 from pymatgen.core import Lattice, Structure
 from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection, construct_neighbouring_sites
+from site_analysis.atom import atoms_from_structure
+from site_analysis.tools import get_coordination_indices
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.atom import Atom
 from site_analysis.site import Site
-from unittest.mock import patch, Mock, PropertyMock
+from unittest.mock import patch, Mock, PropertyMock, MagicMock
 
 
 class PolyhedralSiteCollectionTestCase(unittest.TestCase):
@@ -215,25 +217,25 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(site2.contains_atoms, [])
     
     def test_neighbouring_sites(self):
-        """Test that neighbouring_sites returns the correct neighbors."""
+        """Test that neighbouring_sites returns the correct neighbours."""
         # Override _neighbouring_sites with a test dictionary
         test_neighbours = {
-            self.site1.index: [self.site3],  # site1 neighbors site3
-            self.site2.index: [],  # site2 has no neighbors
-            self.site3.index: [self.site1]  # site3 neighbors site1
+            self.site1.index: [self.site3],  # site1 neighbours site3
+            self.site2.index: [],  # site2 has no neighbours
+            self.site3.index: [self.site1]  # site3 neighbours site1
         }
         self.collection._neighbouring_sites = test_neighbours
         
-        # Test site1 neighbors
+        # Test site1 neighbours
         neighbours = self.collection.neighbouring_sites(self.site1.index)
         self.assertEqual(len(neighbours), 1)
         self.assertIs(neighbours[0], self.site3)
         
-        # Test site2 neighbors (none)
+        # Test site2 neighbours (none)
         neighbours = self.collection.neighbouring_sites(self.site2.index)
         self.assertEqual(len(neighbours), 0)
         
-        # Test site3 neighbors
+        # Test site3 neighbours
         neighbours = self.collection.neighbouring_sites(self.site3.index)
         self.assertEqual(len(neighbours), 1)
         self.assertIs(neighbours[0], self.site1)
@@ -412,6 +414,256 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         
         # Site should have no neighbours
         self.assertEqual(len(neighbours[site.index]), 0)
+                        
+
+class TestAssignSiteOccupationsInteraction(unittest.TestCase):
+    """Test interaction between assign_site_occupations and _get_priority_sites."""
+    
+    def setUp(self):
+        Site._newid = 0
+        self.lattice = Lattice.cubic(2.0)
+        self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
+        
+        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        self.collection = PolyhedralSiteCollection([self.site1, self.site2])
+        self.atoms = atoms_from_structure(self.structure, "Li")
+        self.atom = self.atoms[0]
+    
+    def test_calls_generator_for_each_atom(self):
+        """Test that _get_priority_sites is called once per atom."""
+        with patch.object(self.collection, '_get_priority_sites', return_value=[]):
+            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.collection._get_priority_sites.assert_called_once_with(self.atom)
+    
+    def test_calls_generator_for_multiple_atoms(self):
+        """Test that _get_priority_sites is called for each atom."""
+        # Add second atom
+        self.structure.append("Li", [0.2, 0.2, 0.2])
+        atoms = atoms_from_structure(self.structure, "Li")
+        
+        with patch.object(self.collection, '_get_priority_sites', return_value=[]):
+            self.collection.assign_site_occupations(atoms, self.structure)
+            self.assertEqual(self.collection._get_priority_sites.call_count, 2)
+    
+    def test_checks_sites_in_generator_order(self):
+        """Test that sites are checked in the order returned by generator."""
+        call_order = []
+        self.site1.contains_atom = lambda atom: call_order.append(1) or False
+        self.site2.contains_atom = lambda atom: call_order.append(2) or True
+        
+        with patch.object(self.collection, '_get_priority_sites') as mock_gen:
+            mock_gen.return_value = [self.site2, self.site1]  # site2 first
+            
+            self.collection.assign_site_occupations(self.atoms, self.structure)
+            
+            self.assertEqual(call_order, [2])  # Only site2 checked (found there)
+    
+    def test_stops_checking_when_atom_found(self):
+        """Test that checking stops as soon as atom is found."""
+        self.site1.contains_atom = MagicMock(return_value=True)
+        self.site2.contains_atom = MagicMock(return_value=False)
+        
+        with patch.object(self.collection, '_get_priority_sites') as mock_gen:
+            mock_gen.return_value = [self.site1, self.site2]
+            
+            self.collection.assign_site_occupations(self.atoms, self.structure)
+            
+            self.site1.contains_atom.assert_called_once()
+            self.site2.contains_atom.assert_not_called()
+    
+    def test_calls_update_occupation_when_found(self):
+        """Test that update_occupation is called when atom found."""
+        self.site1.contains_atom = MagicMock(return_value=True)
+        
+        with patch.object(self.collection, '_get_priority_sites', return_value=[self.site1]):
+            with patch.object(self.collection, 'update_occupation') as mock_update:
+                self.collection.assign_site_occupations(self.atoms, self.structure)
+                mock_update.assert_called_once_with(self.site1, self.atom)
+    
+    def test_handles_atom_not_found(self):
+        """Test behavior when atom not found in any site."""
+        self.site1.contains_atom = MagicMock(return_value=False)
+        
+        with patch.object(self.collection, '_get_priority_sites', return_value=[self.site1]):
+            with patch.object(self.collection, 'update_occupation') as mock_update:
+                self.collection.assign_site_occupations(self.atoms, self.structure)
+                
+                mock_update.assert_not_called()
+                self.assertIsNone(self.atom.in_site)
+    
+    def test_resets_site_occupations(self):
+        """Test that reset_site_occupations is called at start."""
+        with patch.object(self.collection, 'reset_site_occupations') as mock_reset:
+            with patch.object(self.collection, '_get_priority_sites', return_value=[]):
+                self.collection.assign_site_occupations(self.atoms, self.structure)
+                mock_reset.assert_called_once()
+    
+    def test_resets_atom_in_site(self):
+        """Test that atom.in_site is reset to None."""
+        self.atom.in_site = 999  # Set to some previous value
+        
+        with patch.object(self.collection, '_get_priority_sites', return_value=[]):
+            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.assertIsNone(self.atom.in_site)
+            
+class TestGetPrioritySites(unittest.TestCase):
+    """Test _get_priority_sites generator behavior."""
+    
+    def setUp(self):
+        Site._newid = 0
+        self.lattice = Lattice.cubic(2.0)
+        self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
+        
+        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        self.site3 = PolyhedralSite(vertex_indices=[8, 9, 10, 11])
+        self.collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3])
+        
+        self.atoms = atoms_from_structure(self.structure, "Li")
+        self.atom = self.atoms[0]
+    
+    def test_yields_most_recent_site_first(self):
+        """Test that generator yields most recent site as first site."""
+        # Set up atom with most recent site
+        self.atom.trajectory = [self.site2.index]  # Most recent is site2
+        
+        # Get priority sites
+        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        
+        # First site should be the most recent site
+        self.assertEqual(priority_sites[0], self.site2)
+        
+    def test_yields_most_recently_visited_when_most_recent_is_none(self):
+        """Test that generator yields most recently visited site when most recent is None."""
+        # Set up atom where most recent is None but has previous site history
+        self.atom.trajectory = [self.site1.index, self.site2.index, None]  # Was in site2, then None
+        
+        # Get priority sites  
+        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        
+        # First site should be the most recently visited site (site2)
+        self.assertEqual(priority_sites[0], self.site2)
+    
+    def test_yields_all_sites_when_no_valid_trajectory(self):
+        """Test that generator yields all sites when no valid site history exists."""
+        # Set up atom with only None entries or empty trajectory
+        self.atom.trajectory = [None, None]  # Never been in any site
+        
+        # Get priority sites  
+        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        
+        # Should yield all sites (no prioritization possible)
+        self.assertEqual(len(priority_sites), 3)
+        self.assertIn(self.site1, priority_sites)
+        self.assertIn(self.site2, priority_sites)
+        self.assertIn(self.site3, priority_sites)
+        
+    def test_yields_transition_destinations_after_most_recent(self):
+        """Test that generator yields transition destinations after most recent site."""
+        # Set up atom with most recent site
+        self.atom.trajectory = [self.site1.index]  # Most recent is site1
+        
+        # Mock transition destinations in frequency order
+        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
+            mock_transitions.return_value = [self.site3.index, self.site2.index]  # site3 most frequent
+            
+            # Get priority sites
+            priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom)]
+            
+            self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])   
+    
+    def test_yields_no_duplicates_when_all_sites_are_transitions(self):
+        """Test that generator doesn't yield duplicates when all sites appear as transitions."""
+        # Set up atom with most recent site
+        self.atom.trajectory = [self.site1.index]  # Most recent is site1
+        
+        # Mock transitions that include all other sites
+        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
+            mock_transitions.return_value = [self.site3.index, self.site2.index]  # All other sites as transitions
+            
+            # Get priority sites
+            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            
+            # Should be exactly 3 sites, no duplicates
+            self.assertEqual(len(priority_sites), 3)
+            
+            # Convert to indices for easier checking
+            site_indices = [site.index for site in priority_sites]
+            
+            # Should have no duplicates
+            self.assertEqual(len(site_indices), len(set(site_indices)))
+            
+            # Should be: site1, site2, site3 (in that order, with no fallback sites)
+            self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])  
+            
+    def test_yields_neighbours_after_transitions(self):
+        """Test that generator yields neighbours after transition destinations."""
+        # Set up atom with most recent site
+        self.atom.trajectory = [self.site1.index]  # Most recent is site1
+        
+        # Mock transitions and neighbours
+        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
+            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
+                mock_transitions.return_value = [self.site2.index]  # One transition
+                mock_neighbours.return_value = [self.site3]  # One neighbour
+                
+                # Get priority sites
+                priority_sites = list(self.collection._get_priority_sites(self.atom))
+                
+                # Should be: site1 (most recent), site2 (transition), site3 (neighbour)
+                self.assertEqual(priority_sites[0], self.site1)  # Most recent
+                self.assertEqual(priority_sites[1], self.site2)  # Transition
+                self.assertEqual(priority_sites[2], self.site3)  # neighbour
+                
+                # Verify neighbouring_sites was called with most recent site index
+                mock_neighbours.assert_called_once_with(self.site1.index)
+    
+    def test_yields_no_duplicates_with_neighbours_and_transitions(self):
+        """Test that generator doesn't yield duplicates when neighbour appears as transition."""
+        # Set up atom with most recent site
+        self.atom.trajectory = [self.site1.index]  # Most recent is site1
+        
+        # Mock transitions and neighbours where site2 appears in both
+        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
+            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
+                mock_transitions.return_value = [self.site2.index]  # site2 as transition
+                mock_neighbours.return_value = [self.site2, self.site3]  # site2 also as neighbour
+                
+                # Get priority sites
+                priority_sites = list(self.collection._get_priority_sites(self.atom))
+                
+                # Should be exactly 3 sites, no duplicates
+                self.assertEqual(len(priority_sites), 3)
+                
+                # Convert to indices
+                site_indices = [site.index for site in priority_sites]
+                
+                # Should have no duplicates
+                self.assertEqual(len(site_indices), len(set(site_indices)))
+                
+                # site2 should only appear once (as transition, not again as neighbour)
+                self.assertEqual(site_indices.count(self.site2.index), 1)
+                
+                # Order should be: site1, site2 (transition), site3 (neighbour)
+                self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
+    
+    def test_skips_neighbour_checking_when_no_most_recent_site(self):
+        """Test that neighbour checking is skipped when atom has no most recent site."""
+        # Set up atom with no trajectory
+        self.atom.trajectory = []  # No most recent site
+        
+        # Mock neighbours (should not be called)
+        with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
+            # Get priority sites
+            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            
+            # Should yield all sites (no prioritization)
+            self.assertEqual(len(priority_sites), 3)
+            
+            # neighbouring_sites should not be called
+            mock_neighbours.assert_not_called()      
+    
 
 
 if __name__ == '__main__':

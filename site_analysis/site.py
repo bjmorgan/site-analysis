@@ -225,4 +225,13 @@ class Site(ABC):
         """
         raise NotImplementedError('__repr__ should be implemented '
                                  'in the derived class')
+                                 
+    def most_frequent_transitions(self):
+        """Return list of site indices ordered by transition frequency (most common first).
+        
+        Returns:
+            list[int]: Site indices sorted by transition count in descending order.
+                Returns empty list if no transitions have been recorded.
+        """
+        return sorted(self.transitions.keys(), key=self.transitions.get, reverse=True)
 

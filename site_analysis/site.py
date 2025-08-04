@@ -308,6 +308,7 @@ class Site(ABC):
         # Build summary dict
         summary_dict = {}
         for metric in metrics:
+            value: Any
             if metric == 'site_type':
                 value = self.__class__.__name__
             elif metric == 'transitions':

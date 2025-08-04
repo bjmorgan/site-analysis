@@ -7,9 +7,14 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis.site_collection import SiteCollection
 from site_analysis.atom import Atom
 from site_analysis.site import Site
 from unittest.mock import Mock, patch, PropertyMock
+
+import tempfile
+import os
+import json
 
 
 class TrajectoryInitializationTestCase(unittest.TestCase):
@@ -391,6 +396,147 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
             Trajectory(sites=sites, atoms=[])
         
         self.assertIn("empty atoms list", str(context.exception))
+        
+    def test_site_summaries_default(self):
+        """Test that site_summaries delegates to site_collection."""
+        # Create real sites
+        sites = [
+            SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0),
+            SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        ]
+        mock_atoms = [Mock(spec=Atom, index=0)]
+        
+        # Create trajectory
+        trajectory = Trajectory(sites=sites, atoms=mock_atoms)
+        
+        # Replace site_collection with mock
+        trajectory.site_collection = Mock(spec=SiteCollection)
+        trajectory.site_collection.summaries.return_value = [
+            {'index': 0, 'site_type': 'SphericalSite'},
+            {'index': 1, 'site_type': 'SphericalSite'}
+        ]
+        
+        result = trajectory.site_summaries()
+        
+        # Should delegate to site_collection
+        trajectory.site_collection.summaries.assert_called_once_with(metrics=None)
+        
+        # Should return the same result
+        self.assertEqual(result, [
+            {'index': 0, 'site_type': 'SphericalSite'},
+            {'index': 1, 'site_type': 'SphericalSite'}
+        ])
+    
+    def test_site_summaries_with_metrics(self):
+        """Test that site_summaries passes metrics to site_collection."""
+        # Create real site
+        sites = [SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)]
+        mock_atoms = [Mock(spec=Atom, index=0)]
+        
+        # Create trajectory
+        trajectory = Trajectory(sites=sites, atoms=mock_atoms)
+        
+        # Replace site_collection with mock
+        trajectory.site_collection = Mock(spec=SiteCollection)
+        trajectory.site_collection.summaries.return_value = [
+            {'index': 0},
+            {'index': 1}
+        ]
+        
+        result = trajectory.site_summaries(metrics=['index'])
+        
+        # Should pass metrics through
+        trajectory.site_collection.summaries.assert_called_once_with(metrics=['index'])
+        
+        # Should return the same result
+        self.assertEqual(result, [{'index': 0}, {'index': 1}])
+        
+    def test_write_site_summaries_default(self):
+        """Test that write_site_summaries writes summaries to JSON file."""
+        # Create trajectory
+        sites = [SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)]
+        mock_atoms = [Mock(spec=Atom, index=0)]
+        trajectory = Trajectory(sites=sites, atoms=mock_atoms)
+        
+        # Mock site_summaries to return known data
+        expected_data = [{'index': 0, 'site_type': 'SphericalSite'}]
+        trajectory.site_summaries = Mock(return_value=expected_data)
+        
+        # Mock file operations
+        mock_file = Mock()
+        mock_file.__enter__ = Mock(return_value=mock_file)
+        mock_file.__exit__ = Mock(return_value=None)
+        
+        with patch('builtins.open', return_value=mock_file) as mock_open:
+            with patch('json.dump') as mock_json_dump:
+                trajectory.write_site_summaries('output.json')
+                
+                # Should call site_summaries with default metrics
+                trajectory.site_summaries.assert_called_once_with(metrics=None)
+                
+                # Should open file for writing
+                mock_open.assert_called_once_with('output.json', 'w')
+                
+                # Should dump data to file with nice formatting
+                mock_json_dump.assert_called_once_with(expected_data, mock_file, indent=2)
+    
+    def test_write_site_summaries_with_metrics(self):
+        """Test that write_site_summaries passes metrics parameter."""
+        # Create trajectory
+        sites = [SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)]
+        mock_atoms = [Mock(spec=Atom, index=0)]
+        trajectory = Trajectory(sites=sites, atoms=mock_atoms)
+        
+        # Mock site_summaries
+        expected_data = [{'index': 0}]
+        trajectory.site_summaries = Mock(return_value=expected_data)
+        
+        # Mock file operations
+        mock_file = Mock()
+        mock_file.__enter__ = Mock(return_value=mock_file)
+        mock_file.__exit__ = Mock(return_value=None)
+        
+        with patch('builtins.open', return_value=mock_file) as mock_open:
+            with patch('json.dump') as mock_json_dump:
+                trajectory.write_site_summaries('output.json', metrics=['index'])
+                
+                # Should pass metrics to site_summaries
+                trajectory.site_summaries.assert_called_once_with(metrics=['index'])
+                
+                # Should write to file
+                mock_json_dump.assert_called_once_with(expected_data, mock_file, indent=2)
+    
+    def test_write_site_summaries_integration(self):
+        """Integration test that actually writes a file."""
+        
+        # Create trajectory with real data
+        Site.reset_index()  # Reset to get predictable indices
+        sites = [
+            SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0),
+            SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        ]
+        mock_atoms = [Mock(spec=Atom, index=0)]
+        trajectory = Trajectory(sites=sites, atoms=mock_atoms)
+        
+        # Write to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            temp_filename = f.name
+        
+        try:
+            trajectory.write_site_summaries(temp_filename, metrics=['index', 'site_type'])
+            
+            # Read back and verify
+            with open(temp_filename, 'r') as f:
+                data = json.load(f)
+            
+            self.assertEqual(len(data), 2)
+            self.assertEqual(data[0]['index'], 0)
+            self.assertEqual(data[0]['site_type'], 'SphericalSite')
+            self.assertEqual(data[1]['index'], 1)
+            self.assertEqual(data[1]['site_type'], 'SphericalSite')
+        finally:
+            # Clean up
+            os.unlink(temp_filename)
 
 
 if __name__ == '__main__':

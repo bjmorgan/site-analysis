@@ -187,3 +187,15 @@ class SiteCollection(ABC):
         """
         raise NotImplementedError('sites_contain_points() should be'
             ' implemented in the derived class')
+            
+    def summaries(self, metrics: list[str] | None = None) -> list[dict]:
+        """Generate summary statistics for all sites in the collection.
+        
+        Args:
+            metrics: List of metrics to include for each site. None returns 
+                default metrics for each site.
+                
+        Returns:
+            List of summary dicts, one per site, in site order.
+        """
+        return [site.summary(metrics=metrics) for site in self.sites]

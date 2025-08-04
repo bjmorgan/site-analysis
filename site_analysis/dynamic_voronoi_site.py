@@ -2,21 +2,7 @@
 
 This module provides the DynamicVoronoiSite class, which represents a site with
 a center that is dynamically calculated from the positions of a set of reference
-atoms. Unlike standard VoronoiSite objects, which have fixed centers, the positions
-of DynamicVoronoiSite objects adapt to structural changes as the reference atoms move.
-
-The site center is calculated as the mean position of the reference atoms, with special
-handling for periodic boundary conditions. This makes DynamicVoronoiSite particularly
-useful for tracking sites in mobile frameworks where the crystal structure deforms
-during simulation.
-
-Similar to standard Voronoi sites, a single DynamicVoronoiSite cannot determine
-whether an atom is contained within it, as this depends on the positions of all
-other sites. This class is designed to be used with DynamicVoronoiSiteCollection,
-which handles the Voronoi tessellation logic.
-
-The coordination number of a DynamicVoronoiSite is defined as the number of 
-reference atoms used to calculate its center.
+atoms.
 """
 
 from __future__ import annotations
@@ -28,17 +14,37 @@ from pymatgen.core import Structure
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 
 class DynamicVoronoiSite(Site):
-	"""Site subclass corresponding to Voronoi cells with centres
-	dynamically calculated from the positions of sets of reference
-	atoms.
+	"""Site subclass corresponding to Voronoi cells with centres dynamically 
+	calculated from the positions of sets of reference atoms.
+	
+	Unlike standard VoronoiSite objects, which have fixed centers, the positions
+	of DynamicVoronoiSite objects adapt to structural changes as the reference 
+	atoms move. The site center is calculated as the mean position of the reference 
+	atoms, with special handling for periodic boundary conditions.
+	
+	This makes DynamicVoronoiSite particularly useful for tracking sites in mobile 
+	frameworks where the crystal structure deforms during simulation.
+	
+	Similar to standard Voronoi sites, a single DynamicVoronoiSite cannot determine
+	whether an atom is contained within it, as this depends on the positions of all
+	other sites. The coordination number of a DynamicVoronoiSite is defined as the 
+	number of reference atoms used to calculate its center.
 	
 	Attributes:
-	    reference_indices (List[int]): Indices of atoms used as reference to calculate
-		    the dynamic centre of the site.
-		_centre_coords (np.ndarray): Fractional coordinates of the dynamically calculated
-			site centre. This is None initially and calculated on demand.
+		reference_indices (List[int]): Indices of atoms used as reference to calculate
+			the dynamic centre of the site.
+		centre_coords (np.ndarray or None): Fractional coordinates of the dynamically 
+			calculated site centre. This is None initially and calculated on demand.
 			
-		"""
+	See Also:
+		:class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
+			(index, label, contains_atoms, trajectory, points, transitions, average_occupation).
+			
+	Important:
+		This class is designed to be used with 
+		:class:`~site_analysis.dynamic_voronoi_site_collection.DynamicVoronoiSiteCollection`,
+		which handles the Voronoi tessellation logic.
+	"""
 		
 	def __init__(self,
 		reference_indices: List[int],

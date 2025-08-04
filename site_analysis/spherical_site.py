@@ -4,20 +4,6 @@ This module provides the SphericalSite class, which represents a site defined
 by a sphere with a specific center position and radius. Spherical sites are the
 simplest site geometry, useful for quick analysis or when the exact shape of
 the site is less important than its location.
-
-SphericalSite determines whether atoms are inside the site volume by checking
-if the distance between the atom and the site center is less than or equal to
-the site's radius. This calculation considers periodic boundary conditions using
-the structure's lattice.
-
-Unlike polyhedral sites, spherical sites have a fixed geometry independent of
-atom positions in the structure, making them suitable for applications where
-consistent site volumes are needed regardless of structural distortions.
-
-Note:
-    SphericalSite objects are typically used with SphericalSiteCollection,
-    which implements specific assignment logic for handling atoms in overlapping
-    sites.
 """
 
 from __future__ import annotations
@@ -34,17 +20,28 @@ class SphericalSite(Site):
     Represents a spherical site centered at a position in fractional coordinates
     with a radius in Angstroms (not fractional coordinates).
     
+    SphericalSite determines whether atoms are inside the site volume by checking
+    if the distance between the atom and the site center is less than or equal to
+    the site's radius. This calculation considers periodic boundary conditions using
+    the structure's lattice.
+    
+    Unlike polyhedral sites, spherical sites have a fixed geometry independent of
+    atom positions in the structure, making them suitable for applications where
+    consistent site volumes are needed regardless of structural distortions.
+    
     Attributes:
-        index (int): Unique numerical identifier for this site. Automatically
-            assigned during initialisation by the parent Site class.
         frac_coords (np.ndarray): Fractional coordinates of the sphere center.
         rcut (float): Cutoff radius in Angstroms.
-        label (str, optional): Optional label for this site.
-        contains_atoms (list): Indices of atoms contained within this site.
-        trajectory (list): History of atom occupations at each timestep.
-        points (list): Fractional coordinates of atoms assigned to this site.
-        transitions (collections.Counter): Record of atom transitions between sites.
-            Keys are destination site indices, values are transition counts.
+        
+    See Also:
+        :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
+            (index, label, contains_atoms, trajectory, points, transitions, average_occupation).
+            
+    Note:
+        SphericalSite objects are typically used with 
+        :class:`~site_analysis.spherical_site_collection.SphericalSiteCollection`,
+        which implements specific assignment logic for handling atoms in overlapping
+        sites.
     """
     
     def __init__(self,

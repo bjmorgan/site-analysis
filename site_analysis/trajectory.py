@@ -281,6 +281,33 @@ class Trajectory(object):
             The number of timesteps in the trajectory.
         """
         return len(self.timesteps)
+        
+    def site_summaries(self, metrics: list[str] | None = None) -> list[dict]:
+        """Generate summary statistics for all sites in this trajectory.
+        
+        Args:
+            metrics: List of metrics to include for each site. None returns 
+                default metrics for each site.
+                
+        Returns:
+            List of summary dicts, one per site, in site order.
+        """
+        return self.site_collection.summaries(metrics=metrics)
+        
+    def write_site_summaries(self, filename: str, metrics: list[str] | None = None) -> None:
+        """Write site summaries to a JSON file.
+        
+        Args:
+            filename: Path to output JSON file.
+            metrics: List of metrics to include for each site. None returns 
+                default metrics for each site.
+        """
+        import json
+        
+        summaries = self.site_summaries(metrics=metrics)
+        
+        with open(filename, 'w') as f:
+            json.dump(summaries, f, indent=2)
  
 def update_occupation(site, atom):
     """Update the occupation record for a site and atom pair.

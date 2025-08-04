@@ -282,7 +282,8 @@ class Trajectory(object):
         """
         return len(self.timesteps)
         
-    def site_summaries(self, metrics: list[str] | None = None) -> list[dict]:
+    def site_summaries(self,
+        metrics: list[str] | None = None) -> list[dict]:
         """Generate summary statistics for all sites in this trajectory.
         
         Args:
@@ -294,7 +295,9 @@ class Trajectory(object):
         """
         return self.site_collection.summaries(metrics=metrics)
         
-    def write_site_summaries(self, filename: str, metrics: list[str] | None = None) -> None:
+    def write_site_summaries(self,
+        filename: str,
+        metrics: list[str] | None = None) -> None:
         """Write site summaries to a JSON file.
         
         Args:

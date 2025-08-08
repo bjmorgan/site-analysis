@@ -365,7 +365,20 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             PolyhedralSite(vertex_indices=[1, 2, "three"])
         
         self.assertIn("All vertex indices must be integers", str(context.exception))
-  
+    
+    def test_emptiness_check_with_non_empty_numpy_array(self):
+        """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""
+        vertex_indices = np.array([0, 1, 2, 3])
+        # This will fail with ValueError about ambiguous truth value if bug exists
+        PolyhedralSite(vertex_indices)
+    
+    def test_emptiness_check_with_empty_numpy_array(self):
+        """Test that empty numpy array is correctly detected as empty."""
+        vertex_indices = np.array([])
+        with self.assertRaises(ValueError) as context:
+            PolyhedralSite(vertex_indices)
+        self.assertIn("vertex_indices cannot be empty", str(context.exception))
+              
 def example_structure(species=None):
     if not species:
         species = ['S']*5

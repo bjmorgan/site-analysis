@@ -266,11 +266,15 @@ class Trajectory(object):
             This method uses tqdm for progress tracking when enabled.
         """
         generator = enumerate(structures, 1)
+        params = {'iterable': generator,
+                  'total': len(structures),
+                  'unit': ' steps',
+                  'desc': 'Analysing trajectory'}
         if progress:
             if progress=='notebook':
-                generator = tqdm_notebook(generator, total=len(structures), unit=' steps')
+                generator = tqdm_notebook(**parms)
             else:
-                generator = tqdm(generator, total=len(structures), unit=' steps')
+                generator = tqdm(**params)
         for timestep, s in generator:
             self.append_timestep(s, t=timestep)
    

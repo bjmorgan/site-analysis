@@ -64,8 +64,12 @@ class PolyhedralSite(Site):
             ValueError: If vertex_indices is empty.
             TypeError: If any element in vertex_indices is not an integer.
         """
+        if isinstance(vertex_indices, np.ndarray):
+            vertex_indices = vertex_indices.tolist()
+        
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
+        print(vertex_indices)
         
         if not all(isinstance(idx, int) for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")

@@ -180,6 +180,69 @@ class SiteCollectionTestCase(unittest.TestCase):
         # Verify error message mentions duplicate indices
         self.assertIn('duplicate', str(context.exception).lower())
         self.assertIn('12', str(context.exception))
+        
+    def test_summaries_default(self):
+        """Test that summaries returns list of summaries for all sites."""
+        # Create sites with index attribute set
+        site1 = Mock(spec=Site, index=0)
+        site1.summary.return_value = {'index': 0, 'site_type': 'MockSite'}
+        
+        site2 = Mock(spec=Site, index=1)
+        site2.summary.return_value = {'index': 1, 'site_type': 'MockSite'}
+        
+        collection = ConcreteSiteCollection([site1, site2])
+        
+        summaries = collection.summaries()
+        
+        # Should call summary() on each site with default metrics
+        site1.summary.assert_called_once_with(metrics=None)
+        site2.summary.assert_called_once_with(metrics=None)
+        
+        # Should return list of summaries
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[0]['index'], 0)
+        self.assertEqual(summaries[1]['index'], 1)
+    
+    def test_summaries_with_metrics(self):
+        """Test that summaries passes metrics parameter to each site."""
+        site1 = Mock(spec=Site, index=0)
+        site1.summary.return_value = {'index': 0}
+        
+        site2 = Mock(spec=Site, index=1)
+        site2.summary.return_value = {'index': 1}
+        
+        collection = ConcreteSiteCollection([site1, site2])
+        
+        summaries = collection.summaries(metrics=['index'])
+        
+        # Should pass metrics to each site
+        site1.summary.assert_called_once_with(metrics=['index'])
+        site2.summary.assert_called_once_with(metrics=['index'])
+        
+        self.assertEqual(summaries, [{'index': 0}, {'index': 1}])
+    
+    def test_summaries_empty_collection(self):
+        """Test that summaries returns empty list for empty collection."""
+        collection = ConcreteSiteCollection([])
+        
+        summaries = collection.summaries()
+        
+        self.assertEqual(summaries, [])
+    
+    def test_summaries_preserves_order(self):
+        """Test that summaries preserves site order."""
+        sites = []
+        for i in range(3):
+            site = Mock(spec=Site, index=i)
+            site.summary.return_value = {'index': i}
+            sites.append(site)
+        
+        collection = ConcreteSiteCollection(sites)
+        
+        summaries = collection.summaries()
+        
+        # Should preserve order
+        self.assertEqual([s['index'] for s in summaries], [0, 1, 2])
 
 if __name__ == '__main__':
     unittest.main()

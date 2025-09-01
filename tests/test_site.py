@@ -153,6 +153,129 @@ class SiteTestCase(unittest.TestCase):
         
         result = site.most_frequent_transitions()
         self.assertEqual(result, [])
+        
+    def test_average_occupation_empty_trajectory(self):
+        """Test that average_occupation returns None when trajectory is empty."""
+        site = ConcreteSite()
+        self.assertIsNone(site.average_occupation)
+    
+    def test_average_occupation_all_empty_timesteps(self):
+        """Test that average_occupation returns 0.0 when all timesteps are empty."""
+        site = ConcreteSite()
+        site.trajectory = [[], [], [], []]
+        self.assertEqual(site.average_occupation, 0.0)
+    
+    def test_average_occupation_all_occupied_timesteps(self):
+        """Test that average_occupation returns 1.0 when all timesteps are occupied."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [2], [3], [4]]
+        self.assertEqual(site.average_occupation, 1.0)
+    
+    def test_average_occupation_mixed_timesteps(self):
+        """Test that average_occupation returns correct fraction for mixed occupation."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [], [2], [], [3]]  # 3 occupied out of 5
+        self.assertAlmostEqual(site.average_occupation, 0.6)
+    
+    def test_average_occupation_multiple_atoms_per_timestep(self):
+        """Test that timesteps with multiple atoms still count as occupied."""
+        site = ConcreteSite()
+        site.trajectory = [[1, 2, 3], [], [4, 5], []]  # 2 occupied out of 4
+        self.assertEqual(site.average_occupation, 0.5)
+        
+    def test_summary_default(self):
+        """Test that summary returns default metrics."""
+        site = ConcreteSite()
+        site.index = 7
+        site.trajectory = [[1]]
+        site.transitions = Counter({2: 3, 5: 1})
+        
+        summary = site.summary()
+        
+        # Should include all default metrics
+        self.assertEqual(set(summary.keys()), {'index', 'site_type', 'average_occupation', 'transitions'})
+        self.assertEqual(summary['site_type'], 'ConcreteSite')
+        self.assertEqual(summary['transitions'], {2: 3, 5: 1})
+    
+    def test_summary_includes_label_when_present(self):
+        """Test that summary includes label when set."""
+        site = ConcreteSite(label='test_site')
+        site.trajectory = [[1]]
+        
+        summary = site.summary()
+        
+        self.assertIn('label', summary)
+        self.assertEqual(summary['label'], 'test_site')
+    
+    def test_summary_with_specific_metrics(self):
+        """Test that summary returns only requested metrics."""
+        site = ConcreteSite()
+        site.trajectory = [[1]]
+        site.transitions = Counter({2: 3})
+        
+        summary = site.summary(metrics=['index', 'site_type'])
+        
+        self.assertEqual(set(summary.keys()), {'index', 'site_type'})
+    
+    def test_summary_exclude_transitions(self):
+        """Test that summary can exclude transitions when requested."""
+        site = ConcreteSite()
+        site.trajectory = [[1]]
+        site.transitions = Counter({2: 3, 5: 1})
+        
+        summary = site.summary(metrics=['index', 'average_occupation'])
+        
+        self.assertNotIn('transitions', summary)
+        
+    def test_summary_empty_metrics_list(self):
+        """Test that summary returns empty dict for empty metrics list."""
+        site = ConcreteSite()
+        site.transitions = Counter({2: 3})
+        
+        summary = site.summary(metrics=[])
+        
+        self.assertEqual(summary, {})
+    
+    def test_summary_invalid_metric(self):
+        """Test that summary raises ValueError for invalid metric names."""
+        site = ConcreteSite()
+        
+        with self.assertRaises(ValueError) as context:
+            site.summary(metrics=['invalid_metric'])
+        
+        self.assertIn('invalid_metric', str(context.exception))
+    
+    def test_summary_multiple_invalid_metrics(self):
+        """Test that summary reports all invalid metrics."""
+        site = ConcreteSite()
+        
+        with self.assertRaises(ValueError) as context:
+            site.summary(metrics=['invalid1', 'index', 'invalid2'])
+        
+        # Should mention both invalid metrics
+        self.assertIn('invalid1', str(context.exception))
+        self.assertIn('invalid2', str(context.exception))
+    
+    def test_summary_excludes_none_from_defaults(self):
+        """Test that summary excludes None values from default output."""
+        site = ConcreteSite()
+        site.trajectory = []  # Empty trajectory means average_occupation is None
+        
+        summary = site.summary()  # Using defaults
+        
+        # Should not include average_occupation when it's None in default mode
+        self.assertNotIn('average_occupation', summary)
+    
+    def test_summary_includes_none_when_explicitly_requested(self):
+        """Test that summary includes None values when explicitly requested."""
+        site = ConcreteSite()
+        site.trajectory = []  # Empty trajectory means average_occupation is None
+        
+        summary = site.summary(metrics=['index', 'average_occupation'])
+        
+        # Should include average_occupation even though it's None
+        self.assertIn('average_occupation', summary)
+        self.assertIsNone(summary['average_occupation'])
 
 if __name__ == '__main__':
     unittest.main()

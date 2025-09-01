@@ -20,7 +20,7 @@ import json
 from monty.io import zopen # type: ignore
 import numpy as np
 from pymatgen.core import Structure
-from typing import Optional, Any, Union
+from typing import Any
 
 class Atom(object):
     """Represents a single persistent atom during a simulation.
@@ -41,20 +41,20 @@ class Atom(object):
 
     def __init__(self,
             index: int,
-            species_string: Optional[str]=None) -> None:
+            species_string: str | None = None) -> None:
         """Initialise an Atom object.
         
         Args:
-            index (int): Numerical index for this atom. Used to identify this atom
+            index: Integer index for this atom. Used to identify this atom
                 in analysed structures.
-            species_string (Optional[str]): String identifying the chemical species of this atom.
+            species_string: String identifying the chemical species of this atom.
         
         Returns:
             None
         """
         self.index = index
-        self.in_site: Optional[int] = None
-        self._frac_coords: Optional[np.ndarray] = None
+        self.in_site: int | None = None
+        self._frac_coords: np.ndarray | None = None
         self.trajectory: list[int|None] = []
         self.species_string = species_string
 
@@ -145,7 +145,7 @@ class Atom(object):
         return atom
 
     def to(self,
-            filename: Optional[str]=None) -> str:
+            filename: str | None = None) -> str:
         s = json.dumps(self.as_dict())
         if filename:
             with zopen(filename, "wb") as f:
@@ -174,7 +174,7 @@ class Atom(object):
         return cls.from_str(contents)
         
     @property
-    def most_recent_site(self) -> Optional[int]:
+    def most_recent_site(self) -> int | None:
         """Return the most recent non-None site from the trajectory.
         
         Returns:
@@ -210,7 +210,7 @@ def atoms_from_species_string(
     
 def atoms_from_structure(
     structure: Structure,
-    species_string: Union[list[str], str]) -> list[Atom]:
+    species_string: list[str] | str) -> list[Atom]:
     """Create Atom objects for atoms of specified species in a structure.
     
     Similar to atoms_from_species_string, but accepts either a single species

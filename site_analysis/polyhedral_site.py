@@ -4,16 +4,6 @@ This module provides the PolyhedralSite class, which represents a site defined
 by a polyhedron formed by a set of vertex atoms. These sites are commonly used
 to represent coordination environments in crystal structures, such as tetrahedral
 or octahedral sites.
-
-PolyhedralSite determines whether atoms are inside the site volume by constructing
-a convex polyhedron from the vertex atoms and checking whether points lie within
-this polyhedron. It supports multiple algorithms for this containment check:
-- 'simplex': Uses Delaunay tessellation to check if a point is in any simplex
-- 'sn': Uses surface normal directions to check if a point is inside all faces
-
-The polyhedron vertices are defined using atom indices in a structure, and
-their coordinates are assigned from the structure when needed. This allows the
-polyhedron shape to adapt to changes in the crystal structure.
 """
 
 from __future__ import annotations
@@ -32,25 +22,29 @@ from typing import Optional, Any
 class PolyhedralSite(Site):
     """Describes a site defined by the polyhedral volume enclosed by a set
     of vertex atoms.
-
+    
+    A PolyhedralSite determines whether atoms are inside the site volume by constructing
+    a convex polyhedron from the vertex atoms and checking whether points lie within
+    this polyhedron. It supports multiple algorithms for this containment check:
+    
+    - 'simplex': Uses Delaunay tessellation to check if a point is in any simplex
+    - 'sn': Uses surface normal directions to check if a point is inside all faces
+    
+    The polyhedron vertices are defined using atom indices in a structure, and
+    their coordinates are assigned from the structure when needed. This allows the
+    polyhedron shape to adapt to changes in the crystal structure.
+    
     Attributes:
-        index (int): Numerical ID, intended to be unique to each site.
-        label (`str`: optional): Optional string given as a label for this site.
-            Default is `None`.
-        contains_atoms (list): list of the atoms contained by this site in the
-            structure last processed.
-        trajectory (list): list of sites this atom has visited at each timestep?
-        points (list): list of fractional coordinates for atoms assigned as
-            occupying this site.
-        transitions (collections.Counter): Stores observed transitions from this
-            site to other sites. Format is {index: count} with ``index`` giving
-            the index of each destination site, and ``count`` giving the number 
-            of observed transitions to this site.
-        vertex_indices (list(int)): list of integer indices for the vertex atoms
-            (counting from 0). 
-        label (:obj:`str`, optional): Optional label for the site.
-   
-    """ 
+        vertex_indices (list[int]): List of integer indices for the vertex atoms
+            (counting from 0).
+        vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
+            Set using assign_vertex_coords() from a Structure.
+        reference_center (np.ndarray or None): Optional reference centre for PBC handling.
+    
+    See Also:
+        :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
+            (index, label, contains_atoms, trajectory, points, transitions).
+    """
 
     def __init__(self,
         vertex_indices: list[int],
@@ -70,8 +64,12 @@ class PolyhedralSite(Site):
             ValueError: If vertex_indices is empty.
             TypeError: If any element in vertex_indices is not an integer.
         """
+        if isinstance(vertex_indices, np.ndarray):
+            vertex_indices = vertex_indices.tolist()
+        
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
+        print(vertex_indices)
         
         if not all(isinstance(idx, int) for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")

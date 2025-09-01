@@ -43,6 +43,10 @@ class Site(ABC):
             site to other sites. Format is {index: count} with ``index`` giving
             the index of each destination site, and ``count`` giving the number 
             of observed transitions to this site.
+        average_occupation (float or None): Average fraction of timesteps where
+            the site was occupied. Returns None if no trajectory data has been
+            processed. Values range from 0.0 (never occupied) to 1.0 (always
+            occupied).
  
     """
 
@@ -234,4 +238,87 @@ class Site(ABC):
                 Returns empty list if no transitions have been recorded.
         """
         return sorted(self.transitions.keys(), key=self.transitions.get, reverse=True)
+        
+    @property
+    def average_occupation(self) -> float | None:
+        """Calculate the average site occupation over the trajectory.
+        
+        Returns the fraction of timesteps where the site was occupied
+        (contained at least one atom).
+        
+        Returns:
+            float | None: Average occupation between 0.0 and 1.0, or None
+                if trajectory is empty (no data processed).
+        """
+        if not self.trajectory:
+            return None
+        
+        occupied_timesteps = sum(1 for timestep in self.trajectory if timestep)
+        return occupied_timesteps / len(self.trajectory)
+        
+    def summary(self, metrics: list[str] | None = None) -> dict:
+        """Generate summary statistics and computed properties.
+        
+        By default, returns commonly used metrics excluding any with None values.
+        When specific metrics are requested, they are included even if their values are None.
+        
+        Args:
+            metrics: List of metrics to include, or None for defaults.
+                Available metrics:
+                - 'index': Site's unique identifier
+                - 'label': Site label (if set)
+                - 'site_type': Class name (e.g., 'SphericalSite')
+                - 'average_occupation': Fraction of timesteps occupied (0.0-1.0)
+                - 'transitions': Dict of transitions to other sites
+                
+                Default behaviour (metrics=None):
+                Returns index, site_type, average_occupation, transitions.
+                Also includes label if set. Excludes any metrics with None values.
+                
+        Returns:
+            dict: Summary statistics. Keys depend on requested metrics.
+            
+        Raises:
+            ValueError: If any requested metrics are not available.
+            
+        Examples:
+            >>> site.summary()  # Default metrics, excluding None values
+            {'index': 0, 'site_type': 'SphericalSite', 'transitions': {}}
+            
+            >>> site.summary(metrics=['index', 'average_occupation'])  
+            {'index': 0, 'average_occupation': None}  # Includes None when explicitly requested
+        """
+        # Define available metrics
+        available_metrics = ['index', 'label', 'site_type', 'average_occupation', 'transitions']
+        
+        # Track if we're using defaults
+        using_defaults = metrics is None
+        
+        if metrics is None:
+            # Default: all metrics except label (only if present)
+            metrics = ['index', 'site_type', 'average_occupation', 'transitions']
+            if self.label is not None:
+                metrics.insert(1, 'label')
+        
+        # Validate metrics
+        invalid_metrics = set(metrics) - set(available_metrics)
+        if invalid_metrics:
+            raise ValueError(f"Invalid metric(s): {invalid_metrics}. Available metrics: {available_metrics}")
+        
+        # Build summary dict
+        summary_dict = {}
+        for metric in metrics:
+            value: Any
+            if metric == 'site_type':
+                value = self.__class__.__name__
+            elif metric == 'transitions':
+                value = dict(self.transitions)
+            else:
+                value = getattr(self, metric)
+            
+            # Include if: value is not None OR user explicitly requested it
+            if value is not None or not using_defaults:
+                summary_dict[metric] = value
+        
+        return summary_dict
 

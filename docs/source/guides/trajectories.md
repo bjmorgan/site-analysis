@@ -112,7 +112,7 @@ print(f"Site history for atom {atom.index}: {atom.trajectory}")
 
 ### Analysis Data
 
-The analysis builds up valuable data about site occupations and transitions:
+The analysis builds up data about site occupations and transitions:
 
 ```python
 # Site occupation positions and transitions
@@ -127,6 +127,72 @@ for site in trajectory.sites:
         for dest_site, count in site.transitions.items():
             print(f"  → Site {dest_site}: {count} transitions")
 ```
+
+### Summary Statistics
+
+Trajectory objects provide methods to extract and export summary statistics for all sites in a structured format:
+
+```python
+# Get summary statistics for all sites
+trajectory.site_summaries()
+
+# Example output
+[{'index': 0,
+  'site_type': 'SphericalSite',
+  'label': 'octahedral',
+  'average_occupation': 0.85,
+  'transitions': {1: 12, 2: 3}},
+ {'index': 1,
+  'site_type': 'SphericalSite',
+  'label': 'tetrahedral_1',
+  'average_occupation': 0.15,
+  'transitions': {0: 12, 2: 5}},
+ ...
+]
+```
+
+The summary includes key metrics for each site:
+- `index`: The site's unique identifier
+- `site_type`: The class of site (e.g., SphericalSite, PolyhedralSite)
+- `label`: The site label if one was assigned
+- `average_occupation`: Fraction of timesteps where the site was occupied (0.0-1.0)
+- `transitions`: Dictionary mapping destination site indices to transition counts
+
+#### Selecting Specific Metrics
+
+The `site_summaries` method takes an optional `metrics` keyword that controls which metrics are included in the summary:
+
+```python
+# Get only specific metrics
+trajectory.site_summaries(metrics=['index', 'average_occupation'])
+
+# Result contains only requested fields
+[{'index': 0, 'average_occupation': 0.85},
+ {'index': 1, 'average_occupation': 0.15},
+ ...]
+```
+
+Available metrics:
+- `'index'`: Site's unique identifier
+- `'label'`: Site label (if set)
+- `'site_type'`: Class name of the site
+- `'average_occupation'`: Fraction of timesteps occupied
+- `'transitions'`: Transition counts to other sites
+
+#### Exporting to JSON
+
+Trajectory objects also offer a `write_site_summaries()` method that exports the summary statistics directly to a JSON file, making it easy to save results for subsequent analysis:
+
+```python
+# Write all summary statistics to a JSON file
+trajectory.write_site_summaries('site_analysis.json')
+
+# Write only selected metrics to file
+trajectory.write_site_summaries('occupations.json', 
+                                metrics=['index', 'label', 'average_occupation'])
+```
+
+The resulting JSON file contains the same structured data as returned by `site_summaries()`, formatted for easy reading and processing by other tools.
 
 ## Complete Workflow Example
 

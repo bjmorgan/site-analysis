@@ -1,5 +1,6 @@
 name: build
-# Controls when the action will run
+
+# Controls when the action will run. 
 on: [push, pull_request]
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
@@ -22,13 +23,19 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install package with dev dependencies
-          pip install -e ".[dev]"
+          pip install -r requirements.txt
+          pip install -U numpy
+          pip install mypy
+          pip install types-PyYAML
+          pip install pytest
+          pip install pytest-cov
+          pip install pylint
+          pip install .
           pip list
       
       - name: Run tests
         run: |
-          pytest --cov-config=.coveragerc --cov=site_analysis --cov-report lcov
+          pytest --cov-config=.coveragerc --cov=vasppy --cov-report lcov
       
       - name: Coveralls GitHub Action
         uses: coverallsapp/github-action@v2.3.6
@@ -40,7 +47,11 @@ jobs:
       
       - name: Static type checking
         run: |
-          mypy site_analysis
+          mypy vasppy
+      
+      - name: PyLint
+        run: |
+          pylint --errors-only vasppy
 
   # This job finalizes the parallel coverage reports
   finish:

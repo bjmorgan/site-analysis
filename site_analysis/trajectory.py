@@ -272,7 +272,7 @@ class Trajectory(object):
                   'desc': 'Analysing trajectory'}
         if progress:
             if progress=='notebook':
-                generator = tqdm_notebook(**params)
+                generator = tqdm_notebook(**parms)
             else:
                 generator = tqdm(**params)
         for timestep, s in generator:

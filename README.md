@@ -25,16 +25,18 @@ from site_analysis.builders import TrajectoryBuilder
 from pymatgen.io.vasp import Xdatcar
 
 # Load MD trajectory from VASP XDATCAR file
-xdatcar = Xdatcar("XDATCAR")
+# (This example uses the provided example_data/XDATCAR file.
+#  For your own analysis, replace with your trajectory file path
+#  and adjust the mobile species and site definitions accordingly.)
+xdatcar = Xdatcar("example_data/XDATCAR")
 md_structures = xdatcar.structures
 
-# Define multiple sites and track Li+ ion movements between them
+# Define sites and track Li+ ion movements between them
 trajectory = (TrajectoryBuilder()
               .with_structure(md_structures[0])  # Use first frame as reference
               .with_mobile_species("Li")
-              .with_spherical_sites(centres=[[0.0, 0.0, 0.0], 
-                                             [0.5, 0.5, 0.5], 
-                                             [0.0, 0.5, 0.0]], 
+              .with_spherical_sites(centres=[[0.25, 0.25, 0.25],
+                                             [0.75, 0.25, 0.25]],
                                     radii=1.5)
               .build())
 

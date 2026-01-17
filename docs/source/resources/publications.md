@@ -24,6 +24,11 @@ Please include the full citation with DOI.
 
 ## Publications Using the Python site-analysis Package
 
+- **Rotational Stacking Faults in the Ionic Conductor Li<sub>3</sub>ScCl<sub>6</sub>**
+  Goldmann, B.A., Rosenbach, C., Evans, H.A., Helm, B., Wankmiller, B., Maus, O., Suard, E., Nazar, L.F., Hansen, M.R., Morgan, B.J., Islam, M.S., Zeier, W.G.
+  *Chemistry of Materials*, (2025)
+  DOI: [10.1021/acs.chemmater.5c02303](httpe://10.1021/acs.chemmater.5c02303) 
+
 - **Enabling ionic transport in Li<sub>3</sub>AlP<sub>2</sub>: the roles of defects and disorder**
   Hu, J., Squires, A.G., Kondek, J., Johnson, M.J., Youd, A.B., Vadhva, P., Paul, P.P., Withers, P.J., Di Michiel, M., Keeble, D.S., Hansen, M.R., Scanlon, D.O., and Rettie, A.J.E.
   *Journal of Materials Chemistry A*, 13, 6427-6439 (2025)

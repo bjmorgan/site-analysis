@@ -1,4 +1,5 @@
 name: build
+
 # Controls when the action will run
 on: [push, pull_request]
 
@@ -31,25 +32,11 @@ jobs:
           pytest --cov-config=.coveragerc --cov=site_analysis --cov-report lcov
       
       - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@v2.3.6
+        uses: coverallsapp/github-action@v2
         with:
           path-to-lcov: ./coverage.lcov
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          parallel: true
-          flag-name: python-${{ matrix.python-version }}
       
       - name: Static type checking
         run: |
           mypy site_analysis
-
-  # This job finalizes the parallel coverage reports
-  finish:
-    needs: tests
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Coveralls Finished
-        uses: coverallsapp/github-action@v2.3.6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          parallel-finished: true

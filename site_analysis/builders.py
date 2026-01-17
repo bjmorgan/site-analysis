@@ -673,7 +673,13 @@ class TrajectoryBuilder:
 			if not self._mobile_species:
 				raise ValueError("Mobile species must be set")
 			self._atoms = atoms_from_structure(self._structure, self._mobile_species)
-			
+			if not self._atoms:
+				available_species = sorted(set(str(site.specie) for site in self._structure))
+				raise ValueError(
+					f"No atoms found matching mobile species '{self._mobile_species}'. "
+					f"Available species in structure: {available_species}"
+				)
+
 		# Create trajectory
 		trajectory = Trajectory(sites=sites, atoms=self._atoms)
 		

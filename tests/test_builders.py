@@ -304,7 +304,29 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		
 		# Check error message
 		self.assertIn("mobile species must be set", str(context.exception).lower())
-	
+
+	def test_build_raises_error_when_mobile_species_not_in_structure(self):
+		"""Test that build() raises ValueError when mobile species not found in structure."""
+		structure = Structure(
+			lattice=Lattice.cubic(4.0),
+			species=["Na", "Cl"],
+			coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
+		)
+
+		builder = TrajectoryBuilder()
+		builder.with_structure(structure)
+		builder.with_mobile_species("Li")
+		builder.with_spherical_sites(centres=[[0.25, 0.25, 0.25]], radii=1.0)
+
+		with self.assertRaises(ValueError) as context:
+			builder.build()
+
+		error_message = str(context.exception)
+		# Li is identified as the requested (missing) species
+		self.assertIn("mobile species 'Li'", error_message)
+		# Available species are listed in square brackets
+		self.assertIn("['Cl', 'Na']", error_message)
+
 	def test_reference_structure_checked_at_build_time(self):
 		"""Test that reference structure is checked at build time for complex sites."""
 		# Configure the builder without reference structure

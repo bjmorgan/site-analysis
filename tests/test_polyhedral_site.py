@@ -258,11 +258,12 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]]) 
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+                           [0.6, 0.4, 0.6]])
+        site.vertex_coords = points
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
             new_callable=PropertyMock) as mock_centre:
             mock_centre.return_value = np.array([0.5, 0.5, 0.5])
-            with patch('site_analysis.polyhedral_site.ConvexHull', 
+            with patch('site_analysis.polyhedral_site.ConvexHull',
                     autospec=True) as mock_ConvexHull:
                 mock_ConvexHull.return_value = ConvexHull(points)
                 in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
@@ -273,8 +274,9 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]]) 
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+                           [0.6, 0.4, 0.6]])
+        site.vertex_coords = points
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
             new_callable=PropertyMock) as mock_centre:
             mock_centre.return_value = np.array([0.5, 0.5, 0.5])
             with patch('site_analysis.polyhedral_site.ConvexHull',
@@ -288,8 +290,9 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]]) 
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+                           [0.6, 0.4, 0.6]])
+        site.vertex_coords = points
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
             new_callable=PropertyMock) as mock_centre:
             mock_centre.return_value = np.array([0.5, 0.5, 0.5])
             with patch('site_analysis.polyhedral_site.ConvexHull',
@@ -304,8 +307,9 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
                            [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]]) 
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre', 
+                           [0.6, 0.4, 0.6]])
+        site.vertex_coords = points
+        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
             new_callable=PropertyMock) as mock_centre:
             mock_centre.return_value = np.array([0.5, 0.5, 0.5])
             with patch('site_analysis.polyhedral_site.ConvexHull',

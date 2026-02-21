@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "1.2.6"
+version = "1.2.7"
 description = "Analysis tools for tracking ion migration through crystallographic sites"
 readme = "README.md"
 authors = [
@@ -31,6 +31,7 @@ dev = [
     "pytest-cov",           # Pytest coverage plugin
     "mypy",                 # Type checking
     "types-PyYAML",         # Type stubs for PyYAML
+    "scipy-stubs",          # Type stubs for SciPy
     "sphinx",               # Documentation generation
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme

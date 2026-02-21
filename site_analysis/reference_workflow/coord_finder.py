@@ -23,7 +23,7 @@ sites in both reference and target structures.
 
 from pymatgen.core import Structure
 from site_analysis.tools import get_coordination_indices
-from typing import Union
+
 
 class CoordinationEnvironmentFinder:
     """Finds coordination environments in a structure."""
@@ -60,7 +60,7 @@ class CoordinationEnvironmentFinder:
     
     def find_environments(self, 
                           center_species: str, 
-                          coordination_species: Union[str, list[str]], 
+                          coordination_species: str | list[str],
                           n_coord: int, 
                           cutoff: float) -> dict[int, list[int]]:
         """Find coordination environments in the structure.

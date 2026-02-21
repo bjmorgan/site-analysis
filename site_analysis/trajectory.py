@@ -40,10 +40,10 @@ from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .site_collection import SiteCollection
 from .site import Site
 from .atom import Atom
-from typing import Union, Optional, Type, Sequence
+from typing import Sequence
 from pymatgen.core import Structure
 
-class Trajectory(object):
+class Trajectory:
     """Class for performing sites analysis on simulation trajectories."""
 
     def __init__(self,
@@ -75,7 +75,7 @@ class Trajectory(object):
             raise TypeError("A Trajectory cannot be initialised with mixed Site types")
         
         # Map site types to their corresponding collection classes
-        site_collection_map: dict[Type[Site], Type[SiteCollection]] = {
+        site_collection_map: dict[type[Site], type[SiteCollection]] = {
             PolyhedralSite: PolyhedralSiteCollection,
             VoronoiSite: VoronoiSiteCollection,
             SphericalSite: SphericalSiteCollection,
@@ -150,7 +150,7 @@ class Trajectory(object):
         """
         return Counter([s.coordination_number for s in self.sites])
 
-    def site_labels(self) -> list[Optional[str]]:
+    def site_labels(self) -> list[str | None]:
         """Return the labels of all sites.
         
         Returns:
@@ -159,7 +159,7 @@ class Trajectory(object):
         return [s.label for s in self.sites]
    
     @property
-    def atom_sites(self) -> list[Optional[int]]:
+    def atom_sites(self) -> list[int | None]:
         """Return the sites that each atom currently occupies.
         
         Returns:
@@ -179,7 +179,7 @@ class Trajectory(object):
 
     def append_timestep(self,
         structure: Structure,
-        t: Optional[int]=None) -> None:
+        t: int | None=None) -> None:
         """Append a new timestep to the trajectory.
         
         This method:
@@ -193,7 +193,6 @@ class Trajectory(object):
         """
         self.analyse_structure(structure)
         for atom in self.atoms:
-            # assert(isinstance(atom.in_site, int))
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)

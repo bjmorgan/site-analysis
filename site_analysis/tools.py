@@ -25,15 +25,15 @@ used internally by the higher-level site and trajectory analysis classes.
 import warnings
 import numpy as np
 
-from typing import Optional, Union, cast
+from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
 
 def get_coordination_indices(
     structure: Structure,
     centre_species: str, 
-    coordination_species: Union[str, list[str]],
+    coordination_species: str | list[str],
     cutoff: float,
-    n_coord: Union[int, list[int]]) -> dict[int, list[int]]:
+    n_coord: int | list[int]) -> dict[int, list[int]]:
     """
     Find atoms with exactly the specified coordination environment.
     
@@ -162,9 +162,9 @@ def get_nearest_neighbour_indices(
 def get_vertex_indices(
         structure: Structure,
         centre_species: str, 
-        vertex_species: Union[str, list[str]],
+        vertex_species: str | list[str],
         cutoff: float,
-        n_vertices: Union[int, list[int]]) -> list[list[int]]:
+        n_vertices: int | list[int]) -> list[list[int]]:
     """
     DEPRECATED: Find the atom indices for atoms defining the vertices of coordination polyhedra.
     
@@ -271,29 +271,21 @@ def x_pbc(x: np.ndarray):
 
 def species_string_from_site(site: Site) -> str:
     """Extract the species string from a pymatgen Site object.
-    
+
     Args:
         site: A pymatgen Site object
-        
+
     Returns:
         String representation of the site's species
     """
-    if hasattr(site._species, 'keys'):
-        species_keys = [k.__str__() for k in site._species.keys()]
-        if species_keys:
-            return str(species_keys[0])
-        return "" 
-    elif hasattr(site, 'species_string'):
-        return site.species_string
-    else:
-        return str(site._species)
+    return site.species_string
 
 def site_index_mapping(structure1: Structure, 
                        structure2: Structure,
-                       species1: Optional[Union[str, list[str]]] = None,
-                       species2: Optional[Union[str, list[str]]] = None,
-                       one_to_one_mapping: Optional[bool] = True,
-                       return_mapping_distances: Optional[bool] = False) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+                       species1: str | list[str] | None = None,
+                       species2: str | list[str] | None = None,
+                       one_to_one_mapping: bool = True,
+                       return_mapping_distances: bool = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Compute the site index mapping between two structures based on the closest corresponding site in
     structure2 to each selected site in structure1.
     
@@ -323,9 +315,6 @@ def site_index_mapping(structure1: Structure,
         species2 = [species2]
     if species2 is None:
         species2 = list(set([site.species_string for site in structure2]))
-    assert(isinstance(species1, list))
-    assert(isinstance(species2, list))
-    
     structure2_mask = np.array([site.species_string in species2 for site in structure2])
     lattice = structure1.lattice
     dr_ij = np.array(lattice.get_all_distances(structure1.frac_coords, structure2.frac_coords))

@@ -280,11 +280,11 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         ])
         
         # Test without structure
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             self.collection.sites_contain_points(points)
         
         # Test with None structure
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             self.collection.sites_contain_points(points, None)
             
     def test_checks_most_recent_site(self):

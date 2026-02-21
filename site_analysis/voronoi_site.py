@@ -5,7 +5,7 @@ by a Voronoi cell centered at a fixed position.
 """
 
 from site_analysis.site import Site
-from typing import Any, Optional
+from typing import Any
 import numpy as np
 
 class VoronoiSite(Site):
@@ -35,7 +35,7 @@ class VoronoiSite(Site):
     
     def __init__(self,
                  frac_coords: np.ndarray,
-                 label: Optional[str]=None) -> None:
+                 label: str | None=None) -> None:
         """Create a ``VoronoiSite`` instance.
         
         Args:

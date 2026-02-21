@@ -16,7 +16,7 @@ from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
-from typing import Optional, Any
+from typing import Any
 
 
 class PolyhedralSite(Site):
@@ -48,8 +48,8 @@ class PolyhedralSite(Site):
 
     def __init__(self,
         vertex_indices: list[int],
-        label: Optional[str]=None,
-        reference_center: Optional[np.ndarray]=None):
+        label: str | None=None,
+        reference_center: np.ndarray | None=None):
         """Create a PolyhedralSite instance.
         
         Args:
@@ -75,8 +75,8 @@ class PolyhedralSite(Site):
         
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
-        self.vertex_coords: Optional[np.ndarray] = None
-        self._delaunay: Optional[Delaunay] = None
+        self.vertex_coords: np.ndarray | None = None
+        self._delaunay: Delaunay | None = None
         self.reference_center = reference_center
 
     def __repr__(self) -> str:
@@ -118,7 +118,9 @@ class PolyhedralSite(Site):
 
         """
         if not self._delaunay:
-            self._delaunay = Delaunay(self.vertex_coords)         
+            if self.vertex_coords is None:
+                raise RuntimeError("Vertex coordinates have not been assigned.")
+            self._delaunay = Delaunay(self.vertex_coords)
         return self._delaunay
 
     @property
@@ -188,7 +190,7 @@ class PolyhedralSite(Site):
 
     def contains_point(self,
             x: np.ndarray,
-            structure: Optional[Structure]=None,
+            structure: Structure | None=None,
             algo: str='simplex',
             *args,
             **kwargs) -> bool:
@@ -245,7 +247,7 @@ class PolyhedralSite(Site):
         the sign of the surface normal for each face with respect to each point.
 
         Args:
-            x (np.array): Fractional coordinates for one or more points, as a
+            x_list (np.array): Fractional coordinates for one or more points, as a
                 (3x1) or (3xN) numpy array.
 
         Returns:
@@ -258,7 +260,10 @@ class PolyhedralSite(Site):
             This is also a possible target for optimisation with f2py etc.
 
         """
-        hull = ConvexHull(self.vertex_coords)
+        vertex_coords = self.vertex_coords
+        if vertex_coords is None:
+            raise RuntimeError("Vertex coordinates have not been assigned.")
+        hull = ConvexHull(vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre
         inside = []
@@ -274,7 +279,7 @@ class PolyhedralSite(Site):
 
     def contains_atom(self,
             atom: Atom,
-            algo: Optional[str]='simplex',
+            algo: str | None='simplex',
             *args: Any,
             **kwargs: Any) -> bool:
         """Test whether an atom is inside this polyhedron.
@@ -319,13 +324,14 @@ class PolyhedralSite(Site):
             (np.array): (3,) numpy array.
  
         """
-        assert isinstance(self.vertex_coords, np.ndarray)
+        if self.vertex_coords is None:
+            raise RuntimeError("Vertex coordinates have not been assigned.")
         centre_coords = np.mean(self.vertex_coords, axis=0)
         return np.array(centre_coords) 
 
     @classmethod
     def sites_from_vertex_indices(cls,
         vertex_indices: list[list[int]],
-        label: Optional[str]=None) -> list[PolyhedralSite]:
+        label: str | None=None) -> list[PolyhedralSite]:
         sites = [cls(vertex_indices=vi, label=label) for vi in vertex_indices]
         return sites

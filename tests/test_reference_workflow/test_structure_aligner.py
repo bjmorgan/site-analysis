@@ -614,6 +614,23 @@ class TestStructureAligner(unittest.TestCase):
             self.assertEqual(kwargs['popsize'], 20)
             self.assertEqual(kwargs['strategy'], 'rand1bin')
             
+    def test_run_differential_evolution_does_not_mutate_options(self):
+        """Test that _run_differential_evolution does not mutate the caller's options dict."""
+        aligner = StructureAligner()
+
+        with patch('scipy.optimize.differential_evolution') as mock_de:
+            mock_de.return_value = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
+
+            options = {'bounds': [(0, 2), (0, 2), (0, 2)], 'popsize': 20}
+            aligner._run_differential_evolution(
+                Mock(),
+                tolerance=0.05,
+                minimizer_options=options,
+            )
+
+            self.assertIn('bounds', options)
+            self.assertEqual(options['popsize'], 20)
+
     def test_align_calls_nelder_mead_by_default(self):
         """Test that align uses Nelder-Mead by default."""
         aligner = StructureAligner()

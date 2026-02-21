@@ -22,7 +22,7 @@ import numpy as np
 from pymatgen.core import Structure
 from typing import Any
 
-class Atom(object):
+class Atom:
     """Represents a single persistent atom during a simulation.
 
     Attributes:
@@ -49,8 +49,6 @@ class Atom(object):
                 in analysed structures.
             species_string: String identifying the chemical species of this atom.
         
-        Returns:
-            None
         """
         self.index = index
         self.in_site: int | None = None
@@ -235,7 +233,7 @@ def atoms_from_structure(
         if s.species_string in species_string
     ]
     for atom in atoms:
-        atom._frac_coords = structure[atom.index].frac_coords
+        atom.assign_coords(structure)
     return atoms
 
 def atoms_from_indices(

@@ -335,7 +335,8 @@ class StructureAligner:
 		
 		# Extract bounds if provided in options
 		if minimizer_options and 'bounds' in minimizer_options:
-			bounds = minimizer_options.pop('bounds')
+			bounds = minimizer_options['bounds']
+			options.pop('bounds')
 			
 		# Run optimization
 		result = differential_evolution(

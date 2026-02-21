@@ -90,7 +90,7 @@ def get_coordination_indices(
         neighbors = []
         for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
             if neighbor.species_string in coordination_species:
-                neighbors.append((int(neighbor.index), int(neighbor.nn_distance)))
+                neighbors.append((int(neighbor.index), neighbor.nn_distance))
         
         # Only include environments with exactly the required number of coordinating atoms
         if len(neighbors) == required:

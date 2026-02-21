@@ -284,8 +284,8 @@ def site_index_mapping(structure1: Structure,
                        structure2: Structure,
                        species1: str | list[str] | None = None,
                        species2: str | list[str] | None = None,
-                       one_to_one_mapping: bool | None = True,
-                       return_mapping_distances: bool | None = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+                       one_to_one_mapping: bool = True,
+                       return_mapping_distances: bool = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Compute the site index mapping between two structures based on the closest corresponding site in
     structure2 to each selected site in structure1.
     

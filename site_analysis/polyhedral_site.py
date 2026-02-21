@@ -269,7 +269,7 @@ class PolyhedralSite(Site):
                 c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
                 p_sign = np.sign(np.dot( surface_normal, x-f[0]))
                 dotsum += c_sign * p_sign
-                inside.append(dotsum == len(faces))
+            inside.append(dotsum == len(faces))
         return any(inside)
 
     def contains_atom(self,

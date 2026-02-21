@@ -156,9 +156,8 @@ class ReferenceBasedSites:
 			self._site_factory = SiteFactory(self.target_structure)
 		
 		# Create polyhedral sites
-		# At this point we know self._site_factory is not None
-		assert self._site_factory is not None
-		sites = self._site_factory.create_polyhedral_sites(
+		site_factory = self._site_factory
+		sites = site_factory.create_polyhedral_sites(
 			mapped_environments,
 			reference_centers=reference_centers,
 			label=label,
@@ -225,9 +224,8 @@ class ReferenceBasedSites:
 			self._site_factory = SiteFactory(self.target_structure)
 		
 		# Create dynamic Voronoi sites
-		# At this point we know self._site_factory is not None
-		assert self._site_factory is not None
-		sites = self._site_factory.create_dynamic_voronoi_sites(
+		site_factory = self._site_factory
+		sites = site_factory.create_dynamic_voronoi_sites(
 			mapped_environments,
 			reference_centers=reference_centers,
 			label=label,
@@ -305,9 +303,8 @@ class ReferenceBasedSites:
 				self._coord_finder = CoordinationEnvironmentFinder(self.reference_structure)
 			
 			# Find coordination environments
-			# At this point we know self._coord_finder is not None
-			assert self._coord_finder is not None
-			environments_dict = self._coord_finder.find_environments(
+			coord_finder = self._coord_finder
+			environments_dict = coord_finder.find_environments(
 				center_species=center_species,
 				coordination_species=coordination_species,
 				n_coord=n_coord,

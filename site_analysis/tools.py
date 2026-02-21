@@ -25,15 +25,15 @@ used internally by the higher-level site and trajectory analysis classes.
 import warnings
 import numpy as np
 
-from typing import Optional, Union, cast
+from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
 
 def get_coordination_indices(
     structure: Structure,
     centre_species: str, 
-    coordination_species: Union[str, list[str]],
+    coordination_species: str | list[str],
     cutoff: float,
-    n_coord: Union[int, list[int]]) -> dict[int, list[int]]:
+    n_coord: int | list[int]) -> dict[int, list[int]]:
     """
     Find atoms with exactly the specified coordination environment.
     
@@ -162,9 +162,9 @@ def get_nearest_neighbour_indices(
 def get_vertex_indices(
         structure: Structure,
         centre_species: str, 
-        vertex_species: Union[str, list[str]],
+        vertex_species: str | list[str],
         cutoff: float,
-        n_vertices: Union[int, list[int]]) -> list[list[int]]:
+        n_vertices: int | list[int]) -> list[list[int]]:
     """
     DEPRECATED: Find the atom indices for atoms defining the vertices of coordination polyhedra.
     
@@ -290,10 +290,10 @@ def species_string_from_site(site: Site) -> str:
 
 def site_index_mapping(structure1: Structure, 
                        structure2: Structure,
-                       species1: Optional[Union[str, list[str]]] = None,
-                       species2: Optional[Union[str, list[str]]] = None,
-                       one_to_one_mapping: Optional[bool] = True,
-                       return_mapping_distances: Optional[bool] = False) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+                       species1: str | list[str] | None = None,
+                       species2: str | list[str] | None = None,
+                       one_to_one_mapping: bool | None = True,
+                       return_mapping_distances: bool | None = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Compute the site index mapping between two structures based on the closest corresponding site in
     structure2 to each selected site in structure1.
     

@@ -20,7 +20,7 @@ subclasses instead.
 
 from abc import ABC, abstractmethod
 import numpy as np
-from typing import Optional, List, Sequence
+from typing import Sequence
 from pymatgen.core import Structure # type: ignore
 from .site import Site
 
@@ -171,7 +171,7 @@ class SiteCollection(ABC):
 
     def sites_contain_points(self,
                              points: np.ndarray,
-                             structure: Optional[Structure]=None) -> bool:
+                             structure: Structure | None=None) -> bool:
         """If implemented, Checks whether the set of sites contain
         a corresponding set of fractional coordinates.
         Args:

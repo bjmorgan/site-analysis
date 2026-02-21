@@ -21,7 +21,7 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import Any, Optional
+from typing import Any
 
 from pymatgen.core import Structure
 

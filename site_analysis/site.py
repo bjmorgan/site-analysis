@@ -17,7 +17,7 @@ subclasses instead.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 from .atom import Atom
 import numpy as np
 from pymatgen.core import Structure
@@ -58,7 +58,7 @@ class Site(ABC):
     # with the default arguments.
     
     def __init__(self,
-            label: Optional[str]=None) -> None:
+            label: str | None=None) -> None:
         """Initialise a Site object.
 
         Args:

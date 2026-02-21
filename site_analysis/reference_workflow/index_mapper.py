@@ -19,7 +19,7 @@ of site definitions between different structures or timesteps in a simulation.
 """
 
 import numpy as np
-from typing import List, Dict, Optional, Union
+
 from pymatgen.core import Structure
 
 
@@ -39,9 +39,9 @@ class IndexMapper:
 		self,
 		reference: Structure,
 		target: Structure,
-		ref_coordinating: List[List[int]],
-		target_species: Optional[Union[str, List[str]]] = None
-	) -> List[List[int]]:
+		ref_coordinating: list[list[int]],
+		target_species: str | list[str] | None = None
+	) -> list[list[int]]:
 		"""Map coordinating atom indices from reference to target structure.
 		
 		Args:
@@ -75,8 +75,8 @@ class IndexMapper:
 	
 	def _extract_unique_coordinating_atoms(
 		self,
-		ref_coordinating: List[List[int]]
-	) -> List[int]:
+		ref_coordinating: list[list[int]]
+	) -> list[int]:
 		"""Extract unique coordinating atom indices from coordination lists.
 		
 		Args:
@@ -94,9 +94,9 @@ class IndexMapper:
 		self,
 		reference: Structure,
 		target: Structure,
-		ref_indices: List[int],
-		target_species: Optional[Union[str, List[str]]]
-	) -> Dict[int, int]:
+		ref_indices: list[int],
+		target_species: str | list[str] | None
+	) -> dict[int, int]:
 		"""Find closest atom in target structure for each reference atom.
 		
 		Args:
@@ -159,9 +159,9 @@ class IndexMapper:
 	
 	def _apply_mapping(
 		self,
-		ref_coordinating: List[List[int]],
-		index_mapping: Dict[int, int]
-	) -> List[List[int]]:
+		ref_coordinating: list[list[int]],
+		index_mapping: dict[int, int]
+	) -> list[list[int]]:
 		"""Apply the index mapping to coordination lists.
 		
 		Args:

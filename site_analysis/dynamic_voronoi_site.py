@@ -7,7 +7,7 @@ atoms.
 
 from __future__ import annotations
 import numpy as np
-from typing import List, Optional, Any, Dict
+from typing import Any
 from .site import Site
 from .atom import Atom
 from pymatgen.core import Structure
@@ -31,7 +31,7 @@ class DynamicVoronoiSite(Site):
 	number of reference atoms used to calculate its center.
 	
 	Attributes:
-		reference_indices (List[int]): Indices of atoms used as reference to calculate
+		reference_indices (list[int]): Indices of atoms used as reference to calculate
 			the dynamic centre of the site.
 		centre_coords (np.ndarray or None): Fractional coordinates of the dynamically 
 			calculated site centre. This is None initially and calculated on demand.
@@ -47,9 +47,9 @@ class DynamicVoronoiSite(Site):
 	"""
 		
 	def __init__(self,
-		reference_indices: List[int],
-		label: Optional[str] = None,
-		reference_center: Optional[np.ndarray] = None) -> None:
+		reference_indices: list[int],
+		label: str | None = None,
+		reference_center: np.ndarray | None = None) -> None:
 		"""Create a ``DynamicVoronoiSite`` instance.
 			
 		Args:
@@ -62,7 +62,7 @@ class DynamicVoronoiSite(Site):
 		"""
 		super(DynamicVoronoiSite, self).__init__(label=label)
 		self.reference_indices = reference_indices
-		self._centre_coords: Optional[np.ndarray] = None
+		self._centre_coords: np.ndarray | None = None
 		self.reference_center = reference_center
 		
 	def __repr__(self) -> str:
@@ -146,14 +146,14 @@ class DynamicVoronoiSite(Site):
 		"""
 		raise NotImplementedError
 		
-	def as_dict(self) -> Dict:
+	def as_dict(self) -> dict:
 		"""Json-serializable dict representation of this DynamicVoronoiSite.
 		
 		Args:
 			None
 			
 		Returns:
-			Dict: Dictionary representation of this site.
+			dict: dictionary representation of this site.
 		"""
 		d = super(DynamicVoronoiSite, self).as_dict()
 		d['reference_indices'] = self.reference_indices
@@ -162,11 +162,11 @@ class DynamicVoronoiSite(Site):
 		return d
 	
 	@classmethod
-	def from_dict(cls, d: Dict) -> DynamicVoronoiSite:
+	def from_dict(cls, d: dict) -> DynamicVoronoiSite:
 		"""Create a DynamicVoronoiSite object from a dict representation.
 		
 		Args:
-			d (Dict): The dict representation of this Site.
+			d (dict): The dict representation of this Site.
 			
 		Returns:
 			DynamicVoronoiSite: A new DynamicVoronoiSite instance.
@@ -214,8 +214,8 @@ class DynamicVoronoiSite(Site):
 		
 	@classmethod
 	def sites_from_reference_indices(cls,
-		reference_indices_list: List[List[int]],
-		label: Optional[str] = None) -> List[DynamicVoronoiSite]:
+		reference_indices_list: list[list[int]],
+		label: str | None = None) -> list[DynamicVoronoiSite]:
 		"""Create a list of DynamicVoronoiSite objects from a list of reference indices.
 		
 		Args:

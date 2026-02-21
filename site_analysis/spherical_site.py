@@ -8,7 +8,7 @@ the site is less important than its location.
 
 from __future__ import annotations
 from .site import Site
-from typing import Optional, Dict, Any
+from typing import Any
 from .atom import Atom
 from pymatgen.core.lattice import Lattice
 import numpy as np
@@ -47,7 +47,7 @@ class SphericalSite(Site):
     def __init__(self,
         frac_coords: np.ndarray,
         rcut: float,
-        label: Optional[str]=None) -> None:
+        label: str | None=None) -> None:
         """Create a SphericalSite instance.
         
         Args:
@@ -86,14 +86,14 @@ class SphericalSite(Site):
         """
         return self.frac_coords
     
-    def as_dict(self) -> Dict:
+    def as_dict(self) -> dict:
         """Returns a dictionary representation of this SphericalSite.
         
         Creates a JSON-serializable dictionary containing all the attributes
         needed to reconstruct this SphericalSite object.
         
         Returns:
-            Dict: Dictionary containing the SphericalSite's attributes, including
+            dict: Dictionary containing the SphericalSite's attributes, including
                 attributes from the parent Site class plus 'frac_coords' and 'rcut'.
         """
         d = super(SphericalSite, self).as_dict()
@@ -103,7 +103,7 @@ class SphericalSite(Site):
 
     def contains_atom(self,
         atom: Atom,
-        lattice: Optional[Lattice] = None,  # Technically optional for signature compatibility, but required
+        lattice: Lattice | None = None,  # Technically optional for signature compatibility, but required
         *args: Any,
         **kwargs: Any) -> bool:
         """Test whether this spherical site contains a specific atom.
@@ -131,7 +131,7 @@ class SphericalSite(Site):
 
     def contains_point(self,
         x: np.ndarray,
-        lattice: Optional[Lattice]=None,  # Technically optional for signature compatibility, but required
+        lattice: Lattice | None=None,  # Technically optional for signature compatibility, but required
         *args: Any,
         **kwargs: Any) -> bool:
         """Test if the point x is contained by this spherical site.
@@ -158,7 +158,7 @@ class SphericalSite(Site):
 
     @classmethod
     def from_dict(cls,
-            d: Dict) -> SphericalSite:
+            d: dict) -> SphericalSite:
         """Create a SphericalSite object from a dictionary representation.
         
         This is the complementary method to `as_dict()`, allowing SphericalSite

@@ -20,7 +20,7 @@ sites in one structure based on a template from another structure.
 import numpy as np
 from pymatgen.core import Structure
 from scipy.optimize import minimize
-from typing import Optional, Union, Any, Callable
+from typing import Any, Callable
 from site_analysis.tools import calculate_species_distances
 
 class StructureAligner:
@@ -34,11 +34,11 @@ class StructureAligner:
 	def align(self, 
 		reference: Structure, 
 		target: Structure, 
-		species: Optional[list[str]] = None, 
+		species: list[str] | None = None, 
 		metric: str = 'rmsd', 
 		tolerance: float = 1e-4,
 		algorithm: str = 'Nelder-Mead',
-		minimizer_options: Optional[dict[str, Any]] = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
+		minimizer_options: dict[str, Any] | None = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
 		"""Align reference structure to target structure via translation."""
 		# Validate structures and get species to use
 		valid_species = self._validate_structures(reference, target, species)
@@ -114,7 +114,7 @@ class StructureAligner:
 	def _validate_structures(self, 
 							reference: Structure, 
 							target: Structure, 
-							species: Optional[list[str]] = None) -> list[str]:
+							species: list[str] | None = None) -> list[str]:
 		"""Validate that structures can be aligned and determine species to use.
 		
 		Args:
@@ -210,7 +210,7 @@ class StructureAligner:
 		algorithm: str, 
 		objective_function: Callable[[np.ndarray], float],
 		tolerance: float,
-		minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+		minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
 		"""Run the selected minimization algorithm.
 		
 		Args:
@@ -243,7 +243,7 @@ class StructureAligner:
 												Callable[
 													[Callable[[np.ndarray], float],
 													float,
-													Optional[dict[str, Any]]
+													dict[str, Any] | None
 												], np.ndarray]]:
 		"""Get the registry of supported optimization algorithms.
 		
@@ -258,7 +258,7 @@ class StructureAligner:
 	def _run_nelder_mead(self, 
 					objective_function: Callable[[np.ndarray], float], 
 					tolerance: float, 
-					minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+					minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
 		"""Run Nelder-Mead optimization.
 		
 		Args:
@@ -303,7 +303,7 @@ class StructureAligner:
 	def _run_differential_evolution(self,
 			objective_function: Callable[[np.ndarray], float],
 			tolerance: float,
-			minimizer_options: Optional[dict[str, Any]] = None) -> np.ndarray:
+			minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
 		"""Run differential evolution optimization.
 		
 		Args:

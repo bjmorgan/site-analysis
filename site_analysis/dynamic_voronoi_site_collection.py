@@ -30,7 +30,7 @@ from site_analysis.site_collection import SiteCollection
 from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.atom import Atom
-from typing import Optional, Any
+
 
 class DynamicVoronoiSiteCollection(SiteCollection):
 	"""A collection of DynamicVoronoiSite objects.

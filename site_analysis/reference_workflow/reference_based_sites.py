@@ -191,7 +191,7 @@ class ReferenceBasedSites:
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
                 or if both label and labels are provided.
-    """
+        """
         # Find coordination environments in reference structure
         # Note: CoordinationEnvironmentFinder uses vertex_species terminology,
         # but conceptually these are reference atoms for dynamic Voronoi sites

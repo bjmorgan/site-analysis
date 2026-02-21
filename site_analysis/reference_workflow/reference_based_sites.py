@@ -151,12 +151,8 @@ class ReferenceBasedSites:
             target_species
         )
         
-        # Create site factory if not already initialised
-        if self._site_factory is None:
-            self._site_factory = SiteFactory(self.target_structure)
-        
         # Create polyhedral sites
-        site_factory = self._site_factory
+        site_factory = self._initialise_site_factory()
         sites = site_factory.create_polyhedral_sites(
             mapped_environments,
             reference_centers=reference_centers,
@@ -219,12 +215,8 @@ class ReferenceBasedSites:
             target_species
         )
         
-        # Create site factory if not already initialised
-        if self._site_factory is None:
-            self._site_factory = SiteFactory(self.target_structure)
-        
         # Create dynamic Voronoi sites
-        site_factory = self._site_factory
+        site_factory = self._initialise_site_factory()
         sites = site_factory.create_dynamic_voronoi_sites(
             mapped_environments,
             reference_centers=reference_centers,
@@ -298,12 +290,8 @@ class ReferenceBasedSites:
             ValueError: If coordination environments cannot be found.
         """
         try:
-            # Create coordination environment finder if not already initialised
-            if self._coord_finder is None:
-                self._coord_finder = CoordinationEnvironmentFinder(self.reference_structure)
-            
             # Find coordination environments
-            coord_finder = self._coord_finder
+            coord_finder = self._initialise_coord_finder()
             environments_dict = coord_finder.find_environments(
                 center_species=center_species,
                 coordination_species=coordination_species,
@@ -376,7 +364,13 @@ class ReferenceBasedSites:
         if self._site_factory is None:
             self._site_factory = SiteFactory(self.target_structure)
         return self._site_factory
-    
+
+    def _initialise_coord_finder(self) -> CoordinationEnvironmentFinder:
+        """Initialise the coordination environment finder if not already done."""
+        if self._coord_finder is None:
+            self._coord_finder = CoordinationEnvironmentFinder(self.reference_structure)
+        return self._coord_finder
+
     def _validate_unique_environments(self, environments: dict[int, list[int]]) -> None:
         """Validate that each environment contains unique atom indices.
         

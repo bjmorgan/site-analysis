@@ -118,7 +118,9 @@ class PolyhedralSite(Site):
 
         """
         if not self._delaunay:
-            self._delaunay = Delaunay(self.vertex_coords)         
+            if self.vertex_coords is None:
+                raise RuntimeError("Vertex coordinates have not been assigned.")
+            self._delaunay = Delaunay(self.vertex_coords)
         return self._delaunay
 
     @property
@@ -258,7 +260,10 @@ class PolyhedralSite(Site):
             This is also a possible target for optimisation with f2py etc.
 
         """
-        hull = ConvexHull(self.vertex_coords)
+        vertex_coords = self.vertex_coords
+        if vertex_coords is None:
+            raise RuntimeError("Vertex coordinates have not been assigned.")
+        hull = ConvexHull(vertex_coords)
         faces = hull.points[hull.simplices]
         centre = self.centre
         inside = []

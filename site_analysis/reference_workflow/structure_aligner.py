@@ -287,7 +287,7 @@ class StructureAligner:
         options.update(minimizer_options)
         
         # Run optimisation
-        result = minimize(
+        result = minimize(  # type: ignore[call-overload]
             objective_function,
             x0=np.array([0, 0, 0]),  # Start with zero translation
             method='Nelder-Mead',
@@ -341,8 +341,8 @@ class StructureAligner:
         # Run optimization
         result = differential_evolution(
             objective_function,
-            bounds=bounds,
-            **options
+            bounds=bounds,  # type: ignore[arg-type]
+            **options  # type: ignore[arg-type]
         )
         
         if not result.success:

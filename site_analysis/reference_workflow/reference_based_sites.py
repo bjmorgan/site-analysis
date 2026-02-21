@@ -356,7 +356,7 @@ class ReferenceBasedSites:
                 f"Failed to map coordination environments{species_str}: {str(e)}"
             ) from e
             
-    def _initialise_site_factory(self):
+    def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.
         
         Note: This method exists primarily for testing purposes.

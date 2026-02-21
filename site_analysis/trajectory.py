@@ -43,7 +43,7 @@ from .atom import Atom
 from typing import Sequence
 from pymatgen.core import Structure
 
-class Trajectory(object):
+class Trajectory:
     """Class for performing sites analysis on simulation trajectories."""
 
     def __init__(self,

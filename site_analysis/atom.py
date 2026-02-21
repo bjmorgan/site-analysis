@@ -22,7 +22,7 @@ import numpy as np
 from pymatgen.core import Structure
 from typing import Any
 
-class Atom(object):
+class Atom:
     """Represents a single persistent atom during a simulation.
 
     Attributes:

@@ -233,7 +233,7 @@ def atoms_from_structure(
         if s.species_string in species_string
     ]
     for atom in atoms:
-        atom._frac_coords = structure[atom.index].frac_coords
+        atom.assign_coords(structure)
     return atoms
 
 def atoms_from_indices(

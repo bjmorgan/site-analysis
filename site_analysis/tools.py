@@ -323,9 +323,6 @@ def site_index_mapping(structure1: Structure,
         species2 = [species2]
     if species2 is None:
         species2 = list(set([site.species_string for site in structure2]))
-    assert(isinstance(species1, list))
-    assert(isinstance(species2, list))
-    
     structure2_mask = np.array([site.species_string in species2 for site in structure2])
     lattice = structure1.lattice
     dr_ij = np.array(lattice.get_all_distances(structure1.frac_coords, structure2.frac_coords))

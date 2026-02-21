@@ -193,7 +193,6 @@ class Trajectory(object):
         """
         self.analyse_structure(structure)
         for atom in self.atoms:
-            # assert(isinstance(atom.in_site, int))
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)

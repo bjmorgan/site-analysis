@@ -49,8 +49,6 @@ class Atom(object):
                 in analysed structures.
             species_string: String identifying the chemical species of this atom.
         
-        Returns:
-            None
         """
         self.index = index
         self.in_site: int | None = None

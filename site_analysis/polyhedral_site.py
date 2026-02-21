@@ -245,7 +245,7 @@ class PolyhedralSite(Site):
         the sign of the surface normal for each face with respect to each point.
 
         Args:
-            x (np.array): Fractional coordinates for one or more points, as a
+            x_list (np.array): Fractional coordinates for one or more points, as a
                 (3x1) or (3xN) numpy array.
 
         Returns:

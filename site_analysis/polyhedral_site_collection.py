@@ -187,10 +187,10 @@ def construct_neighbouring_sites(
     to share a face.
 
     Args:
-        None
+        sites: List of PolyhedralSite objects to check for shared faces.
 
     Returns:
-        (dict): Dictionary of `int`: `list` entries. 
+        (dict): Dictionary of `int`: `list` entries.
             Keys are site indices. Values are lists of ``PolyhedralSite`` objects.
 
     """

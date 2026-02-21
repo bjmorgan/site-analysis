@@ -64,7 +64,7 @@ class Site(ABC):
         Args:
             label (`str`: optional): Optional string used to label this site.
 
-        Retuns:
+        Returns:
             None
 
         """
@@ -193,7 +193,7 @@ class Site(ABC):
         """Reset the site index counter.
 
         Args:
-            newid (`int`: optional): New starting index. Default is 1.
+            newid (`int`: optional): New starting index. Default is 0.
 
         Returns:
             None

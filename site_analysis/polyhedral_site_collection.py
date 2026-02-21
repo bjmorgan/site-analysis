@@ -173,7 +173,8 @@ class PolyhedralSiteCollection(SiteCollection):
             (bool)
 
         """
-        assert isinstance(structure, Structure)
+        if not isinstance(structure, Structure):
+            raise TypeError(f"Expected a Structure, got {type(structure).__name__}")
         check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
         return check
 

@@ -319,7 +319,8 @@ class PolyhedralSite(Site):
             (np.array): (3,) numpy array.
  
         """
-        assert isinstance(self.vertex_coords, np.ndarray)
+        if self.vertex_coords is None:
+            raise RuntimeError("Vertex coordinates have not been assigned.")
         centre_coords = np.mean(self.vertex_coords, axis=0)
         return np.array(centre_coords) 
 

@@ -82,10 +82,9 @@ class Trajectory(object):
             DynamicVoronoiSite: DynamicVoronoiSiteCollection
         }
         
-        site_type = type(sites[0])
         # Find the appropriate site collection class
-        for site_type, collection_class in site_collection_map.items():
-            if isinstance(sites[0], site_type):
+        for registered_type, collection_class in site_collection_map.items():
+            if isinstance(sites[0], registered_type):
                 self.site_collection = collection_class(sites)
                 break
         else:  # This executes if no break occurs in the for loop
@@ -198,7 +197,7 @@ class Trajectory(object):
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)
-        if t:
+        if t is not None:
             self.timesteps.append(t)
 
     def reset(self) -> None:

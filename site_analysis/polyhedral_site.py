@@ -69,8 +69,7 @@ class PolyhedralSite(Site):
         
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
-        print(vertex_indices)
-        
+
         if not all(isinstance(idx, int) for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")
         
@@ -270,7 +269,7 @@ class PolyhedralSite(Site):
                 c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
                 p_sign = np.sign(np.dot( surface_normal, x-f[0]))
                 dotsum += c_sign * p_sign
-                inside.append(dotsum == len(faces))
+            inside.append(dotsum == len(faces))
         return any(inside)
 
     def contains_atom(self,

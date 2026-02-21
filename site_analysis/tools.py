@@ -90,7 +90,7 @@ def get_coordination_indices(
         neighbors = []
         for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
             if neighbor.species_string in coordination_species:
-                neighbors.append((int(neighbor.index), int(neighbor.nn_distance)))
+                neighbors.append((int(neighbor.index), neighbor.nn_distance))
         
         # Only include environments with exactly the required number of coordinating atoms
         if len(neighbors) == required:
@@ -251,7 +251,7 @@ def x_pbc(x: np.ndarray):
         x (np.array): Input fractional coordinates.
 
     Returns:
-        np.array: (9,3) numpy array of all mapped fractional coordinates, including the
+        np.array: (8,3) numpy array of all mapped fractional coordinates, including the
                   original coordinates in the origin calculation cell.
 
     Example:

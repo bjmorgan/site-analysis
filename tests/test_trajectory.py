@@ -201,6 +201,11 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertEqual(len(self.site2.trajectory), 1)
         self.assertEqual(self.site2.trajectory[0], [1])  # Contains atom 1
     
+    def test_append_timestep_with_t_zero(self):
+        """Test that append_timestep records timestep t=0."""
+        self.trajectory.append_timestep(self.structure, t=0)
+        self.assertEqual(self.trajectory.timesteps, [0])
+
     def test_reset(self):
         """Test that reset correctly clears the trajectory."""
         # Setup with a timestep

@@ -148,7 +148,7 @@ class SiteCollection(ABC):
         previous_site_index = None
         if atom.trajectory:
             previous_site_index = atom.trajectory[-1]
-        if previous_site_index:
+        if previous_site_index is not None:
             if previous_site_index != site.index: # this atom has moved
                 previous_site = self.site_by_index(previous_site_index)
                 previous_site.transitions[site.index] += 1

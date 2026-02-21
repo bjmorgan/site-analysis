@@ -141,7 +141,8 @@ class Atom(object):
             atom.in_site = int(d["in_site"])
         else:
             atom.in_site = None
-        atom._frac_coords = np.array(d["frac_coords"])
+        if "frac_coords" in d:
+            atom._frac_coords = np.array(d["frac_coords"])
         return atom
 
     def to(self,

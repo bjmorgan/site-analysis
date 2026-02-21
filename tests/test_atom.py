@@ -327,6 +327,24 @@ class AtomSerialisationTestCase(unittest.TestCase):
         self.assertEqual(atom.species_string, "Li")
         np.testing.assert_array_equal(atom._frac_coords, [0.1, 0.2, 0.3])
 
+    def test_from_dict_without_frac_coords(self):
+        """Test from_dict handles missing frac_coords key."""
+        atom_dict = {
+            "index": 3,
+            "in_site": None,
+        }
+        atom = Atom.from_dict(atom_dict)
+        self.assertEqual(atom.index, 3)
+        self.assertIsNone(atom._frac_coords)
+
+    def test_as_dict_from_dict_round_trip_without_frac_coords(self):
+        """Test round-trip serialisation when frac_coords is None."""
+        atom = Atom(index=7)
+        d = atom.as_dict()
+        restored = Atom.from_dict(d)
+        self.assertEqual(restored.index, 7)
+        self.assertIsNone(restored._frac_coords)
+
     def test_from_dict_handles_none_values(self):
         """Test from_dict handles None values correctly."""
         atom_dict = {

@@ -509,6 +509,29 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
             self.assertIn(center_idx, environments)
             self.assertEqual(len(environments[center_idx]), 0)
 
+    def test_neighbours_sorted_by_distance(self):
+        """Test that returned neighbour indices are sorted by distance."""
+        # Distances: Cl at 1.8 A, 1.2 A, 1.5 A — all truncate to 1 with int()
+        structure = Structure(
+            lattice=Lattice.cubic(10.0),
+            species=["Na", "Cl", "Cl", "Cl"],
+            coords=[
+                [0.0, 0.0, 0.0],   # Na
+                [0.18, 0.0, 0.0],  # Cl - 1.8 A
+                [0.12, 0.0, 0.0],  # Cl - 1.2 A
+                [0.15, 0.0, 0.0],  # Cl - 1.5 A
+            ]
+        )
+        environments = get_coordination_indices(
+            structure,
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=2.0,
+            n_coord=3
+        )
+        # Should be sorted by distance: 1.2, 1.5, 1.8
+        self.assertEqual(environments[0], [2, 3, 1])
+
     def test_cutoff_sensitivity(self):
         """Test sensitivity to cutoff distance."""
         # Test with distance gradient structure at different cutoffs

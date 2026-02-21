@@ -198,7 +198,7 @@ class Trajectory(object):
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)
-        if t:
+        if t is not None:
             self.timesteps.append(t)
 
     def reset(self) -> None:

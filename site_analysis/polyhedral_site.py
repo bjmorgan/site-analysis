@@ -69,8 +69,7 @@ class PolyhedralSite(Site):
         
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
-        print(vertex_indices)
-        
+
         if not all(isinstance(idx, int) for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")
         

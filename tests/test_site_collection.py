@@ -99,6 +99,22 @@ class SiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(atom.in_site, sites[0].index)
         self.assertEqual(sites[1].transitions, {12: 1})
   
+    def test_update_occupation_records_transition_from_site_index_zero(self):
+        """Test that transitions from site index 0 are recorded."""
+        sites = [Mock(spec=Site), Mock(spec=Site)]
+        sites[0].index = 0
+        sites[0].transitions = Counter()
+        sites[1].index = 1
+        sites[1].contains_atoms = []
+        sites[1].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 4
+        atom.trajectory = [0]  # was in site 0
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[1], atom=atom)
+        self.assertEqual(sites[0].transitions, {1: 1})
+
     def test_reset_site_occupations(self):
         sites = [Mock(spec=Site, index=0), 
                  Mock(spec=Site, index=1)]

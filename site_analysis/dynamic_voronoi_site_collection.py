@@ -59,7 +59,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             if not isinstance(s, DynamicVoronoiSite):
                 raise TypeError("All sites must be DynamicVoronoiSite instances")
         super(DynamicVoronoiSiteCollection, self).__init__(sites)
-        self.sites = self.sites  # type: list[DynamicVoronoiSite]
+        self.sites: list[DynamicVoronoiSite]
         
     def analyse_structure(self,
                           atoms: list[Atom],

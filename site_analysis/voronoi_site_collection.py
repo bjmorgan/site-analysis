@@ -45,7 +45,7 @@ class VoronoiSiteCollection(SiteCollection):
             if not isinstance(s, VoronoiSite):
                 raise TypeError
         super(VoronoiSiteCollection, self).__init__(sites)
-        self.sites = self.sites # type: list[VoronoiSite]
+        self.sites: list[VoronoiSite]
 
     def analyse_structure(self,
                           atoms: list[Atom],

@@ -64,7 +64,7 @@ class PolyhedralSiteCollection(SiteCollection):
             if not isinstance(s, PolyhedralSite):
                 raise TypeError
         super(PolyhedralSiteCollection, self).__init__(sites)
-        self.sites = self.sites # type: list[PolyhedralSite]
+        self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
 
     def analyse_structure(self,

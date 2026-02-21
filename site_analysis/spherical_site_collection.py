@@ -67,7 +67,7 @@ class SphericalSiteCollection(SiteCollection):
             if not isinstance(s, SphericalSite):
                 raise TypeError
         super(SphericalSiteCollection, self).__init__(sites)
-        self.sites = self.sites  # type: list[SphericalSite]
+        self.sites: list[SphericalSite]
         self._neighbouring_sites: dict[int, list[SphericalSite]] | None = None
         self._current_lattice: Lattice | None = None
         self._neighbour_cutoff = neighbour_cutoff

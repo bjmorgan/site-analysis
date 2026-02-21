@@ -251,7 +251,7 @@ def x_pbc(x: np.ndarray):
         x (np.array): Input fractional coordinates.
 
     Returns:
-        np.array: (9,3) numpy array of all mapped fractional coordinates, including the
+        np.array: (8,3) numpy array of all mapped fractional coordinates, including the
                   original coordinates in the origin calculation cell.
 
     Example:

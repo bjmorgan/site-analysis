@@ -10,7 +10,7 @@
 
 `site-analysis` is a Python module for analysing molecular dynamics simulations of solid-state ion transport, by assigning positions of mobile ions to specific &ldquo;sites&rdquo; within the host structure.
 
-The code is built on top of [`pymatgen`](https://pymatgen.org) and takes VASP XDATCAR files as molecular dynamics trajectory inputs.
+The code is built on top of [`pymatgen`](https://pymatgen.org) and operates on molecular dynamics trajectories represented as lists of pymatgen `Structure` objects. Any trajectory source that can produce pymatgen structures can be used as input.
 
 The code can use the following definitions for assigning mobile ions to sites:
 1. **Spherical cutoff**: Atoms occupy a site if they lie within a spherical cutoff from a fixed position.
@@ -24,10 +24,9 @@ The code can use the following definitions for assigning mobile ions to sites:
 from site_analysis.builders import TrajectoryBuilder
 from pymatgen.io.vasp import Xdatcar
 
-# Load MD trajectory from VASP XDATCAR file
-# (This example uses the provided example_data/XDATCAR file.
-#  For your own analysis, replace with your trajectory file path
-#  and adjust the mobile species and site definitions accordingly.)
+# Load MD trajectory as a list of pymatgen Structure objects.
+# Here we load from a VASP XDATCAR file, but any source of
+# pymatgen Structure objects can be used as input.
 xdatcar = Xdatcar("example_data/XDATCAR")
 md_structures = xdatcar.structures
 
@@ -89,3 +88,7 @@ python -m unittest discover
 ```
 
 The code requires Python 3.10 or above.
+
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

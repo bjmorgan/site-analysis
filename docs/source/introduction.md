@@ -4,7 +4,7 @@
 
 `site-analysis` is a Python module for analyzing molecular dynamics simulations of solid-state ionic transport by assigning mobile ions to discrete "sites" within host structures.
 
-The package is built on top of [pymatgen](https://pymatgen.org/) and processes molecular dynamics trajectory data, with particular support for VASP `XDATCAR` format files.
+The package is built on top of [pymatgen](https://pymatgen.org/) and operates on molecular dynamics trajectories represented as lists of pymatgen `Structure` objects. Any trajectory source that can produce pymatgen structures can be used as input.
 
 ## Context
 

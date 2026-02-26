@@ -7,4 +7,6 @@ site_analysis.egg-info
 **/*.swp
 build
 dist
-
+/*.md
+!/CONTRIBUTING.md
+!/README.md

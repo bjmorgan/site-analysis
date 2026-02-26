@@ -3,7 +3,6 @@
 <img src='https://github.com/bjmorgan/site-analysis/blob/main/logo/site-analysis-logo.png' width='180'>
 
 ![Build Status](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/bjmorgan/site-analysis/badge.svg?branch=main)](https://coveralls.io/github/bjmorgan/site-analysis?branch=main)
 [![Documentation Status](https://readthedocs.org/projects/site-analysis/badge/?version=latest)](https://site-analysis.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/site-analysis.svg)](https://badge.fury.io/py/site-analysis)
 [![status](https://joss.theoj.org/papers/0a447aeb167964e77c8d381f7d1db89a/status.svg)](https://joss.theoj.org/papers/0a447aeb167964e77c8d381f7d1db89a)

@@ -5,7 +5,6 @@
 The code is built on top of [pymatgen](https://pymatgen.org) and operates on molecular dynamics trajectories represented as lists of pymatgen `Structure` objects. Any trajectory source that can produce pymatgen structures can be used as input.
 
 [![Build Status](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml/badge.svg)](https://github.com/bjmorgan/site-analysis/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/bjmorgan/site-analysis/badge.svg?branch=main)](https://coveralls.io/github/bjmorgan/site-analysis?branch=main)
 [![PyPI version](https://badge.fury.io/py/site-analysis.svg)](https://badge.fury.io/py/site-analysis)
 [![status](https://joss.theoj.org/papers/0a447aeb167964e77c8d381f7d1db89a/status.svg)](https://joss.theoj.org/papers/0a447aeb167964e77c8d381f7d1db89a)
 

@@ -84,6 +84,8 @@ class PolyhedralSite(Site):
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
         self._pending_lattice: Lattice | None = None
+        self._pbc_image_shifts: np.ndarray | None = None
+        self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
 
     def __repr__(self) -> str:
@@ -198,12 +200,35 @@ class PolyhedralSite(Site):
     def _store_vertex_coords(self,
             frac_coords: np.ndarray,
             lattice: Lattice) -> None:
-        """Apply PBC correction and store vertex coordinates."""
+        """Apply PBC correction and store vertex coordinates.
+
+        Caches the integer PBC image shifts so that subsequent frames
+        can skip the expensive 27-image distance search when no vertex
+        has undergone a large displacement (> 0.5 fractional).
+        """
+        if self._pbc_image_shifts is not None:
+            diff = frac_coords - self._pbc_cached_raw_frac
+            if np.all(np.abs(diff) < 0.5):
+                # No large displacement — apply cached shifts
+                shifted = frac_coords + self._pbc_image_shifts
+                min_coords = np.min(shifted, axis=0)
+                uniform = np.maximum(0, np.ceil(-min_coords))
+                self.vertex_coords = shifted + uniform
+                self._delaunay = None
+                self._cache_stale = True
+                return
+
+        # Full computation — either first call or cache invalidated
         if self.reference_center is not None:
-            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, lattice)
+            corrected, image_shifts = unwrap_vertices_to_reference_center(
+                frac_coords, self.reference_center, lattice,
+                return_image_shifts=True)
         else:
-            frac_coords = apply_legacy_pbc_correction(frac_coords)
-        self.vertex_coords = frac_coords
+            corrected = apply_legacy_pbc_correction(frac_coords)
+            image_shifts = np.round(corrected - frac_coords).astype(int)
+        self._pbc_image_shifts = image_shifts
+        self._pbc_cached_raw_frac = frac_coords.copy()
+        self.vertex_coords = corrected
         self._delaunay = None
         self._cache_stale = True
 

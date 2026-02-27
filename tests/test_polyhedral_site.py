@@ -486,7 +486,10 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=reference_center)
 
         with patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = np.array([[0.1, 0.1, 0.1]])
+            mock_unwrap.return_value = (
+                np.array([[0.1, 0.1, 0.1]]),
+                np.array([[0, 0, 0]]),
+            )
 
             site.assign_vertex_coords(structure)
 

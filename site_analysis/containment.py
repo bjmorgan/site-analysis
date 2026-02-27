@@ -213,7 +213,15 @@ class FaceTopologyCache:
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
                 Used to build a ConvexHull and extract face connectivity.
+
+        Raises:
+            RuntimeError: If numba is not installed.
         """
+        if not HAS_NUMBA:
+            raise RuntimeError(
+                "FaceTopologyCache requires numba. "
+                "Install it with: pip install site-analysis[fast]"
+            )
         hull = ConvexHull(vertex_coords)
         self.face_simplices: np.ndarray = hull.simplices
         self._face_normals: np.ndarray | None = None

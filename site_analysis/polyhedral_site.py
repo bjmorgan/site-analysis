@@ -285,7 +285,7 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        if structure:
+        if structure is not None:
             self.assign_vertex_coords(structure)
         elif self._pending_frac_coords is not None and self._pending_lattice is not None:
             self._assign_from_pending(self._pending_frac_coords, self._pending_lattice)

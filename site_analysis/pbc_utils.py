@@ -77,6 +77,8 @@ def unwrap_vertices_to_reference_center(
         returns a tuple of (unwrapped_coords, image_shifts).
     """
     if frac_coords.size == 0:
+        if return_image_shifts:
+            return frac_coords, np.zeros((0, 3), dtype=int)
         return frac_coords
 
     n_vertices = len(frac_coords)

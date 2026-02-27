@@ -203,13 +203,17 @@ class PolyhedralSite(Site):
         """Apply PBC correction and store vertex coordinates.
 
         Caches the integer PBC image shifts so that subsequent frames
-        can skip the expensive 27-image distance search when no vertex
-        has undergone a large displacement (> 0.5 fractional).
+        can skip the expensive 27-image distance search. When raw
+        coordinates wrap across a periodic boundary (jump of ~1.0),
+        the cached shifts are adjusted rather than recomputed.
         """
         if self._pbc_image_shifts is not None:
             diff = frac_coords - self._pbc_cached_raw_frac
-            if np.all(np.abs(diff) < 0.5):
-                # No large displacement — apply cached shifts
+            wrapping = np.round(diff).astype(int)
+            physical_diff = diff - wrapping
+            if np.all(np.abs(physical_diff) < 0.3):
+                self._pbc_image_shifts = self._pbc_image_shifts - wrapping
+                self._pbc_cached_raw_frac = frac_coords.copy()
                 shifted = frac_coords + self._pbc_image_shifts
                 min_coords = np.min(shifted, axis=0)
                 uniform = np.maximum(0, np.ceil(-min_coords))
@@ -218,7 +222,7 @@ class PolyhedralSite(Site):
                 self._cache_stale = True
                 return
 
-        # Full computation — either first call or cache invalidated
+        # Full computation — first call only (or after anomalous displacement)
         if self.reference_center is not None:
             corrected, image_shifts = unwrap_vertices_to_reference_center(
                 frac_coords, self.reference_center, lattice,

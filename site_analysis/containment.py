@@ -24,6 +24,63 @@ except ImportError:
 
 if HAS_NUMBA:
     @numba.njit(cache=True)  # type: ignore[misc]
+    def _numba_update_faces(
+        vertex_coords: np.ndarray,
+        face_simplices: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """JIT-compiled face normal and centre sign computation.
+
+        Args:
+            vertex_coords: (N_vertices, 3) array of vertex positions.
+            face_simplices: (N_faces, 3) array of vertex indices per face.
+
+        Returns:
+            Tuple of (face_normals, face_ref_points, centre_signs).
+        """
+        n_faces = face_simplices.shape[0]
+        n_vertices = vertex_coords.shape[0]
+        face_normals = np.empty((n_faces, 3))
+        face_ref_points = np.empty((n_faces, 3))
+        centre_signs = np.empty(n_faces)
+
+        centre = np.zeros(3)
+        for i in range(n_vertices):
+            for k in range(3):
+                centre[k] += vertex_coords[i, k]
+        for k in range(3):
+            centre[k] /= n_vertices
+
+        for j in range(n_faces):
+            i0 = face_simplices[j, 0]
+            i1 = face_simplices[j, 1]
+            i2 = face_simplices[j, 2]
+
+            # Edge vectors from vertex 2
+            e0x = vertex_coords[i0, 0] - vertex_coords[i2, 0]
+            e0y = vertex_coords[i0, 1] - vertex_coords[i2, 1]
+            e0z = vertex_coords[i0, 2] - vertex_coords[i2, 2]
+            e1x = vertex_coords[i1, 0] - vertex_coords[i2, 0]
+            e1y = vertex_coords[i1, 1] - vertex_coords[i2, 1]
+            e1z = vertex_coords[i1, 2] - vertex_coords[i2, 2]
+
+            # Cross product
+            face_normals[j, 0] = e0y * e1z - e0z * e1y
+            face_normals[j, 1] = e0z * e1x - e0x * e1z
+            face_normals[j, 2] = e0x * e1y - e0y * e1x
+
+            # Reference point (first vertex of face)
+            for k in range(3):
+                face_ref_points[j, k] = vertex_coords[i0, k]
+
+            # Centre sign
+            dot = 0.0
+            for k in range(3):
+                dot += face_normals[j, k] * (centre[k] - face_ref_points[j, k])
+            centre_signs[j] = np.sign(dot)
+
+        return face_normals, face_ref_points, centre_signs
+
+    @numba.njit(cache=True)  # type: ignore[misc]
     def _numba_sn_query(
         x_pbc_points: np.ndarray,
         face_normals: np.ndarray,
@@ -97,18 +154,9 @@ class FaceTopologyCache:
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
         """
-        faces = vertex_coords[self.face_simplices]  # (N_faces, 3, 3)
-        self._face_normals = np.ascontiguousarray(
-            np.cross(
-                faces[:, 0] - faces[:, 2],
-                faces[:, 1] - faces[:, 2],
-            )
-        )  # (N_faces, 3)
-        centre = np.mean(vertex_coords, axis=0)
-        self._face_ref_points = np.ascontiguousarray(faces[:, 0])  # (N_faces, 3)
-        self._centre_signs = np.sign(
-            np.sum(self._face_normals * (centre - self._face_ref_points), axis=1)
-        )  # (N_faces,)
+        self._face_normals, self._face_ref_points, self._centre_signs = (
+            _numba_update_faces(vertex_coords, self.face_simplices)
+        )
 
     def contains_point(self, x_pbc_points: np.ndarray) -> bool:
         """Test whether any PBC image point is inside the polyhedron.

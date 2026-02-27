@@ -228,9 +228,9 @@ class FaceTopologyCache:
             )
         hull = ConvexHull(vertex_coords)
         self.face_simplices: np.ndarray = hull.simplices
-        self._face_normals: np.ndarray | None = None
-        self._face_ref_points: np.ndarray | None = None
-        self._centre_signs: np.ndarray | None = None
+        self._face_normals: np.ndarray
+        self._face_ref_points: np.ndarray
+        self._centre_signs: np.ndarray
         self.update(vertex_coords)
 
     def update(self, vertex_coords: np.ndarray) -> None:

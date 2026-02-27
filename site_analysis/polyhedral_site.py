@@ -227,7 +227,7 @@ class PolyhedralSite(Site):
             lattice: Lattice for Cartesian distance calculations
                 (used only on full recomputation with reference centres).
         """
-        if self._pbc_image_shifts is not None:
+        if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
             valid, vertex_coords, new_shifts = update_pbc_shifts(
                 frac_coords, self._pbc_cached_raw_frac, self._pbc_image_shifts)
             if valid:

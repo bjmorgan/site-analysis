@@ -181,18 +181,14 @@ This approach is useful when you have pre-identified coordination environments o
 
 ### Limitations
 - More complex to define than spherical/Voronoi sites
-- Computationally intensive containment calculations
+- Containment calculations are more expensive than spherical/Voronoi sites (mitigated with numba; see below)
 - May not fill space completely in all structures
 - Requires well-defined coordination environments
 
 ## Containment Algorithms
 
-The package offers two algorithms for determining if a point is inside a polyhedron:
+The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached face topology is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:
 
-```python
-# The default 'simplex' algorithm is recommended
-site.contains_point(position, structure, algo='simplex')  # Uses Delaunay tessellation
-site.contains_point(position, structure, algo='sn')       # Surface normal method
+```bash
+pip install site-analysis[fast]  # installs numba
 ```
-
-The builder uses the default algorithm automatically.

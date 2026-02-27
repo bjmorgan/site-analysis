@@ -1,14 +1,12 @@
-"""Polyhedral containment algorithms with optional numba acceleration.
+"""Optional numba acceleration for polyhedral site analysis.
 
-Provides a cached surface normal method for point-in-polyhedron testing.
-Face topology (which vertex triples form each face) is computed once from
-an initial ``ConvexHull`` and reused across timesteps. Per-timestep, only
-face normals and reference signs are recomputed from updated vertex
-coordinates.
+Provides JIT-compiled routines for containment testing and PBC shift
+updates, with pure-numpy fallbacks when numba is not installed.
 
-When numba is available, the containment query is JIT-compiled with
-early-exit logic for maximum throughput. Otherwise, the caller should
-fall back to Delaunay tessellation (handled in ``PolyhedralSite``).
+When numba is available, ``update_pbc_shifts`` and
+``FaceTopologyCache`` use JIT-compiled implementations. Otherwise,
+``update_pbc_shifts`` falls back to numpy and the caller should use
+Delaunay tessellation for containment (handled in ``PolyhedralSite``).
 """
 
 from __future__ import annotations
@@ -117,6 +115,83 @@ if HAS_NUMBA:
             if all_match:
                 return True
         return False
+
+
+def _numpy_update_pbc_shifts(
+    frac_coords: np.ndarray,
+    cached_raw_frac: np.ndarray,
+    image_shifts: np.ndarray,
+) -> tuple[bool, np.ndarray, np.ndarray]:
+    """Update cached PBC image shifts using numpy.
+
+    Args:
+        frac_coords: (n, 3) new raw fractional coordinates.
+        cached_raw_frac: (n, 3) previous raw fractional coordinates.
+        image_shifts: (n, 3) int, current cached image shifts.
+
+    Returns:
+        Tuple of (cache_valid, new_vertex_coords, new_image_shifts).
+        If cache_valid is False, the other values are undefined.
+    """
+    diff = frac_coords - cached_raw_frac
+    wrapping = np.round(diff).astype(np.int64)
+    physical_diff = diff - wrapping
+    if not np.all(np.abs(physical_diff) < 0.3):
+        return False, frac_coords, image_shifts
+    new_shifts = image_shifts - wrapping
+    shifted = frac_coords + new_shifts
+    min_coords = np.min(shifted, axis=0)
+    uniform = np.maximum(0, np.ceil(-min_coords))
+    return True, shifted + uniform, new_shifts
+
+
+if HAS_NUMBA:
+    @numba.njit(cache=True)  # type: ignore[misc]
+    def _numba_update_pbc_shifts(
+        frac_coords: np.ndarray,
+        cached_raw_frac: np.ndarray,
+        image_shifts: np.ndarray,
+    ) -> tuple[bool, np.ndarray, np.ndarray]:
+        """JIT-compiled PBC image shift update with early exit.
+
+        Args:
+            frac_coords: (n, 3) new raw fractional coordinates.
+            cached_raw_frac: (n, 3) previous raw fractional coordinates.
+            image_shifts: (n, 3) int, current cached image shifts.
+
+        Returns:
+            Tuple of (cache_valid, new_vertex_coords, new_image_shifts).
+            If cache_valid is False, the other values are undefined.
+        """
+        n = frac_coords.shape[0]
+        new_shifts = np.empty((n, 3), dtype=np.int64)
+        for i in range(n):
+            for k in range(3):
+                diff = frac_coords[i, k] - cached_raw_frac[i, k]
+                w = int(np.round(diff))
+                physical = diff - w
+                if physical >= 0.3 or physical <= -0.3:
+                    return False, frac_coords, image_shifts
+                new_shifts[i, k] = image_shifts[i, k] - w
+        shifted = np.empty((n, 3))
+        for i in range(n):
+            for k in range(3):
+                shifted[i, k] = frac_coords[i, k] + new_shifts[i, k]
+        for k in range(3):
+            min_val = shifted[0, k]
+            for i in range(1, n):
+                if shifted[i, k] < min_val:
+                    min_val = shifted[i, k]
+            u = 0.0
+            if min_val < 0.0:
+                u = np.ceil(-min_val)
+            for i in range(n):
+                shifted[i, k] += u
+        return True, shifted, new_shifts
+
+    update_pbc_shifts = _numba_update_pbc_shifts
+else:
+    update_pbc_shifts = _numpy_update_pbc_shifts
 
 
 class FaceTopologyCache:

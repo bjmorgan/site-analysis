@@ -17,7 +17,7 @@ from pymatgen.core import Lattice, Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
-from site_analysis.containment import HAS_NUMBA, FaceTopologyCache
+from site_analysis.containment import HAS_NUMBA, FaceTopologyCache, update_pbc_shifts
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 from typing import Any
 
@@ -154,11 +154,9 @@ class PolyhedralSite(Site):
             lattice: Lattice) -> None:
         """Mark vertex coordinates as stale for lazy reassignment.
 
-        Stores pre-extracted coordinate data so that PBC-corrected vertex
-        coordinates can be computed on demand when ``contains_point`` is
-        next called. This avoids both redundant PeriodicSite creation
-        (vertices shared across sites are extracted once by the collection)
-        and the PBC correction cost for sites that are never queried.
+        Stores a reference to the full coordinate array so that
+        PBC-corrected vertex coordinates can be computed on demand
+        when ``contains_point`` is next called.
 
         Args:
             all_frac_coords: Full fractional coordinate array from the
@@ -208,16 +206,12 @@ class PolyhedralSite(Site):
         the cached shifts are adjusted rather than recomputed.
         """
         if self._pbc_image_shifts is not None:
-            diff = frac_coords - self._pbc_cached_raw_frac
-            wrapping = np.round(diff).astype(int)
-            physical_diff = diff - wrapping
-            if np.all(np.abs(physical_diff) < 0.3):
-                self._pbc_image_shifts = self._pbc_image_shifts - wrapping
+            valid, vertex_coords, new_shifts = update_pbc_shifts(
+                frac_coords, self._pbc_cached_raw_frac, self._pbc_image_shifts)
+            if valid:
+                self._pbc_image_shifts = new_shifts
                 self._pbc_cached_raw_frac = frac_coords.copy()
-                shifted = frac_coords + self._pbc_image_shifts
-                min_coords = np.min(shifted, axis=0)
-                uniform = np.maximum(0, np.ceil(-min_coords))
-                self.vertex_coords = shifted + uniform
+                self.vertex_coords = vertex_coords
                 self._delaunay = None
                 self._cache_stale = True
                 return

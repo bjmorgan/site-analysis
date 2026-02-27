@@ -357,6 +357,124 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             PolyhedralSite(vertex_indices)
         self.assertIn("vertex_indices cannot be empty", str(context.exception))
               
+class TestNotifyStructureChanged(unittest.TestCase):
+    """Tests for lazy coordinate assignment via notify_structure_changed."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.site = PolyhedralSite(vertex_indices=[1, 3])
+
+    def test_stores_pending_data(self):
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.1, 0.2, 0.3],
+                             [0.5, 0.5, 0.5],
+                             [0.4, 0.4, 0.4]])
+        lattice = Lattice.cubic(10.0)
+        self.site.notify_structure_changed(all_frac, lattice)
+        np.testing.assert_array_equal(self.site._pending_frac_coords, all_frac)
+        self.assertIs(self.site._pending_lattice, lattice)
+
+    def test_contains_point_triggers_assign_from_pending(self):
+        """contains_point flushes pending data before testing."""
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.4, 0.4, 0.4],
+                             [0.4, 0.6, 0.6],
+                             [0.6, 0.6, 0.4],
+                             [0.6, 0.4, 0.6]])
+        lattice = Lattice.cubic(10.0)
+        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+        site.notify_structure_changed(all_frac, lattice)
+        # After contains_point, pending data should be cleared
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        self.assertIsNone(site._pending_frac_coords)
+        self.assertIsNone(site._pending_lattice)
+        self.assertIsNotNone(site.vertex_coords)
+
+    def test_assign_from_pending_uses_vertex_indices(self):
+        """_assign_from_pending extracts the correct rows via vertex_indices."""
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.1, 0.2, 0.3],
+                             [0.5, 0.5, 0.5],
+                             [0.4, 0.4, 0.4]])
+        lattice = Lattice.cubic(10.0)
+        self.site.notify_structure_changed(all_frac, lattice)
+        with patch.object(self.site, '_store_vertex_coords') as mock_store:
+            self.site._assign_from_pending()
+            called_frac = mock_store.call_args[0][0]
+            expected = all_frac[[1, 3]]
+            np.testing.assert_array_equal(called_frac, expected)
+
+
+class TestStoreVertexCoords(unittest.TestCase):
+    """Tests for _store_vertex_coords PBC shift caching."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.lattice = Lattice.cubic(10.0)
+
+    def test_first_call_computes_full_shifts(self):
+        """First call with no cached shifts uses full computation."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.1, 0.1, 0.1],
+                         [0.2, 0.2, 0.2],
+                         [0.3, 0.3, 0.3],
+                         [0.4, 0.4, 0.4]])
+        self.assertIsNone(site._pbc_image_shifts)
+        site._store_vertex_coords(frac, self.lattice)
+        self.assertIsNotNone(site._pbc_image_shifts)
+        self.assertIsNotNone(site.vertex_coords)
+
+    def test_second_call_uses_cached_path(self):
+        """Second call with small displacement uses cached shifts."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice)
+        frac2 = frac1 + 0.005  # small vibration
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy, \
+             patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_not_called()
+            mock_unwrap.assert_not_called()
+
+    def test_large_displacement_falls_through_to_full_computation(self):
+        """Large displacement invalidates cache and recomputes."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice)
+        frac2 = frac1 + 0.4  # large displacement
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction',
+                   return_value=frac2) as mock_legacy:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_called_once()
+
+    def test_wrapping_adjusts_shifts_without_recomputation(self):
+        """Coordinate wrapping (e.g. 0.99 -> 0.01) adjusts cached shifts."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.99, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5]])
+        site._store_vertex_coords(frac1, self.lattice)
+        original_shifts = site._pbc_image_shifts.copy()
+        frac2 = np.array([[0.01, 0.5, 0.5],  # wrapped
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5]])
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy, \
+             patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_not_called()
+            mock_unwrap.assert_not_called()
+        # Shift for vertex 0 should have changed to account for wrapping
+        self.assertEqual(site._pbc_image_shifts[0, 0], original_shifts[0, 0] + 1)
+
+
 def example_structure(species=None):
     if not species:
         species = ['S']*5

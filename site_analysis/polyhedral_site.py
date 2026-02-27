@@ -187,12 +187,18 @@ class PolyhedralSite(Site):
             [structure[i] for i in self.vertex_indices]])
         self._store_vertex_coords(frac_coords, structure.lattice)
 
-    def _assign_from_pending(self) -> None:
-        """Compute PBC-corrected vertex coords from pending data."""
-        frac_coords = self._pending_frac_coords[self.vertex_indices]
-        lattice = self._pending_lattice
+    def _assign_from_pending(self,
+            all_frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Compute PBC-corrected vertex coords from pending data.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array.
+            lattice: Lattice for PBC distance calculations.
+        """
         self._pending_frac_coords = None
         self._pending_lattice = None
+        frac_coords = all_frac_coords[self.vertex_indices]
         self._store_vertex_coords(frac_coords, lattice)
 
     def _store_vertex_coords(self,
@@ -281,8 +287,8 @@ class PolyhedralSite(Site):
             )
         if structure:
             self.assign_vertex_coords(structure)
-        elif self._pending_frac_coords is not None:
-            self._assign_from_pending()
+        elif self._pending_frac_coords is not None and self._pending_lattice is not None:
+            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice)
         if self.vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'

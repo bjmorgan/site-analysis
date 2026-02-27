@@ -1,5 +1,9 @@
 """Utilities for handling periodic boundary conditions."""
 
+from __future__ import annotations
+
+from typing import Literal, overload
+
 import numpy as np
 from pymatgen.core import Lattice
 
@@ -35,6 +39,22 @@ _PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
                                           for dy in [-1, 0, 1] 
                                           for dz in [-1, 0, 1]])
                                         
+@overload
+def unwrap_vertices_to_reference_center(
+    frac_coords: np.ndarray,
+    reference_center: np.ndarray,
+    lattice: Lattice,
+    return_image_shifts: Literal[False] = ...,
+) -> np.ndarray: ...
+
+@overload
+def unwrap_vertices_to_reference_center(
+    frac_coords: np.ndarray,
+    reference_center: np.ndarray,
+    lattice: Lattice,
+    return_image_shifts: Literal[True] = ...,
+) -> tuple[np.ndarray, np.ndarray]: ...
+
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
     reference_center: np.ndarray,
@@ -78,4 +98,4 @@ def unwrap_vertices_to_reference_center(
 
     if return_image_shifts:
         return result, image_shifts
-    return result
+    return np.asarray(result)

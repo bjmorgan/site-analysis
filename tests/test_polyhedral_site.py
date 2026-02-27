@@ -433,9 +433,8 @@ class TestNotifyStructureChanged(unittest.TestCase):
                              [0.5, 0.5, 0.5],
                              [0.4, 0.4, 0.4]])
         lattice = Lattice.cubic(10.0)
-        self.site.notify_structure_changed(all_frac, lattice)
         with patch.object(self.site, '_store_vertex_coords') as mock_store:
-            self.site._assign_from_pending()
+            self.site._assign_from_pending(all_frac, lattice)
             called_frac = mock_store.call_args[0][0]
             expected = all_frac[[1, 3]]
             np.testing.assert_array_equal(called_frac, expected)

@@ -55,6 +55,12 @@ For detailed examples and tutorials, see the [documentation](https://site-analys
 pip install site-analysis
 ```
 
+For faster polyhedral site analysis, install with numba acceleration:
+
+```bash
+pip install site-analysis[fast]
+```
+
 ### Development Installation
 
 For development or to access the latest features:

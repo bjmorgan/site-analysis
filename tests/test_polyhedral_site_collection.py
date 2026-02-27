@@ -298,7 +298,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         
         # Create mock atom with no current site
         mock_atom = Mock(spec=Atom, index=42, in_site=None)
-        
+        mock_atom.frac_coords = np.array([0.5, 0.5, 0.5])
+
         # Mock the most_recent_site property
         most_recent_site_mock = PropertyMock(return_value=5)
         type(mock_atom).most_recent_site = most_recent_site_mock
@@ -449,8 +450,8 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     def test_checks_sites_in_generator_order(self):
         """Test that sites are checked in the order returned by generator."""
         call_order = []
-        self.site1.contains_atom = lambda atom: call_order.append(1) or False
-        self.site2.contains_atom = lambda atom: call_order.append(2) or True
+        self.site1.contains_atom = lambda atom, **kw: call_order.append(1) or False
+        self.site2.contains_atom = lambda atom, **kw: call_order.append(2) or True
         
         with patch.object(self.collection, '_get_priority_sites') as mock_gen:
             mock_gen.return_value = [self.site2, self.site1]  # site2 first

@@ -299,6 +299,42 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                                             [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
+    def test_contains_point_uses_provided_pbc_images(self):
+        """contains_point skips x_pbc when pbc_images is provided."""
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        precomputed = np.array([[0.5, 0.5, 0.5]])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            site.contains_point(np.array([0.5, 0.5, 0.5]), pbc_images=precomputed)
+            mock_x_pbc.assert_not_called()
+
+    def test_contains_point_calls_x_pbc_when_no_pbc_images(self):
+        """contains_point computes x_pbc when pbc_images is not provided."""
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        x = np.array([0.5, 0.5, 0.5])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
+            site.contains_point(x)
+            mock_x_pbc.assert_called_once_with(x)
+
+    def test_contains_atom_forwards_pbc_images(self):
+        """contains_atom passes pbc_images through to contains_point."""
+        atom = Mock(spec=Atom)
+        atom.frac_coords = np.array([0.3, 0.4, 0.5])
+        site = self.site
+        site.contains_point = Mock(return_value=True)
+        precomputed = np.array([[0.3, 0.4, 0.5]])
+        site.contains_atom(atom, pbc_images=precomputed)
+        call_kwargs = site.contains_point.call_args[1]
+        np.testing.assert_array_equal(call_kwargs['pbc_images'], precomputed)
+
     def test_contains_atom_algo_parameter_emits_deprecation_warning(self):
         atom = Mock(spec=Atom)
         atom.frac_coords = np.array([0.3, 0.4, 0.5])

@@ -250,6 +250,7 @@ class PolyhedralSite(Site):
             structure: Structure | None = None,
             algo: str | None = None,
             *args,
+            pbc_images: np.ndarray | None = None,
             **kwargs) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
@@ -264,6 +265,8 @@ class PolyhedralSite(Site):
                 this structure.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
+            pbc_images: Optional pre-computed PBC images of x, shape (N, 3).
+                If provided, skips the internal ``x_pbc`` call.
 
         Returns:
             True if the point is inside the polyhedron.
@@ -284,7 +287,7 @@ class PolyhedralSite(Site):
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
-        x_images = x_pbc(x)
+        x_images = pbc_images if pbc_images is not None else x_pbc(x)
         if HAS_NUMBA:
             if self._face_topology_cache is None:
                 self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
@@ -310,6 +313,7 @@ class PolyhedralSite(Site):
             atom: Atom,
             algo: str | None = None,
             *args: Any,
+            pbc_images: np.ndarray | None = None,
             **kwargs: Any) -> bool:
         """Test whether an atom is inside this polyhedron.
 
@@ -317,6 +321,9 @@ class PolyhedralSite(Site):
             atom: The atom to test.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
+            pbc_images: Optional pre-computed PBC images of the atom's
+                fractional coordinates. If provided, passed through to
+                ``contains_point`` to avoid redundant computation.
 
         Returns:
             True if the atom is inside the polyhedron.
@@ -329,7 +336,7 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return self.contains_point(atom.frac_coords)
+        return self.contains_point(atom.frac_coords, pbc_images=pbc_images)
 
     def as_dict(self) -> dict:
         d = super(PolyhedralSite, self).as_dict()

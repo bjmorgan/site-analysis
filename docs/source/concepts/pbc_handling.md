@@ -38,7 +38,7 @@ The reference centre for each site is the fractional coordinates of the central 
 
 ### Performance Considerations
 
-For some systems the spread-based method can be up to 20% faster than the reference centre method, which may be advantageous when analysing large simulation trajectories. The specific performance characteristics depend on your system&mdash;the number of sites, system size, and coordination environments all influence computational cost. The reference-center method is the default approach when using the {class}`~site_analysis.builders.TrajectoryBuilder` or {class}`~site_analysis.reference_workflow.ReferenceBasedSites` workflows, due to its correctness in small simulation cells. If you are certain that all sites have spreads well below &frac12; the simulation cell dimensions, even under dynamic distortions, you may wish to try the spread-based method (e.g., by setting `use_reference_centers=False`) to compare the relative performance of the two methods.
+Both methods have similar performance. PBC image shifts are cached after the first frame and updated incrementally on subsequent frames, so the initial unwrapping cost is amortised over the trajectory. The reference centre method is the default when using the {class}`~site_analysis.builders.TrajectoryBuilder` or {class}`~site_analysis.reference_workflow.ReferenceBasedSites` workflows, due to its correctness in small simulation cells.
 
 ## Controlling PBC Handling in Your Code
 

@@ -1,11 +1,14 @@
 import unittest
+import warnings
+
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.containment import HAS_NUMBA
 from site_analysis.atom import Atom
 from site_analysis.site import Site
 from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from collections import Counter
-from scipy.spatial import Delaunay, ConvexHull
+from scipy.spatial import Delaunay
 from pymatgen.core import Structure, Lattice
 
 class PolyhedralSiteTestCase(unittest.TestCase):
@@ -48,7 +51,39 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertEqual(site.contains_atoms, [])
         self.assertEqual(site.trajectory, [])
         self.assertEqual(site.transitions, Counter())
-   
+
+    def test_reset_preserves_face_topology_cache(self):
+        site = self.site
+        mock_cache = Mock()
+        site._face_topology_cache = mock_cache
+        site.reset()
+        self.assertIs(site._face_topology_cache, mock_cache)
+
+    def test_reset_clears_pending_state(self):
+        """reset() clears pending fractional coords and lattice."""
+        site = self.site
+        site._pending_frac_coords = np.zeros((4, 3))
+        site._pending_lattice = Lattice.cubic(10.0)
+        site.reset()
+        self.assertIsNone(site._pending_frac_coords)
+        self.assertIsNone(site._pending_lattice)
+
+    def test_reset_clears_pbc_shift_caches(self):
+        """reset() clears PBC image shift caches."""
+        site = self.site
+        site._pbc_image_shifts = np.zeros((4, 3), dtype=int)
+        site._pbc_cached_raw_frac = np.zeros((4, 3))
+        site.reset()
+        self.assertIsNone(site._pbc_image_shifts)
+        self.assertIsNone(site._pbc_cached_raw_frac)
+
+    def test_reset_sets_cache_stale(self):
+        """reset() marks the face topology cache as stale."""
+        site = self.site
+        site._cache_stale = False
+        site.reset()
+        self.assertTrue(site._cache_stale)
+
     def test_delaunay_if_not_already_set(self):
         site = self.site
         vertex_coords = np.array([[0.0, 0.0, 0.0],
@@ -94,21 +129,21 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                 [0.3, 0.3, 0.3],
                 [0.4, 0.4, 0.4]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        
+
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         site._delaunay = 'foo'
-        
+
         with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_pbc:
             # Mock returns the same coordinates (no correction needed)
             expected_frac_coords = np.array(coords)
             mock_pbc.return_value = expected_frac_coords
-            
+
             site.assign_vertex_coords(structure)
-            
+
             # Verify PBC function was called with the raw coordinates
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
-            
+
             # Verify site uses the coordinates and resets Delaunay
             np.testing.assert_array_almost_equal(site.vertex_coords, expected_frac_coords)
             self.assertEqual(site._delaunay, None)
@@ -118,14 +153,14 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         # Create structure with coordinates that span boundaries (need PBC correction)
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1],
-                  [0.9, 0.1, 0.1], 
+                  [0.9, 0.1, 0.1],
                   [0.1, 0.9, 0.9],
                   [0.9, 0.9, 0.9]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        
+
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         site._delaunay = 'foo'
-        
+
         with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_pbc:
             # Mock returns coordinates that have been wrapped across boundaries
             expected_frac_coords = np.array([[1.1, 1.1, 1.1],
@@ -133,13 +168,13 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                              [1.1, 0.9, 0.9],
                                              [0.9, 0.9, 0.9]])
             mock_pbc.return_value = expected_frac_coords
-            
+
             site.assign_vertex_coords(structure)
-            
+
             # Verify PBC function was called with the raw coordinates
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
-            
+
             # Verify site uses the PBC-corrected coordinates and resets Delaunay
             np.testing.assert_array_almost_equal(site.vertex_coords, expected_frac_coords)
             self.assertEqual(site._delaunay, None)
@@ -155,55 +190,91 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             site.contains_point(np.array([0.0, 0.0, 0.0]))
 
-    def test_contains_point_raises_value_error_if_algo_is_not_valid(self):
-        site = self.site
-        with self.assertRaises(ValueError):
-            site.contains_point(np.array([0.0, 0.0, 0.0]), algo='foo')
-
     def test_contains_point_assigns_vertex_coords_if_called_with_structure(self):
         site = self.site
         structure = example_structure()
         site.assign_vertex_coords = Mock()
-        site.vertex_coords = np.array([[0.0, 0.0, 0.0]])
-        site.contains_point_simplex = Mock()
-        x = np.array([0.0, 0.0, 0.0])
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        x = np.array([0.5, 0.5, 0.5])
         with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            site.contains_point(x, structure=structure, algo='simplex')
+            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
+            site.contains_point(x, structure=structure)
             site.assign_vertex_coords.assert_called_with(structure)
-            site.contains_point_simplex.assert_called_once()
             mock_x_pbc.assert_called_once_with(x)
     
-    def test_contains_point_with_algo_simplex(self):
+    def test_contains_point_algo_parameter_emits_deprecation_warning(self):
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
                                        [0.4, 0.6, 0.6],
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
-        site.contains_point_simplex = Mock()
-        x = np.random.random(3)
-        x_pbc = np.array([x])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = x_pbc
-            site.contains_point(x, algo='simplex')
-            mock_x_pbc.assert_called_with(x)
-            site.contains_point_simplex.assert_called_with(x_pbc)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            site.contains_point(np.array([0.5, 0.5, 0.5]), algo='simplex')
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("algo", str(w[0].message))
 
-    def test_contains_point_with_algo_sn(self):
+    def test_contains_point_no_warning_without_algo(self):
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
                                        [0.4, 0.6, 0.6],
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
-        site.contains_point_sn = Mock()
-        x = np.random.random(3)
-        x_pbc = np.array([x])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = x_pbc
-            site.contains_point(x, algo='sn')
-            mock_x_pbc.assert_called_with(x)
-            site.contains_point_sn.assert_called_with(x_pbc)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
+            self.assertEqual(len(w), 0)
 
-    def test_contains_point_simplex_returns_true_if_point_inside_polyhedron(self):
+    @patch('site_analysis.polyhedral_site.HAS_NUMBA', False)
+    def test_contains_point_uses_delaunay_when_numba_unavailable(self):
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        site._face_topology_cache = None
+        site._contains_point_delaunay = Mock(return_value=True)
+        x = np.array([0.5, 0.5, 0.5])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
+            result = site.contains_point(x)
+            site._contains_point_delaunay.assert_called_once()
+            self.assertTrue(result)
+
+    @unittest.skipUnless(HAS_NUMBA, "numba not available")
+    def test_contains_point_uses_cache_when_available(self):
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        mock_cache = Mock()
+        mock_cache.contains_point.return_value = True
+        site._face_topology_cache = mock_cache
+        x = np.array([0.5, 0.5, 0.5])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
+            result = site.contains_point(x)
+            mock_cache.contains_point.assert_called_once()
+            self.assertTrue(result)
+
+    @unittest.skipUnless(HAS_NUMBA, "numba not available")
+    def test_contains_point_creates_cache_lazily(self):
+        """Test that the face topology cache is created on first contains_point call."""
+        site = self.site
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        self.assertIsNone(site._face_topology_cache)
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        self.assertIsNotNone(site._face_topology_cache)
+
+    def test__contains_point_delaunay_returns_true_if_point_inside_polyhedron(self):
         site = self.site
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
@@ -212,10 +283,10 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with patch('site_analysis.polyhedral_site.PolyhedralSite.delaunay',
                    new_callable=PropertyMock) as mock_delaunay:
             mock_delaunay.return_value = Delaunay(points)
-            in_site = site.contains_point_simplex(np.array([0.5, 0.5, 0.5]))
+            in_site = site._contains_point_delaunay(np.array([0.5, 0.5, 0.5]))
             self.assertTrue(in_site)
 
-    def test_contains_point_simplex_returns_false_if_point_outside_polyhedron(self):
+    def test__contains_point_delaunay_returns_false_if_point_outside_polyhedron(self):
         site = self.site
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
@@ -224,10 +295,10 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with patch('site_analysis.polyhedral_site.PolyhedralSite.delaunay',
                    new_callable=PropertyMock) as mock_delaunay:
             mock_delaunay.return_value = Delaunay(points)
-            in_site = site.contains_point_simplex(np.array([0.1, 0.1, 0.1]))
+            in_site = site._contains_point_delaunay(np.array([0.1, 0.1, 0.1]))
             self.assertFalse(in_site)
 
-    def test_contains_point_simplex_returns_false_if_all_points_outside_polyhedron(self):
+    def test__contains_point_delaunay_returns_false_if_all_points_outside_polyhedron(self):
         site = self.site
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
@@ -236,11 +307,11 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with patch('site_analysis.polyhedral_site.PolyhedralSite.delaunay',
                    new_callable=PropertyMock) as mock_delaunay:
             mock_delaunay.return_value = Delaunay(points)
-            in_site = site.contains_point_simplex(np.array([[0.1, 0.1, 0.1],
+            in_site = site._contains_point_delaunay(np.array([[0.1, 0.1, 0.1],
                                                             [0.8, 0.8, 0.9]]))
             self.assertFalse(in_site)
 
-    def test_contains_point_simplex_returns_true_if_one_point_inside_polyhedron(self):
+    def test__contains_point_delaunay_returns_true_if_one_point_inside_polyhedron(self):
         site = self.site
         points = np.array([[0.4, 0.4, 0.4],
                            [0.4, 0.6, 0.6],
@@ -249,103 +320,67 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with patch('site_analysis.polyhedral_site.PolyhedralSite.delaunay',
                    new_callable=PropertyMock) as mock_delaunay:
             mock_delaunay.return_value = Delaunay(points)
-            in_site = site.contains_point_simplex(np.array([[0.1, 0.1, 0.1],
+            in_site = site._contains_point_delaunay(np.array([[0.1, 0.1, 0.1],
                                                             [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
-    def test_contains_point_sn_returns_true_if_point_inside_polyhedron(self):
+    def test_contains_point_uses_provided_pbc_images(self):
+        """contains_point skips x_pbc when pbc_images is provided."""
         site = self.site
-        points = np.array([[0.4, 0.4, 0.4],
-                           [0.4, 0.6, 0.6],
-                           [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]])
-        site.vertex_coords = points
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
-            new_callable=PropertyMock) as mock_centre:
-            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
-            with patch('site_analysis.polyhedral_site.ConvexHull',
-                    autospec=True) as mock_ConvexHull:
-                mock_ConvexHull.return_value = ConvexHull(points)
-                in_site = site.contains_point_sn(np.array([0.5, 0.5, 0.5]))
-                self.assertTrue(in_site)
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        precomputed = np.array([[0.5, 0.5, 0.5]])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            site.contains_point(np.array([0.5, 0.5, 0.5]), pbc_images=precomputed)
+            mock_x_pbc.assert_not_called()
 
-    def test_contains_point_sn_returns_false_if_point_outside_polyhedron(self):
+    def test_contains_point_calls_x_pbc_when_no_pbc_images(self):
+        """contains_point computes x_pbc when pbc_images is not provided."""
         site = self.site
-        points = np.array([[0.4, 0.4, 0.4],
-                           [0.4, 0.6, 0.6],
-                           [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]])
-        site.vertex_coords = points
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
-            new_callable=PropertyMock) as mock_centre:
-            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
-            with patch('site_analysis.polyhedral_site.ConvexHull',
-                    autospec=True) as mock_ConvexHull:
-                mock_ConvexHull.return_value = ConvexHull(points)
-                in_site = site.contains_point_sn(np.array([0.1, 0.1, 0.1]))
-                self.assertFalse(in_site)
+        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
+                                       [0.4, 0.6, 0.6],
+                                       [0.6, 0.6, 0.4],
+                                       [0.6, 0.4, 0.6]])
+        x = np.array([0.5, 0.5, 0.5])
+        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
+            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
+            site.contains_point(x)
+            mock_x_pbc.assert_called_once_with(x)
 
-    def test_contains_point_sn_returns_false_if_all_points_outside_polyhedron(self):
-        site = self.site
-        points = np.array([[0.4, 0.4, 0.4],
-                           [0.4, 0.6, 0.6],
-                           [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]])
-        site.vertex_coords = points
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
-            new_callable=PropertyMock) as mock_centre:
-            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
-            with patch('site_analysis.polyhedral_site.ConvexHull',
-                    autospec=True) as mock_ConvexHull:
-                mock_ConvexHull.return_value = ConvexHull(points)
-                in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                        [0.8, 0.8, 0.9]]))
-                self.assertFalse(in_site)
-
-    def test_contains_point_sn_returns_true_if_one_point_inside_polyhedron(self):
-        site = self.site
-        points = np.array([[0.4, 0.4, 0.4],
-                           [0.4, 0.6, 0.6],
-                           [0.6, 0.6, 0.4],
-                           [0.6, 0.4, 0.6]])
-        site.vertex_coords = points
-        with patch('site_analysis.polyhedral_site.PolyhedralSite.centre',
-            new_callable=PropertyMock) as mock_centre:
-            mock_centre.return_value = np.array([0.5, 0.5, 0.5])
-            with patch('site_analysis.polyhedral_site.ConvexHull',
-                    autospec=True) as mock_ConvexHull:
-                mock_ConvexHull.return_value = ConvexHull(points)
-                in_site = site.contains_point_sn(np.array([[0.1, 0.1, 0.1],
-                                                        [0.5, 0.5, 0.5]]))
-                self.assertTrue(in_site)
-
-    def test_contains_atom_raises_value_error_if_algo_is_invalid(self):
-        atom = Mock(spec=Atom)
-        site = self.site
-        with self.assertRaises(ValueError):
-            site.contains_atom(atom, algo='foo')
-
-    def test_contains_atom_calls_contains_point_if_algo_is_simplex(self):
+    def test_contains_atom_forwards_pbc_images(self):
+        """contains_atom passes pbc_images through to contains_point."""
         atom = Mock(spec=Atom)
         atom.frac_coords = np.array([0.3, 0.4, 0.5])
         site = self.site
-        site.contains_point = Mock(return_value='foo')
-        return_value = site.contains_atom(atom, algo='simplex')
-        self.assertEqual(return_value, 'foo')
-        call = site.contains_point.call_args
-        np.testing.assert_array_equal(call[0][0], atom.frac_coords)
-        self.assertEqual(call[1], {'algo': 'simplex'})
+        site.contains_point = Mock(return_value=True)
+        precomputed = np.array([[0.3, 0.4, 0.5]])
+        site.contains_atom(atom, pbc_images=precomputed)
+        call_kwargs = site.contains_point.call_args[1]
+        np.testing.assert_array_equal(call_kwargs['pbc_images'], precomputed)
 
-    def test_contains_atom_calls_contains_point_if_algo_is_sn(self):
+    def test_contains_atom_algo_parameter_emits_deprecation_warning(self):
         atom = Mock(spec=Atom)
         atom.frac_coords = np.array([0.3, 0.4, 0.5])
         site = self.site
-        site.contains_point = Mock(return_value='foo')
-        return_value = site.contains_atom(atom, algo='sn')
-        self.assertEqual(return_value, 'foo')
+        site.contains_point = Mock(return_value=True)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            site.contains_atom(atom, algo='simplex')
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("algo", str(w[0].message))
+
+    def test_contains_atom_calls_contains_point(self):
+        atom = Mock(spec=Atom)
+        atom.frac_coords = np.array([0.3, 0.4, 0.5])
+        site = self.site
+        site.contains_point = Mock(return_value=True)
+        return_value = site.contains_atom(atom)
+        self.assertTrue(return_value)
         call = site.contains_point.call_args
         np.testing.assert_array_equal(call[0][0], atom.frac_coords)
-        self.assertEqual(call[1], {'algo': 'sn'})
 
     def test_centre(self):
         site = self.site
@@ -383,6 +418,137 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             PolyhedralSite(vertex_indices)
         self.assertIn("vertex_indices cannot be empty", str(context.exception))
               
+class TestNotifyStructureChanged(unittest.TestCase):
+    """Tests for lazy coordinate assignment via notify_structure_changed."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.site = PolyhedralSite(vertex_indices=[1, 3])
+
+    def test_stores_pending_data(self):
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.1, 0.2, 0.3],
+                             [0.5, 0.5, 0.5],
+                             [0.4, 0.4, 0.4]])
+        lattice = Lattice.cubic(10.0)
+        self.site.notify_structure_changed(all_frac, lattice)
+        np.testing.assert_array_equal(self.site._pending_frac_coords, all_frac)
+        self.assertIs(self.site._pending_lattice, lattice)
+
+    def test_contains_point_triggers_assign_from_pending(self):
+        """contains_point flushes pending data before testing."""
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.4, 0.4, 0.4],
+                             [0.4, 0.6, 0.6],
+                             [0.6, 0.6, 0.4],
+                             [0.6, 0.4, 0.6]])
+        lattice = Lattice.cubic(10.0)
+        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+        site.notify_structure_changed(all_frac, lattice)
+        # After contains_point, pending data should be cleared
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        self.assertIsNone(site._pending_frac_coords)
+        self.assertIsNone(site._pending_lattice)
+        self.assertIsNotNone(site.vertex_coords)
+
+    def test_assign_from_pending_uses_vertex_indices(self):
+        """_assign_from_pending extracts the correct rows via vertex_indices."""
+        all_frac = np.array([[0.0, 0.0, 0.0],
+                             [0.1, 0.2, 0.3],
+                             [0.5, 0.5, 0.5],
+                             [0.4, 0.4, 0.4]])
+        lattice = Lattice.cubic(10.0)
+        with patch.object(self.site, '_store_vertex_coords') as mock_store:
+            self.site._assign_from_pending(all_frac, lattice)
+            called_frac = mock_store.call_args[0][0]
+            expected = all_frac[[1, 3]]
+            np.testing.assert_array_equal(called_frac, expected)
+
+
+class TestStoreVertexCoords(unittest.TestCase):
+    """Tests for _store_vertex_coords PBC shift caching."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.lattice = Lattice.cubic(10.0)
+
+    def test_first_call_computes_full_shifts(self):
+        """First call with no cached shifts uses full computation."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.1, 0.1, 0.1],
+                         [0.2, 0.2, 0.2],
+                         [0.3, 0.3, 0.3],
+                         [0.4, 0.4, 0.4]])
+        self.assertIsNone(site._pbc_image_shifts)
+        site._store_vertex_coords(frac, self.lattice)
+        self.assertIsNotNone(site._pbc_image_shifts)
+        self.assertIsNotNone(site.vertex_coords)
+
+    def test_second_call_uses_cached_path(self):
+        """Second call with small displacement uses cached shifts."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice)
+        frac2 = frac1 + 0.005  # small vibration
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy, \
+             patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_not_called()
+            mock_unwrap.assert_not_called()
+
+    def test_large_displacement_falls_through_to_full_computation(self):
+        """Large displacement invalidates cache and recomputes."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice)
+        frac2 = frac1 + 0.4  # large displacement
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction',
+                   return_value=frac2) as mock_legacy:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_called_once()
+
+    def test_wrapping_adjusts_shifts_without_recomputation(self):
+        """Coordinate wrapping (e.g. 0.99 -> 0.01) adjusts cached shifts."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.99, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5]])
+        site._store_vertex_coords(frac1, self.lattice)
+        original_shifts = site._pbc_image_shifts.copy()
+        frac2 = np.array([[0.01, 0.5, 0.5],  # wrapped
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5],
+                          [0.5, 0.5, 0.5]])
+        with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy, \
+             patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            site._store_vertex_coords(frac2, self.lattice)
+            mock_legacy.assert_not_called()
+            mock_unwrap.assert_not_called()
+        # Shift for vertex 0 should have changed to account for wrapping
+        self.assertEqual(site._pbc_image_shifts[0, 0], original_shifts[0, 0] + 1)
+
+    @unittest.skipUnless(HAS_NUMBA, "numba not available")
+    def test_cache_stale_triggers_update_after_store_vertex_coords(self):
+        """After _store_vertex_coords sets _cache_stale, the next
+        contains_point call should update the face topology cache."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.4, 0.4, 0.4],
+                         [0.4, 0.6, 0.6],
+                         [0.6, 0.6, 0.4],
+                         [0.6, 0.4, 0.6]])
+        site._store_vertex_coords(frac, self.lattice)
+        self.assertTrue(site._cache_stale)
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        self.assertFalse(site._cache_stale)
+
+
 def example_structure(species=None):
     if not species:
         species = ['S']*5
@@ -497,25 +663,28 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         """Test that legacy PBC correction is used when reference_center is None."""
         structure = example_structure()
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])  # No reference_center
-        
+
         with patch('site_analysis.polyhedral_site.apply_legacy_pbc_correction') as mock_legacy:
             mock_legacy.return_value = np.array([[0.1, 0.1, 0.1]])
-            
+
             site.assign_vertex_coords(structure)
-            
+
             mock_legacy.assert_called_once()
-            
+
     def test_assign_vertex_coords_uses_reference_center_when_provided(self):
         """Test that reference centre-based unwrapping is used when reference_center is provided."""
         structure = example_structure()
         reference_center = np.array([0.5, 0.5, 0.5])
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=reference_center)
-        
+
         with patch('site_analysis.polyhedral_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = np.array([[0.1, 0.1, 0.1]])
-            
+            mock_unwrap.return_value = (
+                np.array([[0.1, 0.1, 0.1]]),
+                np.array([[0, 0, 0]]),
+            )
+
             site.assign_vertex_coords(structure)
-            
+
             mock_unwrap.assert_called_once()
 
 

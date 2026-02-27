@@ -33,6 +33,7 @@ from .site_collection import SiteCollection
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .site import Site
+from .tools import x_pbc
 from pymatgen.core import Structure # type: ignore
 import numpy as np
 
@@ -72,8 +73,10 @@ class PolyhedralSiteCollection(SiteCollection):
             structure: Structure):
         for a in atoms:
             a.assign_coords(structure)
+        all_frac_coords = structure.frac_coords
+        lattice = structure.lattice
         for s in self.sites:
-            s.assign_vertex_coords(structure)
+            s.notify_structure_changed(all_frac_coords, lattice)
         self.assign_site_occupations(atoms, structure)
                     
     def assign_site_occupations(self, atoms, structure) -> None:
@@ -89,10 +92,11 @@ class PolyhedralSiteCollection(SiteCollection):
         self.reset_site_occupations()
         for atom in atoms:
             atom.in_site = None
-            
+            pbc_images = x_pbc(atom.frac_coords)
+
             # Check sites in priority order until found
             for site in self._get_priority_sites(atom):
-                if site.contains_atom(atom):
+                if site.contains_atom(atom, pbc_images=pbc_images):
                     self.update_occupation(site, atom)
                     break
     

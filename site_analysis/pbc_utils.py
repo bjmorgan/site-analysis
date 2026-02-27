@@ -1,5 +1,9 @@
 """Utilities for handling periodic boundary conditions."""
 
+from __future__ import annotations
+
+from typing import Literal, overload
+
 import numpy as np
 from pymatgen.core import Lattice
 
@@ -22,10 +26,7 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
         periodic boundaries in small unit cells. Consider using reference
         centre-based approaches for robust PBC handling.
     """
-    # Work with a copy to avoid modifying the input
     corrected_coords: np.ndarray = frac_coords.copy()
-    
-    # Handle periodic boundary conditions for each dimension
     for dim in range(3):
         spread = np.max(corrected_coords[:, dim]) - np.min(corrected_coords[:, dim])
         if spread > 0.5:
@@ -38,46 +39,65 @@ _PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
                                           for dy in [-1, 0, 1] 
                                           for dz in [-1, 0, 1]])
                                         
+@overload
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
     reference_center: np.ndarray,
-    lattice: Lattice
-) -> np.ndarray:
+    lattice: Lattice,
+    return_image_shifts: Literal[False] = ...,
+) -> np.ndarray: ...
+
+@overload
+def unwrap_vertices_to_reference_center(
+    frac_coords: np.ndarray,
+    reference_center: np.ndarray,
+    lattice: Lattice,
+    return_image_shifts: Literal[True] = ...,
+) -> tuple[np.ndarray, np.ndarray]: ...
+
+def unwrap_vertices_to_reference_center(
+    frac_coords: np.ndarray,
+    reference_center: np.ndarray,
+    lattice: Lattice,
+    return_image_shifts: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
-    
+
     Args:
         frac_coords: Array of fractional coordinates with shape (n, 3).
         reference_center: Reference centre position for unwrapping.
         lattice: Lattice object for distance calculations.
-        
+        return_image_shifts: If True, also return the per-vertex integer
+            image shifts (from ``_PERIODIC_SHIFTS``), separate from the
+            uniform non-negative shift.
+
     Returns:
-        Unwrapped fractional coordinates with the same shape, shifted to ensure all coordinates >= 0.
+        Unwrapped fractional coordinates with the same shape, shifted to
+        ensure all coordinates >= 0. If ``return_image_shifts`` is True,
+        returns a tuple of (unwrapped_coords, image_shifts).
     """
     if frac_coords.size == 0:
+        if return_image_shifts:
+            return frac_coords, np.zeros((0, 3), dtype=int)
         return frac_coords
-        
-    # Apply all shifts using broadcasting: (n_vertices, 27, 3)
-    vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
-    
-    # Convert to Cartesian coordinates for true distance calculation
-    ref_cart = lattice.get_cartesian_coords(reference_center)  # (3,)
+
     n_vertices = len(frac_coords)
-    vertex_images_flat = vertex_images.reshape(n_vertices * 27, 3)  # (n_vertices * 27, 3)
-    vertex_images_cart = lattice.get_cartesian_coords(vertex_images_flat)  # (n_vertices * 27, 3)
-    
-    # Calculate Euclidean distances from reference centre to all images
-    distances_flat = np.linalg.norm(vertex_images_cart - ref_cart, axis=1)  # (n_vertices * 27,)
-    
-    # Reshape distances back to (n_vertices, 27)
-    distances = distances_flat.reshape(n_vertices, 27)
-    
-    # Select closest image for each vertex
+    vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
+
+    ref_cart = lattice.get_cartesian_coords(reference_center)
+    vertex_images_cart = lattice.get_cartesian_coords(
+        vertex_images.reshape(n_vertices * 27, 3))
+    distances = np.linalg.norm(
+        vertex_images_cart - ref_cart, axis=1).reshape(n_vertices, 27)
+
     best_indices = np.argmin(distances, axis=1)
-    result: np.ndarray = vertex_images[np.arange(n_vertices), best_indices]
-    
-    # Apply uniform shift to ensure all coordinates are non-negative
+    image_shifts: np.ndarray = _PERIODIC_SHIFTS[best_indices]
+    result = frac_coords + image_shifts
+
     min_coords = np.min(result, axis=0)
-    shift = np.maximum(0, np.ceil(-min_coords))
-    result += shift
-    
-    return result
+    uniform_shift = np.maximum(0, np.ceil(-min_coords))
+    result = result + uniform_shift
+
+    if return_image_shifts:
+        return result, image_shifts
+    return np.asarray(result)  # no-op; satisfies mypy no-any-return

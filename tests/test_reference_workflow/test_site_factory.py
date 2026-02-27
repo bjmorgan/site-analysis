@@ -23,16 +23,17 @@ class TestSiteFactory(unittest.TestCase):
 		# Reset Site._newid counter between tests
 		Site._newid = 0
 		
-		# Create a simple test structure
+		# Create a simple test structure (coordinates chosen so all
+		# 4-atom subsets form valid, non-degenerate tetrahedra)
 		lattice = Lattice.cubic(5.0)
 		species = ["Na", "Cl", "Na", "Cl", "Na", "Cl"]
 		coords = [
-			[0.0, 0.0, 0.0], 
-			[0.2, 0.2, 0.2], 
-			[0.5, 0.0, 0.0], 
-			[0.7, 0.2, 0.2], 
-			[0.0, 0.5, 0.0],
-			[0.3, 0.3, 0.3] 
+			[0.1, 0.1, 0.1],
+			[0.3, 0.1, 0.3],
+			[0.1, 0.3, 0.3],
+			[0.3, 0.3, 0.1],
+			[0.2, 0.2, 0.4],
+			[0.2, 0.4, 0.2],
 		]
 		self.structure = Structure(lattice, species, coords)
 		self.site_factory = SiteFactory(self.structure)
@@ -70,7 +71,7 @@ class TestSiteFactory(unittest.TestCase):
 		
 		# Indices out of range
 		with self.assertRaises(ValueError):
-			factory._validate_environments([[1, 2, 10]])  # 10 is out of range
+			factory._validate_environments([[1, 2, 10]])  # 10 > 5, out of range
 	
 	def test_validate_labels_valid(self):
 		"""Test label validation with valid labels."""

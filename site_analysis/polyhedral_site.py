@@ -9,12 +9,15 @@ or octahedral sites.
 from __future__ import annotations
 
 import itertools
-import numpy as np 
-from scipy.spatial import Delaunay, ConvexHull # type: ignore
-from pymatgen.core import Structure
+import warnings
+
+import numpy as np
+from scipy.spatial import Delaunay, QhullError # type: ignore
+from pymatgen.core import Lattice, Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
+from site_analysis.containment import HAS_NUMBA, FaceTopologyCache, update_pbc_shifts
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 from typing import Any
 
@@ -22,25 +25,25 @@ from typing import Any
 class PolyhedralSite(Site):
     """Describes a site defined by the polyhedral volume enclosed by a set
     of vertex atoms.
-    
-    A PolyhedralSite determines whether atoms are inside the site volume by constructing
-    a convex polyhedron from the vertex atoms and checking whether points lie within
-    this polyhedron. It supports multiple algorithms for this containment check:
-    
-    - 'simplex': Uses Delaunay tessellation to check if a point is in any simplex
-    - 'sn': Uses surface normal directions to check if a point is inside all faces
-    
+
+    A PolyhedralSite determines whether atoms are inside the site volume by
+    constructing a convex polyhedron from the vertex atoms and checking whether
+    points lie within this polyhedron. The containment algorithm is selected
+    automatically: when numba is available, a JIT-compiled surface normal method
+    with cached face topology is used; otherwise, falls back to Delaunay
+    tessellation via scipy.
+
     The polyhedron vertices are defined using atom indices in a structure, and
     their coordinates are assigned from the structure when needed. This allows the
     polyhedron shape to adapt to changes in the crystal structure.
-    
+
     Attributes:
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
         vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
             Set using assign_vertex_coords() from a Structure.
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
-    
+
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
             (index, label, contains_atoms, trajectory, points, transitions).
@@ -77,6 +80,12 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
+        self._face_topology_cache: FaceTopologyCache | None = None
+        self._cache_stale: bool = True
+        self._pending_frac_coords: np.ndarray | None = None
+        self._pending_lattice: Lattice | None = None
+        self._pbc_image_shifts: np.ndarray | None = None
+        self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
 
     def __repr__(self) -> str:
@@ -90,21 +99,19 @@ class PolyhedralSite(Site):
     def reset(self) -> None:
         """Reset the trajectory for this site.
 
-        Resets the contains_atoms and trajectory attributes
-        to empty lists.
-
-        Vertex coordinates and Delaunay tesselation are unset.
-
-        Args:
-            None
-
-        Returns:
-            None
-
+        Resets the contains_atoms and trajectory attributes to empty lists.
+        Vertex coordinates, Delaunay tessellation, and PBC shift caches are
+        unset. The face topology cache is preserved as it depends only on
+        vertex indices, which are immutable.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None
         self._delaunay = None
+        self._cache_stale = True
+        self._pending_frac_coords = None
+        self._pending_lattice = None
+        self._pbc_image_shifts = None
+        self._pbc_cached_raw_frac = None
  
     @property
     def delaunay(self) -> Delaunay:
@@ -147,31 +154,103 @@ class PolyhedralSite(Site):
         """
         return self.coordination_number
         
+    def notify_structure_changed(self,
+            all_frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Mark vertex coordinates as stale for lazy reassignment.
+
+        Stores a reference to the full coordinate array so that
+        PBC-corrected vertex coordinates can be computed on demand
+        when ``contains_point`` is next called.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice: Lattice for PBC distance calculations.
+        """
+        self._pending_frac_coords = all_frac_coords
+        self._pending_lattice = lattice
+
     def assign_vertex_coords(self,
             structure: Structure) -> None:
         """Assign fractional coordinates to the polyhedra vertices
         from the corresponding atom positions in a pymatgen Structure.
-        
+
         Args:
-            structure (Structure): The pymatgen Structure used to assign
+            structure: The pymatgen Structure used to assign
                 the fractional coordinates of the vertices.
-        
-        Returns:
-            None
-        
+
         Notes:
-            This method assumes the coordinates of the vertices may 
-            have changed, so unsets the Delaunay tesselation for this site.
-        
+            This method assumes the coordinates of the vertices may
+            have changed, so unsets the Delaunay tessellation for this site.
+
+            For bulk analysis prefer ``notify_structure_changed`` via the
+            collection, which pre-extracts coordinates once and defers
+            PBC correction until the site is actually queried.
         """
-        frac_coords = np.array([s.frac_coords for s in 
+        frac_coords = np.array([s.frac_coords for s in
             [structure[i] for i in self.vertex_indices]])
+        self._store_vertex_coords(frac_coords, structure.lattice)
+
+    def _assign_from_pending(self,
+            all_frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Compute PBC-corrected vertex coords from pending data.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array.
+            lattice: Lattice for PBC distance calculations.
+        """
+        self._pending_frac_coords = None
+        self._pending_lattice = None
+        frac_coords = all_frac_coords[self.vertex_indices]
+        self._store_vertex_coords(frac_coords, lattice)
+
+    def _store_vertex_coords(self,
+            frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Apply PBC correction and store vertex coordinates.
+
+        On the first call (or after an anomalous displacement invalidates
+        the cache), performs full PBC unwrapping using either the reference
+        centre method or the legacy spread-based method. On subsequent
+        calls, updates the cached integer image shifts incrementally by
+        detecting coordinate wraps (jumps of ~1.0), avoiding the expensive
+        27-image distance search.
+
+        Sets ``vertex_coords``, clears the Delaunay tessellation, and
+        marks the face topology cache as stale.
+
+        Args:
+            frac_coords: Raw fractional coordinates of the vertices,
+                shape ``(n_vertices, 3)``.
+            lattice: Lattice for Cartesian distance calculations
+                (used only on full recomputation with reference centres).
+        """
+        if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
+            valid, vertex_coords, new_shifts = update_pbc_shifts(
+                frac_coords, self._pbc_cached_raw_frac, self._pbc_image_shifts)
+            if valid:
+                self._pbc_image_shifts = new_shifts
+                self._pbc_cached_raw_frac = frac_coords.copy()
+                self.vertex_coords = vertex_coords
+                self._delaunay = None
+                self._cache_stale = True
+                return
+
+        # Full computation — first call only (or after anomalous displacement)
         if self.reference_center is not None:
-            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, structure.lattice)
+            corrected, image_shifts = unwrap_vertices_to_reference_center(
+                frac_coords, self.reference_center, lattice,
+                return_image_shifts=True)
         else:
-            frac_coords = apply_legacy_pbc_correction(frac_coords)
-        self.vertex_coords = frac_coords
+            corrected = apply_legacy_pbc_correction(frac_coords)
+            image_shifts = np.round(corrected - frac_coords).astype(int)
+        self._pbc_image_shifts = image_shifts
+        self._pbc_cached_raw_frac = frac_coords.copy()
+        self.vertex_coords = corrected
         self._delaunay = None
+        self._cache_stale = True
 
     def get_vertex_species(self,
             structure: Structure) -> list[str]:
@@ -190,113 +269,102 @@ class PolyhedralSite(Site):
 
     def contains_point(self,
             x: np.ndarray,
-            structure: Structure | None=None,
-            algo: str='simplex',
+            structure: Structure | None = None,
+            algo: str | None = None,
             *args,
+            pbc_images: np.ndarray | None = None,
             **kwargs) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
-        Args:
-            x (np.array): Fractional coordinates of the point to test (length 3 numpy array).
-            structure (:obj:`Structure`, optional): Optional pymatgen Structure. If provided,
-                the vertex coordinates for this polyhedral site will be assigned using
-                this structure. Default is None.
-            algo (str): Select the algorithm for testing whether a point is contained
-                by the site:
-    
-                simplex: Use scipy.spatial.Delaunay.find_simplex to test if any of
-                         the simplices that make up this polyhedron contain the point.
-       
-                sn:      Compute the sign of the surface normal for each polyhedron 
-                         face with respect to the point, to test if the point lies
-                         "inside" every face.
-                
-        Returns:
-            bool
+        The containment algorithm is selected automatically based on available
+        dependencies. When numba is installed, uses a JIT-compiled surface
+        normal method. Otherwise, falls back to Delaunay tessellation.
 
+        Args:
+            x: Fractional coordinates of the point to test (length 3 array).
+            structure: Optional pymatgen Structure. If provided, the vertex
+                coordinates for this polyhedral site will be assigned using
+                this structure.
+            algo: Deprecated. Previously selected the algorithm. Now ignored;
+                the best available method is used automatically.
+            pbc_images: Optional pre-computed PBC images of x, shape (N, 3).
+                If provided, skips the internal ``x_pbc`` call.
+
+        Returns:
+            True if the point is inside the polyhedron.
         """
-        contains_point_algos = {'simplex': self.contains_point_simplex,
-                                'sn': self.contains_point_sn}
-        if algo not in contains_point_algos.keys():
-            raise ValueError(f'{algo} is not a valid algorithm keyword for contains_point()')
-        if structure:
+        if algo is not None:
+            warnings.warn(
+                "The 'algo' parameter is deprecated and will be removed in a "
+                "future version. The best available containment algorithm is "
+                "now selected automatically.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if structure is not None:
             self.assign_vertex_coords(structure)
+        elif self._pending_frac_coords is not None and self._pending_lattice is not None:
+            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice)
         if self.vertex_coords is None:
-            raise RuntimeError('no vertex coordinates set for polyhedral_site {}'.format(self.index))
-        return contains_point_algos[algo](x_pbc(x))
+            raise RuntimeError(
+                f'no vertex coordinates set for polyhedral_site {self.index}'
+            )
+        x_images = pbc_images if pbc_images is not None else x_pbc(x)
+        try:
+            if HAS_NUMBA:
+                if self._face_topology_cache is None:
+                    self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
+                    self._cache_stale = False
+                elif self._cache_stale:
+                    self._face_topology_cache.update(self.vertex_coords)
+                    self._cache_stale = False
+                return self._face_topology_cache.contains_point(x_images)
+            return self._contains_point_delaunay(x_images)
+        except QhullError as e:
+            raise RuntimeError(
+                f"Degenerate vertex geometry for polyhedral_site {self.index} "
+                f"(vertices {self.vertex_indices})"
+            ) from e
    
-    def contains_point_simplex(self,
-            x: np.ndarray) -> bool:
-        """Test whether one or more points are inside this site, by checking 
-        whether these points are contained inside the simplices of the Delaunay 
-        tesselation defined by the vertex coordinates.
+    def _contains_point_delaunay(self, x: np.ndarray) -> bool:
+        """Test containment using Delaunay tessellation.
 
         Args:
-            x (np.array): Fractional coordinates for one or more points, as a
-                (3x1) or (3xN) numpy array.
+            x: Fractional coordinates as (3,) or (N, 3) array.
 
         Returns:
-            bool
-
+            True if any point is inside a simplex of the tessellation.
         """
         return bool(np.any(self.delaunay.find_simplex(x) >= 0))
- 
-    def contains_point_sn(self,
-            x_list: np.ndarray) -> bool:
-        """Test whether one or more points are inside this site, by calculating 
-        the sign of the surface normal for each face with respect to each point.
-
-        Args:
-            x_list (np.array): Fractional coordinates for one or more points, as a
-                (3x1) or (3xN) numpy array.
-
-        Returns:
-            bool
-
-        Note:
-            This method could be made more efficient by caching the 
-            surface_normal vectors and in-face vectors.
-
-            This is also a possible target for optimisation with f2py etc.
-
-        """
-        vertex_coords = self.vertex_coords
-        if vertex_coords is None:
-            raise RuntimeError("Vertex coordinates have not been assigned.")
-        hull = ConvexHull(vertex_coords)
-        faces = hull.points[hull.simplices]
-        centre = self.centre
-        inside = []
-        for x in x_list:
-            dotsum = 0
-            for f in faces:
-                surface_normal = np.cross(f[0]-f[2], f[1]-f[2])
-                c_sign = np.sign(np.dot( surface_normal, centre-f[0]))
-                p_sign = np.sign(np.dot( surface_normal, x-f[0]))
-                dotsum += c_sign * p_sign
-            inside.append(dotsum == len(faces))
-        return any(inside)
 
     def contains_atom(self,
             atom: Atom,
-            algo: str | None='simplex',
+            algo: str | None = None,
             *args: Any,
+            pbc_images: np.ndarray | None = None,
             **kwargs: Any) -> bool:
         """Test whether an atom is inside this polyhedron.
 
         Args:
-            atom (Atom): The atom to test.
-            algo (:obj:`str`, optional): Select the algorithm to us. Options are
-                'simplex' and 'sn'. See the documentation for the contains_point()
-                method for more details. Default is 'simplex'.
+            atom: The atom to test.
+            algo: Deprecated. Previously selected the algorithm. Now ignored;
+                the best available method is used automatically.
+            pbc_images: Optional pre-computed PBC images of the atom's
+                fractional coordinates. If provided, passed through to
+                ``contains_point`` to avoid redundant computation.
 
         Returns:
-            bool
+            True if the atom is inside the polyhedron.
         """
-        contains_point_algos = ['simplex', 'sn']
-        if algo not in contains_point_algos:
-            raise ValueError(f'{algo} is not a valid algorithm keyword for contains_atom()')
-        return self.contains_point(atom.frac_coords, algo=algo)
+        if algo is not None:
+            warnings.warn(
+                "The 'algo' parameter is deprecated and will be removed in a "
+                "future version. The best available containment algorithm is "
+                "now selected automatically.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self.contains_point(atom.frac_coords, pbc_images=pbc_images)
 
     def as_dict(self) -> dict:
         d = super(PolyhedralSite, self).as_dict()

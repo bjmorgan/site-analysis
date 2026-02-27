@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "1.2.7"
+version = "1.3.0"
 description = "Analysis tools for tracking ion migration through crystallographic sites"
 readme = "README.md"
 authors = [
@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+fast = [
+    "numba",
+]
 dev = [
     "pytest",               # Test runner
     "coverage",             # For test coverage reporting
@@ -37,6 +40,7 @@ dev = [
     "sphinx-rtd-theme",     # Documentation theme
     "myst-parser",          # For markdown in Sphinx
     "matplotlib",           # For plots in the docs
+    "numba",                # For testing numba-accelerated containment
 ]
 
 [project.urls]

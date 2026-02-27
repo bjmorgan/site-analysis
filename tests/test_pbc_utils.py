@@ -132,15 +132,15 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		species = ["Re"] * 4
 		coords = [
 			[0.1, 0.1, 0.1],
-			[0.2, 0.2, 0.2],
-			[0.3, 0.3, 0.3],
-			[0.4, 0.4, 0.4]
+			[0.1, 0.3, 0.3],
+			[0.3, 0.3, 0.1],
+			[0.3, 0.1, 0.3]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Should remain unchanged (this works correctly)
 		expected_coords = np.array(coords)
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
@@ -168,21 +168,21 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		species = ["Re"] * 4
 		coords = [
 			[0.1, 0.1, 0.1],
-			[0.2, 0.2, 0.9],   # Large z-coordinate, should trigger correction
-			[0.3, 0.3, 0.1],
-			[0.4, 0.4, 0.1]
+			[0.3, 0.1, 0.9],   # Large z-coordinate, should trigger correction
+			[0.1, 0.3, 0.1],
+			[0.3, 0.3, 0.1]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Current algorithm should correctly shift small z-coordinates
 		expected_coords = np.array([
 			[0.1, 0.1, 1.1],   # z < 0.5, gets +1.0
-			[0.2, 0.2, 0.9],   # z >= 0.5, unchanged  
-			[0.3, 0.3, 1.1],   # z < 0.5, gets +1.0
-			[0.4, 0.4, 1.1]    # z < 0.5, gets +1.0
+			[0.3, 0.1, 0.9],   # z >= 0.5, unchanged
+			[0.1, 0.3, 1.1],   # z < 0.5, gets +1.0
+			[0.3, 0.3, 1.1]    # z < 0.5, gets +1.0
 		])
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
 
@@ -215,16 +215,16 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		"""Test negative coordinates that don't require PBC correction."""
 		species = ["Re"] * 4
 		coords = [
-			[0.1, -0.1, 0.2],   # Negative y-coordinate
-			[0.2, -0.05, 0.3],  # y-spread: 0.1 - (-0.1) = 0.2 < 0.5
-			[0.3, 0.0, 0.4],
-			[0.4, 0.1, 0.5]
+			[0.2, -0.1, 0.2],    # Negative y-coordinate
+			[0.2, 0.1, 0.4],     # y-spread: 0.1 - (-0.1) = 0.2 < 0.5
+			[0.4, -0.1, 0.4],
+			[0.3, 0.1, 0.2]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Should remain unchanged (spread < 0.5, no correction needed)
 		expected_coords = np.array(coords)
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
@@ -330,6 +330,52 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		# Should remain unchanged since all vertices are already close
 		np.testing.assert_array_almost_equal(result, vertex_coords, decimal=7)
 	
+	def test_return_image_shifts_returns_tuple(self):
+		"""Test that return_image_shifts=True returns (coords, shifts) tuple."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6]
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		result = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center, self.lattice, return_image_shifts=True)
+		self.assertIsInstance(result, tuple)
+		self.assertEqual(len(result), 2)
+		coords, shifts = result
+		self.assertEqual(coords.shape, (4, 3))
+		self.assertEqual(shifts.shape, (4, 3))
+		# Shifts should be integers
+		np.testing.assert_array_equal(shifts, shifts.astype(int))
+
+	def test_return_image_shifts_false_returns_array(self):
+		"""Test that return_image_shifts=False returns just coordinates."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		result = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center, self.lattice, return_image_shifts=False)
+		self.assertIsInstance(result, np.ndarray)
+		self.assertEqual(result.shape, (2, 3))
+
+	def test_return_image_shifts_consistent_with_coords(self):
+		"""Image shifts applied to raw coords should match the returned coordinates."""
+		vertex_coords = np.array([
+			[0.05, 0.5, 0.5],
+			[0.95, 0.5, 0.5],  # needs shift of -1 in x
+		])
+		reference_center = np.array([0.0, 0.5, 0.5])
+		coords, shifts = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center, self.lattice, return_image_shifts=True)
+		# coords = raw + shifts + uniform, so (coords - uniform) - raw = shifts
+		shifted_raw = vertex_coords + shifts
+		min_coords = np.min(shifted_raw, axis=0)
+		uniform = np.maximum(0, np.ceil(-min_coords))
+		np.testing.assert_array_almost_equal(coords, shifted_raw + uniform)
+
 	def test_unwrap_vertices_empty_input(self):
 		"""Test that empty input is handled correctly."""
 		vertex_coords = np.array([]).reshape(0, 3)

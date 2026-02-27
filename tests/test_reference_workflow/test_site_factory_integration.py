@@ -22,16 +22,17 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		# Reset Site._newid counter between tests
 		Site._newid = 0
 		
-		# Create a simple test structure
+		# Create a simple test structure (coordinates chosen so all
+		# 4-atom subsets form valid, non-degenerate tetrahedra)
 		lattice = Lattice.cubic(5.0)
 		species = ["Na", "Cl", "Na", "Cl", "Na", "Cl"]
 		coords = [
-			[0.0, 0.0, 0.0],  # Na0
-			[0.2, 0.2, 0.2],  # Cl1
-			[0.5, 0.0, 0.0],  # Na2
-			[0.7, 0.2, 0.2],  # Cl3
-			[0.0, 0.5, 0.0],  # Na4
-			[0.3, 0.3, 0.3],  # Cl5
+			[0.1, 0.1, 0.1],  # Na0
+			[0.3, 0.1, 0.3],  # Cl1
+			[0.1, 0.3, 0.3],  # Na2
+			[0.3, 0.3, 0.1],  # Cl3
+			[0.2, 0.2, 0.4],  # Na4
+			[0.2, 0.4, 0.2],  # Cl5
 		]
 		self.structure = Structure(lattice, species, coords)
 		

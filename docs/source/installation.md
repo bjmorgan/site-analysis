@@ -16,6 +16,16 @@ pip install site-analysis
 
 This will automatically install all required dependencies.
 
+## Optional Dependencies
+
+For faster polyhedral site analysis, you can install with [numba](https://numba.pydata.org/) acceleration:
+
+```bash
+pip install site-analysis[fast]
+```
+
+This enables JIT-compiled containment testing, which typically gives a ~7x speedup when analysing polyhedral sites.
+
 ## Installing from Source
 
 For development or to access the latest features before release, you can install directly from the source code:

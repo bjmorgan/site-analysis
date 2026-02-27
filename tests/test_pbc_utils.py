@@ -132,15 +132,15 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		species = ["Re"] * 4
 		coords = [
 			[0.1, 0.1, 0.1],
-			[0.2, 0.2, 0.2],
-			[0.3, 0.3, 0.3],
-			[0.4, 0.4, 0.4]
+			[0.1, 0.3, 0.3],
+			[0.3, 0.3, 0.1],
+			[0.3, 0.1, 0.3]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Should remain unchanged (this works correctly)
 		expected_coords = np.array(coords)
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
@@ -168,21 +168,21 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		species = ["Re"] * 4
 		coords = [
 			[0.1, 0.1, 0.1],
-			[0.2, 0.2, 0.9],   # Large z-coordinate, should trigger correction
-			[0.3, 0.3, 0.1],
-			[0.4, 0.4, 0.1]
+			[0.3, 0.1, 0.9],   # Large z-coordinate, should trigger correction
+			[0.1, 0.3, 0.1],
+			[0.3, 0.3, 0.1]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Current algorithm should correctly shift small z-coordinates
 		expected_coords = np.array([
 			[0.1, 0.1, 1.1],   # z < 0.5, gets +1.0
-			[0.2, 0.2, 0.9],   # z >= 0.5, unchanged  
-			[0.3, 0.3, 1.1],   # z < 0.5, gets +1.0
-			[0.4, 0.4, 1.1]    # z < 0.5, gets +1.0
+			[0.3, 0.1, 0.9],   # z >= 0.5, unchanged
+			[0.1, 0.3, 1.1],   # z < 0.5, gets +1.0
+			[0.3, 0.3, 1.1]    # z < 0.5, gets +1.0
 		])
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
 
@@ -215,16 +215,16 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		"""Test negative coordinates that don't require PBC correction."""
 		species = ["Re"] * 4
 		coords = [
-			[0.1, -0.1, 0.2],   # Negative y-coordinate
-			[0.2, -0.05, 0.3],  # y-spread: 0.1 - (-0.1) = 0.2 < 0.5
-			[0.3, 0.0, 0.4],
-			[0.4, 0.1, 0.5]
+			[0.2, -0.1, 0.2],    # Negative y-coordinate
+			[0.2, 0.1, 0.4],     # y-spread: 0.1 - (-0.1) = 0.2 < 0.5
+			[0.4, -0.1, 0.4],
+			[0.3, 0.1, 0.2]
 		]
 		structure = Structure(self.lattice, species, coords)
-		
+
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure)
-		
+
 		# Should remain unchanged (spread < 0.5, no correction needed)
 		expected_coords = np.array(coords)
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)

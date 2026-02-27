@@ -75,14 +75,15 @@ class UnwrappedCoordinatesSiteTestCase(unittest.TestCase):
 	def test_polyhedral_site_with_unwrapped_coordinates(self):
 		"""Test that polyhedral sites work correctly with unwrapped coordinates."""
 		# Create structure with mixed wrapped/unwrapped coordinates
+		# Li is at the centroid of the tetrahedron (guaranteed strictly inside)
 		lattice = Lattice.cubic(5.0)
 		structure = Structure(
 			lattice=lattice,
 			species=["Li", "O", "O", "O", "O"],
 			coords=[
-				[1.1, 1.2, 1.3],  # Li at unwrapped position (should wrap to [0.1, 0.2, 0.3])
-				[0.0, 0.0, 0.0],  # O vertices in wrapped coordinates forming tetrahedron
-				[0.2, 0.2, 0.2],  # around the wrapped Li position [0.1, 0.2, 0.3]
+				[1.1, 1.1, 1.25],  # Li at unwrapped position (wraps to [0.1, 0.1, 0.25])
+				[0.0, 0.0, 0.0],   # O vertices forming tetrahedron
+				[0.2, 0.2, 0.2],   # centroid = [0.1, 0.1, 0.25]
 				[0.2, 0.0, 0.4],
 				[0.0, 0.2, 0.4]
 			]

@@ -13,7 +13,7 @@ import warnings
 
 import numpy as np
 from scipy.spatial import Delaunay # type: ignore
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
@@ -81,6 +81,9 @@ class PolyhedralSite(Site):
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
         self._face_topology_cache: FaceTopologyCache | None = None
+        self._cache_stale: bool = True
+        self._pending_frac_coords: np.ndarray | None = None
+        self._pending_lattice: Lattice | None = None
         self.reference_center = reference_center
 
     def __repr__(self) -> str:
@@ -144,33 +147,65 @@ class PolyhedralSite(Site):
         """
         return self.coordination_number
         
+    def notify_structure_changed(self,
+            all_frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Mark vertex coordinates as stale for lazy reassignment.
+
+        Stores pre-extracted coordinate data so that PBC-corrected vertex
+        coordinates can be computed on demand when ``contains_point`` is
+        next called. This avoids both redundant PeriodicSite creation
+        (vertices shared across sites are extracted once by the collection)
+        and the PBC correction cost for sites that are never queried.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice: Lattice for PBC distance calculations.
+        """
+        self._pending_frac_coords = all_frac_coords
+        self._pending_lattice = lattice
+
     def assign_vertex_coords(self,
             structure: Structure) -> None:
         """Assign fractional coordinates to the polyhedra vertices
         from the corresponding atom positions in a pymatgen Structure.
-        
+
         Args:
-            structure (Structure): The pymatgen Structure used to assign
+            structure: The pymatgen Structure used to assign
                 the fractional coordinates of the vertices.
-        
-        Returns:
-            None
-        
+
         Notes:
-            This method assumes the coordinates of the vertices may 
-            have changed, so unsets the Delaunay tesselation for this site.
-        
+            This method assumes the coordinates of the vertices may
+            have changed, so unsets the Delaunay tessellation for this site.
+
+            For bulk analysis prefer ``notify_structure_changed`` via the
+            collection, which pre-extracts coordinates once and defers
+            PBC correction until the site is actually queried.
         """
-        frac_coords = np.array([s.frac_coords for s in 
+        frac_coords = np.array([s.frac_coords for s in
             [structure[i] for i in self.vertex_indices]])
+        self._store_vertex_coords(frac_coords, structure.lattice)
+
+    def _assign_from_pending(self) -> None:
+        """Compute PBC-corrected vertex coords from pending data."""
+        frac_coords = self._pending_frac_coords[self.vertex_indices]
+        lattice = self._pending_lattice
+        self._pending_frac_coords = None
+        self._pending_lattice = None
+        self._store_vertex_coords(frac_coords, lattice)
+
+    def _store_vertex_coords(self,
+            frac_coords: np.ndarray,
+            lattice: Lattice) -> None:
+        """Apply PBC correction and store vertex coordinates."""
         if self.reference_center is not None:
-            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, structure.lattice)
+            frac_coords = unwrap_vertices_to_reference_center(frac_coords, self.reference_center, lattice)
         else:
             frac_coords = apply_legacy_pbc_correction(frac_coords)
         self.vertex_coords = frac_coords
         self._delaunay = None
-        if self._face_topology_cache is not None:
-            self._face_topology_cache.update(self.vertex_coords)
+        self._cache_stale = True
 
     def get_vertex_species(self,
             structure: Structure) -> list[str]:
@@ -220,6 +255,8 @@ class PolyhedralSite(Site):
             )
         if structure:
             self.assign_vertex_coords(structure)
+        elif self._pending_frac_coords is not None:
+            self._assign_from_pending()
         if self.vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
@@ -228,6 +265,10 @@ class PolyhedralSite(Site):
         if HAS_NUMBA:
             if self._face_topology_cache is None:
                 self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
+                self._cache_stale = False
+            elif self._cache_stale:
+                self._face_topology_cache.update(self.vertex_coords)
+                self._cache_stale = False
             return self._face_topology_cache.contains_point(x_images)
         return self._contains_point_delaunay(x_images)
    

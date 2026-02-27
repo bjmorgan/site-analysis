@@ -86,21 +86,21 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             PolyhedralSiteCollection(sites=mixed_sites)
     
     def test_analyse_structure(self):
-        """Test that analyse_structure assigns coordinates and updates site occupations."""
+        """Test that analyse_structure notifies sites and updates occupations."""
         # Setup mocks
         with patch.object(Atom, 'assign_coords') as mock_assign_coords, \
-             patch.object(PolyhedralSite, 'assign_vertex_coords') as mock_assign_vertex, \
+             patch.object(PolyhedralSite, 'notify_structure_changed') as mock_notify, \
              patch.object(PolyhedralSiteCollection, 'assign_site_occupations') as mock_assign:
-            
+
             # Call method
             self.collection.analyse_structure(self.atoms, self.structure)
-            
+
             # Verify each atom's coordinates were assigned
             self.assertEqual(mock_assign_coords.call_count, 3)
-            
-            # Verify each site's vertex coordinates were assigned
-            self.assertEqual(mock_assign_vertex.call_count, 3)
-            
+
+            # Verify each site was notified of the new structure
+            self.assertEqual(mock_notify.call_count, 3)
+
             # Verify assign_site_occupations was called with atoms and structure
             mock_assign.assert_called_once_with(self.atoms, self.structure)
     

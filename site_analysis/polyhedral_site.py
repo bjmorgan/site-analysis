@@ -12,7 +12,7 @@ import itertools
 import warnings
 
 import numpy as np
-from scipy.spatial import Delaunay # type: ignore
+from scipy.spatial import Delaunay, QhullError # type: ignore
 from pymatgen.core import Lattice, Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
@@ -100,13 +100,18 @@ class PolyhedralSite(Site):
         """Reset the trajectory for this site.
 
         Resets the contains_atoms and trajectory attributes to empty lists.
-        Vertex coordinates and Delaunay tessellation are unset. The face
-        topology cache is preserved as it depends only on vertex indices,
-        which are immutable.
+        Vertex coordinates, Delaunay tessellation, and PBC shift caches are
+        unset. The face topology cache is preserved as it depends only on
+        vertex indices, which are immutable.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None
         self._delaunay = None
+        self._cache_stale = True
+        self._pending_frac_coords = None
+        self._pending_lattice = None
+        self._pbc_image_shifts = None
+        self._pbc_cached_raw_frac = None
  
     @property
     def delaunay(self) -> Delaunay:
@@ -206,10 +211,21 @@ class PolyhedralSite(Site):
             lattice: Lattice) -> None:
         """Apply PBC correction and store vertex coordinates.
 
-        Caches the integer PBC image shifts so that subsequent frames
-        can skip the expensive 27-image distance search. When raw
-        coordinates wrap across a periodic boundary (jump of ~1.0),
-        the cached shifts are adjusted rather than recomputed.
+        On the first call (or after an anomalous displacement invalidates
+        the cache), performs full PBC unwrapping using either the reference
+        centre method or the legacy spread-based method. On subsequent
+        calls, updates the cached integer image shifts incrementally by
+        detecting coordinate wraps (jumps of ~1.0), avoiding the expensive
+        27-image distance search.
+
+        Sets ``vertex_coords``, clears the Delaunay tessellation, and
+        marks the face topology cache as stale.
+
+        Args:
+            frac_coords: Raw fractional coordinates of the vertices,
+                shape ``(n_vertices, 3)``.
+            lattice: Lattice for Cartesian distance calculations
+                (used only on full recomputation with reference centres).
         """
         if self._pbc_image_shifts is not None:
             valid, vertex_coords, new_shifts = update_pbc_shifts(
@@ -294,15 +310,21 @@ class PolyhedralSite(Site):
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
         x_images = pbc_images if pbc_images is not None else x_pbc(x)
-        if HAS_NUMBA:
-            if self._face_topology_cache is None:
-                self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
-                self._cache_stale = False
-            elif self._cache_stale:
-                self._face_topology_cache.update(self.vertex_coords)
-                self._cache_stale = False
-            return self._face_topology_cache.contains_point(x_images)
-        return self._contains_point_delaunay(x_images)
+        try:
+            if HAS_NUMBA:
+                if self._face_topology_cache is None:
+                    self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
+                    self._cache_stale = False
+                elif self._cache_stale:
+                    self._face_topology_cache.update(self.vertex_coords)
+                    self._cache_stale = False
+                return self._face_topology_cache.contains_point(x_images)
+            return self._contains_point_delaunay(x_images)
+        except QhullError as e:
+            raise RuntimeError(
+                f"Degenerate vertex geometry for polyhedral_site {self.index} "
+                f"(vertices {self.vertex_indices})"
+            ) from e
    
     def _contains_point_delaunay(self, x: np.ndarray) -> bool:
         """Test containment using Delaunay tessellation.

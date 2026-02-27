@@ -109,6 +109,10 @@ if HAS_NUMBA:
                 for k in range(3):
                     dot += ((x_pbc_points[i, k] - face_ref_points[j, k])
                             * face_normals[j, k])
+                # dot == 0.0 means the point lies exactly on the face
+                # plane; np.sign(0.0) returns 0.0 which would never
+                # match centre_signs (always +/-1), so we skip the
+                # check to avoid falsely rejecting boundary points.
                 if dot != 0.0 and np.sign(dot) != centre_signs[j]:
                     all_match = False
                     break

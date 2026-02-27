@@ -58,7 +58,32 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         site._face_topology_cache = mock_cache
         site.reset()
         self.assertIs(site._face_topology_cache, mock_cache)
-   
+
+    def test_reset_clears_pending_state(self):
+        """reset() clears pending fractional coords and lattice."""
+        site = self.site
+        site._pending_frac_coords = np.zeros((4, 3))
+        site._pending_lattice = Lattice.cubic(10.0)
+        site.reset()
+        self.assertIsNone(site._pending_frac_coords)
+        self.assertIsNone(site._pending_lattice)
+
+    def test_reset_clears_pbc_shift_caches(self):
+        """reset() clears PBC image shift caches."""
+        site = self.site
+        site._pbc_image_shifts = np.zeros((4, 3), dtype=int)
+        site._pbc_cached_raw_frac = np.zeros((4, 3))
+        site.reset()
+        self.assertIsNone(site._pbc_image_shifts)
+        self.assertIsNone(site._pbc_cached_raw_frac)
+
+    def test_reset_sets_cache_stale(self):
+        """reset() marks the face topology cache as stale."""
+        site = self.site
+        site._cache_stale = False
+        site.reset()
+        self.assertTrue(site._cache_stale)
+
     def test_delaunay_if_not_already_set(self):
         site = self.site
         vertex_coords = np.array([[0.0, 0.0, 0.0],
@@ -508,6 +533,20 @@ class TestStoreVertexCoords(unittest.TestCase):
             mock_unwrap.assert_not_called()
         # Shift for vertex 0 should have changed to account for wrapping
         self.assertEqual(site._pbc_image_shifts[0, 0], original_shifts[0, 0] + 1)
+
+    @unittest.skipUnless(HAS_NUMBA, "numba not available")
+    def test_cache_stale_triggers_update_after_store_vertex_coords(self):
+        """After _store_vertex_coords sets _cache_stale, the next
+        contains_point call should update the face topology cache."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.4, 0.4, 0.4],
+                         [0.4, 0.6, 0.6],
+                         [0.6, 0.6, 0.4],
+                         [0.6, 0.4, 0.6]])
+        site._store_vertex_coords(frac, self.lattice)
+        self.assertTrue(site._cache_stale)
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        self.assertFalse(site._cache_stale)
 
 
 def example_structure(species=None):

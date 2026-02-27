@@ -100,4 +100,4 @@ def unwrap_vertices_to_reference_center(
 
     if return_image_shifts:
         return result, image_shifts
-    return np.asarray(result)
+    return np.asarray(result)  # no-op; satisfies mypy no-any-return

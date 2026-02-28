@@ -51,39 +51,12 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		"""Test that SphericalSiteCollection initializes correctly."""
 		self.assertEqual(self.collection.sites, self.sites)
 		
-	def test_init_initializes_neighbour_attributes(self):
-		"""Test that __init__ initializes neighbour-related attributes to None."""
-		sites = [self.site1, self.site2]
-		collection = SphericalSiteCollection(sites)
-		
-		# Check that neighbour attributes are initialized to None
-		self.assertIsNone(collection._neighbouring_sites)
-		self.assertIsNone(collection._current_lattice)
-	
 	def test_init_with_empty_sites_list(self):
 		"""Test that __init__ works with empty sites list."""
 		collection = SphericalSiteCollection([])
 		
 		self.assertEqual(collection.sites, [])
-		self.assertIsNone(collection._neighbouring_sites)
-		self.assertIsNone(collection._current_lattice)
 		self.assertEqual(collection._site_lookup, {})
-		
-	def test_init_sets_default_neighbour_cutoff(self):
-		"""Test that __init__ sets default neighbour_cutoff to 10.0 Å."""
-		sites = [self.site1, self.site2]
-		collection = SphericalSiteCollection(sites)
-		
-		# Check that default cutoff is 10.0
-		self.assertEqual(collection._neighbour_cutoff, 10.0)
-	
-	def test_init_sets_custom_neighbour_cutoff(self):
-		"""Test that __init__ can set custom neighbour_cutoff."""
-		sites = [self.site1, self.site2]
-		collection = SphericalSiteCollection(sites, neighbour_cutoff=15.0)
-		
-		# Check that custom cutoff is set
-		self.assertEqual(collection._neighbour_cutoff, 15.0)
 		
 	def test_init_raises_type_error_with_non_spherical_sites(self):
 		"""Test that initialisation raises TypeError with non-SphericalSite objects."""
@@ -95,132 +68,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		with self.assertRaises(TypeError):
 			SphericalSiteCollection(sites=mixed_sites)
 		
-	def test_get_current_lattice_returns_stored_lattice(self):
-		"""Test that _get_current_lattice returns the stored lattice when available."""
-		collection = SphericalSiteCollection([self.site1])
-		mock_lattice = Mock(spec=Lattice)
-		
-		# Set the current lattice
-		collection._current_lattice = mock_lattice
-		
-		# Should return the stored lattice
-		result = collection._get_current_lattice()
-		self.assertIs(result, mock_lattice)
-	
-	def test_get_current_lattice_returns_none_when_none(self):
-		"""Test that _get_current_lattice returns None when _current_lattice is None."""
-		collection = SphericalSiteCollection([self.site1])
-		
-		# _current_lattice should be None from __init__
-		result = collection._get_current_lattice()
-		self.assertIsNone(result)
-		
-	def test_calculate_all_neighbouring_sites_basic_functionality(self):
-		"""Test that _calculate_all_neighbouring_sites correctly identifies neighbours within default 10.0 Å cutoff."""
-		# Create sites at known positions
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0, label="site1")
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0, label="site2")  
-		site3 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0, label="site3")
-		
-		collection = SphericalSiteCollection([site1, site2, site3])  # Default 10.0 Å cutoff
-		mock_lattice = Mock(spec=Lattice)
-		
-		# Mock distance matrix: site1-site2 close (5 Å < 10 Å), site1-site3 far (15 Å > 10 Å)
-		mock_distances = np.array([
-			[0.0, 5.0, 15.0],  # Distances from site1
-			[5.0, 0.0, 12.0],  # Distances from site2  
-			[15.0, 12.0, 0.0]  # Distances from site3
-		])
-		mock_lattice.get_all_distances.return_value = mock_distances
-		
-		# Calculate neighbours
-		neighbours = collection._calculate_all_neighbouring_sites(mock_lattice)
-		
-		# Check results against 10.0 Å cutoff
-		self.assertEqual(len(neighbours[site1.index]), 1)  # site1 neighbours: site2 (5 Å ≤ 10 Å)
-		self.assertIs(neighbours[site1.index][0], site2)
-		
-		self.assertEqual(len(neighbours[site2.index]), 1)  # site2 neighbours: site1 (5 Å ≤ 10 Å)
-		self.assertIs(neighbours[site2.index][0], site1)
-		
-		self.assertEqual(len(neighbours[site3.index]), 0)  # site3 neighbours: none (15, 12 Å > 10 Å)
-	
-	def test_calculate_all_neighbouring_sites_boundary_case(self):
-		"""Test sites exactly at the default 10.0 Å cutoff distance."""
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0)
-		
-		collection = SphericalSiteCollection([site1, site2])  # Default 10.0 Å cutoff
-		mock_lattice = Mock(spec=Lattice)
-		
-		# Mock distance matrix: exactly at the 10.0 Å cutoff
-		mock_distances = np.array([
-			[0.0, 10.0],
-			[10.0, 0.0]
-		])
-		mock_lattice.get_all_distances.return_value = mock_distances
-		
-		# Calculate neighbours
-		neighbours = collection._calculate_all_neighbouring_sites(mock_lattice)
-		
-		# Sites at exactly the cutoff distance should be neighbours (10.0 Å ≤ 10.0 Å)
-		self.assertEqual(len(neighbours[site1.index]), 1)
-		self.assertIs(neighbours[site1.index][0], site2)
-		
-	def test_calculate_all_neighbouring_sites_sorts_by_distance(self):
-		"""Test that neighbours are sorted by increasing distance."""
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0)  # Closest
-		site3 = SphericalSite(frac_coords=np.array([0.2, 0.0, 0.0]), rcut=1.0)  # Farthest
-		
-		collection = SphericalSiteCollection([site1, site2, site3])
-		mock_lattice = Mock(spec=Lattice)
-		
-		# Mock distances: site1 to others = 2.0, 5.0 Å
-		mock_distances = np.array([
-			[0.0, 2.0, 5.0],
-			[2.0, 0.0, 3.0],
-			[5.0, 3.0, 0.0]
-		])
-		mock_lattice.get_all_distances.return_value = mock_distances
-		
-		neighbours = collection._calculate_all_neighbouring_sites(mock_lattice)
-		
-		# Check that site1's neighbours are sorted: closest (site2) first, then site3
-		self.assertEqual(neighbours[site1.index], [site2, site3])
-		
-	def test_calculate_all_neighbouring_sites_uses_cutoff_attribute(self):
-		"""Test that _calculate_all_neighbouring_sites uses the _neighbour_cutoff attribute."""
-		# Create sites with custom cutoff
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0)
-		site3 = SphericalSite(frac_coords=np.array([0.2, 0.0, 0.0]), rcut=1.0)
-		
-		# Create collection with 8.0 Å cutoff (instead of default 10.0 Å)
-		collection = SphericalSiteCollection([site1, site2, site3], neighbour_cutoff=8.0)
-		mock_lattice = Mock(spec=Lattice)
-		
-		# Mock distances: site1-site2 = 7.0 Å (within cutoff), site1-site3 = 9.0 Å (outside cutoff)
-		mock_distances = np.array([
-			[0.0, 7.0, 9.0],
-			[7.0, 0.0, 2.0], 
-			[9.0, 2.0, 0.0]
-		])
-		mock_lattice.get_all_distances.return_value = mock_distances
-		
-		# Calculate neighbours
-		neighbours = collection._calculate_all_neighbouring_sites(mock_lattice)
-		
-		# site1 should only have site2 as neighbour (7.0 Å ≤ 8.0 Å cutoff)
-		# site3 should not be a neighbour (9.0 Å > 8.0 Å cutoff)
-		self.assertEqual(len(neighbours[site1.index]), 1)
-		self.assertIs(neighbours[site1.index][0], site2)
-		
-		# site3 should have no neighbours from site1 (9.0 Å > 8.0 Å cutoff)
-		# but should have site2 (2.0 Å ≤ 8.0 Å cutoff)
-		self.assertEqual(len(neighbours[site3.index]), 1)
-		self.assertIs(neighbours[site3.index][0], site2)
-	
 	def test_analyse_structure(self):
 		"""Test that analyse_structure calls assign_coords and assign_site_occupations."""
 		# Patch the methods we want to verify
@@ -325,102 +172,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 		# Verify transition was recorded in site2
 		self.assertEqual(self.site2.transitions[self.site1.index], 1)
 		
-	def test_neighbouring_sites(self):
-		"""Test that neighbouring_sites returns the correct neighbours."""
-		# Create sites at known positions for distance testing
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0, label="site1")
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0, label="site2")  # Close to site1
-		site3 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0, label="site3")  # Far from site1
-		
-		collection = SphericalSiteCollection([site1, site2, site3])
-		
-		# Mock the _neighbouring_sites to control the test
-		test_neighbours = {
-			site1.index: [site2],  # site1 neighbours site2
-			site2.index: [site1],  # site2 neighbours site1
-			site3.index: []        # site3 has no neighbours
-		}
-		collection._neighbouring_sites = test_neighbours
-		
-		# Test site1 neighbours
-		neighbours = collection.neighbouring_sites(site1.index)
-		self.assertEqual(len(neighbours), 1)
-		self.assertIs(neighbours[0], site2)
-		
-		# Test site2 neighbours
-		neighbours = collection.neighbouring_sites(site2.index)
-		self.assertEqual(len(neighbours), 1)
-		self.assertIs(neighbours[0], site1)
-		
-		# Test site3 neighbours (none)
-		neighbours = collection.neighbouring_sites(site3.index)
-		self.assertEqual(len(neighbours), 0)
-	
-	def test_neighbouring_sites_lazy_calculation_all_distances(self):
-		"""Test that neighbouring_sites calculates all site-site distances on first access."""
-		# Create sites at known positions
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0, label="site1")
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0, label="site2")  # Close to site1
-		site3 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0, label="site3")  # Far from site1
-		
-		collection = SphericalSiteCollection([site1, site2, site3])
-		
-		# Mock the _calculate_all_neighbouring_sites method
-		with patch.object(collection, '_calculate_all_neighbouring_sites') as mock_calculate:
-			mock_neighbours = {
-				site1.index: [site2],
-				site2.index: [site1], 
-				site3.index: []
-			}
-			mock_calculate.return_value = mock_neighbours
-			
-			# Create a mock structure with lattice for distance calculations
-			mock_structure = Mock(spec=Structure)
-			mock_lattice = Mock(spec=Lattice)
-			mock_structure.lattice = mock_lattice
-			
-			# First call should trigger calculation
-			with patch.object(collection, '_get_current_lattice', return_value=mock_lattice):
-				neighbours = collection.neighbouring_sites(site1.index)
-			
-			# Verify calculation was called with the lattice
-			mock_calculate.assert_called_once_with(mock_lattice)
-			
-			# Verify result
-			self.assertEqual(len(neighbours), 1)
-			self.assertIs(neighbours[0], site2)
-	
-	def test_neighbouring_sites_caches_calculation(self):
-		"""Test that neighbouring_sites only calculates once and caches results."""
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)
-		site2 = SphericalSite(frac_coords=np.array([0.1, 0.0, 0.0]), rcut=1.0)
-		
-		collection = SphericalSiteCollection([site1, site2])
-		
-		with patch.object(collection, '_calculate_all_neighbouring_sites') as mock_calculate:
-			mock_calculate.return_value = {site1.index: [site2], site2.index: [site1]}
-			
-			with patch.object(collection, '_get_current_lattice', return_value=Mock(spec=Lattice)):
-				# Multiple calls to neighbouring_sites
-				collection.neighbouring_sites(site1.index)
-				collection.neighbouring_sites(site2.index)
-				collection.neighbouring_sites(site1.index)  # Call again
-			
-			# Calculation should only be called once
-			mock_calculate.assert_called_once()
-	
-	def test_neighbouring_sites_requires_lattice_for_calculation(self):
-		"""Test that neighbouring_sites properly handles lattice requirement."""
-		site1 = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=1.0)
-		collection = SphericalSiteCollection([site1])
-		
-		# Mock _get_current_lattice to return None (no lattice available)
-		with patch.object(collection, '_get_current_lattice', return_value=None):
-			with self.assertRaises(RuntimeError) as context:
-				collection.neighbouring_sites(site1.index)
-			
-			self.assertIn("No lattice available", str(context.exception))
-			
 	def test_full_optimised_assignment_integration(self):
 			"""Integration test for the complete optimised site assignment algorithm."""
 			# Simple setup: 3 sites, 2 atoms
@@ -449,8 +200,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 			collection.assign_site_occupations(atoms, structure)
 			
 			# Verify key integration points
-			self.assertEqual(collection._current_lattice, lattice)  # Lattice stored
-			self.assertIsNotNone(collection._neighbouring_sites)    # Neighbors calculated
 			self.assertEqual(atom1.in_site, site1.index)           # Correct assignment
 			self.assertEqual(atom2.in_site, site2.index)           # Correct assignment
 			self.assertEqual(site1.contains_atoms, [atom1.index])  # Site updated
@@ -475,117 +224,94 @@ class TestGetPrioritySites(unittest.TestCase):
 	def test_yields_most_recent_site_first(self):
 		"""Test that generator yields most recent site as first site."""
 		self.atom._recent_sites = [self.site2.index, None]
-		with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
-			priority_sites = list(self.collection._get_priority_sites(self.atom))
-			self.assertEqual(priority_sites[0], self.site2)
+		priority_sites = list(self.collection._get_priority_sites(self.atom))
+		self.assertEqual(priority_sites[0], self.site2)
 
-	def test_yields_most_recently_visited_when_most_recent_is_none(self):
-		"""Test that generator yields most recently visited site when last entry was None."""
+	def test_yields_both_recent_sites(self):
+		"""Test that generator yields both recent distinct sites."""
 		self.atom._recent_sites = [self.site2.index, self.site1.index]
-		with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
-			priority_sites = list(self.collection._get_priority_sites(self.atom))
-			self.assertEqual(priority_sites[0], self.site2)
+		priority_sites = list(self.collection._get_priority_sites(self.atom))
+		self.assertEqual(priority_sites[0], self.site2)
+		self.assertEqual(priority_sites[1], self.site1)
 	
 	def test_yields_all_sites_when_no_valid_trajectory(self):
 		"""Test that generator yields all sites when no valid site history exists."""
 		self.atom.trajectory = [None, None]
 		priority_sites = list(self.collection._get_priority_sites(self.atom))
 		self.assertEqual(len(priority_sites), 3)
-		self.assertIn(self.site1, priority_sites)
-		self.assertIn(self.site2, priority_sites)
-		self.assertIn(self.site3, priority_sites)
+		# All sites yielded, starting from nearest
+		self.assertEqual(priority_sites[0], self.site1)  # nearest to atom at [0.2,0.2,0.2]
 		
 	def test_yields_transition_destinations_after_most_recent(self):
 		"""Test that generator yields transition destinations after most recent site."""
 		self.atom._recent_sites = [self.site1.index, None]
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-			with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
-				mock_transitions.return_value = [self.site3.index, self.site2.index]
-				priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom)]
-				self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])
+			mock_transitions.return_value = [self.site3.index, self.site2.index]
+			priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom)]
+			self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])
 
 	def test_yields_no_duplicates_when_all_sites_are_transitions(self):
 		"""Test that generator doesn't yield duplicates when all sites appear as transitions."""
 		self.atom._recent_sites = [self.site1.index, None]
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-			with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
-				mock_transitions.return_value = [self.site3.index, self.site2.index]
-				priority_sites = list(self.collection._get_priority_sites(self.atom))
-				self.assertEqual(len(priority_sites), 3)
-				site_indices = [site.index for site in priority_sites]
-				self.assertEqual(len(site_indices), len(set(site_indices)))
-				self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
-	
-	def test_skips_neighbour_checking_when_no_most_recent_site(self):
-		"""Test that neighbour checking is skipped when atom has no most recent site."""
-		self.atom.trajectory = []
-		with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
+			mock_transitions.return_value = [self.site3.index, self.site2.index]
 			priority_sites = list(self.collection._get_priority_sites(self.atom))
 			self.assertEqual(len(priority_sites), 3)
-			mock_neighbours.assert_not_called()
+			site_indices = [site.index for site in priority_sites]
+			self.assertEqual(len(site_indices), len(set(site_indices)))
+			self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
 	
-	def test_yields_remaining_sites_after_neighbours(self):
-		"""Test that generator yields remaining sites after neighbours."""
-		self.atom._recent_sites = [self.site1.index, None]
-
-		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-			with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-				mock_transitions.return_value = []
-				mock_neighbours.return_value = [self.site2]
-
-				priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-				self.assertEqual(priority_sites[0], self.site1)
-				self.assertEqual(priority_sites[1], self.site2)
-				self.assertEqual(priority_sites[2], self.site3)
-
-	def test_yields_neighbours_after_transitions(self):
-		"""Test that generator yields neighbours after transition destinations."""
-		self.atom._recent_sites = [self.site1.index, None]
-
-		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-			with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-				mock_transitions.return_value = [self.site2.index]
-				mock_neighbours.return_value = [self.site3]
-
-				priority_sites = list(self.collection._get_priority_sites(self.atom))
-				
-				# Should be: site1 (most recent), site2 (transition), site3 (neighbour)
-				self.assertEqual(priority_sites[0], self.site1)  # Most recent
-				self.assertEqual(priority_sites[1], self.site2)  # Transition
-				self.assertEqual(priority_sites[2], self.site3)  # Neighbour
-				
-				# Verify neighbouring_sites was called with most recent site index
-				mock_neighbours.assert_called_once_with(self.site1.index)
+	def test_no_history_uses_nearest_site_first(self):
+		"""Test that nearest site is yielded first when atom has no history."""
+		# atom at [0.2, 0.2, 0.2] -- nearest site is site1 at [0.1, 0.1, 0.1]
+		priority_sites = list(self.collection._get_priority_sites(self.atom))
+		self.assertEqual(len(priority_sites), 3)
+		self.assertEqual(priority_sites[0], self.site1)
 	
-	def test_yields_no_duplicates_with_neighbours_and_transitions(self):
-		"""Test that generator doesn't yield duplicates when neighbour appears as transition."""
-		# Set up atom with most recent site
+	def test_yields_remaining_sites_distance_ranked(self):
+		"""Test that remaining sites are yielded in distance-ranked order."""
 		self.atom._recent_sites = [self.site1.index, None]
-		
-		# Mock transitions and neighbours where site2 appears in both
+
+		with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
+			priority_sites = list(self.collection._get_priority_sites(self.atom))
+
+			# site1 at [0.1,0.1,0.1], site2 at [0.5,0.5,0.5], site3 at [0.8,0.8,0.8]
+			# From site1 with minimum-image convention:
+			#   site3 is 0.3*sqrt(3) away via PBC, site2 is 0.4*sqrt(3) away
+			self.assertEqual(priority_sites[0], self.site1)
+			self.assertEqual(priority_sites[1], self.site3)
+			self.assertEqual(priority_sites[2], self.site2)
+
+	def test_yields_transitions_then_distance_ranked(self):
+		"""Test that transitions come before distance-ranked remaining sites."""
+		self.atom._recent_sites = [self.site1.index, None]
+
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-			with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-				mock_transitions.return_value = [self.site2.index]  # site2 as transition
-				mock_neighbours.return_value = [self.site2, self.site3]  # site2 also as neighbour
-				
-				# Get priority sites
-				priority_sites = list(self.collection._get_priority_sites(self.atom))
-				
-				# Should be exactly 3 sites, no duplicates
-				self.assertEqual(len(priority_sites), 3)
-				
-				# Convert to indices
-				site_indices = [site.index for site in priority_sites]
-				
-				# Should have no duplicates
-				self.assertEqual(len(site_indices), len(set(site_indices)))
-				
-				# site2 should only appear once (as transition, not again as neighbour)
-				self.assertEqual(site_indices.count(self.site2.index), 1)
-				
-				# Order should be: site1, site2 (transition), site3 (neighbour)
-				self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
+			mock_transitions.return_value = [self.site3.index]
+
+			priority_sites = list(self.collection._get_priority_sites(self.atom))
+
+			# site1 (recent), site3 (transition), site2 (distance-ranked remaining)
+			self.assertEqual(priority_sites[0], self.site1)
+			self.assertEqual(priority_sites[1], self.site3)
+			self.assertEqual(priority_sites[2], self.site2)
+	
+	def test_yields_no_duplicates_with_transitions(self):
+		"""Test that generator doesn't yield duplicates when transition overlaps with distance ranking."""
+		self.atom._recent_sites = [self.site1.index, None]
+
+		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
+			mock_transitions.return_value = [self.site2.index]
+
+			priority_sites = list(self.collection._get_priority_sites(self.atom))
+
+			# Should be exactly 3 sites, no duplicates
+			self.assertEqual(len(priority_sites), 3)
+			site_indices = [site.index for site in priority_sites]
+			self.assertEqual(len(site_indices), len(set(site_indices)))
+
+			# site2 appears as transition, then site3 from distance ranking
+			self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
 				
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
 	"""Test interaction between assign_site_occupations and _get_priority_sites."""
@@ -678,12 +404,6 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
 			self.collection.assign_site_occupations(self.atoms, self.structure)
 			self.assertIsNone(self.atom.in_site)
 	
-	def test_stores_lattice_from_structure(self):
-		"""Test that assign_site_occupations stores the lattice from structure."""
-		with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-			self.collection.assign_site_occupations(self.atoms, self.structure)
-			self.assertEqual(self.collection._current_lattice, self.structure.lattice)
-
 
 if __name__ == '__main__':
 	unittest.main()

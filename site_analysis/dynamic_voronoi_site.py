@@ -1,7 +1,7 @@
 """Dynamic Voronoi site representation for crystal structure analysis.
 
 This module provides the DynamicVoronoiSite class, which represents a site with
-a center that is dynamically calculated from the positions of a set of reference
+a centre that is dynamically calculated from the positions of a set of reference
 atoms.
 """
 
@@ -17,9 +17,9 @@ class DynamicVoronoiSite(Site):
     """Site subclass corresponding to Voronoi cells with centres dynamically 
     calculated from the positions of sets of reference atoms.
     
-    Unlike standard VoronoiSite objects, which have fixed centers, the positions
-    of DynamicVoronoiSite objects adapt to structural changes as the reference 
-    atoms move. The site center is calculated as the mean position of the reference 
+    Unlike standard VoronoiSite objects, which have fixed centres, the positions
+    of DynamicVoronoiSite objects adapt to structural changes as the reference
+    atoms move. The site centre is calculated as the mean position of the reference
     atoms, with special handling for periodic boundary conditions.
     
     This makes DynamicVoronoiSite particularly useful for tracking sites in mobile 
@@ -28,7 +28,7 @@ class DynamicVoronoiSite(Site):
     Similar to standard Voronoi sites, a single DynamicVoronoiSite cannot determine
     whether an atom is contained within it, as this depends on the positions of all
     other sites. The coordination number of a DynamicVoronoiSite is defined as the 
-    number of reference atoms used to calculate its center.
+    number of reference atoms used to calculate its centre.
     
     Attributes:
         reference_indices (list[int]): Indices of atoms used as reference to calculate
@@ -107,8 +107,7 @@ class DynamicVoronoiSite(Site):
         """Apply PBC correction and compute the site centre.
 
         Performs full PBC unwrapping using either the reference centre
-        method or the legacy spread-based method. Sets ``_centre_coords``
-        from the mean of PBC-corrected coordinates.
+        method or the legacy spread-based method.
 
         Args:
             frac_coords: Raw fractional coordinates of the reference atoms,
@@ -118,6 +117,10 @@ class DynamicVoronoiSite(Site):
 
         Returns:
             Integer image shifts applied, shape ``(n_reference, 3)``.
+
+        Note:
+            Also sets ``_centre_coords`` as a side-effect (mean of
+            PBC-corrected coordinates, wrapped to [0, 1)).
         """
         if self.reference_center is not None:
             corrected, image_shifts = unwrap_vertices_to_reference_center(
@@ -125,7 +128,7 @@ class DynamicVoronoiSite(Site):
                 return_image_shifts=True)
         else:
             corrected = apply_legacy_pbc_correction(frac_coords)
-            image_shifts = np.round(corrected - frac_coords).astype(int)
+            image_shifts = np.round(corrected - frac_coords).astype(np.int64)
         self._centre_coords = np.mean(corrected, axis=0) % 1.0
         return image_shifts
         

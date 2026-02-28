@@ -6,19 +6,19 @@ atoms to these sites based on their positions in a crystal structure.
 
 The DynamicVoronoiSiteCollection extends the base SiteCollection class with
 specific functionality for dynamic Voronoi sites, including:
-1. Calculating the dynamic centers of sites based on reference atom positions
+1. Calculating the dynamic centres of sites based on reference atom positions
 2. Assigning atoms to sites using Voronoi tessellation principles
 
 For atom assignment, the collection:
-1. First updates each site's center by calculating the mean position of its
+1. First updates each site's centre by calculating the mean position of its
    reference atoms, with special handling for periodic boundary conditions
-2. Calculates distances from each (dynamically determined) site center to each atom
-3. Assigns each atom to the site with the nearest center
+2. Calculates distances from each (dynamically determined) site centre to each atom
+3. Assigns each atom to the site with the nearest centre
 4. Uses the structure's lattice to correctly handle distances across
    periodic boundaries
 
 This collection is particularly useful for tracking sites in frameworks
-that deform during simulation, as the site centers adapt to the changing
+that deform during simulation, as the site centres adapt to the changing
 positions of the reference atoms.
 """
 
@@ -39,11 +39,19 @@ from site_analysis.atom import Atom
 class _CentreGroup:
     """Batch arrays for a group of sites sharing the same n_reference.
 
+    Owns the cached PBC shift state and the vectorised fast-path
+    computation.  The collection orchestrates fallback (per-site)
+    computation and distributes computed centres back to individual
+    sites.
+
     Attributes:
-        site_positions: Indices into the parent ``DynamicVoronoiSiteCollection.sites`` list for this group.
-        ref_indices: ``(n_sites, n_ref)`` int array of reference atom indices.
+        site_positions: Indices into the parent
+            ``DynamicVoronoiSiteCollection.sites`` list for this group.
+        ref_indices: ``(n_sites, n_ref)`` int array of reference atom
+            indices.
         pbc_shifts: ``(n_sites, n_ref, 3)`` int, cached image shifts.
-        cached_raw_frac: ``(n_sites, n_ref, 3)`` float, previous raw coords.
+        cached_raw_frac: ``(n_sites, n_ref, 3)`` float, previous raw
+            coords.
         initialised: Whether the PBC caches have been populated.
     """
     site_positions: list[int]
@@ -56,6 +64,54 @@ class _CentreGroup:
         n_sites, n_ref = self.ref_indices.shape
         self.pbc_shifts = np.zeros((n_sites, n_ref, 3), dtype=np.int64)
         self.cached_raw_frac = np.zeros((n_sites, n_ref, 3))
+
+    def try_fast_update(self, batch_ref: np.ndarray) -> np.ndarray | None:
+        """Try the vectorised incremental shift update.
+
+        If the group is initialised and all coordinate displacements
+        since the last frame are below 0.3 fractional units, updates
+        the cached shifts and returns the computed centres.  Otherwise
+        returns ``None`` to signal that the caller should fall back to
+        per-site full PBC computation.
+
+        Args:
+            batch_ref: Raw fractional coordinates for this group,
+                shape ``(n_sites, n_ref, 3)``.
+
+        Returns:
+            Site centres as ``(n_sites, 3)`` array, or ``None`` if the
+            fast path cannot be used.
+        """
+        if not self.initialised:
+            return None
+        diff = batch_ref - self.cached_raw_frac
+        wrapping = np.round(diff).astype(np.int64)
+        physical_diff = diff - wrapping
+        if not np.all(np.abs(physical_diff) < 0.3):
+            return None
+        new_shifts = self.pbc_shifts - wrapping
+        corrected = batch_ref + new_shifts
+        # Shift each site's coords so all values are >= 0
+        min_coords = np.min(corrected, axis=1)  # (n_sites, 3)
+        non_neg = np.maximum(0, np.ceil(-min_coords))  # (n_sites, 3)
+        corrected = corrected + non_neg[:, np.newaxis, :]
+        self.pbc_shifts = new_shifts
+        self.cached_raw_frac = batch_ref.copy()
+        centres: np.ndarray = np.mean(corrected, axis=1) % 1.0
+        return centres
+
+    def initialise(self, batch_ref: np.ndarray) -> None:
+        """Mark the group as initialised after fallback computation.
+
+        Called once all ``pbc_shifts`` entries have been populated by
+        per-site full PBC computation.
+
+        Args:
+            batch_ref: Raw fractional coordinates for this group,
+                shape ``(n_sites, n_ref, 3)``.
+        """
+        self.cached_raw_frac = batch_ref.copy()
+        self.initialised = True
 
 
 class DynamicVoronoiSiteCollection(SiteCollection):
@@ -108,10 +164,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
                                   lattice: Lattice) -> None:
         """Compute all site centres in batch, grouped by reference count.
 
-        On the first frame (or after reset), falls back to per-site full
-        PBC computation to populate the caches.  On subsequent frames,
-        uses vectorised incremental shift updates across all sites in
-        each group simultaneously.
+        For each group, tries the vectorised fast path first.  If that
+        fails (first frame, after reset, or large displacement), falls
+        back to per-site full PBC computation.
 
         Args:
             all_frac_coords: Full fractional coordinate array from the
@@ -119,32 +174,18 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             lattice: Lattice for PBC distance calculations.
         """
         for group in self._centre_groups:
-            # (n_sites, n_ref, 3)
-            batch_ref = all_frac_coords[group.ref_indices]
-            if group.initialised:
-                diff = batch_ref - group.cached_raw_frac
-                wrapping = np.round(diff).astype(np.int64)
-                physical_diff = diff - wrapping
-                if np.all(np.abs(physical_diff) < 0.3):
-                    new_shifts = group.pbc_shifts - wrapping
-                    corrected = batch_ref + new_shifts
-                    # Per-site uniform non-negative shift
-                    min_coords = np.min(corrected, axis=1)  # (n_sites, 3)
-                    uniform = np.maximum(0, np.ceil(-min_coords))  # (n_sites, 3)
-                    corrected = corrected + uniform[:, np.newaxis, :]
-                    group.pbc_shifts = new_shifts
-                    group.cached_raw_frac = batch_ref.copy()
-                    centres = np.mean(corrected, axis=1) % 1.0
-                    for idx, pos in enumerate(group.site_positions):
-                        self.sites[pos]._centre_coords = centres[idx]
-                    continue
-            # First frame or cache invalidation — per-site full computation.
+            batch_ref = all_frac_coords[group.ref_indices]  # (n_sites, n_ref, 3)
+            centres = group.try_fast_update(batch_ref)
+            if centres is not None:
+                for idx, pos in enumerate(group.site_positions):
+                    self.sites[pos]._centre_coords = centres[idx]
+                continue
+            # Fallback — per-site full PBC computation.
             for idx, pos in enumerate(group.site_positions):
                 site = self.sites[pos]
                 image_shifts = site._compute_corrected_coords(batch_ref[idx], lattice)
                 group.pbc_shifts[idx] = image_shifts
-            group.cached_raw_frac = batch_ref.copy()
-            group.initialised = True
+            group.initialise(batch_ref)
 
     def reset(self) -> None:
         """Reset all sites and batch PBC caches for a fresh analysis run."""
@@ -181,7 +222,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
                                 structure: Structure) -> None:
         """Assign atoms to sites based on Voronoi tessellation.
         
-        This method assigns each atom to the nearest site center,
+        This method assigns each atom to the nearest site centre,
         taking into account periodic boundary conditions.
         
         Args:

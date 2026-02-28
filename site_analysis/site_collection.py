@@ -19,10 +19,37 @@ subclasses instead.
 """
 
 from abc import ABC, abstractmethod
+from typing import NamedTuple, Sequence
+
 import numpy as np
-from typing import Sequence
 from pymatgen.core import Structure # type: ignore
 from .site import Site
+
+
+class _NearestSiteLookup(NamedTuple):
+    """Precomputed lookup for finding the nearest site to a given position.
+
+    Uses minimum-image convention in fractional space, which is only
+    geometrically exact for orthogonal cells.
+    """
+    centres: np.ndarray
+    site_indices: list[int]
+
+    def nearest_site_index(self, frac_coords: np.ndarray) -> int:
+        """Return the site index nearest to the given fractional coordinates.
+
+        Uses minimum-image convention in fractional space.
+
+        Args:
+            frac_coords: Fractional coordinates to find the nearest site for.
+
+        Returns:
+            The site index of the nearest site.
+        """
+        diffs = self.centres - frac_coords
+        diffs -= np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        return self.site_indices[int(np.argmin(dists))]
 
 class SiteCollection(ABC):
     """Parent class for collections of sites.
@@ -155,6 +182,7 @@ class SiteCollection(ABC):
         site.contains_atoms.append(atom.index)
         site.points.append(atom.frac_coords)
         atom.in_site = site.index
+        atom.update_recent_site(site.index)
 
     def reset(self) -> None:
         """Reset the collection and all its sites for a fresh analysis run.

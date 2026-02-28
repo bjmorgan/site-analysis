@@ -11,7 +11,6 @@ from typing import Any
 from .site import Site
 from .atom import Atom
 from pymatgen.core import Lattice, Structure
-from site_analysis.containment import update_pbc_shifts
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 
 class DynamicVoronoiSite(Site):
@@ -64,8 +63,6 @@ class DynamicVoronoiSite(Site):
         super(DynamicVoronoiSite, self).__init__(label=label)
         self.reference_indices = reference_indices
         self._centre_coords: np.ndarray | None = None
-        self._pbc_image_shifts: np.ndarray | None = None
-        self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
         
     def __repr__(self) -> str:
@@ -89,8 +86,6 @@ class DynamicVoronoiSite(Site):
         """
         super(DynamicVoronoiSite, self).reset()
         self._centre_coords = None
-        self._pbc_image_shifts = None
-        self._pbc_cached_raw_frac = None
         
     def calculate_centre(self, structure: Structure) -> None:
         """Calculate the centre of this site based on the positions of reference atoms.
@@ -102,61 +97,28 @@ class DynamicVoronoiSite(Site):
         Notes:
             This method handles periodic boundary conditions and calculates
             the centre as the mean of the reference atom positions.
-
-            For bulk analysis prefer ``calculate_centre_from_bulk`` via the
-            collection, which pre-extracts coordinates once and avoids
-            creating individual ``PeriodicSite`` objects.
         """
         ref_coords = np.array([structure[i].frac_coords for i in self.reference_indices])
         self._compute_corrected_coords(ref_coords, structure.lattice)
 
-    def calculate_centre_from_bulk(self,
-            all_frac_coords: np.ndarray,
-            lattice: Lattice) -> None:
-        """Calculate the site centre from pre-extracted bulk coordinates.
-
-        This is the preferred method for bulk analysis, where the collection
-        extracts ``structure.frac_coords`` once and passes it to all sites.
-        Avoids creating individual ``PeriodicSite`` objects per reference atom.
-
-        Args:
-            all_frac_coords: Full fractional coordinate array from the
-                structure, shape ``(n_atoms, 3)``.
-            lattice: Lattice for PBC distance calculations.
-        """
-        ref_coords = all_frac_coords[self.reference_indices]
-        self._compute_corrected_coords(ref_coords, lattice)
-
     def _compute_corrected_coords(self,
             frac_coords: np.ndarray,
-            lattice: Lattice) -> None:
-        """Apply PBC correction with shift caching and compute the site centre.
+            lattice: Lattice) -> np.ndarray:
+        """Apply PBC correction and compute the site centre.
 
-        On the first call (or after an anomalous displacement invalidates
-        the cache), performs full PBC unwrapping using either the reference
-        centre method or the legacy spread-based method. On subsequent
-        calls, updates the cached integer image shifts incrementally by
-        detecting coordinate wraps (jumps of ~1.0), avoiding the expensive
-        27-image distance search.
-
-        Sets ``_centre_coords`` from the mean of PBC-corrected coordinates.
+        Performs full PBC unwrapping using either the reference centre
+        method or the legacy spread-based method. Sets ``_centre_coords``
+        from the mean of PBC-corrected coordinates.
 
         Args:
             frac_coords: Raw fractional coordinates of the reference atoms,
                 shape ``(n_reference, 3)``.
             lattice: Lattice for Cartesian distance calculations
-                (used only on full recomputation with reference centres).
-        """
-        if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
-            valid, corrected, new_shifts = update_pbc_shifts(
-                frac_coords, self._pbc_cached_raw_frac, self._pbc_image_shifts)
-            if valid:
-                self._pbc_image_shifts = new_shifts
-                self._pbc_cached_raw_frac = frac_coords.copy()
-                self._centre_coords = np.mean(corrected, axis=0) % 1.0
-                return
+                (used only with reference centres).
 
-        # Full computation -- first call or after anomalous displacement
+        Returns:
+            Integer image shifts applied, shape ``(n_reference, 3)``.
+        """
         if self.reference_center is not None:
             corrected, image_shifts = unwrap_vertices_to_reference_center(
                 frac_coords, self.reference_center, lattice,
@@ -164,9 +126,8 @@ class DynamicVoronoiSite(Site):
         else:
             corrected = apply_legacy_pbc_correction(frac_coords)
             image_shifts = np.round(corrected - frac_coords).astype(int)
-        self._pbc_image_shifts = image_shifts
-        self._pbc_cached_raw_frac = frac_coords.copy()
         self._centre_coords = np.mean(corrected, axis=0) % 1.0
+        return image_shifts
         
     @property
     def centre(self) -> np.ndarray:

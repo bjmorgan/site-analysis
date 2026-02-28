@@ -57,10 +57,6 @@ class _CentreGroup:
         self.pbc_shifts = np.zeros((n_sites, n_ref, 3), dtype=np.int64)
         self.cached_raw_frac = np.zeros((n_sites, n_ref, 3))
 
-    def reset(self) -> None:
-        """Clear cached PBC state so the next frame does a full computation."""
-        self.initialised = False
-
 
 class DynamicVoronoiSiteCollection(SiteCollection):
     """A collection of DynamicVoronoiSite objects.
@@ -125,7 +121,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         for group in self._centre_groups:
             # (n_sites, n_ref, 3)
             batch_ref = all_frac_coords[group.ref_indices]
-            if group.initialised and self.sites[group.site_positions[0]]._pbc_image_shifts is not None:
+            if group.initialised:
                 diff = batch_ref - group.cached_raw_frac
                 wrapping = np.round(diff).astype(np.int64)
                 physical_diff = diff - wrapping
@@ -143,31 +139,22 @@ class DynamicVoronoiSiteCollection(SiteCollection):
                         self.sites[pos]._centre_coords = centres[idx]
                     continue
             # First frame or cache invalidation — per-site full computation.
-            # Clear per-site caches first to avoid stale data from an
-            # earlier batch frame being used by _compute_corrected_coords.
-            for pos in group.site_positions:
-                self.sites[pos]._pbc_image_shifts = None
-                self.sites[pos]._pbc_cached_raw_frac = None
             for idx, pos in enumerate(group.site_positions):
                 site = self.sites[pos]
-                ref_coords = batch_ref[idx]
-                site._compute_corrected_coords(ref_coords, lattice)
-                group.pbc_shifts[idx] = site._pbc_image_shifts
-                group.cached_raw_frac[idx] = site._pbc_cached_raw_frac
+                image_shifts = site._compute_corrected_coords(batch_ref[idx], lattice)
+                group.pbc_shifts[idx] = image_shifts
+            group.cached_raw_frac = batch_ref.copy()
             group.initialised = True
 
     def reset_centre_groups(self) -> None:
-        """Reset batch and per-site PBC caches so the next frame does full computation."""
+        """Reset batch PBC caches so the next frame does full computation."""
         for group in self._centre_groups:
-            group.reset()
-            for pos in group.site_positions:
-                self.sites[pos]._pbc_image_shifts = None
-                self.sites[pos]._pbc_cached_raw_frac = None
+            group.initialised = False
 
     def analyse_structure(self,
                           atoms: list[Atom],
                           structure: Structure) -> None:
-        """Analyze a structure to assign atoms to sites.
+        """Analyse a structure to assign atoms to sites.
         
         This method:
         1. Assigns coordinates to atoms

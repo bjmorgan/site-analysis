@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch, PropertyMock, call
+from unittest.mock import Mock, patch
 import numpy as np
 from pymatgen.core import Structure, Lattice
 
@@ -59,92 +59,30 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		self.assertIn(atom.index, site1.contains_atoms)
 			
 	def test_assign_site_occupations(self):
-		"""Test that atoms are correctly assigned to sites based on Voronoi tessellation."""
-		# Create mock sites
-		site1 = Mock(spec=DynamicVoronoiSite,
-					 reference_indices=[0, 1], reference_center=None)
-		site2 = Mock(spec=DynamicVoronoiSite,
-					 reference_indices=[2, 3], reference_center=None)
-		site1.index = 0
-		site2.index = 1
-		# Set up centre method to return fixed coordinates
-		centre1 = PropertyMock(return_value=np.array([0.2, 0.2, 0.2]))
-		centre2 = PropertyMock(return_value=np.array([0.8, 0.8, 0.8]))
-		type(site1).centre = centre1
-		type(site2).centre = centre2
-		
-		sites = [site1, site2]
-		
-		# Create mock atoms
-		atoms = [Mock(spec=Atom) for _ in range(5)]
-		for i, atom in enumerate(atoms):
-			atom.index = i
-			# Set up frac_coords attribute
-			atom.frac_coords = np.array([0.1 + 0.2 * i,
-										 0.1 + 0.2 * i,
-										 0.1 + 0.2 * i])
-		
-		# Create mock structure and lattice
-		lattice = Mock(spec=Lattice)
-		structure = Mock(spec=Structure)
-		structure.lattice = lattice
-		
-		# Mock the distance calculation
-		# Return a matrix where:
-		# - atoms 0-1 are closer to site1
-		# - atoms 2-4 are closer to site2
-		mock_distances = np.array([
-			[2.0, 3.0, 8.0, 10.0, 7.0],  # Distances from site1 to atoms 0-4
-			[8.0, 7.0, 2.0, 1.0, 3.0]    # Distances from site2 to atoms 0-4
-		])
-		lattice.get_all_distances = Mock(return_value=mock_distances)
-		
-		# Create collection with mocked sites
-		site_collection = DynamicVoronoiSiteCollection(sites=sites)
-		
-		# Mock the reset_site_occupations method
-		site_collection.reset_site_occupations = Mock()
-		
-		# Mock the update_occupation method to track assignments
-		site_collection.update_occupation = Mock()
-		
-		# Call the method being tested
-		site_collection.assign_site_occupations(atoms, structure)
-		
-		# Verify reset_site_occupations was called
-		site_collection.reset_site_occupations.assert_called_once()
-		
-		# Verify centre property was accessed for each site
-		centre1.assert_called()
-		centre2.assert_called()
-		
-		# Verify get_all_distances was called with the correct parameters
-		# We can't use site1.centre here because it's a PropertyMock, so get the value directly
-		expected_site_coords = np.array([
-			centre1.return_value,
-			centre2.return_value
-		])
-		atom_coords = np.array([atom.frac_coords for atom in atoms])
-		
-		# We can't directly compare numpy arrays in the call args, so we need to extract them
-		args, kwargs = lattice.get_all_distances.call_args
-		np.testing.assert_array_equal(args[0], expected_site_coords)
-		np.testing.assert_array_equal(args[1], atom_coords)
-		
-		# Verify update_occupation was called for each atom with the correct site
-		expected_calls = [
-			call(site1, atoms[0]),  # Atom 0 → Site 1
-			call(site1, atoms[1]),  # Atom 1 → Site 1
-			call(site2, atoms[2]),  # Atom 2 → Site 2
-			call(site2, atoms[3]),  # Atom 3 → Site 2
-			call(site2, atoms[4])   # Atom 4 → Site 2
-		]
-		
-		# Verify each update_occupation call was made in the expected order
-		site_collection.update_occupation.assert_has_calls(expected_calls)
-		
-		# Verify the number of calls matches the number of atoms
-		self.assertEqual(site_collection.update_occupation.call_count, len(atoms))
+		"""Test that atoms are assigned to the nearest site centre."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1._centre_coords = np.array([0.2, 0.2, 0.2])
+		site2._centre_coords = np.array([0.8, 0.8, 0.8])
+
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+
+		lattice = Lattice.cubic(10.0)
+		# 4 reference atoms + 2 mobile atoms
+		coords = [[0.1, 0.1, 0.1], [0.3, 0.3, 0.3],
+				  [0.7, 0.7, 0.7], [0.9, 0.9, 0.9],
+				  [0.15, 0.15, 0.15], [0.85, 0.85, 0.85]]
+		structure = Structure(lattice, ["Na"] * 6, coords)
+
+		atom1 = Atom(index=4)
+		atom2 = Atom(index=5)
+		atom1.assign_coords(structure)
+		atom2.assign_coords(structure)
+
+		collection.assign_site_occupations([atom1, atom2], structure)
+
+		self.assertIn(atom1.index, site1.contains_atoms)
+		self.assertIn(atom2.index, site2.contains_atoms)
 		
 	def test_empty_atoms_list(self):
 		"""Test that assign_site_occupations correctly handles empty atom lists."""
@@ -246,8 +184,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		self.assertIsNotNone(site1._centre_coords)
 		self.assertIsNotNone(site2._centre_coords)
 
-	def test_reset_centre_groups_clears_batch_and_per_site_state(self):
-		"""reset_centre_groups should clear both group and per-site PBC caches."""
+	def test_reset_centre_groups_clears_batch_state(self):
+		"""reset_centre_groups should clear group initialised flag."""
 		lattice = Lattice.cubic(10.0)
 		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
 		structure = Structure(lattice, ["Na"] * 2, coords)
@@ -257,12 +195,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 
 		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
 		self.assertTrue(collection._centre_groups[0].initialised)
-		self.assertIsNotNone(site._pbc_image_shifts)
 
 		collection.reset_centre_groups()
 		self.assertFalse(collection._centre_groups[0].initialised)
-		self.assertIsNone(site._pbc_image_shifts)
-		self.assertIsNone(site._pbc_cached_raw_frac)
 
 	def test_multi_frame_centres_match_per_site(self):
 		"""Batch centres over multiple frames should match per-site computation."""

@@ -59,7 +59,9 @@ class PriorityAssignmentMixin:
 
     Subclasses call ``_init_priority_ranking(centres, site_indices)`` from
     their ``__init__`` to enable distance-ranked ordering. If not called,
-    the generator falls back to neighbours then arbitrary order.
+    the generator falls back to ``neighbouring_sites`` then arbitrary
+    order (used by ``PolyhedralSiteCollection`` when reference centres
+    are unavailable).
 
     Note: distance ranking uses minimum-image convention in fractional
     space, which is only geometrically exact for orthogonal cells. For
@@ -85,10 +87,14 @@ class PriorityAssignmentMixin:
     def _init_priority_ranking(self, centres: np.ndarray, site_indices: list[int]) -> None:
         """Precompute distance-ranked site ordering from the given centres.
 
+        Does nothing if ``centres`` is empty (zero sites).
+
         Args:
             centres: (N, 3) array of fractional coordinates for each site.
             site_indices: Corresponding site indices.
         """
+        if len(centres) == 0:
+            return
         ranked: dict[int, list[int]] = {}
         for i, idx in enumerate(site_indices):
             diffs = centres - centres[i]
@@ -104,17 +110,23 @@ class PriorityAssignmentMixin:
     def _get_priority_sites(self, atom: Atom) -> Generator[Site, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
 
+        The generator picks an *anchor site* — the most recent site from
+        the atom's history, or the nearest site centre if no history
+        exists — and uses it to order the remaining sites.
+
         The checking sequence depends on available information:
 
         When trajectory history exists:
             1. Most recently visited site, then previously visited site
-            2. Learned transition destinations in frequency order
+            2. Learned transition destinations from the anchor in
+               frequency order
             3. Remaining sites by distance from anchor (if distance ranking
                available), otherwise neighbours then arbitrary order
 
         When no trajectory history exists:
-            - If distance ranking is available: nearest site centre first,
-              then learned transitions, then distance-ranked outward
+            - If distance ranking is available: nearest site centre
+              (anchor) first, then learned transitions, then
+              distance-ranked outward
             - Otherwise: all sites in arbitrary order
 
         Each site is yielded at most once.

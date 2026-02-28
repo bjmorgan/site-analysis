@@ -53,7 +53,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
         """
         for s in sites:
             if not isinstance(s, PolyhedralSite):
-                raise TypeError
+                raise TypeError(f"Expected PolyhedralSite, got {type(s).__name__}")
         super().__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)

@@ -43,7 +43,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
         """
         for s in sites:
             if not isinstance(s, SphericalSite):
-                raise TypeError
+                raise TypeError(f"Expected SphericalSite, got {type(s).__name__}")
         super().__init__(sites)
         self.sites: list[SphericalSite]
         centres = np.array([s.frac_coords for s in self.sites])

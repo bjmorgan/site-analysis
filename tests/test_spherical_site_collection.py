@@ -50,6 +50,7 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 	def test_initialization(self):
 		"""Test that SphericalSiteCollection initializes correctly."""
 		self.assertEqual(self.collection.sites, self.sites)
+		self.assertIsNotNone(self.collection._distance_ranked_sites)
 		
 	def test_init_with_empty_sites_list(self):
 		"""Test that __init__ works with empty sites list."""

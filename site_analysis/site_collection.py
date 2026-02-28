@@ -50,6 +50,7 @@ class _NearestSiteLookup(NamedTuple):
         dists = np.linalg.norm(diffs, axis=1)
         return self.site_indices[int(np.argmin(dists))]
 
+
 class PriorityAssignmentMixin:
     """Mixin providing priority-based site assignment ordering.
 

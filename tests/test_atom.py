@@ -270,43 +270,68 @@ class AtomUtilityFunctionsTestCase(unittest.TestCase):
         self.assertEqual(atoms[1].index, -5)
         self.assertEqual(atoms[2].index, 0)   
         
-    def test_most_recent_site_empty_trajectory(self):
-        """Test most_recent_site with an empty trajectory."""
+    def test_most_recent_site_default(self):
+        """Test most_recent_site returns None by default."""
         atom = Atom(index=1)
-        # Empty trajectory should return None
         self.assertIsNone(atom.most_recent_site)
-    
-    def test_most_recent_site_none_values(self):
-        """Test most_recent_site when trajectory only contains None values."""
+
+    def test_most_recent_site_reads_recent_sites(self):
+        """Test most_recent_site returns _recent_sites[0]."""
         atom = Atom(index=1)
-        atom.trajectory = [None, None, None]
-        
-        # Only None values in trajectory should return None
+        atom._recent_sites = [5, 3]
+        self.assertEqual(atom.most_recent_site, 5)
+
+    def test_most_recent_site_after_reset(self):
+        """Test most_recent_site returns None after reset."""
+        atom = Atom(index=1)
+        atom._recent_sites = [5, 3]
+        atom.reset()
         self.assertIsNone(atom.most_recent_site)
-    
-    def test_most_recent_site_with_values(self):
-        """Test most_recent_site returns the last non-None value."""
+
+
+class TestRecentSites(unittest.TestCase):
+    """Tests for Atom._recent_sites tracking."""
+
+    def test_default(self):
+        """_recent_sites is [None, None] by default."""
         atom = Atom(index=1)
-        
-        # Simple case with only site indices
-        atom.trajectory = [2, 4, 6, 8]
-        self.assertEqual(atom.most_recent_site, 8)
-        
-        # With None at the end
-        atom.trajectory = [2, 4, 6, None]
-        self.assertEqual(atom.most_recent_site, 6)
-        
-        # With None values interspersed
-        atom.trajectory = [2, None, 4, None, 6, None]
-        self.assertEqual(atom.most_recent_site, 6)
-        
-        # With None values at the beginning
-        atom.trajectory = [None, None, 6, 8]
-        self.assertEqual(atom.most_recent_site, 8)
-        
-        # Mixed case with None values
-        atom.trajectory = [None, 3, None, None, 7, None]
-        self.assertEqual(atom.most_recent_site, 7)
+        self.assertEqual(atom._recent_sites, [None, None])
+
+    def test_after_reset(self):
+        """_recent_sites is cleared on reset."""
+        atom = Atom(index=1)
+        atom._recent_sites = [3, 5]
+        atom.reset()
+        self.assertEqual(atom._recent_sites, [None, None])
+
+    def test_update_first_site(self):
+        """First site visit sets most recent."""
+        atom = Atom(index=1)
+        atom.update_recent_site(5)
+        self.assertEqual(atom._recent_sites, [5, None])
+
+    def test_update_new_site(self):
+        """Moving to a new site shifts the previous one back."""
+        atom = Atom(index=1)
+        atom.update_recent_site(5)
+        atom.update_recent_site(3)
+        self.assertEqual(atom._recent_sites, [3, 5])
+
+    def test_update_same_site(self):
+        """Staying in the same site does not change tracking."""
+        atom = Atom(index=1)
+        atom.update_recent_site(5)
+        atom.update_recent_site(5)
+        self.assertEqual(atom._recent_sites, [5, None])
+
+    def test_update_three_sites(self):
+        """Third distinct site pushes the oldest one out."""
+        atom = Atom(index=1)
+        atom.update_recent_site(5)
+        atom.update_recent_site(3)
+        atom.update_recent_site(7)
+        self.assertEqual(atom._recent_sites, [7, 3])
+
 
 class AtomSerialisationTestCase(unittest.TestCase):
     """Simple unit tests for Atom serialisation methods."""

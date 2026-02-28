@@ -54,6 +54,7 @@ class Atom:
         self.in_site: int | None = None
         self._frac_coords: np.ndarray | None = None
         self.trajectory: list[int|None] = []
+        self._recent_sites: list[int | None] = [None, None]
         self.species_string = species_string
 
     def __str__(self) -> str:
@@ -91,6 +92,7 @@ class Atom:
         self.in_site = None
         self._frac_coords = None
         self.trajectory = []
+        self._recent_sites = [None, None]
 
     def assign_coords(self,
             structure: Structure) -> None:
@@ -175,12 +177,25 @@ class Atom:
     @property
     def most_recent_site(self) -> int | None:
         """Return the most recent non-None site from the trajectory.
-        
+
         Returns:
             The index of the most recent non-None site visited by this atom,
             or None if no site has been visited yet.
         """
-        return next((site_index for site_index in reversed(self.trajectory) if site_index is not None), None)
+        return self._recent_sites[0]
+
+    def update_recent_site(self, site_index: int) -> None:
+        """Record a site visit, updating the recent sites tracker.
+
+        Only updates if the site differs from the current most recent,
+        so repeated assignments to the same site are ignored.
+
+        Args:
+            site_index: The site index being assigned.
+        """
+        if site_index != self._recent_sites[0]:
+            self._recent_sites[1] = self._recent_sites[0]
+            self._recent_sites[0] = site_index
 
 
 def atoms_from_species_string(

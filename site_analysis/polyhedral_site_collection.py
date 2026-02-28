@@ -9,24 +9,32 @@ specific functionality for polyhedral sites, including:
 - Maintaining a map of neighbouring polyhedral sites that share faces
 - Optimised atom assignment using priority-based site checking
 - Using observed transition patterns between sites for performance optimisation
+- Precomputed distance-ranked site ordering when reference centres are available
 
-The module also includes a utility function, construct_neighbouring_sites,
-which analyses a set of polyhedral sites to determine which ones are
-face-sharing neighbours (defined as sites sharing three or more vertices).
+The module also includes utility functions:
+- construct_neighbouring_sites: analyses polyhedral sites to determine which
+  ones are face-sharing neighbours (sharing three or more vertices).
+- _compute_distance_ranked_sites: precomputes distance-ranked site lists
+  from reference centres for efficient fallback ordering.
 
-For atom assignment, the collection implements an intelligent optimisation
+For atom assignment, the collection implements a priority-based optimisation
 that reduces average search complexity from O(N) to O(k):
 
-1. First check if an atom is still in its most recently assigned site
-2. Then check observed transition destinations from that site in decreasing 
-    frequency order
-3. Then check neighbouring sites that share faces with the most recent site 
-    (if these have not yet been checked)
-4. Finally check all remaining sites if not found in the priority categories
+When trajectory history exists:
+    1. Check the most recently visited site, then the previously visited
+       site (covers staying put and bouncing back)
+    2. Check learned transition destinations in frequency order
+    3. Check remaining sites by distance from anchor site (if reference
+       centres are available), otherwise face-sharing neighbours then
+       arbitrary order
 
-This approach leverages both spatial relationships (face-sharing neighbors)
-and learned behavior (observed transition patterns) to dramatically reduce
-the number of containment checks required.
+When no trajectory history exists:
+    - If reference centres are available: check the nearest site centre
+      first, then distance-ranked outward
+    - Otherwise: check all sites in arbitrary order
+
+This approach leverages spatial relationships, learned transition patterns,
+and distance-based ordering to reduce the number of containment checks.
 """
 
 from .site_collection import SiteCollection
@@ -67,6 +75,9 @@ class PolyhedralSiteCollection(SiteCollection):
         super(PolyhedralSiteCollection, self).__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
+        self._distance_ranked_sites, self._reference_centres, self._site_indices = (
+            _compute_distance_ranked_sites(self.sites)
+        )
 
     def analyse_structure(self,
             atoms: list[Atom],
@@ -100,60 +111,87 @@ class PolyhedralSiteCollection(SiteCollection):
                     self.update_occupation(site, atom)
                     break
     
+    def _nearest_site_index(self, frac_coords: np.ndarray) -> int | None:
+        """Return the site index nearest to the given fractional coordinates.
+
+        Uses minimum-image convention in fractional space. Returns None
+        if reference centres are not available.
+
+        Args:
+            frac_coords: Fractional coordinates to find the nearest site for.
+
+        Returns:
+            The site index of the nearest site, or None.
+        """
+        if self._reference_centres is None:
+            return None
+        diffs = self._reference_centres - frac_coords
+        diffs -= np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        return self._site_indices[int(np.argmin(dists))]
+
     def _get_priority_sites(self, atom):
         """Generator that yields sites in priority order for optimised atom assignment.
-        
-        This generator implements an optimised site-checking sequence:
-        1. First yield the most recent site from atom.most_recent_site (if atom has trajectory history)
-        2. Then yield transition destinations from that site in frequency order using site.most_frequent_transitions()
-        3. Then yield neighbouring sites of the most recent site using self.neighbouring_sites() 
-        4. Finally yield all remaining sites not already checked
-        
-        Each site is yielded at most once by tracking checked indices. If the atom
-        has no trajectory history (atom.most_recent_site is None), steps 1-3 are
-        skipped and only step 4 (all sites) is performed.
-        
-        The optimisation reduces average search complexity from O(N) to O(k) where:
-        - N = total number of sites in the collection
-        - k = typical number of sites checked before finding atom (usually much smaller)
-        
+
+        The checking sequence depends on available information:
+
+        When trajectory history exists:
+            1. Most recently visited site, then previously visited site
+            2. Learned transition destinations in frequency order
+            3. Remaining sites by distance from anchor (if reference centres
+               available), otherwise face-sharing neighbours then arbitrary order
+
+        When no trajectory history exists:
+            - If reference centres are available: nearest site centre first,
+              then distance-ranked outward
+            - Otherwise: all sites in arbitrary order
+
+        Each site is yielded at most once.
+
         Args:
-            atom (Atom): Atom object with trajectory history used to determine
+            atom: Atom object with trajectory history used to determine
                 site priorities.
-        
+
         Yields:
-            PolyhedralSite: Sites in optimal checking order, stopping when the
-                calling method finds the atom.
-        
-        Notes:
-            This method is called internally by assign_site_occupations()
-            and should not be called directly.
+            PolyhedralSite: Sites in optimal checking order.
         """
-        checked_indices = set()
-        
-        # 1. Most recent site first (if atom has trajectory)
-        most_recent_index = atom.most_recent_site
-        if most_recent_index is not None:
-            most_recent_site = self.site_by_index(most_recent_index)
-            yield most_recent_site
-            checked_indices.add(most_recent_site.index)
-            
-            # 2. Transition destinations in frequency order
-            for dest_index in most_recent_site.most_frequent_transitions():
+        checked_indices: set[int] = set()
+        anchor_index = None
+
+        recent = [s for s in atom._recent_sites if s is not None]
+        if recent:
+            anchor_index = recent[0]
+            for index in recent:
+                yield self.site_by_index(index)
+                checked_indices.add(index)
+        elif self._reference_centres is not None:
+            anchor_index = self._nearest_site_index(atom.frac_coords)
+            yield self.site_by_index(anchor_index)
+            checked_indices.add(anchor_index)
+
+        if anchor_index is not None:
+            # Learned transitions in frequency order
+            anchor_site = self.site_by_index(anchor_index)
+            for dest_index in anchor_site.most_frequent_transitions():
                 if dest_index not in checked_indices:
-                    dest_site = self.site_by_index(dest_index)
-                    yield dest_site
+                    yield self.site_by_index(dest_index)
                     checked_indices.add(dest_index)
-            
-            # 3. neighbouring sites not already checked
-            for neighbour_site in self.neighbouring_sites(most_recent_index):
-                if neighbour_site.index not in checked_indices:
-                    yield neighbour_site
-                    checked_indices.add(neighbour_site.index)
-        
-        # 4. All remaining sites
-        for site in self.sites:
-            if site.index not in checked_indices:
+
+            # Remaining sites
+            if self._distance_ranked_sites is not None:
+                for index in self._distance_ranked_sites[anchor_index]:
+                    if index not in checked_indices:
+                        yield self.site_by_index(index)
+            else:
+                for neighbour_site in self.neighbouring_sites(anchor_index):
+                    if neighbour_site.index not in checked_indices:
+                        yield neighbour_site
+                        checked_indices.add(neighbour_site.index)
+                for site in self.sites:
+                    if site.index not in checked_indices:
+                        yield site
+        else:
+            for site in self.sites:
                 yield site
 
     def neighbouring_sites(self,
@@ -180,6 +218,43 @@ class PolyhedralSiteCollection(SiteCollection):
             raise TypeError(f"Expected a Structure, got {type(structure).__name__}")
         check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
         return check
+
+def _compute_distance_ranked_sites(
+        sites: list[PolyhedralSite],
+) -> tuple[dict[int, list[int]] | None, np.ndarray | None, list[int] | None]:
+    """Precompute distance-ranked site lists from reference centres.
+
+    For each site, produces a list of all other site indices sorted by
+    distance from that site's reference centre, using minimum-image
+    convention in fractional space.
+
+    Args:
+        sites: List of PolyhedralSite objects.
+
+    Returns:
+        A tuple of (ranked_dict, centres_array, site_indices) where:
+        - ranked_dict maps site index to a list of other site indices
+          sorted by distance, or None if any site lacks a reference centre.
+        - centres_array is an (N, 3) array of reference centres, or None.
+        - site_indices is a list mapping array position to site index, or None.
+    """
+    centres = []
+    for s in sites:
+        if s.reference_center is None:
+            return None, None, None
+        centres.append(s.reference_center)
+    centres_array = np.array(centres)
+    site_indices = [s.index for s in sites]
+
+    ranked: dict[int, list[int]] = {}
+    for i, site in enumerate(sites):
+        diffs = centres_array - centres_array[i]
+        diffs -= np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        order = np.argsort(dists)
+        ranked[site.index] = [site_indices[j] for j in order if j != i]
+    return ranked, centres_array, site_indices
+
 
 def construct_neighbouring_sites(
         sites: list[PolyhedralSite]) -> dict[int, list[PolyhedralSite]]:

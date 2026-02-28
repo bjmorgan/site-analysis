@@ -435,10 +435,12 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 			# Create atoms with some trajectory history
 			atom1 = Atom(index=0)
 			atom1.trajectory = [site1.index]
+			atom1._recent_sites = [site1.index, None]
 			atom1._frac_coords = np.array([0.05, 0.05, 0.05])  # Should stay in site1
-			
-			atom2 = Atom(index=1) 
+
+			atom2 = Atom(index=1)
 			atom2.trajectory = [site1.index]
+			atom2._recent_sites = [site1.index, None]
 			atom2._frac_coords = np.array([0.15, 0.05, 0.05])  # Should move to site2
 			
 			atoms = [atom1, atom2]
@@ -472,15 +474,15 @@ class TestGetPrioritySites(unittest.TestCase):
 	
 	def test_yields_most_recent_site_first(self):
 		"""Test that generator yields most recent site as first site."""
-		self.atom.trajectory = [self.site2.index]
+		self.atom._recent_sites = [self.site2.index, None]
 		with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
 			priority_sites = list(self.collection._get_priority_sites(self.atom))
 			self.assertEqual(priority_sites[0], self.site2)
-			
+
 	def test_yields_most_recently_visited_when_most_recent_is_none(self):
-		"""Test that generator yields most recently visited site when most recent is None."""
-		self.atom.trajectory = [self.site1.index, self.site2.index, None]
-		with patch.object(self.collection, 'neighbouring_sites', return_value=[]): 
+		"""Test that generator yields most recently visited site when last entry was None."""
+		self.atom._recent_sites = [self.site2.index, self.site1.index]
+		with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
 			priority_sites = list(self.collection._get_priority_sites(self.atom))
 			self.assertEqual(priority_sites[0], self.site2)
 	
@@ -495,16 +497,16 @@ class TestGetPrioritySites(unittest.TestCase):
 		
 	def test_yields_transition_destinations_after_most_recent(self):
 		"""Test that generator yields transition destinations after most recent site."""
-		self.atom.trajectory = [self.site1.index]
+		self.atom._recent_sites = [self.site1.index, None]
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
 			with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
 				mock_transitions.return_value = [self.site3.index, self.site2.index]
 				priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom)]
-				self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])   
-	
+				self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])
+
 	def test_yields_no_duplicates_when_all_sites_are_transitions(self):
 		"""Test that generator doesn't yield duplicates when all sites appear as transitions."""
-		self.atom.trajectory = [self.site1.index]
+		self.atom._recent_sites = [self.site1.index, None]
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
 			with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
 				mock_transitions.return_value = [self.site3.index, self.site2.index]
@@ -524,35 +526,28 @@ class TestGetPrioritySites(unittest.TestCase):
 	
 	def test_yields_remaining_sites_after_neighbours(self):
 		"""Test that generator yields remaining sites after neighbours."""
-		# Set up atom with most recent site
-		self.atom.trajectory = [self.site1.index]  # Most recent is site1
-		
-		# Mock transitions and neighbours
+		self.atom._recent_sites = [self.site1.index, None]
+
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
 			with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-				mock_transitions.return_value = []  # No transitions
-				mock_neighbours.return_value = [self.site2]  # One neighbour
-				
-				# Get priority sites
+				mock_transitions.return_value = []
+				mock_neighbours.return_value = [self.site2]
+
 				priority_sites = list(self.collection._get_priority_sites(self.atom))
-				
-				# Should be: site1 (most recent), site2 (neighbour), site3 (remaining)
-				self.assertEqual(priority_sites[0], self.site1)  # Most recent
-				self.assertEqual(priority_sites[1], self.site2)  # Neighbour
-				self.assertEqual(priority_sites[2], self.site3)  # Remaining
-				
+
+				self.assertEqual(priority_sites[0], self.site1)
+				self.assertEqual(priority_sites[1], self.site2)
+				self.assertEqual(priority_sites[2], self.site3)
+
 	def test_yields_neighbours_after_transitions(self):
 		"""Test that generator yields neighbours after transition destinations."""
-		# Set up atom with most recent site
-		self.atom.trajectory = [self.site1.index]  # Most recent is site1
-		
-		# Mock transitions and neighbours
+		self.atom._recent_sites = [self.site1.index, None]
+
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
 			with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-				mock_transitions.return_value = [self.site2.index]  # One transition
-				mock_neighbours.return_value = [self.site3]  # One neighbour
-				
-				# Get priority sites
+				mock_transitions.return_value = [self.site2.index]
+				mock_neighbours.return_value = [self.site3]
+
 				priority_sites = list(self.collection._get_priority_sites(self.atom))
 				
 				# Should be: site1 (most recent), site2 (transition), site3 (neighbour)

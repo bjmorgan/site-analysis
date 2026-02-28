@@ -155,6 +155,7 @@ class SiteCollection(ABC):
         site.contains_atoms.append(atom.index)
         site.points.append(atom.frac_coords)
         atom.in_site = site.index
+        atom.update_recent_site(site.index)
 
     def reset(self) -> None:
         """Reset the collection and all its sites for a fresh analysis run.

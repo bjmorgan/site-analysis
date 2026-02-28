@@ -8,6 +8,7 @@ site_analysis.egg-info
 build
 dist
 /*.md
+!/CHANGELOG.md
 !/CONTRIBUTING.md
 !/README.md
 benchmarks/

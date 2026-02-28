@@ -68,6 +68,7 @@ tutorials/argyrodite_site_definitions
 :caption: Resources
 
 resources/publications
+changelog
 
 ```
 

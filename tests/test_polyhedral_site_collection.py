@@ -467,8 +467,8 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
         self.assertEqual(ranked[site_a.index], [site_c.index, site_b.index])
 
 
-class TestNearestSiteIndex(unittest.TestCase):
-    """Tests for _nearest_site_index."""
+class TestReferenceData(unittest.TestCase):
+    """Tests for _ReferenceData.nearest_site_index."""
 
     def test_reference_data_none_without_reference_centres(self):
         """Collection has no reference data when sites lack reference centres."""
@@ -485,8 +485,8 @@ class TestNearestSiteIndex(unittest.TestCase):
         site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
                                 reference_center=np.array([0.5, 0.5, 0.5]))
         collection = PolyhedralSiteCollection([site_a, site_b])
-        result = PolyhedralSiteCollection._nearest_site_index(
-            np.array([0.12, 0.12, 0.12]), collection._reference_data)
+        result = collection._reference_data.nearest_site_index(
+            np.array([0.12, 0.12, 0.12]))
         self.assertEqual(result, site_a.index)
 
     def test_uses_minimum_image_convention(self):
@@ -498,8 +498,8 @@ class TestNearestSiteIndex(unittest.TestCase):
                                 reference_center=np.array([0.95, 0.95, 0.95]))
         collection = PolyhedralSiteCollection([site_a, site_b])
         # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
-        result = PolyhedralSiteCollection._nearest_site_index(
-            np.array([0.02, 0.02, 0.02]), collection._reference_data)
+        result = collection._reference_data.nearest_site_index(
+            np.array([0.02, 0.02, 0.02]))
         self.assertEqual(result, site_b.index)
 
 

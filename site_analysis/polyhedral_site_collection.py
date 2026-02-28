@@ -59,6 +59,22 @@ class _ReferenceData(NamedTuple):
     centres: np.ndarray
     site_indices: list[int]
 
+    def nearest_site_index(self, frac_coords: np.ndarray) -> int:
+        """Return the site index nearest to the given fractional coordinates.
+
+        Uses minimum-image convention in fractional space.
+
+        Args:
+            frac_coords: Fractional coordinates to find the nearest site for.
+
+        Returns:
+            The site index of the nearest site.
+        """
+        diffs = self.centres - frac_coords
+        diffs -= np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        return self.site_indices[int(np.argmin(dists))]
+
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
     
@@ -125,25 +141,6 @@ class PolyhedralSiteCollection(SiteCollection):
                     self.update_occupation(site, atom)
                     break
     
-    @staticmethod
-    def _nearest_site_index(frac_coords: np.ndarray,
-                            reference_data: _ReferenceData) -> int:
-        """Return the site index nearest to the given fractional coordinates.
-
-        Uses minimum-image convention in fractional space.
-
-        Args:
-            frac_coords: Fractional coordinates to find the nearest site for.
-            reference_data: Precomputed reference centre data.
-
-        Returns:
-            The site index of the nearest site.
-        """
-        diffs = reference_data.centres - frac_coords
-        diffs -= np.round(diffs)
-        dists = np.linalg.norm(diffs, axis=1)
-        return reference_data.site_indices[int(np.argmin(dists))]
-
     def _get_priority_sites(self, atom: Atom) -> Generator[PolyhedralSite, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
 
@@ -179,7 +176,7 @@ class PolyhedralSiteCollection(SiteCollection):
                 yield self.site_by_index(index)
                 checked_indices.add(index)
         elif self._reference_data is not None:
-            anchor_index = self._nearest_site_index(atom.frac_coords, self._reference_data)
+            anchor_index = self._reference_data.nearest_site_index(atom.frac_coords)
             yield self.site_by_index(anchor_index)
             checked_indices.add(anchor_index)
 

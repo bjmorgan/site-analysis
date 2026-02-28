@@ -361,11 +361,102 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         
         with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = np.array(coords)
-            
+            mock_unwrap.return_value = (np.array(coords), np.zeros((4, 3), dtype=int))
+
             site.calculate_centre(structure)
-            
+
             mock_unwrap.assert_called_once()
             
+class TestComputeCorrectedCoords(unittest.TestCase):
+    """Tests for _compute_corrected_coords PBC correction."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_computes_correct_centre(self):
+        """Centre should be the mean of PBC-corrected reference coordinates."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        site._compute_corrected_coords(coords, lattice)
+
+        expected = np.mean(coords, axis=0)
+        np.testing.assert_array_almost_equal(site._centre_coords, expected)
+
+    def test_returns_image_shifts(self):
+        """Should return integer image shifts applied to each reference atom."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        shifts = site._compute_corrected_coords(coords, lattice)
+
+        self.assertEqual(shifts.shape, (4, 3))
+        self.assertTrue(np.issubdtype(shifts.dtype, np.integer))
+
+    def test_wrapping_produces_correct_centre(self):
+        """Coordinates straddling the periodic boundary should produce a sensible centre."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1])
+        lattice = Lattice.cubic(10.0)
+        # Two atoms straddling the boundary — should unwrap to be near each other
+        coords = np.array([[0.99, 0.5, 0.5],
+                           [0.01, 0.5, 0.5]])
+
+        site._compute_corrected_coords(coords, lattice)
+
+        # Centre should be near x=0.0 (or 1.0), not at 0.5
+        x = site._centre_coords[0]
+        self.assertTrue(x < 0.1 or x > 0.9,
+                        f"Centre x={x} should be near the boundary, not near 0.5")
+
+    def test_reset_clears_centre(self):
+        """reset() should clear calculated centre coordinates."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        site._compute_corrected_coords(coords, lattice)
+        self.assertIsNotNone(site._centre_coords)
+
+        site.reset()
+
+        self.assertIsNone(site._centre_coords)
+
+
+class TestComputeCorrectedCoordsWithReferenceCentre(unittest.TestCase):
+    """Tests for _compute_corrected_coords using the reference_center path."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_uses_unwrap_vertices(self):
+        """With reference_center should use unwrap_vertices_to_reference_center."""
+        ref_centre = np.array([0.15, 0.15, 0.15])
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
+                                  reference_center=ref_centre)
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            mock_unwrap.return_value = (coords.copy(), np.zeros((4, 3), dtype=int))
+            site._compute_corrected_coords(coords, lattice)
+            mock_unwrap.assert_called_once()
+            args = mock_unwrap.call_args
+            np.testing.assert_array_equal(args[0][1], ref_centre)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -511,6 +511,29 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
                 # Should write to file
                 mock_json_dump.assert_called_once_with(expected_data, mock_file, indent=2)
     
+    def test_reset_clears_dynamic_voronoi_batch_caches(self):
+        """trajectory.reset() should clear DynamicVoronoiSiteCollection group caches."""
+        Site._newid = 0
+        lattice = Lattice.cubic(10.0)
+        # 4 reference atoms + 1 mobile atom
+        coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+                  [0.7, 0.7, 0.7], [0.8, 0.8, 0.8],
+                  [0.15, 0.15, 0.15]]
+        structure = Structure(lattice, ["Na"] * 5, coords)
+
+        site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+        site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+        atom = Atom(index=4)
+        trajectory = Trajectory(sites=[site1, site2], atoms=[atom])
+
+        trajectory.append_timestep(structure, t=1)
+        self.assertTrue(trajectory.site_collection._centre_groups[0].initialised)
+
+        trajectory.reset()
+        self.assertFalse(trajectory.site_collection._centre_groups[0].initialised)
+        self.assertIsNone(site1._centre_coords)
+        self.assertIsNone(site2._centre_coords)
+
     def test_write_site_summaries_integration(self):
         """Integration test that actually writes a file."""
         

@@ -1,7 +1,7 @@
 """Dynamic Voronoi site representation for crystal structure analysis.
 
 This module provides the DynamicVoronoiSite class, which represents a site with
-a center that is dynamically calculated from the positions of a set of reference
+a centre that is dynamically calculated from the positions of a set of reference
 atoms.
 """
 
@@ -10,16 +10,16 @@ import numpy as np
 from typing import Any
 from .site import Site
 from .atom import Atom
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
 
 class DynamicVoronoiSite(Site):
     """Site subclass corresponding to Voronoi cells with centres dynamically 
     calculated from the positions of sets of reference atoms.
     
-    Unlike standard VoronoiSite objects, which have fixed centers, the positions
-    of DynamicVoronoiSite objects adapt to structural changes as the reference 
-    atoms move. The site center is calculated as the mean position of the reference 
+    Unlike standard VoronoiSite objects, which have fixed centres, the positions
+    of DynamicVoronoiSite objects adapt to structural changes as the reference
+    atoms move. The site centre is calculated as the mean position of the reference
     atoms, with special handling for periodic boundary conditions.
     
     This makes DynamicVoronoiSite particularly useful for tracking sites in mobile 
@@ -28,7 +28,7 @@ class DynamicVoronoiSite(Site):
     Similar to standard Voronoi sites, a single DynamicVoronoiSite cannot determine
     whether an atom is contained within it, as this depends on the positions of all
     other sites. The coordination number of a DynamicVoronoiSite is defined as the 
-    number of reference atoms used to calculate its center.
+    number of reference atoms used to calculate its centre.
     
     Attributes:
         reference_indices (list[int]): Indices of atoms used as reference to calculate
@@ -89,29 +89,48 @@ class DynamicVoronoiSite(Site):
         
     def calculate_centre(self, structure: Structure) -> None:
         """Calculate the centre of this site based on the positions of reference atoms.
-        
+
         Args:
-            structure (Structure): The pymatgen Structure used to assign
+            structure: The pymatgen Structure used to assign
                 fractional coordinates to the reference atoms.
-        
-        Returns:
-            None
-            
+
         Notes:
             This method handles periodic boundary conditions and calculates
             the centre as the mean of the reference atom positions.
         """
-        # Get fractional coordinates of reference atoms
         ref_coords = np.array([structure[i].frac_coords for i in self.reference_indices])
-        # Handle periodic boundary conditions
+        self._compute_corrected_coords(ref_coords, structure.lattice)
+
+    def _compute_corrected_coords(self,
+            frac_coords: np.ndarray,
+            lattice: Lattice) -> np.ndarray:
+        """Apply PBC correction and compute the site centre.
+
+        Performs full PBC unwrapping using either the reference centre
+        method or the legacy spread-based method.
+
+        Args:
+            frac_coords: Raw fractional coordinates of the reference atoms,
+                shape ``(n_reference, 3)``.
+            lattice: Lattice for Cartesian distance calculations
+                (used only with reference centres).
+
+        Returns:
+            Integer image shifts applied, shape ``(n_reference, 3)``.
+
+        Note:
+            Also sets ``_centre_coords`` as a side-effect (mean of
+            PBC-corrected coordinates, wrapped to [0, 1)).
+        """
         if self.reference_center is not None:
-            ref_coords = unwrap_vertices_to_reference_center(ref_coords, self.reference_center, structure.lattice)
+            corrected, image_shifts = unwrap_vertices_to_reference_center(
+                frac_coords, self.reference_center, lattice,
+                return_image_shifts=True)
         else:
-            ref_coords = apply_legacy_pbc_correction(ref_coords)
-        centre = np.mean(ref_coords, axis=0)
-        # Wrap the centre back into the unit cell [0, 1)
-        centre = centre % 1.0
-        self._centre_coords = centre
+            corrected = apply_legacy_pbc_correction(frac_coords)
+            image_shifts = np.round(corrected - frac_coords).astype(np.int64)
+        self._centre_coords = np.mean(corrected, axis=0) % 1.0
+        return image_shifts
         
     @property
     def centre(self) -> np.ndarray:

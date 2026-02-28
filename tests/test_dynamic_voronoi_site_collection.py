@@ -184,8 +184,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		self.assertIsNotNone(site1._centre_coords)
 		self.assertIsNotNone(site2._centre_coords)
 
-	def test_reset_centre_groups_clears_batch_state(self):
-		"""reset_centre_groups should clear group initialised flag."""
+	def test_reset_clears_batch_state(self):
+		"""reset should clear group initialised flag."""
 		lattice = Lattice.cubic(10.0)
 		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
 		structure = Structure(lattice, ["Na"] * 2, coords)
@@ -196,7 +196,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
 		self.assertTrue(collection._centre_groups[0].initialised)
 
-		collection.reset_centre_groups()
+		collection.reset()
 		self.assertFalse(collection._centre_groups[0].initialised)
 
 	def test_multi_frame_centres_match_per_site(self):
@@ -225,9 +225,10 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
 			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
 
-	def test_per_site_reset_without_group_reset_produces_correct_centres(self):
-		"""If site.reset() clears per-site caches but groups are not reset,
-		batch path should detect the inconsistency and recompute."""
+	def test_site_reset_without_collection_reset_triggers_fallback(self):
+		"""site.reset() without collection.reset() leaves stale group caches.
+		A large coordinate change should trigger fallback and still produce
+		correct centres."""
 		lattice = Lattice.cubic(10.0)
 		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
@@ -242,16 +243,14 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
 
-		# Simulate Trajectory.reset() — clears per-site caches but not groups
+		# Only reset sites, not collection — group caches are stale
 		for site in collection.sites:
 			site.reset()
-
-		# Group still thinks it's initialised
 		self.assertTrue(collection._centre_groups[0].initialised)
 
-		# Run on different coords — should still produce correct centres
-		new_base = np.array([[0.4, 0.4, 0.4], [0.5, 0.5, 0.5],
-							 [0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+		# New coords far from cached values (> 0.3 displacement triggers fallback)
+		new_base = np.array([[0.6, 0.6, 0.6], [0.7, 0.7, 0.7],
+							 [0.2, 0.2, 0.2], [0.3, 0.3, 0.3]])
 		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
 		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
 
@@ -376,7 +375,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
 
-		collection.reset_centre_groups()
+		collection.reset()
 
 		# Run on different coordinates after reset
 		new_base = np.array([[0.4, 0.4, 0.4], [0.5, 0.5, 0.5],

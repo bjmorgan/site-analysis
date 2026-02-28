@@ -207,9 +207,8 @@ class Trajectory:
         """
         for atom in self.atoms:
             atom.reset()
-        for site in self.sites:
-            site.reset()
-        self.timesteps = [] 
+        self.site_collection.reset()
+        self.timesteps = []
 
     @property
     def atoms_trajectory(self):

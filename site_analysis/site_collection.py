@@ -156,6 +156,16 @@ class SiteCollection(ABC):
         site.points.append(atom.frac_coords)
         atom.in_site = site.index
 
+    def reset(self) -> None:
+        """Reset the collection and all its sites for a fresh analysis run.
+
+        Resets per-site state (occupations, trajectories, caches) via
+        ``Site.reset()``. Subclasses may override to also clear
+        collection-level caches, but should call ``super().reset()``.
+        """
+        for site in self.sites:
+            site.reset()
+
     def reset_site_occupations(self):
         """Occupations of all sites in this site collection are set as empty.
 

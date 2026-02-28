@@ -40,7 +40,7 @@ class _CentreGroup:
     """Batch arrays for a group of sites sharing the same n_reference.
 
     Attributes:
-        site_positions: Indices into ``self.sites`` for this group.
+        site_positions: Indices into the parent ``DynamicVoronoiSiteCollection.sites`` list for this group.
         ref_indices: ``(n_sites, n_ref)`` int array of reference atom indices.
         pbc_shifts: ``(n_sites, n_ref, 3)`` int, cached image shifts.
         cached_raw_frac: ``(n_sites, n_ref, 3)`` float, previous raw coords.
@@ -146,8 +146,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             group.cached_raw_frac = batch_ref.copy()
             group.initialised = True
 
-    def reset_centre_groups(self) -> None:
-        """Reset batch PBC caches so the next frame does full computation."""
+    def reset(self) -> None:
+        """Reset all sites and batch PBC caches for a fresh analysis run."""
+        super().reset()
         for group in self._centre_groups:
             group.initialised = False
 

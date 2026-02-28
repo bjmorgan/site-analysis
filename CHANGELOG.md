@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Extracted shared priority-based site assignment logic into `PriorityAssignmentMixin`, used by both `PolyhedralSiteCollection` and `SphericalSiteCollection`.
 - Improved spherical site priority heuristic: tracks two recent distinct sites and uses precomputed distance-ranked site ordering (previously used neighbour-cutoff-based ordering).
-- Improved polyhedral site priority heuristic: tracks two recent distinct sites (catches bounce-back) and uses precomputed distance-ranked site ordering as fallback when reference centres are available. Reduces containment checks by ~68% and gives ~1.4x wall-clock speedup on argyrodite Li6PS5Cl trajectories.
+- Optimised polyhedral site assignment priority heuristic: tracks the two most recent distinct sites (catches bounce-back), and uses precomputed distance-ranked site ordering as fallback when reference centres are available. Reduces containment checks by ~68% and gives ~1.4x wall-clock speedup on argyrodite Li6PS5Cl trajectories.
 
 ### Removed
 

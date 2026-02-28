@@ -415,16 +415,15 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
     """Tests for _compute_distance_ranked_sites."""
 
     def test_returns_none_when_no_reference_centres(self):
-        """Returns (None, None, None) when any site lacks a reference centre."""
+        """Returns (None, None) when any site lacks a reference centre."""
         Site._newid = 0
         sites = [
             PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
             PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
         ]
-        ranked, centres, indices = _compute_distance_ranked_sites(sites)
+        ranked, reference_data = _compute_distance_ranked_sites(sites)
         self.assertIsNone(ranked)
-        self.assertIsNone(centres)
-        self.assertIsNone(indices)
+        self.assertIsNone(reference_data)
 
     def test_returns_none_when_mixed_reference_centres(self):
         """Returns None when only some sites have reference centres."""
@@ -434,7 +433,7 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
                            reference_center=np.array([0.1, 0.1, 0.1])),
             PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
         ]
-        ranked, centres, indices = _compute_distance_ranked_sites(sites)
+        ranked, reference_data = _compute_distance_ranked_sites(sites)
         self.assertIsNone(ranked)
 
     def test_ranks_by_distance(self):
@@ -446,7 +445,7 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
                                 reference_center=np.array([0.1, 0.0, 0.0]))
         site_c = PolyhedralSite(vertex_indices=[8, 9, 10, 11],
                                 reference_center=np.array([0.3, 0.0, 0.0]))
-        ranked, centres, indices = _compute_distance_ranked_sites([site_a, site_b, site_c])
+        ranked, reference_data = _compute_distance_ranked_sites([site_a, site_b, site_c])
 
         # From site_a: site_b (0.1) is closer than site_c (0.3)
         self.assertEqual(ranked[site_a.index], [site_b.index, site_c.index])
@@ -462,7 +461,7 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
                                 reference_center=np.array([0.5, 0.0, 0.0]))
         site_c = PolyhedralSite(vertex_indices=[8, 9, 10, 11],
                                 reference_center=np.array([0.95, 0.0, 0.0]))
-        ranked, _, _ = _compute_distance_ranked_sites([site_a, site_b, site_c])
+        ranked, _ = _compute_distance_ranked_sites([site_a, site_b, site_c])
 
         # From site_a at 0.05: site_c at 0.95 is 0.1 away via PBC, site_b is 0.45
         self.assertEqual(ranked[site_a.index], [site_c.index, site_b.index])
@@ -471,13 +470,12 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
 class TestNearestSiteIndex(unittest.TestCase):
     """Tests for _nearest_site_index."""
 
-    def test_returns_none_without_reference_centres(self):
-        """Returns None when reference centres are not available."""
+    def test_reference_data_none_without_reference_centres(self):
+        """Collection has no reference data when sites lack reference centres."""
         Site._newid = 0
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         collection = PolyhedralSiteCollection([site])
-        result = collection._nearest_site_index(np.array([0.5, 0.5, 0.5]))
-        self.assertIsNone(result)
+        self.assertIsNone(collection._reference_data)
 
     def test_returns_nearest_site(self):
         """Returns the site index nearest to the given coordinates."""
@@ -487,7 +485,8 @@ class TestNearestSiteIndex(unittest.TestCase):
         site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
                                 reference_center=np.array([0.5, 0.5, 0.5]))
         collection = PolyhedralSiteCollection([site_a, site_b])
-        result = collection._nearest_site_index(np.array([0.12, 0.12, 0.12]))
+        result = PolyhedralSiteCollection._nearest_site_index(
+            np.array([0.12, 0.12, 0.12]), collection._reference_data)
         self.assertEqual(result, site_a.index)
 
     def test_uses_minimum_image_convention(self):
@@ -499,7 +498,8 @@ class TestNearestSiteIndex(unittest.TestCase):
                                 reference_center=np.array([0.95, 0.95, 0.95]))
         collection = PolyhedralSiteCollection([site_a, site_b])
         # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
-        result = collection._nearest_site_index(np.array([0.02, 0.02, 0.02]))
+        result = PolyhedralSiteCollection._nearest_site_index(
+            np.array([0.02, 0.02, 0.02]), collection._reference_data)
         self.assertEqual(result, site_b.index)
 
 
@@ -736,7 +736,7 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
     def test_distance_ranked_sites_computed(self):
         """Distance-ranked sites are computed when reference centres are available."""
         self.assertIsNotNone(self.collection._distance_ranked_sites)
-        self.assertIsNotNone(self.collection._reference_centres)
+        self.assertIsNotNone(self.collection._reference_data)
 
     def test_remaining_sites_ordered_by_distance(self):
         """After recent and transitions, remaining sites are distance-ranked."""

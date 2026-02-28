@@ -43,6 +43,7 @@ and distance-based ordering to reduce the number of containment checks.
 """
 
 from collections.abc import Generator
+from typing import NamedTuple
 
 from .site_collection import SiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -51,6 +52,12 @@ from .site import Site
 from .tools import x_pbc
 from pymatgen.core import Structure # type: ignore
 import numpy as np
+
+
+class _ReferenceData(NamedTuple):
+    """Precomputed reference centre data for nearest-site lookups."""
+    centres: np.ndarray
+    site_indices: list[int]
 
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
@@ -82,7 +89,7 @@ class PolyhedralSiteCollection(SiteCollection):
         super(PolyhedralSiteCollection, self).__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
-        self._distance_ranked_sites, self._reference_centres, self._site_indices = (
+        self._distance_ranked_sites, self._reference_data = (
             _compute_distance_ranked_sites(self.sites)
         )
 
@@ -118,25 +125,24 @@ class PolyhedralSiteCollection(SiteCollection):
                     self.update_occupation(site, atom)
                     break
     
-    def _nearest_site_index(self, frac_coords: np.ndarray) -> int | None:
+    @staticmethod
+    def _nearest_site_index(frac_coords: np.ndarray,
+                            reference_data: _ReferenceData) -> int:
         """Return the site index nearest to the given fractional coordinates.
 
-        Uses minimum-image convention in fractional space. Returns None
-        if reference centres are not available.
+        Uses minimum-image convention in fractional space.
 
         Args:
             frac_coords: Fractional coordinates to find the nearest site for.
+            reference_data: Precomputed reference centre data.
 
         Returns:
-            The site index of the nearest site, or None.
+            The site index of the nearest site.
         """
-        if self._reference_centres is None:
-            return None
-        assert self._site_indices is not None
-        diffs = self._reference_centres - frac_coords
+        diffs = reference_data.centres - frac_coords
         diffs -= np.round(diffs)
         dists = np.linalg.norm(diffs, axis=1)
-        return self._site_indices[int(np.argmin(dists))]
+        return reference_data.site_indices[int(np.argmin(dists))]
 
     def _get_priority_sites(self, atom: Atom) -> Generator[PolyhedralSite, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
@@ -172,9 +178,8 @@ class PolyhedralSiteCollection(SiteCollection):
             for index in recent:
                 yield self.site_by_index(index)
                 checked_indices.add(index)
-        elif self._reference_centres is not None:
-            anchor_index = self._nearest_site_index(atom.frac_coords)
-            assert anchor_index is not None
+        elif self._reference_data is not None:
+            anchor_index = self._nearest_site_index(atom.frac_coords, self._reference_data)
             yield self.site_by_index(anchor_index)
             checked_indices.add(anchor_index)
 
@@ -231,7 +236,7 @@ class PolyhedralSiteCollection(SiteCollection):
 
 def _compute_distance_ranked_sites(
         sites: list[PolyhedralSite],
-) -> tuple[dict[int, list[int]] | None, np.ndarray | None, list[int] | None]:
+) -> tuple[dict[int, list[int]] | None, _ReferenceData | None]:
     """Precompute distance-ranked site lists from reference centres.
 
     For each site, produces a list of all other site indices sorted by
@@ -242,16 +247,16 @@ def _compute_distance_ranked_sites(
         sites: List of PolyhedralSite objects.
 
     Returns:
-        A tuple of (ranked_dict, centres_array, site_indices) where:
+        A tuple of (ranked_dict, reference_data) where:
         - ranked_dict maps site index to a list of other site indices
           sorted by distance, or None if any site lacks a reference centre.
-        - centres_array is an (N, 3) array of reference centres, or None.
-        - site_indices is a list mapping array position to site index, or None.
+        - reference_data contains the centres array and site indices for
+          nearest-site lookups, or None.
     """
     centres = []
     for s in sites:
         if s.reference_center is None:
-            return None, None, None
+            return None, None
         centres.append(s.reference_center)
     centres_array = np.array(centres)
     site_indices = [s.index for s in sites]
@@ -263,7 +268,7 @@ def _compute_distance_ranked_sites(
         dists = np.linalg.norm(diffs, axis=1)
         order = np.argsort(dists)
         ranked[site.index] = [site_indices[j] for j in order if j != i]
-    return ranked, centres_array, site_indices
+    return ranked, _ReferenceData(centres=centres_array, site_indices=site_indices)
 
 
 def construct_neighbouring_sites(

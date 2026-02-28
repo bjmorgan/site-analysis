@@ -468,9 +468,44 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
         self.assertEqual(ranked[site_a.index], [site_c.index, site_b.index])
 
 
+class TestNearestSiteIndex(unittest.TestCase):
+    """Tests for _nearest_site_index."""
+
+    def test_returns_none_without_reference_centres(self):
+        """Returns None when reference centres are not available."""
+        Site._newid = 0
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        collection = PolyhedralSiteCollection([site])
+        result = collection._nearest_site_index(np.array([0.5, 0.5, 0.5]))
+        self.assertIsNone(result)
+
+    def test_returns_nearest_site(self):
+        """Returns the site index nearest to the given coordinates."""
+        Site._newid = 0
+        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                reference_center=np.array([0.1, 0.1, 0.1]))
+        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                                reference_center=np.array([0.5, 0.5, 0.5]))
+        collection = PolyhedralSiteCollection([site_a, site_b])
+        result = collection._nearest_site_index(np.array([0.12, 0.12, 0.12]))
+        self.assertEqual(result, site_a.index)
+
+    def test_uses_minimum_image_convention(self):
+        """Uses PBC so a point near 0.0 is close to a site at 0.95."""
+        Site._newid = 0
+        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                reference_center=np.array([0.5, 0.5, 0.5]))
+        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                                reference_center=np.array([0.95, 0.95, 0.95]))
+        collection = PolyhedralSiteCollection([site_a, site_b])
+        # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
+        result = collection._nearest_site_index(np.array([0.02, 0.02, 0.02]))
+        self.assertEqual(result, site_b.index)
+
+
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     """Test interaction between assign_site_occupations and _get_priority_sites."""
-    
+
     def setUp(self):
         Site._newid = 0
         self.lattice = Lattice.cubic(2.0)
@@ -717,14 +752,14 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
 
     def test_no_history_uses_nearest_site(self):
         """With no history, yields nearest site to atom position first."""
-        # atom at [0.1, 0.1, 0.1] — nearest to site1 at [0.1, 0.1, 0.1]
+        # atom at [0.1, 0.1, 0.1] -- nearest to site1 at [0.1, 0.1, 0.1]
         indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
 
         self.assertEqual(indices[0], self.site1.index)
 
     def test_no_history_distance_ranked_outward(self):
         """With no history, sites are ranked by distance from nearest."""
-        # atom at [0.1, 0.1, 0.1] — nearest to site1
+        # atom at [0.1, 0.1, 0.1] -- nearest to site1
         indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
 
         self.assertEqual(indices, [self.site1.index, self.site2.index, self.site3.index])

@@ -115,6 +115,20 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection.update_occupation(site=sites[1], atom=atom)
         self.assertEqual(sites[0].transitions, {1: 1})
 
+    def test_update_occupation_calls_update_recent_site(self):
+        """update_occupation should call atom.update_recent_site with the site index."""
+        sites = [Mock(spec=Site)]
+        sites[0].index = 5
+        sites[0].contains_atoms = []
+        sites[0].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 1
+        atom.trajectory = []
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[0], atom=atom)
+        atom.update_recent_site.assert_called_once_with(5)
+
     def test_reset_calls_reset_on_all_sites(self):
         """reset() should call site.reset() for every site in the collection."""
         sites = [Mock(spec=Site, index=0),

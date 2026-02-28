@@ -561,7 +561,7 @@ class TestGetPrioritySites(unittest.TestCase):
 	def test_yields_no_duplicates_with_neighbours_and_transitions(self):
 		"""Test that generator doesn't yield duplicates when neighbour appears as transition."""
 		# Set up atom with most recent site
-		self.atom.trajectory = [self.site1.index]  # Most recent is site1
+		self.atom._recent_sites = [self.site1.index, None]
 		
 		# Mock transitions and neighbours where site2 appears in both
 		with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:

@@ -83,7 +83,7 @@ class Atom:
     def reset(self) -> None:
         """Reset the state of this Atom.
 
-        Clears the `in_site` and `trajectory` attributes.
+        Clears the `in_site`, `trajectory`, and `_recent_sites` attributes.
 
         Returns:
             None
@@ -176,11 +176,11 @@ class Atom:
         
     @property
     def most_recent_site(self) -> int | None:
-        """Return the most recent non-None site from the trajectory.
+        """Return the most recent non-None site assigned to this atom.
 
         Returns:
-            The index of the most recent non-None site visited by this atom,
-            or None if no site has been visited yet.
+            The site index of the most recently assigned site,
+            or None if no site has been assigned yet.
         """
         return self._recent_sites[0]
 

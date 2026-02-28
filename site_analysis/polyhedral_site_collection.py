@@ -30,12 +30,19 @@ When trajectory history exists:
 
 When no trajectory history exists:
     - If reference centres are available: check the nearest site centre
-      first, then distance-ranked outward
+      first, then learned transitions, then distance-ranked outward
     - Otherwise: check all sites in arbitrary order
+
+Note: distance ranking uses minimum-image convention in fractional space,
+which is only geometrically exact for orthogonal cells. For non-orthogonal
+cells the ranking is approximate, but correctness is unaffected since all
+sites are eventually checked.
 
 This approach leverages spatial relationships, learned transition patterns,
 and distance-based ordering to reduce the number of containment checks.
 """
+
+from collections.abc import Generator
 
 from .site_collection import SiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -48,9 +55,9 @@ import numpy as np
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.
     
-    Extends the base SiteCollection class with specific functionality for 
-    polyhedral sites, including maintaining a map of neighboring polyhedral 
-    sites that share faces and implementing optimized atom assignment based 
+    Extends the base SiteCollection class with specific functionality for
+    polyhedral sites, including maintaining a map of neighbouring polyhedral
+    sites that share faces and implementing optimised atom assignment based
     on spatial relationships and learned transition patterns.
     
     Attributes:
@@ -125,12 +132,13 @@ class PolyhedralSiteCollection(SiteCollection):
         """
         if self._reference_centres is None:
             return None
+        assert self._site_indices is not None
         diffs = self._reference_centres - frac_coords
         diffs -= np.round(diffs)
         dists = np.linalg.norm(diffs, axis=1)
         return self._site_indices[int(np.argmin(dists))]
 
-    def _get_priority_sites(self, atom):
+    def _get_priority_sites(self, atom: Atom) -> Generator[PolyhedralSite, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
 
         The checking sequence depends on available information:
@@ -143,7 +151,7 @@ class PolyhedralSiteCollection(SiteCollection):
 
         When no trajectory history exists:
             - If reference centres are available: nearest site centre first,
-              then distance-ranked outward
+              then learned transitions, then distance-ranked outward
             - Otherwise: all sites in arbitrary order
 
         Each site is yielded at most once.
@@ -166,6 +174,7 @@ class PolyhedralSiteCollection(SiteCollection):
                 checked_indices.add(index)
         elif self._reference_centres is not None:
             anchor_index = self._nearest_site_index(atom.frac_coords)
+            assert anchor_index is not None
             yield self.site_by_index(anchor_index)
             checked_indices.add(anchor_index)
 
@@ -182,6 +191,7 @@ class PolyhedralSiteCollection(SiteCollection):
                 for index in self._distance_ranked_sites[anchor_index]:
                     if index not in checked_indices:
                         yield self.site_by_index(index)
+                        checked_indices.add(index)
             else:
                 for neighbour_site in self.neighbouring_sites(anchor_index):
                     if neighbour_site.index not in checked_indices:

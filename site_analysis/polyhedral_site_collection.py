@@ -54,8 +54,12 @@ from pymatgen.core import Structure # type: ignore
 import numpy as np
 
 
-class _ReferenceData(NamedTuple):
-    """Precomputed reference centre data for nearest-site lookups."""
+class _NearestSiteLookup(NamedTuple):
+    """Precomputed lookup for finding the nearest site to a given position.
+
+    Uses minimum-image convention in fractional space, which is only
+    geometrically exact for orthogonal cells.
+    """
     centres: np.ndarray
     site_indices: list[int]
 
@@ -105,7 +109,7 @@ class PolyhedralSiteCollection(SiteCollection):
         super(PolyhedralSiteCollection, self).__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
-        self._distance_ranked_sites, self._reference_data = (
+        self._distance_ranked_sites, self._nearest_site_lookup = (
             _compute_distance_ranked_sites(self.sites)
         )
 
@@ -175,8 +179,8 @@ class PolyhedralSiteCollection(SiteCollection):
             for index in recent:
                 yield self.site_by_index(index)
                 checked_indices.add(index)
-        elif self._reference_data is not None:
-            anchor_index = self._reference_data.nearest_site_index(atom.frac_coords)
+        elif self._nearest_site_lookup is not None:
+            anchor_index = self._nearest_site_lookup.nearest_site_index(atom.frac_coords)
             yield self.site_by_index(anchor_index)
             checked_indices.add(anchor_index)
 
@@ -233,7 +237,7 @@ class PolyhedralSiteCollection(SiteCollection):
 
 def _compute_distance_ranked_sites(
         sites: list[PolyhedralSite],
-) -> tuple[dict[int, list[int]] | None, _ReferenceData | None]:
+) -> tuple[dict[int, list[int]] | None, _NearestSiteLookup | None]:
     """Precompute distance-ranked site lists from reference centres.
 
     For each site, produces a list of all other site indices sorted by
@@ -244,11 +248,11 @@ def _compute_distance_ranked_sites(
         sites: List of PolyhedralSite objects.
 
     Returns:
-        A tuple of (ranked_dict, reference_data) where:
+        A tuple of (ranked_dict, nearest_site_lookup) where:
         - ranked_dict maps site index to a list of other site indices
           sorted by distance, or None if any site lacks a reference centre.
-        - reference_data contains the centres array and site indices for
-          nearest-site lookups, or None.
+        - nearest_site_lookup is a precomputed lookup for finding the
+          nearest site to a given position, or None.
     """
     centres = []
     for s in sites:
@@ -265,7 +269,7 @@ def _compute_distance_ranked_sites(
         dists = np.linalg.norm(diffs, axis=1)
         order = np.argsort(dists)
         ranked[site.index] = [site_indices[j] for j in order if j != i]
-    return ranked, _ReferenceData(centres=centres_array, site_indices=site_indices)
+    return ranked, _NearestSiteLookup(centres=centres_array, site_indices=site_indices)
 
 
 def construct_neighbouring_sites(

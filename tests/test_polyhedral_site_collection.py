@@ -467,15 +467,15 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
         self.assertEqual(ranked[site_a.index], [site_c.index, site_b.index])
 
 
-class TestReferenceData(unittest.TestCase):
-    """Tests for _ReferenceData.nearest_site_index."""
+class TestNearestSiteLookup(unittest.TestCase):
+    """Tests for _NearestSiteLookup.nearest_site_index."""
 
-    def test_reference_data_none_without_reference_centres(self):
-        """Collection has no reference data when sites lack reference centres."""
+    def test_lookup_none_without_reference_centres(self):
+        """Collection has no nearest-site lookup when sites lack reference centres."""
         Site._newid = 0
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         collection = PolyhedralSiteCollection([site])
-        self.assertIsNone(collection._reference_data)
+        self.assertIsNone(collection._nearest_site_lookup)
 
     def test_returns_nearest_site(self):
         """Returns the site index nearest to the given coordinates."""
@@ -485,7 +485,7 @@ class TestReferenceData(unittest.TestCase):
         site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
                                 reference_center=np.array([0.5, 0.5, 0.5]))
         collection = PolyhedralSiteCollection([site_a, site_b])
-        result = collection._reference_data.nearest_site_index(
+        result = collection._nearest_site_lookup.nearest_site_index(
             np.array([0.12, 0.12, 0.12]))
         self.assertEqual(result, site_a.index)
 
@@ -498,7 +498,7 @@ class TestReferenceData(unittest.TestCase):
                                 reference_center=np.array([0.95, 0.95, 0.95]))
         collection = PolyhedralSiteCollection([site_a, site_b])
         # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
-        result = collection._reference_data.nearest_site_index(
+        result = collection._nearest_site_lookup.nearest_site_index(
             np.array([0.02, 0.02, 0.02]))
         self.assertEqual(result, site_b.index)
 
@@ -736,7 +736,7 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
     def test_distance_ranked_sites_computed(self):
         """Distance-ranked sites are computed when reference centres are available."""
         self.assertIsNotNone(self.collection._distance_ranked_sites)
-        self.assertIsNotNone(self.collection._reference_data)
+        self.assertIsNotNone(self.collection._nearest_site_lookup)
 
     def test_remaining_sites_ordered_by_distance(self):
         """After recent and transitions, remaining sites are distance-ranked."""

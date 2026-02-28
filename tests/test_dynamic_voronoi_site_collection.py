@@ -290,6 +290,103 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
 			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
 
+	def test_per_site_reset_without_group_reset_produces_correct_centres(self):
+		"""If site.reset() clears per-site caches but groups are not reset,
+		batch path should detect the inconsistency and recompute."""
+		lattice = Lattice.cubic(10.0)
+		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
+
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
+
+		# Run several frames
+		for i in range(5):
+			coords = base_coords + 0.01 * i
+			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
+			collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+
+		# Simulate Trajectory.reset() — clears per-site caches but not groups
+		for site in collection.sites:
+			site.reset()
+
+		# Group still thinks it's initialised
+		self.assertTrue(collection._centre_groups[0].initialised)
+
+		# Run on different coords — should still produce correct centres
+		new_base = np.array([[0.4, 0.4, 0.4], [0.5, 0.5, 0.5],
+							 [0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+
+		for i in range(3):
+			coords = new_base + 0.01 * i
+			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
+			frac = structure.frac_coords
+
+			ref_a._compute_corrected_coords(frac[[0, 1]], structure.lattice)
+			ref_b._compute_corrected_coords(frac[[2, 3]], structure.lattice)
+			collection._batch_calculate_centres(frac, structure.lattice)
+
+			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
+			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
+
+	def test_batch_invalidation_falls_back_to_per_site(self):
+		"""Large displacement should invalidate batch cache and recompute per-site."""
+		lattice = Lattice.cubic(10.0)
+		coords1 = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
+		# Displacement > 0.3 triggers invalidation
+		coords2 = [[0.5, 0.5, 0.5], [0.6, 0.6, 0.6],
+				   [0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
+		struct1 = Structure(lattice, ["Na"] * 4, coords1)
+		struct2 = Structure(lattice, ["Na"] * 4, coords2)
+
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
+
+		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice)
+
+		# Fresh per-site reference for the post-invalidation frame
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		ref_a.calculate_centre(struct2)
+		ref_b.calculate_centre(struct2)
+
+		collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice)
+
+		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
+		np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
+
+	def test_batch_wrapping_across_periodic_boundary(self):
+		"""Coordinates wrapping across boundary (0.99 -> 0.01) should be handled correctly."""
+		lattice = Lattice.cubic(10.0)
+		coords1 = [[0.99, 0.1, 0.1], [0.2, 0.1, 0.1],
+				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
+		coords2 = [[0.01, 0.1, 0.1], [0.2, 0.1, 0.1],  # atom 0 wraps
+				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
+		struct1 = Structure(lattice, ["Na"] * 4, coords1)
+		struct2 = Structure(lattice, ["Na"] * 4, coords2)
+
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
+
+		# Fresh per-site reference
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+
+		for struct in [struct1, struct2]:
+			frac = struct.frac_coords
+			ref_a._compute_corrected_coords(frac[[0, 1]], struct.lattice)
+			ref_b._compute_corrected_coords(frac[[2, 3]], struct.lattice)
+			collection._batch_calculate_centres(frac, struct.lattice)
+
+		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
+		np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
+
 	def test_reset_then_reuse_produces_correct_centres(self):
 		"""After reset, batch centres on new data should match per-site computation."""
 		lattice = Lattice.cubic(10.0)

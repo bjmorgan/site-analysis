@@ -115,6 +115,15 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection.update_occupation(site=sites[1], atom=atom)
         self.assertEqual(sites[0].transitions, {1: 1})
 
+    def test_reset_calls_reset_on_all_sites(self):
+        """reset() should call site.reset() for every site in the collection."""
+        sites = [Mock(spec=Site, index=0),
+                 Mock(spec=Site, index=1)]
+        site_collection = ConcreteSiteCollection(sites=sites)
+        site_collection.reset()
+        sites[0].reset.assert_called_once()
+        sites[1].reset.assert_called_once()
+
     def test_reset_site_occupations(self):
         sites = [Mock(spec=Site, index=0), 
                  Mock(spec=Site, index=1)]

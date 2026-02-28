@@ -359,6 +359,38 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
 			np.testing.assert_array_almost_equal(ref_c.centre, site_c.centre)
 
+	def test_batch_with_reference_center_matches_per_site(self):
+		"""Batch path with reference_center set should match per-site computation."""
+		lattice = Lattice.cubic(10.0)
+		ref_centre_a = np.array([0.15, 0.15, 0.15])
+		ref_centre_b = np.array([0.75, 0.75, 0.75])
+		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
+
+		# Per-site path
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1],
+									reference_center=ref_centre_a)
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3],
+									reference_center=ref_centre_b)
+		# Batch path
+		site_c = DynamicVoronoiSite(reference_indices=[0, 1],
+									reference_center=ref_centre_a)
+		site_d = DynamicVoronoiSite(reference_indices=[2, 3],
+									reference_center=ref_centre_b)
+		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
+
+		for i in range(5):
+			coords = base_coords + 0.01 * i
+			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
+			frac = structure.frac_coords
+
+			site_a._compute_corrected_coords(frac[[0, 1]], structure.lattice)
+			site_b._compute_corrected_coords(frac[[2, 3]], structure.lattice)
+			collection._batch_calculate_centres(frac, structure.lattice)
+
+			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
+			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
+
 	def test_reset_then_reuse_produces_correct_centres(self):
 		"""After reset, batch centres on new data should match per-site computation."""
 		lattice = Lattice.cubic(10.0)

@@ -42,15 +42,12 @@ class _CentreGroup:
     Attributes:
         site_positions: Indices into ``self.sites`` for this group.
         ref_indices: ``(n_sites, n_ref)`` int array of reference atom indices.
-        reference_centres: ``(n_sites, 3)`` or None — per-site reference
-            centres for PBC unwrapping.
         pbc_shifts: ``(n_sites, n_ref, 3)`` int, cached image shifts.
         cached_raw_frac: ``(n_sites, n_ref, 3)`` float, previous raw coords.
         initialised: Whether the PBC caches have been populated.
     """
     site_positions: list[int]
     ref_indices: np.ndarray
-    reference_centres: np.ndarray | None
     pbc_shifts: np.ndarray = field(init=False, repr=False)
     cached_raw_frac: np.ndarray = field(init=False, repr=False)
     initialised: bool = field(init=False, default=False)
@@ -104,17 +101,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         for positions in by_nref.values():
             ref_indices = np.array(
                 [self.sites[i].reference_indices for i in positions])
-            has_ref_centres = any(
-                self.sites[i].reference_center is not None for i in positions)
-            if has_ref_centres:
-                reference_centres = np.array(
-                    [self.sites[i].reference_center for i in positions])
-            else:
-                reference_centres = None
             groups.append(_CentreGroup(
                 site_positions=positions,
                 ref_indices=ref_indices,
-                reference_centres=reference_centres,
             ))
         return groups
 
@@ -163,9 +152,12 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             group.initialised = True
 
     def reset_centre_groups(self) -> None:
-        """Reset batch PBC caches so the next frame does full computation."""
+        """Reset batch and per-site PBC caches so the next frame does full computation."""
         for group in self._centre_groups:
             group.reset()
+            for pos in group.site_positions:
+                self.sites[pos]._pbc_image_shifts = None
+                self.sites[pos]._pbc_cached_raw_frac = None
 
     def analyse_structure(self,
                           atoms: list[Atom],

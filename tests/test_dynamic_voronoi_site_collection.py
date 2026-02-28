@@ -246,8 +246,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		self.assertIsNotNone(site1._centre_coords)
 		self.assertIsNotNone(site2._centre_coords)
 
-	def test_reset_centre_groups_clears_batch_state(self):
-		"""reset_centre_groups should force full recomputation on next frame."""
+	def test_reset_centre_groups_clears_batch_and_per_site_state(self):
+		"""reset_centre_groups should clear both group and per-site PBC caches."""
 		lattice = Lattice.cubic(10.0)
 		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
 		structure = Structure(lattice, ["Na"] * 2, coords)
@@ -257,9 +257,12 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 
 		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
 		self.assertTrue(collection._centre_groups[0].initialised)
+		self.assertIsNotNone(site._pbc_image_shifts)
 
 		collection.reset_centre_groups()
 		self.assertFalse(collection._centre_groups[0].initialised)
+		self.assertIsNone(site._pbc_image_shifts)
+		self.assertIsNone(site._pbc_cached_raw_frac)
 
 	def test_multi_frame_centres_match_per_site(self):
 		"""Batch centres over multiple frames should match per-site computation."""

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] - 2026-02-28
+
+### Changed
+
+- Batch vectorised centre calculation for `DynamicVoronoiSite` collections, grouped by reference count. After the first frame, incremental PBC shift updates avoid per-site O(27-image) unwrapping (~4x speedup on MD trajectories).
+- `SiteCollection` now owns site reset via `reset()`. `Trajectory.reset()` delegates to `site_collection.reset()`, ensuring collection-level caches are properly cleared.
+
 ## [1.3.0] - 2026-02-27
 
 ### Added

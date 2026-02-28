@@ -24,12 +24,45 @@ positions of the reference atoms.
 
 from __future__ import annotations
 
+from collections import defaultdict
+from dataclasses import dataclass, field
+
 import numpy as np
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from site_analysis.site_collection import SiteCollection
 from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.atom import Atom
+
+
+@dataclass
+class _CentreGroup:
+    """Batch arrays for a group of sites sharing the same n_reference.
+
+    Attributes:
+        site_positions: Indices into ``self.sites`` for this group.
+        ref_indices: ``(n_sites, n_ref)`` int array of reference atom indices.
+        reference_centres: ``(n_sites, 3)`` or None — per-site reference
+            centres for PBC unwrapping.
+        pbc_shifts: ``(n_sites, n_ref, 3)`` int, cached image shifts.
+        cached_raw_frac: ``(n_sites, n_ref, 3)`` float, previous raw coords.
+        initialised: Whether the PBC caches have been populated.
+    """
+    site_positions: list[int]
+    ref_indices: np.ndarray
+    reference_centres: np.ndarray | None
+    pbc_shifts: np.ndarray = field(init=False, repr=False)
+    cached_raw_frac: np.ndarray = field(init=False, repr=False)
+    initialised: bool = field(init=False, default=False)
+
+    def __post_init__(self) -> None:
+        n_sites, n_ref = self.ref_indices.shape
+        self.pbc_shifts = np.zeros((n_sites, n_ref, 3), dtype=np.int64)
+        self.cached_raw_frac = np.zeros((n_sites, n_ref, 3))
+
+    def reset(self) -> None:
+        """Clear cached PBC state so the next frame does a full computation."""
+        self.initialised = False
 
 
 class DynamicVoronoiSiteCollection(SiteCollection):
@@ -60,7 +93,80 @@ class DynamicVoronoiSiteCollection(SiteCollection):
                 raise TypeError("All sites must be DynamicVoronoiSite instances")
         super(DynamicVoronoiSiteCollection, self).__init__(sites)
         self.sites: list[DynamicVoronoiSite]
+        self._centre_groups: list[_CentreGroup] = self._build_centre_groups()
         
+    def _build_centre_groups(self) -> list[_CentreGroup]:
+        """Group sites by reference count for batch centre calculation."""
+        by_nref: dict[int, list[int]] = defaultdict(list)
+        for i, site in enumerate(self.sites):
+            by_nref[len(site.reference_indices)].append(i)
+        groups: list[_CentreGroup] = []
+        for positions in by_nref.values():
+            ref_indices = np.array(
+                [self.sites[i].reference_indices for i in positions])
+            has_ref_centres = any(
+                self.sites[i].reference_center is not None for i in positions)
+            if has_ref_centres:
+                reference_centres = np.array(
+                    [self.sites[i].reference_center for i in positions])
+            else:
+                reference_centres = None
+            groups.append(_CentreGroup(
+                site_positions=positions,
+                ref_indices=ref_indices,
+                reference_centres=reference_centres,
+            ))
+        return groups
+
+    def _batch_calculate_centres(self,
+                                  all_frac_coords: np.ndarray,
+                                  lattice: Lattice) -> None:
+        """Compute all site centres in batch, grouped by reference count.
+
+        On the first frame (or after reset), falls back to per-site full
+        PBC computation to populate the caches.  On subsequent frames,
+        uses vectorised incremental shift updates across all sites in
+        each group simultaneously.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice: Lattice for PBC distance calculations.
+        """
+        for group in self._centre_groups:
+            # (n_sites, n_ref, 3)
+            batch_ref = all_frac_coords[group.ref_indices]
+            if group.initialised:
+                diff = batch_ref - group.cached_raw_frac
+                wrapping = np.round(diff).astype(np.int64)
+                physical_diff = diff - wrapping
+                if np.all(np.abs(physical_diff) < 0.3):
+                    new_shifts = group.pbc_shifts - wrapping
+                    corrected = batch_ref + new_shifts
+                    # Per-site uniform non-negative shift
+                    min_coords = np.min(corrected, axis=1)  # (n_sites, 3)
+                    uniform = np.maximum(0, np.ceil(-min_coords))  # (n_sites, 3)
+                    corrected = corrected + uniform[:, np.newaxis, :]
+                    group.pbc_shifts = new_shifts
+                    group.cached_raw_frac = batch_ref.copy()
+                    centres = np.mean(corrected, axis=1) % 1.0
+                    for idx, pos in enumerate(group.site_positions):
+                        self.sites[pos]._centre_coords = centres[idx]
+                    continue
+            # First frame or cache invalidation — per-site full computation
+            for idx, pos in enumerate(group.site_positions):
+                site = self.sites[pos]
+                ref_coords = batch_ref[idx]
+                site._compute_corrected_coords(ref_coords, lattice)
+                group.pbc_shifts[idx] = site._pbc_image_shifts
+                group.cached_raw_frac[idx] = site._pbc_cached_raw_frac
+            group.initialised = True
+
+    def reset_centre_groups(self) -> None:
+        """Reset batch PBC caches so the next frame does full computation."""
+        for group in self._centre_groups:
+            group.reset()
+
     def analyse_structure(self,
                           atoms: list[Atom],
                           structure: Structure) -> None:
@@ -82,8 +188,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             atom.assign_coords(structure)
         all_frac_coords = structure.frac_coords
         lattice = structure.lattice
-        for site in self.sites:
-            site.calculate_centre_from_bulk(all_frac_coords, lattice)
+        self._batch_calculate_centres(all_frac_coords, lattice)
         self.assign_site_occupations(atoms, structure)
         
     def assign_site_occupations(self,

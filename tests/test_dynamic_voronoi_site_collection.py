@@ -17,8 +17,10 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 	
 	def test_site_collection_is_initialised(self):
 		"""Test that a DynamicVoronoiSiteCollection is correctly initialised."""
-		sites = [Mock(spec=DynamicVoronoiSite, index=0),
-				 Mock(spec=DynamicVoronoiSite, index=1)]
+		sites = [Mock(spec=DynamicVoronoiSite, index=0,
+					  reference_indices=[0, 1], reference_center=None),
+				 Mock(spec=DynamicVoronoiSite, index=1,
+					  reference_indices=[2, 3], reference_center=None)]
 		site_collection = DynamicVoronoiSiteCollection(sites=sites)
 		self.assertEqual(site_collection.sites, sites)
 		
@@ -32,47 +34,37 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 			DynamicVoronoiSiteCollection(sites=sites)
 			
 	def test_analyse_structure(self):
-		"""Test that analyse_structure extracts coords once and calls calculate_centre_from_bulk."""
-		# Create mock sites and atoms with proper index attributes
-		sites = [
-			Mock(spec=DynamicVoronoiSite, reference_indices=[0, 1], index=0),
-			Mock(spec=DynamicVoronoiSite, reference_indices=[2, 3], index=1)
-		]
-		atoms = [Mock(spec=Atom) for _ in range(5)]
-		mock_frac_coords = np.array([[0.1, 0.2, 0.3]] * 5)
-		mock_lattice = Mock(spec=Lattice)
-		structure = Mock(spec=Structure)
-		type(structure).frac_coords = PropertyMock(return_value=mock_frac_coords)
-		structure.lattice = mock_lattice
+		"""Test that analyse_structure computes centres and assigns occupations."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
 
-		# Initialize the collection
-		site_collection = DynamicVoronoiSiteCollection(sites=sites)
+		lattice = Lattice.cubic(10.0)
+		# Atoms 0,1 are reference for site1; 2,3 for site2; 4 is mobile
+		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+				  [0.7, 0.7, 0.7], [0.8, 0.8, 0.8],
+				  [0.15, 0.15, 0.15]]
+		structure = Structure(lattice, ["Na"] * 5, coords)
 
-		# Mock the assign_site_occupations method to avoid actually calling it
-		site_collection.assign_site_occupations = Mock()
+		atom = Atom(index=4)
+		collection.analyse_structure([atom], structure)
 
-		# Call analyse_structure
-		site_collection.analyse_structure(atoms, structure)
+		# Centres should be computed from reference atoms
+		np.testing.assert_array_almost_equal(
+			site1.centre, np.array([0.15, 0.15, 0.15]))
+		np.testing.assert_array_almost_equal(
+			site2.centre, np.array([0.75, 0.75, 0.75]))
 
-		# Check that each atom's coordinates are assigned
-		for atom in atoms:
-			atom.assign_coords.assert_called_with(structure)
-
-		# Check that each site's centre is calculated via bulk extraction
-		for site in sites:
-			site.calculate_centre_from_bulk.assert_called_once()
-			args = site.calculate_centre_from_bulk.call_args[0]
-			np.testing.assert_array_equal(args[0], mock_frac_coords)
-			self.assertIs(args[1], mock_lattice)
-
-		# Check that site occupations are assigned
-		site_collection.assign_site_occupations.assert_called_with(atoms, structure)
+		# Atom at [0.15, 0.15, 0.15] should be assigned to site1
+		self.assertIn(atom.index, site1.contains_atoms)
 			
 	def test_assign_site_occupations(self):
 		"""Test that atoms are correctly assigned to sites based on Voronoi tessellation."""
 		# Create mock sites
-		site1 = Mock(spec=DynamicVoronoiSite)
-		site2 = Mock(spec=DynamicVoronoiSite)
+		site1 = Mock(spec=DynamicVoronoiSite,
+					 reference_indices=[0, 1], reference_center=None)
+		site2 = Mock(spec=DynamicVoronoiSite,
+					 reference_indices=[2, 3], reference_center=None)
 		site1.index = 0
 		site2.index = 1
 		# Set up centre method to return fixed coordinates
@@ -185,5 +177,116 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		self.assertEqual(site1.contains_atoms, [])
 		self.assertEqual(site2.contains_atoms, [])
 		
+class BatchCentreCalculationTestCase(unittest.TestCase):
+
+	def setUp(self):
+		Site._newid = 0
+
+	def test_groups_formed_by_reference_count(self):
+		"""Sites with different n_reference are placed in separate groups."""
+		sites = [
+			DynamicVoronoiSite(reference_indices=[0, 1]),
+			DynamicVoronoiSite(reference_indices=[2, 3]),
+			DynamicVoronoiSite(reference_indices=[4, 5, 6]),
+		]
+		collection = DynamicVoronoiSiteCollection(sites=sites)
+		groups = collection._centre_groups
+		self.assertEqual(len(groups), 2)
+		group_sizes = sorted(len(g.site_positions) for g in groups)
+		self.assertEqual(group_sizes, [1, 2])
+
+	def test_batch_produces_same_centres_as_per_site(self):
+		"""Batch path should produce identical centres to per-site calculation."""
+		lattice = Lattice.cubic(10.0)
+		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+				  [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
+		structure = Structure(lattice, ["Na"] * 4, coords)
+
+		# Per-site path
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a.calculate_centre(structure)
+		site_b.calculate_centre(structure)
+
+		# Batch path
+		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_d = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
+		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+
+		np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
+		np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
+
+	def test_second_frame_uses_cached_batch_path(self):
+		"""After first frame, batch path should not call _compute_corrected_coords."""
+		lattice = Lattice.cubic(10.0)
+		coords1 = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
+		coords2 = [[0.11, 0.11, 0.11], [0.21, 0.21, 0.21],
+				   [0.71, 0.71, 0.71], [0.81, 0.81, 0.81]]
+		struct1 = Structure(lattice, ["Na"] * 4, coords1)
+		struct2 = Structure(lattice, ["Na"] * 4, coords2)
+
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+
+		# First frame populates caches
+		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice)
+		self.assertTrue(collection._centre_groups[0].initialised)
+
+		# Second frame should use vectorised path (not per-site)
+		with patch.object(site1, '_compute_corrected_coords') as mock1, \
+			 patch.object(site2, '_compute_corrected_coords') as mock2:
+			collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice)
+			mock1.assert_not_called()
+			mock2.assert_not_called()
+
+		# Centres should still be updated
+		self.assertIsNotNone(site1._centre_coords)
+		self.assertIsNotNone(site2._centre_coords)
+
+	def test_reset_centre_groups_clears_batch_state(self):
+		"""reset_centre_groups should force full recomputation on next frame."""
+		lattice = Lattice.cubic(10.0)
+		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
+		structure = Structure(lattice, ["Na"] * 2, coords)
+
+		site = DynamicVoronoiSite(reference_indices=[0, 1])
+		collection = DynamicVoronoiSiteCollection(sites=[site])
+
+		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+		self.assertTrue(collection._centre_groups[0].initialised)
+
+		collection.reset_centre_groups()
+		self.assertFalse(collection._centre_groups[0].initialised)
+
+	def test_multi_frame_centres_match_per_site(self):
+		"""Batch centres over multiple frames should match per-site computation."""
+		lattice = Lattice.cubic(10.0)
+		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
+
+		# Per-site path
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		# Batch path
+		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_d = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
+
+		for i in range(5):
+			coords = base_coords + 0.01 * i
+			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
+			frac = structure.frac_coords
+
+			site_a._compute_corrected_coords(frac[[0, 1]], structure.lattice)
+			site_b._compute_corrected_coords(frac[[2, 3]], structure.lattice)
+			collection._batch_calculate_centres(frac, structure.lattice)
+
+			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
+			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
+
+
 if __name__ == '__main__':
 	unittest.main()

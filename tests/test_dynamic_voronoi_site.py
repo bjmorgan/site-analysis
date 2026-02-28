@@ -361,11 +361,146 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         
         with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = np.array(coords)
-            
+            mock_unwrap.return_value = (np.array(coords), np.zeros((4, 3), dtype=int))
+
             site.calculate_centre(structure)
-            
+
             mock_unwrap.assert_called_once()
             
+class TestComputeCorrectedCoords(unittest.TestCase):
+    """Tests for _compute_corrected_coords PBC shift caching."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_first_call_computes_full_shifts(self):
+        """First call should populate PBC shift caches."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        self.assertIsNone(site._pbc_image_shifts)
+        self.assertIsNone(site._pbc_cached_raw_frac)
+
+        site._compute_corrected_coords(coords, lattice)
+
+        self.assertIsNotNone(site._pbc_image_shifts)
+        self.assertIsNotNone(site._pbc_cached_raw_frac)
+        self.assertIsNotNone(site._centre_coords)
+
+    def test_second_call_uses_cached_path(self):
+        """Small displacement should use cached shifts, not full PBC correction."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords1 = np.array([[0.1, 0.1, 0.1],
+                            [0.2, 0.1, 0.1],
+                            [0.1, 0.2, 0.1],
+                            [0.1, 0.1, 0.2]])
+        coords2 = coords1 + 0.01  # Small displacement
+
+        site._compute_corrected_coords(coords1, lattice)
+
+        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_legacy:
+            site._compute_corrected_coords(coords2, lattice)
+            mock_legacy.assert_not_called()
+
+    def test_large_displacement_falls_through_to_full_computation(self):
+        """Displacement > 0.3 should invalidate cache and call full PBC correction."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords1 = np.array([[0.1, 0.1, 0.1],
+                            [0.2, 0.1, 0.1],
+                            [0.1, 0.2, 0.1],
+                            [0.1, 0.1, 0.2]])
+        coords2 = coords1 + 0.4  # Large displacement
+
+        site._compute_corrected_coords(coords1, lattice)
+
+        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_legacy:
+            mock_legacy.return_value = coords2
+            site._compute_corrected_coords(coords2, lattice)
+            mock_legacy.assert_called_once()
+
+    def test_wrapping_adjusts_shifts_without_recomputation(self):
+        """Coordinate wrapping (0.99 -> 0.01) should adjust shifts via cached path."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords1 = np.array([[0.99, 0.1, 0.1],
+                            [0.2, 0.1, 0.1],
+                            [0.1, 0.2, 0.1],
+                            [0.1, 0.1, 0.2]])
+        coords2 = np.array([[0.01, 0.1, 0.1],  # Wrapped across boundary
+                            [0.2, 0.1, 0.1],
+                            [0.1, 0.2, 0.1],
+                            [0.1, 0.1, 0.2]])
+
+        site._compute_corrected_coords(coords1, lattice)
+
+        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_legacy:
+            site._compute_corrected_coords(coords2, lattice)
+            mock_legacy.assert_not_called()
+
+    def test_reset_clears_pbc_shift_caches(self):
+        """reset() should clear PBC shift caches."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        site._compute_corrected_coords(coords, lattice)
+        self.assertIsNotNone(site._pbc_image_shifts)
+
+        site.reset()
+
+        self.assertIsNone(site._pbc_image_shifts)
+        self.assertIsNone(site._pbc_cached_raw_frac)
+
+
+class TestCalculateCentreFromBulk(unittest.TestCase):
+    """Tests for calculate_centre_from_bulk."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_extracts_correct_reference_indices(self):
+        """Should extract rows matching reference_indices from bulk array."""
+        site = DynamicVoronoiSite(reference_indices=[1, 3])
+        all_frac_coords = np.array([[0.0, 0.0, 0.0],
+                                    [0.1, 0.2, 0.3],
+                                    [0.4, 0.5, 0.6],
+                                    [0.7, 0.8, 0.9]])
+        lattice = Lattice.cubic(10.0)
+
+        with patch.object(site, '_compute_corrected_coords') as mock_compute:
+            site.calculate_centre_from_bulk(all_frac_coords, lattice)
+            args = mock_compute.call_args[0]
+            expected = np.array([[0.1, 0.2, 0.3],
+                                 [0.7, 0.8, 0.9]])
+            np.testing.assert_array_equal(args[0], expected)
+
+    def test_produces_same_result_as_calculate_centre(self):
+        """Both methods should produce the same centre for the same data."""
+        lattice = Lattice.cubic(10.0)
+        coords = [[0.1, 0.1, 0.1],
+                   [0.2, 0.1, 0.1],
+                   [0.1, 0.2, 0.1],
+                   [0.1, 0.1, 0.2]]
+        structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
+
+        site_a = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        site_a.calculate_centre(structure)
+
+        site_b = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        site_b.calculate_centre_from_bulk(structure.frac_coords, structure.lattice)
+
+        np.testing.assert_array_almost_equal(site_a._centre_coords,
+                                              site_b._centre_coords)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -32,32 +32,39 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 			DynamicVoronoiSiteCollection(sites=sites)
 			
 	def test_analyse_structure(self):
-		"""Test that analyse_structure correctly processes atoms and updates site centres."""
+		"""Test that analyse_structure extracts coords once and calls calculate_centre_from_bulk."""
 		# Create mock sites and atoms with proper index attributes
 		sites = [
 			Mock(spec=DynamicVoronoiSite, reference_indices=[0, 1], index=0),
 			Mock(spec=DynamicVoronoiSite, reference_indices=[2, 3], index=1)
 		]
 		atoms = [Mock(spec=Atom) for _ in range(5)]
+		mock_frac_coords = np.array([[0.1, 0.2, 0.3]] * 5)
+		mock_lattice = Mock(spec=Lattice)
 		structure = Mock(spec=Structure)
-		
+		type(structure).frac_coords = PropertyMock(return_value=mock_frac_coords)
+		structure.lattice = mock_lattice
+
 		# Initialize the collection
 		site_collection = DynamicVoronoiSiteCollection(sites=sites)
-		
+
 		# Mock the assign_site_occupations method to avoid actually calling it
 		site_collection.assign_site_occupations = Mock()
-		
+
 		# Call analyse_structure
 		site_collection.analyse_structure(atoms, structure)
-		
+
 		# Check that each atom's coordinates are assigned
 		for atom in atoms:
 			atom.assign_coords.assert_called_with(structure)
-		
-		# Check that each site's centre is calculated
+
+		# Check that each site's centre is calculated via bulk extraction
 		for site in sites:
-			site.calculate_centre.assert_called_with(structure)
-		
+			site.calculate_centre_from_bulk.assert_called_once()
+			args = site.calculate_centre_from_bulk.call_args[0]
+			np.testing.assert_array_equal(args[0], mock_frac_coords)
+			self.assertIs(args[1], mock_lattice)
+
 		# Check that site occupations are assigned
 		site_collection.assign_site_occupations.assert_called_with(atoms, structure)
 			

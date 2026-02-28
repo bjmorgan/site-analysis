@@ -80,8 +80,10 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         """
         for atom in atoms:
             atom.assign_coords(structure)
+        all_frac_coords = structure.frac_coords
+        lattice = structure.lattice
         for site in self.sites:
-            site.calculate_centre(structure)
+            site.calculate_centre_from_bulk(all_frac_coords, lattice)
         self.assign_site_occupations(atoms, structure)
         
     def assign_site_occupations(self,

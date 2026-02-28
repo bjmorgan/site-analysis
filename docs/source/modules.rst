@@ -8,7 +8,9 @@ Submodules
    :maxdepth: 4
 
    modules/atom
-   modules/polyhedral_site            
+   modules/dynamic_voronoi_site
+   modules/dynamic_voronoi_site_collection
+   modules/polyhedral_site
    modules/polyhedral_site_collection
    modules/site
    modules/site_collection

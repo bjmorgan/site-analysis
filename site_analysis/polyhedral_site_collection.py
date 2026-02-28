@@ -43,9 +43,8 @@ and distance-based ordering to reduce the number of containment checks.
 """
 
 from collections.abc import Generator
-from typing import NamedTuple
 
-from .site_collection import SiteCollection
+from .site_collection import SiteCollection, _NearestSiteLookup
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .site import Site
@@ -53,31 +52,6 @@ from .tools import x_pbc
 from pymatgen.core import Structure # type: ignore
 import numpy as np
 
-
-class _NearestSiteLookup(NamedTuple):
-    """Precomputed lookup for finding the nearest site to a given position.
-
-    Uses minimum-image convention in fractional space, which is only
-    geometrically exact for orthogonal cells.
-    """
-    centres: np.ndarray
-    site_indices: list[int]
-
-    def nearest_site_index(self, frac_coords: np.ndarray) -> int:
-        """Return the site index nearest to the given fractional coordinates.
-
-        Uses minimum-image convention in fractional space.
-
-        Args:
-            frac_coords: Fractional coordinates to find the nearest site for.
-
-        Returns:
-            The site index of the nearest site.
-        """
-        diffs = self.centres - frac_coords
-        diffs -= np.round(diffs)
-        dists = np.linalg.norm(diffs, axis=1)
-        return self.site_indices[int(np.argmin(dists))]
 
 class PolyhedralSiteCollection(SiteCollection):
     """A collection of PolyhedralSite objects.

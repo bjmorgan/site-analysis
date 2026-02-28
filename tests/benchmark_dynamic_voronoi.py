@@ -1,8 +1,7 @@
 """Benchmark dynamic Voronoi site analysis on real MD data.
 
-Profiles the full trajectory analysis workflow to identify where time
-is spent: centre calculation, Voronoi assignment, atom coord
-assignment, and bookkeeping (update_occupation, trajectory tracking).
+Compares total wall-clock time for original vs optimised paths and
+optionally dumps a cProfile breakdown with ``--profile``.
 
 Usage:
     python tests/benchmark_dynamic_voronoi.py [--repeats N] [--profile]

@@ -387,6 +387,44 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 		np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
 
+	def test_mixed_n_reference_groups_produce_correct_centres(self):
+		"""Batch with multiple groups (different n_reference) should produce correct centres."""
+		lattice = Lattice.cubic(10.0)
+		# 7 atoms: sites use different subsets
+		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
+								[0.5, 0.5, 0.5], [0.6, 0.6, 0.6],
+								[0.8, 0.8, 0.8], [0.3, 0.3, 0.3],
+								[0.4, 0.4, 0.4]])
+
+		# 2-ref group
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		# 3-ref group
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3, 4])
+		# 2-ref group (same group as site_a)
+		site_c = DynamicVoronoiSite(reference_indices=[5, 6])
+
+		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b, site_c])
+		self.assertEqual(len(collection._centre_groups), 2)
+
+		# Fresh per-site references
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3, 4])
+		ref_c = DynamicVoronoiSite(reference_indices=[5, 6])
+
+		for i in range(5):
+			coords = base_coords + 0.01 * i
+			structure = Structure(lattice, ["Na"] * 7, coords.tolist())
+			frac = structure.frac_coords
+
+			ref_a._compute_corrected_coords(frac[[0, 1]], structure.lattice)
+			ref_b._compute_corrected_coords(frac[[2, 3, 4]], structure.lattice)
+			ref_c._compute_corrected_coords(frac[[5, 6]], structure.lattice)
+			collection._batch_calculate_centres(frac, structure.lattice)
+
+			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
+			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
+			np.testing.assert_array_almost_equal(ref_c.centre, site_c.centre)
+
 	def test_reset_then_reuse_produces_correct_centres(self):
 		"""After reset, batch centres on new data should match per-site computation."""
 		lattice = Lattice.cubic(10.0)

@@ -461,6 +461,73 @@ class TestComputeCorrectedCoords(unittest.TestCase):
         self.assertIsNone(site._pbc_cached_raw_frac)
 
 
+class TestComputeCorrectedCoordsWithReferenceCentre(unittest.TestCase):
+    """Tests for _compute_corrected_coords using the reference_center path."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_first_call_uses_unwrap_vertices(self):
+        """First call with reference_center should use unwrap_vertices_to_reference_center."""
+        ref_centre = np.array([0.15, 0.15, 0.15])
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
+                                  reference_center=ref_centre)
+        lattice = Lattice.cubic(10.0)
+        coords = np.array([[0.1, 0.1, 0.1],
+                           [0.2, 0.1, 0.1],
+                           [0.1, 0.2, 0.1],
+                           [0.1, 0.1, 0.2]])
+
+        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            mock_unwrap.return_value = (coords.copy(), np.zeros((4, 3), dtype=int))
+            site._compute_corrected_coords(coords, lattice)
+            mock_unwrap.assert_called_once()
+            args = mock_unwrap.call_args
+            np.testing.assert_array_equal(args[0][1], ref_centre)
+
+    def test_second_call_uses_cached_path(self):
+        """Small displacement with reference_center should use cached shifts."""
+        ref_centre = np.array([0.15, 0.15, 0.15])
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
+                                  reference_center=ref_centre)
+        lattice = Lattice.cubic(10.0)
+        coords1 = np.array([[0.1, 0.1, 0.1],
+                            [0.2, 0.1, 0.1],
+                            [0.1, 0.2, 0.1],
+                            [0.1, 0.1, 0.2]])
+        coords2 = coords1 + 0.01
+
+        site._compute_corrected_coords(coords1, lattice)
+
+        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
+            site._compute_corrected_coords(coords2, lattice)
+            mock_unwrap.assert_not_called()
+
+    def test_multi_frame_centres_match_single_call(self):
+        """Cached path with reference_center should produce same centres as fresh computation."""
+        ref_centre = np.array([0.15, 0.15, 0.15])
+        lattice = Lattice.cubic(10.0)
+        base_coords = np.array([[0.1, 0.1, 0.1],
+                                [0.2, 0.1, 0.1],
+                                [0.1, 0.2, 0.1],
+                                [0.1, 0.1, 0.2]])
+
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
+                                  reference_center=ref_centre)
+
+        for i in range(5):
+            coords = base_coords + 0.01 * i
+            site._compute_corrected_coords(coords, lattice)
+
+        # Fresh site computing only the final frame
+        fresh = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
+                                   reference_center=ref_centre)
+        final_coords = base_coords + 0.04
+        fresh._compute_corrected_coords(final_coords, lattice)
+
+        np.testing.assert_array_almost_equal(site.centre, fresh.centre)
+
+
 class TestCalculateCentreFromBulk(unittest.TestCase):
     """Tests for calculate_centre_from_bulk."""
 

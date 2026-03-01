@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "site_analysis"
-version = "1.5.0"
+version = "1.6.0"
 description = "Analysis tools for tracking ion migration through crystallographic sites"
 readme = "README.md"
 authors = [
@@ -34,6 +34,7 @@ dev = [
     "pytest-cov",           # Pytest coverage plugin
     "mypy",                 # Type checking
     "types-PyYAML",         # Type stubs for PyYAML
+    "types-tqdm",           # Type stubs for tqdm
     "scipy-stubs",          # Type stubs for SciPy
     "sphinx",               # Documentation generation
     "nbsphinx",             # For notebook integration in docs
@@ -49,6 +50,9 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
+
+[tool.setuptools.package-data]
+site_analysis = ["py.typed"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -339,51 +339,20 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         )
     
     def test_trajectory_from_structures_with_progress(self):
-        """Test trajectory_from_structures with progress bar."""
-        # Create structures
+        """Test trajectory_from_structures wraps iterator with tqdm."""
         structures = [self.structure, self.structure2]
-        
-        # Create a patch for append_timestep to avoid actual processing
+
         with patch.object(self.trajectory, 'append_timestep') as mock_append, \
              patch('site_analysis.trajectory.tqdm') as mock_tqdm:
-            
-            # Make tqdm return the original enumerate object for iteration
             mock_tqdm.return_value = enumerate(structures, 1)
-            
-            # Call with progress=True
+
             self.trajectory.trajectory_from_structures(structures, progress=True)
-            
-            # Check tqdm was called with the right arguments
+
             mock_tqdm.assert_called_once()
-            args, kwargs = mock_tqdm.call_args
-            self.assertEqual(kwargs['total'], 2)  # Should use the length of structures
-            
-            # Check append_timestep was called for each structure
+            _, kwargs = mock_tqdm.call_args
+            self.assertEqual(kwargs['total'], 2)
             self.assertEqual(mock_append.call_count, 2)
-    
-    def test_trajectory_from_structures_with_notebook_progress(self):
-        """Test trajectory_from_structures with notebook progress bar."""
-        # Create structures
-        structures = [self.structure, self.structure2]
-        
-        # Create a patch for append_timestep to avoid actual processing
-        with patch.object(self.trajectory, 'append_timestep') as mock_append, \
-             patch('site_analysis.trajectory.tqdm_notebook') as mock_tqdm_notebook:
-            
-            # Make tqdm_notebook return the original enumerate object for iteration
-            mock_tqdm_notebook.return_value = enumerate(structures, 1)
-            
-            # Call with progress='notebook'
-            self.trajectory.trajectory_from_structures(structures, progress='notebook')
-            
-            # Check tqdm_notebook was called with the right arguments
-            mock_tqdm_notebook.assert_called_once()
-            args, kwargs = mock_tqdm_notebook.call_args
-            self.assertEqual(kwargs['total'], 2)  # Should use the length of structures
-            
-            # Check append_timestep was called for each structure
-            self.assertEqual(mock_append.call_count, 2)
-            
+
     def test_init_with_empty_sites(self):
         """Test that Trajectory raises ValueError with empty sites list."""
         atoms = [Mock(spec=Atom)]

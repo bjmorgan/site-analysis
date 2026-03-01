@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.0] - 2026-03-01
+
+### Changed
+
+- Replaced deprecated `tqdm_notebook` with `tqdm.auto`, which auto-detects the environment (terminal, Jupyter notebook, Jupyter lab). The `progress` parameter on `trajectory_from_structures` is now a simple boolean.
+- Added PEP 561 `py.typed` marker for downstream type checking support.
+- Added `types-tqdm` dev dependency; removed inline `# type: ignore` on tqdm import.
+- Removed redundant mypy ignores for `tqdm`, `pymatgen`, and `scipy` (now covered by type stubs).
+- Added Python 3.14 to CI test matrix; separated mypy into its own CI job.
+
+### Removed
+
+- Removed `progress='notebook'` option from `trajectory_from_structures` (`tqdm.auto` handles environment detection automatically).
+
 ## [1.5.0] - 2026-02-28
 
 ### Changed

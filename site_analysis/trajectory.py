@@ -28,21 +28,24 @@ Note:
 """
 
 from collections import Counter
-from tqdm.auto import tqdm  # type: ignore
-from .polyhedral_site_collection import PolyhedralSiteCollection
-from .polyhedral_site import PolyhedralSite
-from .voronoi_site import VoronoiSite
-from .voronoi_site_collection import VoronoiSiteCollection
-from .spherical_site import SphericalSite
-from .spherical_site_collection import SphericalSiteCollection
-from .dynamic_voronoi_site import DynamicVoronoiSite
-from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
-from .site_collection import SiteCollection
-from .site import Site
-from .atom import Atom
 from collections.abc import Iterable
 from typing import Sequence
+
+from tqdm.auto import tqdm  # type: ignore
+
 from pymatgen.core import Structure
+
+from .atom import Atom
+from .dynamic_voronoi_site import DynamicVoronoiSite
+from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
+from .polyhedral_site import PolyhedralSite
+from .polyhedral_site_collection import PolyhedralSiteCollection
+from .site import Site
+from .site_collection import SiteCollection
+from .spherical_site import SphericalSite
+from .spherical_site_collection import SphericalSiteCollection
+from .voronoi_site import VoronoiSite
+from .voronoi_site_collection import VoronoiSiteCollection
 
 class Trajectory:
     """Class for performing sites analysis on simulation trajectories."""
@@ -249,11 +252,15 @@ class Trajectory:
         """
         return self.sites_trajectory
 
-    def trajectory_from_structures(self, structures, progress: bool = False):
+    def trajectory_from_structures(
+        self,
+        structures: Sequence[Structure],
+        progress: bool = False,
+    ) -> None:
         """Generate a trajectory from a list of structures.
 
         Args:
-            structures: list of pymatgen Structure objects to analyse.
+            structures: The structures to analyse, one per timestep.
             progress: Show a progress bar. Automatically selects the
                 appropriate widget for terminal or notebook environments.
         """

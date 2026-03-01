@@ -32,6 +32,7 @@ from pymatgen.core import Lattice, Structure
 from site_analysis.site_collection import SiteCollection
 from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
 
 
@@ -183,7 +184,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             # Fallback — per-site full PBC computation.
             for idx, pos in enumerate(group.site_positions):
                 site = self.sites[pos]
-                image_shifts = site._compute_corrected_coords(batch_ref[idx], lattice)
+                corrected, image_shifts = correct_pbc(
+                    batch_ref[idx], site.reference_center, lattice)
+                site._centre_coords = np.mean(corrected, axis=0) % 1.0
                 group.pbc_shifts[idx] = image_shifts
             group.initialise(batch_ref)
 

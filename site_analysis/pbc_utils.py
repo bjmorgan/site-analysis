@@ -101,3 +101,36 @@ def unwrap_vertices_to_reference_center(
     if return_image_shifts:
         return result, image_shifts
     return np.asarray(result)  # no-op; satisfies mypy no-any-return
+
+
+def correct_pbc(
+    frac_coords: np.ndarray,
+    reference_center: np.ndarray | None,
+    lattice: Lattice,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Apply PBC correction to fractional coordinates.
+
+    Selects the appropriate unwrapping strategy based on whether a
+    reference centre is provided. When a reference centre is given,
+    vertices are unwrapped to their closest periodic images relative
+    to that centre. Otherwise, the legacy spread-based correction is
+    applied.
+
+    Args:
+        frac_coords: Fractional coordinates, shape ``(n, 3)``.
+        reference_center: Reference centre for unwrapping, or ``None``
+            for legacy spread-based correction.
+        lattice: Lattice for Cartesian distance calculations
+            (used only when ``reference_center`` is not ``None``).
+
+    Returns:
+        Tuple of ``(corrected_coords, image_shifts)`` where both have
+        shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype.
+    """
+    if reference_center is not None:
+        return unwrap_vertices_to_reference_center(
+            frac_coords, reference_center, lattice,
+            return_image_shifts=True)
+    corrected = apply_legacy_pbc_correction(frac_coords)
+    image_shifts = np.round(corrected - frac_coords).astype(np.int64)
+    return corrected, image_shifts

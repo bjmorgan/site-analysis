@@ -5,7 +5,8 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
-from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
+from unittest.mock import patch
+from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center, correct_pbc
 
 
 class TestLegacyPBCCorrection(unittest.TestCase):
@@ -385,6 +386,46 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		
 		# Should return empty array with correct shape
 		self.assertEqual(result.shape, (0, 3))
+
+class TestCorrectPbc(unittest.TestCase):
+	"""Tests for the correct_pbc dispatch function."""
+
+	def setUp(self):
+		self.lattice = Lattice.cubic(10.0)
+
+	def test_delegates_to_legacy_when_no_reference_center(self):
+		"""With no reference centre, delegates to apply_legacy_pbc_correction."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		with patch('site_analysis.pbc_utils.apply_legacy_pbc_correction',
+				   return_value=frac_coords.copy()) as mock_legacy:
+			correct_pbc(frac_coords, None, self.lattice)
+			mock_legacy.assert_called_once()
+
+	def test_delegates_to_unwrap_when_reference_center_provided(self):
+		"""With a reference centre, delegates to unwrap_vertices_to_reference_center."""
+		frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+		ref = np.array([0.15, 0.15, 0.15])
+		with patch('site_analysis.pbc_utils.unwrap_vertices_to_reference_center',
+				   return_value=(frac_coords.copy(), np.zeros((2, 3), dtype=np.int64))) as mock_unwrap:
+			correct_pbc(frac_coords, ref, self.lattice)
+			mock_unwrap.assert_called_once()
+			args = mock_unwrap.call_args
+			self.assertTrue(args[1].get('return_image_shifts', False)
+							or args[0][3] if len(args[0]) > 3 else args[1].get('return_image_shifts', False))
+
+	def test_returns_int64_shifts(self):
+		"""Image shifts have int64 dtype regardless of path."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		_, shifts = correct_pbc(frac_coords, None, self.lattice)
+		self.assertEqual(shifts.dtype, np.int64)
+
+	def test_legacy_path_returns_consistent_shifts(self):
+		"""Shifts from the legacy path satisfy corrected = original + shifts."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice)
+		expected_shifts = np.round(corrected - frac_coords).astype(np.int64)
+		np.testing.assert_array_equal(shifts, expected_shifts)
+
 
 if __name__ == '__main__':
 	unittest.main()

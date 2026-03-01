@@ -18,7 +18,7 @@ from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
 from site_analysis.containment import HAS_NUMBA, FaceTopologyCache, update_pbc_shifts
-from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center
+from site_analysis.pbc_utils import correct_pbc
 from typing import Any
 
 
@@ -239,13 +239,8 @@ class PolyhedralSite(Site):
                 return
 
         # Full computation — first call only (or after anomalous displacement)
-        if self.reference_center is not None:
-            corrected, image_shifts = unwrap_vertices_to_reference_center(
-                frac_coords, self.reference_center, lattice,
-                return_image_shifts=True)
-        else:
-            corrected = apply_legacy_pbc_correction(frac_coords)
-            image_shifts = np.round(corrected - frac_coords).astype(int)
+        corrected, image_shifts = correct_pbc(
+            frac_coords, self.reference_center, lattice)
         self._pbc_image_shifts = image_shifts
         self._pbc_cached_raw_frac = frac_coords.copy()
         self.vertex_coords = corrected

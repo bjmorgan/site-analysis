@@ -10,10 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Extracted shared priority-based site assignment logic into `PriorityAssignmentMixin`, used by both `PolyhedralSiteCollection` and `SphericalSiteCollection`.
 - Improved priority heuristic for both site collections: tracks two recent distinct sites (catches bounce-back) and uses precomputed distance-ranked site ordering instead of neighbour-cutoff-based ordering. ~68% fewer containment checks and ~1.4x wall-clock speedup on argyrodite Li6PS5Cl trajectories.
+- Unified duplicated PBC correction logic into `correct_pbc()` in `pbc_utils`, used by both `PolyhedralSite` and `DynamicVoronoiSite`.
+- Dissolved `containment.py`: moved `HAS_NUMBA` to `_compat.py`, PBC shift updates to `pbc_utils.py`, and face topology cache into `polyhedral_site.py`.
 
 ### Removed
 
 - Removed `neighbour_cutoff` parameter from `SphericalSiteCollection` (distance-ranked ordering replaces neighbour-based ordering).
+- Removed `containment` module (internals relocated; no public API change).
 
 ## [1.4.0] - 2026-02-28
 

@@ -409,14 +409,27 @@ class TestCorrectPbc(unittest.TestCase):
 				   return_value=(frac_coords.copy(), np.zeros((2, 3), dtype=np.int64))) as mock_unwrap:
 			correct_pbc(frac_coords, ref, self.lattice)
 			mock_unwrap.assert_called_once()
-			args = mock_unwrap.call_args
-			self.assertTrue(args[1].get('return_image_shifts', False)
-							or args[0][3] if len(args[0]) > 3 else args[1].get('return_image_shifts', False))
+			self.assertTrue(mock_unwrap.call_args.kwargs.get('return_image_shifts'))
 
-	def test_returns_int64_shifts(self):
-		"""Image shifts have int64 dtype regardless of path."""
+	def test_returns_int64_shifts_legacy_path(self):
+		"""Image shifts have int64 dtype for the legacy path."""
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
 		_, shifts = correct_pbc(frac_coords, None, self.lattice)
+		self.assertEqual(shifts.dtype, np.int64)
+
+	def test_returns_int64_shifts_reference_centre_path(self):
+		"""Image shifts have int64 dtype for the reference-centre path."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		ref = np.array([0.15, 0.15, 0.5])
+		_, shifts = correct_pbc(frac_coords, ref, self.lattice)
+		self.assertTrue(np.issubdtype(shifts.dtype, np.integer))
+
+	def test_empty_input_returns_empty_arrays(self):
+		"""Empty input should return empty arrays without error."""
+		frac_coords = np.array([]).reshape(0, 3)
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice)
+		self.assertEqual(corrected.shape, (0, 3))
+		self.assertEqual(shifts.shape, (0, 3))
 		self.assertEqual(shifts.dtype, np.int64)
 
 	def test_legacy_path_returns_consistent_shifts(self):

@@ -212,11 +212,10 @@ class PolyhedralSite(Site):
         """Apply PBC correction and store vertex coordinates.
 
         On the first call (or after an anomalous displacement invalidates
-        the cache), performs full PBC unwrapping using either the reference
-        centre method or the legacy spread-based method. On subsequent
-        calls, updates the cached integer image shifts incrementally by
-        detecting coordinate wraps (jumps of ~1.0), avoiding the expensive
-        27-image distance search.
+        the cache), delegates to ``correct_pbc()`` for full PBC
+        unwrapping. On subsequent calls, updates the cached integer
+        image shifts incrementally by detecting coordinate wraps
+        (jumps of ~1.0), avoiding the expensive 27-image distance search.
 
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
         marks the face topology cache as stale.
@@ -224,8 +223,9 @@ class PolyhedralSite(Site):
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
                 shape ``(n_vertices, 3)``.
-            lattice: Lattice for Cartesian distance calculations
-                (used only on full recomputation with reference centres).
+            lattice: Lattice for Cartesian distance calculations.
+                Passed to ``correct_pbc()``; unused by the incremental
+                update path.
         """
         if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
             valid, vertex_coords, new_shifts = update_pbc_shifts(

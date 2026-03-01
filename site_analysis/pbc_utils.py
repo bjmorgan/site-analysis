@@ -120,13 +120,16 @@ def correct_pbc(
         frac_coords: Fractional coordinates, shape ``(n, 3)``.
         reference_center: Reference centre for unwrapping, or ``None``
             for legacy spread-based correction.
-        lattice: Lattice for Cartesian distance calculations
-            (used only when ``reference_center`` is not ``None``).
+        lattice: Lattice for Cartesian distance calculations.
+            Passed to the reference-centre unwrapping path; unused by
+            the legacy spread-based path.
 
     Returns:
         Tuple of ``(corrected_coords, image_shifts)`` where both have
         shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype.
     """
+    if frac_coords.size == 0:
+        return frac_coords, np.zeros((0, 3), dtype=np.int64)
     if reference_center is not None:
         return unwrap_vertices_to_reference_center(
             frac_coords, reference_center, lattice,

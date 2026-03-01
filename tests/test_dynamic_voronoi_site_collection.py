@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import unittest
 from unittest.mock import Mock, patch
 import numpy as np
@@ -10,7 +12,11 @@ from site_analysis.atom import Atom
 from site_analysis.site import Site
 
 
-def _reference_centre(frac_coords, lattice, reference_center=None):
+def _reference_centre(
+	frac_coords: np.ndarray,
+	reference_center: np.ndarray | None,
+	lattice: Lattice,
+) -> np.ndarray:
 	"""Compute a reference site centre for test assertions.
 
 	Replicates the logic that DynamicVoronoiSite.calculate_centre uses
@@ -227,8 +233,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			site_a._centre_coords = _reference_centre(frac[[0, 1]], structure.lattice)
-			site_b._centre_coords = _reference_centre(frac[[2, 3]], structure.lattice)
+			site_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
+			site_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
 			collection._batch_calculate_centres(frac, structure.lattice)
 
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
@@ -268,8 +274,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
 			collection._batch_calculate_centres(frac, structure.lattice)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -323,8 +329,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 
 		for struct in [struct1, struct2]:
 			frac = struct.frac_coords
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], struct.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], struct.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, struct.lattice)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, struct.lattice)
 			collection._batch_calculate_centres(frac, struct.lattice)
 
 		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -359,9 +365,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 7, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], structure.lattice)
-			ref_c._centre_coords = _reference_centre(frac[[5, 6]], structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], None, structure.lattice)
+			ref_c._centre_coords = _reference_centre(frac[[5, 6]], None, structure.lattice)
 			collection._batch_calculate_centres(frac, structure.lattice)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -393,8 +399,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			site_a._centre_coords = _reference_centre(frac[[0, 1]], structure.lattice, ref_centre_a)
-			site_b._centre_coords = _reference_centre(frac[[2, 3]], structure.lattice, ref_centre_b)
+			site_a._centre_coords = _reference_centre(frac[[0, 1]], ref_centre_a, structure.lattice)
+			site_b._centre_coords = _reference_centre(frac[[2, 3]], ref_centre_b, structure.lattice)
 			collection._batch_calculate_centres(frac, structure.lattice)
 
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
@@ -430,8 +436,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
 			collection._batch_calculate_centres(frac, structure.lattice)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)

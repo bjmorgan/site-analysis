@@ -388,6 +388,13 @@ class TestCalculateCentrePbc(unittest.TestCase):
         self.assertTrue(x < 0.1 or x > 0.9,
                         f"Centre x={x} should be near the boundary, not near 0.5")
 
+
+class TestResetWithCalculatedCentre(unittest.TestCase):
+    """Test that reset clears a previously calculated centre."""
+
+    def setUp(self):
+        Site._newid = 0
+
     def test_reset_clears_centre(self):
         """reset() should clear calculated centre coordinates."""
         lattice = Lattice.cubic(10.0)

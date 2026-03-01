@@ -6,6 +6,7 @@ For site types defined using reference atoms ({class}`~site_analysis.polyhedral_
 :width: 90%
 
 **Caption:** (a) A polyhedral site defined by four vertex atoms. (b) A 4-coordinate polyhedral site that wraps around the simulation cell periodic boundary. (c) Neglecting periodic boundary conditions leads to incorrect site geometry. (d) Properly unwrapping the wrapped atoms gives the correct site geometry.
+```
 
 `site_analysis` implements two approaches for handling periodic boundary conditions in reference-based site types: **spread-based detection**, which identifies wrapped sites based on the spatial distribution of reference atoms, and **reference centre unwrapping**, which uses the position of each site's central atom as a reference point for unwrapping vertex coordinates to their closest periodic images.
 
@@ -21,6 +22,7 @@ This method works well provided all sites have spans less than 0.5 times the sim
 :width: 90%
 
 **Caption:** (a) If a site spans < &frac12; of the simulation cell in all dimensions it is considered to not wrap around the periodic boundaries and no unwrapping is needed. (b) Sites with spans > &frac12; of the simulation cell along any one dimension are assumed to wrap around the periodic boundaries (as in this figure). Unwrapping is performed to restore the correct site geometry. (c) In small supercells where sites naturally span &asymp; &frac12; of unit cell dimensions the method becomes unreliable, as legitimate site geometries can erroneously be assigned as wrapping around the periodic boundaries. These sites are then &ldquo;unwrapped&rdquo; to produce incorrect site geometries and false site assignments.
+```
 
 ### Reference Centre Unwrapping (**default**)
 
@@ -33,6 +35,7 @@ The reference centre for each site is the fractional coordinates of the central 
 :width: 80%
 
 **Caption:** Reference center unwrapping process: (a) Site with central atom (×) and coordinating atoms that wrap around periodic boundaries. (b) The reference center method considers all periodic images (3×3 supercell view) and selects the closest image of each coordinating atom relative to the central atom. (c) Result: correctly unwrapped site geometry.
+```
 
 **Important limitation:** This method assumes that the central atoms remain reasonably close to their initial positions throughout the analysis. If sites drift significantly from their reference positions during a simulation, the unwrapping may become unreliable.
 
@@ -54,7 +57,7 @@ builder.with_polyhedral_sites(..., use_reference_centers=True)
 builder.with_polyhedral_sites(..., use_reference_centers=False)
 ```
 
-For more details on using these workflows, see {doc}`trajectory_builder` and {doc}`reference_workflow`.
+For more details on using these workflows, see {doc}`../guides/builders` and {doc}`../guides/reference_workflow`.
 
 ### Manual Site Creation
 

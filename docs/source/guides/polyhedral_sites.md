@@ -170,20 +170,7 @@ trajectory = Trajectory(sites=sites, atoms=atoms)
 
 This approach is useful when you have pre-identified coordination environments or need to work with non-standard polyhedra.
 
-## Comparison with Other Site Types
-
-### Advantages
-- Accurately represents coordination environments
-- Shape adapts to structural distortions
-- Chemically meaningful site boundaries
-- Can handle complex geometries
-- Space-filling in close-packed structures
-
-### Limitations
-- More complex to define than spherical/Voronoi sites
-- Containment calculations are more expensive than spherical/Voronoi sites (mitigated with numba; see below)
-- May not fill space completely in all structures
-- Requires well-defined coordination environments
+For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 
 ## Containment Algorithms
 

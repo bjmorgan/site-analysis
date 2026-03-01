@@ -454,7 +454,35 @@ trajectory = create_trajectory_with_polyhedral_sites(
 )
 ```
 
-Similar factory functions exist for Voronoi and dynamic Voronoi sites.
+### `create_trajectory_with_voronoi_sites()`
+```python
+from site_analysis import create_trajectory_with_voronoi_sites
+
+trajectory = create_trajectory_with_voronoi_sites(
+    structure=structure,
+    mobile_species="Li",
+    centres=[[0.5, 0.5, 0.5], [0.0, 0.0, 0.0]],
+    labels=["site_A", "site_B"]
+)
+```
+
+### `create_trajectory_with_dynamic_voronoi_sites()`
+```python
+from site_analysis import create_trajectory_with_dynamic_voronoi_sites
+
+trajectory = create_trajectory_with_dynamic_voronoi_sites(
+    structure=target_structure,
+    reference_structure=reference_structure,
+    mobile_species="Li",
+    centre_species="Li",
+    reference_species="O",
+    cutoff=3.0,
+    n_reference=6,
+    label="dynamic_octahedral",
+    align=True,
+    align_species=["O"]
+)
+```
 
 ## Best Practices
 

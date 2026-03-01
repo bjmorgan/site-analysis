@@ -110,6 +110,28 @@ atom = trajectory.atoms[0]
 print(f"Site history for atom {atom.index}: {atom.trajectory}")
 ```
 
+### Handling Unassigned Timesteps
+
+When using spherical or polyhedral sites (which may not fill space completely), an atom's trajectory can contain `None` entries for timesteps where it was not inside any site:
+
+```python
+# Example trajectory with gaps
+# [5, 5, None, None, 12, 12, 12]
+#         ^^^^  ^^^^  atom was between sites
+
+atom = trajectory.atoms[0]
+
+# Count how often the atom was unassigned
+unassigned = sum(1 for s in atom.trajectory if s is None)
+total = len(atom.trajectory)
+print(f"Atom {atom.index}: unassigned for {unassigned}/{total} timesteps")
+
+# Filter to only assigned timesteps
+assigned_sites = [s for s in atom.trajectory if s is not None]
+```
+
+A high proportion of `None` entries may indicate that site radii are too small or that a space-filling site type (Voronoi or dynamic Voronoi) would be more appropriate. Voronoi-based sites never produce `None` entries because they partition space completely.
+
 ### Analysis Data
 
 The analysis builds up data about site occupations and transitions:

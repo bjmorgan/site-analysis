@@ -194,28 +194,9 @@ This approach gives you full control over:
 - Reusing sites from previous analyses
 - Integrating with other workflows that generate site objects
 
-## Comparison with Other Site Types
-
-### Advantages
-- Conceptually simple and intuitive
-- Easy to define and visualise
-- Computationally efficient
-
-### Limitations
-- Do not completely fill space (gaps between sites)
-- May overlap, causing ambiguous assignment
-- Size needs to be carefully chosen
-- Less physically meaningful than geometry-based approaches
-- Generally inferior to other site types for most analyses
-
 ## Handling Overlapping Sites
 
-When sites overlap, the assignment algorithm prioritizes stability:
-
-1. **Check previous assignment**: If the atom was in a site during the previous timestep and that site still contains the atom's current position, keep the atom in that site
-2. **Find new assignment**: If the atom wasn't previously assigned OR has moved outside its previous site, check all sites in order and assign the atom to the first site that contains it
-
-This persistence-based approach means atoms tend to remain in their current sites even when they're in overlapping regions, reducing spurious transitions between overlapping sites.
+When sites overlap, the assignment algorithm uses a priority-based approach: it checks the atom's most recently occupied sites first, then sites ordered by learned transition frequency and distance from the current site. The first containing site found claims the atom. This means atoms tend to remain in their current sites even when they're in overlapping regions, reducing spurious transitions. See the [site collections](../concepts/site_collections.md) page for details on the priority ordering.
 
 **Note**: Overlapping sites can be deliberately used to minimize spurious "transitions" caused by large amplitude thermal vibrations that don't represent true diffusive motion.
 
@@ -256,7 +237,7 @@ if unassigned:
 ### Problem: Atoms jumping between overlapping sites
 **Solutions**:
 - Reduce site radii to minimize overlap
-- The default persistence-based assignment helps minimize spurious jumps
+- The default priority-based assignment helps minimise spurious jumps
 - Consider polyhedral sites for better-defined boundaries
 
 ### Problem: Sites too small/large for structure

@@ -17,8 +17,8 @@ Please include the full citation with DOI.
   author = {Morgan, Benjamin J.},
   title = {site-analysis: Python module for analysing molecular dynamics simulations of ion transport},
   url = {https://github.com/bjmorgan/site-analysis},
-  version = {0.0.1},
-  year = {2020}
+  version = {1.5.0},
+  year = {2025}
 }
 ```
 
@@ -27,7 +27,7 @@ Please include the full citation with DOI.
 - **Rotational Stacking Faults in the Ionic Conductor Li<sub>3</sub>ScCl<sub>6</sub>**
   Goldmann, B.A., Rosenbach, C., Evans, H.A., Helm, B., Wankmiller, B., Maus, O., Suard, E., Nazar, L.F., Hansen, M.R., Morgan, B.J., Islam, M.S., Zeier, W.G.
   *Chemistry of Materials*, (2025)
-  DOI: [10.1021/acs.chemmater.5c02303](httpe://10.1021/acs.chemmater.5c02303) 
+  DOI: [10.1021/acs.chemmater.5c02303](https://doi.org/10.1021/acs.chemmater.5c02303) 
 
 - **Enabling ionic transport in Li<sub>3</sub>AlP<sub>2</sub>: the roles of defects and disorder**
   Hu, J., Squires, A.G., Kondek, J., Johnson, M.J., Youd, A.B., Vadhva, P., Paul, P.P., Withers, P.J., Di Michiel, M., Keeble, D.S., Hansen, M.R., Scanlon, D.O., and Rettie, A.J.E.
@@ -49,7 +49,7 @@ Please include the full citation with DOI.
   *Chemistry of Materials*, 33, 2004-2018 (2021)  
   DOI: [10.1021/acs.chemmater.0c03738](https://doi.org/10.1021/acs.chemmater.0c03738)
 
-## Publications Using the Preceeding Fortran Implementation
+## Publications Using the Preceding Fortran Implementation
 
 The following publications used the earlier Fortran implementation of the polyhedral site analysis with the surface normal algorithm, which formed the basis for the current Python `site_analysis` package.
 
@@ -80,7 +80,7 @@ The following publications used the earlier Fortran implementation of the polyhe
 
 ## Publications Using Earlier Implementations
 
-The following publications used earlier implementations of tetrahedral site projection schemes.:
+The following publications used earlier implementations of tetrahedral site projection schemes:
 
 - **Cation composition effects on oxide conductivity in the Zr<sub>2</sub>Y<sub>2</sub>O<sub>7</sub>-Y<sub>3</sub>NbO<sub>7</sub> system**  
   Marrocchelli, D., Madden, P.A., Norberg, S.T. and Hull, S.  

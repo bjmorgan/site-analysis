@@ -155,25 +155,7 @@ This approach gives you full control over:
 - Site labelling and metadata
 - Integration with other analysis tools
 
-## Comparison with Other Site Types
-
-### Advantages over Spherical Sites
-- Complete spatial coverage (no gaps)
-- No ambiguity in assignment
-- No need to choose radii
-- Computationally efficient
-
-### Advantages over Polyhedral Sites
-- Always fills space completely
-- Simpler to define (just centres)
-- Faster computation
-- Works with any arrangement of centres
-
-### Limitations
-- Site shapes determined by neighbour positions
-- May not reflect physical site boundaries
-- No direct connection to coordination environments
-- Can create elongated or irregular cells
+For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 
 ## Troubleshooting
 

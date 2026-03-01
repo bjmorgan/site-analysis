@@ -82,7 +82,7 @@ modules
 ## Code Requirements
 
 - Python 3.10 or later
-- Dependencies: pymatgen, numpy, scipy
+- Dependencies: pymatgen, numpy, scipy, tqdm
 
 ## Development
 

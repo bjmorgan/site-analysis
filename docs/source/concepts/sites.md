@@ -41,15 +41,9 @@ The radius parameter for spherical sites presents a fundamental trade-off. When 
 
 To mitigate this issue, one might be tempted to increase the site radii to ensure fuller coverage of space. However, this introduces a new problem: overlapping sites. When spheres overlap, a mobile ion might simultaneously satisfy the containment criteria for multiple sites, creating ambiguity in site assignment.
 
-The `site_analysis` package addresses this ambiguity through a specific prioritization algorithm in the SphericalSiteCollection:
+The `site_analysis` package addresses this ambiguity through a priority-based assignment algorithm: each atom's recently occupied sites are checked first, followed by sites ordered by learned transition frequency and distance. The first containing site found claims the atom. This means an atom in an overlapping region will tend to remain in its current site, reducing spurious transitions from small oscillations.
 
-1. First, it checks if an atom is still in its previously assigned site (prioritizing persistence)
-2. If not in the previous site, it sequentially checks all sites until a match is found
-3. The first site found to contain the atom claims it (no further checks are performed)
-
-This approach handles overlapping spherical sites in a consistent way. If an atom is in a region where multiple sites overlap, it will remain assigned to its original site as long as it stays within that site's volume. This persistence can be useful for tracking atoms through small oscillations without generating spurious site transitions.
-
-While effective for maintaining assignment consistency, this approach does not resolve the fundamental spatial coverage issues with spherical sites. The persistence heuristic also has no physical basis in energy barriers or transition states, making other site definitions generally preferable for detailed mechanistic analysis.
+For details on how the priority ordering works, see the [site collections](site_collections.md) page. While effective for maintaining assignment consistency, this approach does not resolve the fundamental spatial coverage issues with spherical sites, making other site definitions generally preferable for detailed mechanistic analysis.
 
 **Best for**:
 - Initial exploratory analysis

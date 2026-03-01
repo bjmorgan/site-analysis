@@ -17,7 +17,7 @@ from site_analysis import TrajectoryBuilder
 from pymatgen.core import Structure
 
 # Load structures
-ideal_structure = Structure.from_file("ideal_structure.cif")
+reference_structure = Structure.from_file("ideal_structure.cif")
 target_structure = Structure.from_file("md_frame.vasp")
 
 # Create a trajectory with tetrahedral Li sites
@@ -101,67 +101,7 @@ trajectory = (TrajectoryBuilder()
 
 This example shows how to specify framework atoms for alignment by using the `align_species` parameter. By selecting only framework species that have consistent counts in both structures, proper alignment can be achieved even when the mobile ion content differs between reference and target structures.
 
-#### Alignment Parameters
-
-All alignment parameters are optional and have sensible defaults:
-
-- **Enable/Disable**: The `align` parameter (default: `True`) controls whether structure alignment is performed at all. Setting `align=False` disables alignment, which may be appropriate when structures are already perfectly aligned or when testing alternative workflows.
-
-- **Species Selection**: The `align_species` parameter specifies which atomic species are used for alignment. This should be species that have consistent counts in both reference and target structures:
-  - If `None` (default), mapping species will be used if specified, otherwise all common species
-  - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
-  - Typically framework atoms are used to avoid issues with different mobile ion counts
-
-- **Alignment Metric**: The `align_metric` parameter (default: `'rmsd'`) determines what distance measurement is minimised:
-  - `'rmsd'`: Root-mean-square deviation - minimises the average distance between corresponding atoms across both structures
-  - `'max_dist'`: Maximum distance - minimises the maximum distance between any corresponding atom pair (focuses on the largest misalignment)
-
-- **Tolerance**: The `align_tolerance` parameter (default: `1e-4`) controls the convergence criteria for the alignment optimization algorithm. A smaller value (e.g., 1e-5) requires more precise alignment, while a larger value (e.g., 1e-3) allows quicker convergence with potentially less precise alignment.
-
-- **Optimization Algorithm**: The `align_algorithm` parameter (default: `'Nelder-Mead'`) determines which numerical optimization approach is used:
-  - `'Nelder-Mead'`: A local optimization method that works well when structures are already roughly aligned or have similar origins. It's faster but may get stuck in local minima.
-  - `'differential_evolution'`: A global optimization method that's more robust when structures have very different origins or orientations. It's slower but better at finding the optimal alignment when local methods fail.
-
-- **Minimizer Options**: For fine-grained control, `align_minimizer_options` accepts a dictionary of algorithm-specific parameters:
-  ```python
-  # For differential_evolution
-  align_minimizer_options={
-      'popsize': 20,      # Population size (default: 15)
-      'maxiter': 1000,    # Maximum iterations (default: 1000)
-      'strategy': 'best1bin'  # Mutation strategy
-  }
-  
-  # For Nelder-Mead
-  align_minimizer_options={
-      'maxiter': 2000,    # Maximum iterations
-      'xatol': 1e-4,      # Absolute tolerance on parameters
-      'fatol': 1e-4       # Absolute tolerance on function value
-  }
-  ```
-
-#### When to Use Global Optimization
-
-Consider using `align_algorithm='differential_evolution'` when:
-- Structures have very different origins (not just small displacements)
-- Nelder-Mead consistently fails to find a good alignment
-- You see error messages about optimization failure or reaching maximum iterations
-- You're working with complex structures where the alignment landscape might have multiple local minima
-
-Example with global optimization:
-```python
-trajectory = (TrajectoryBuilder()
-    .with_structure(target_structure)
-    .with_reference_structure(reference_structure)
-    .with_mobile_species("Li")
-    .with_structure_alignment(
-        align_species=["O", "Ti"],
-        align_algorithm='differential_evolution',  # Global optimizer
-        align_metric='max_dist',                   # Minimize worst-case alignment
-        align_minimizer_options={'popsize': 20}    # Larger population 
-    )
-    .with_polyhedral_sites(...)
-    .build())
-```
+For a full reference of all alignment parameters (`align_metric`, `align_algorithm`, `align_tolerance`, `align_minimizer_options`), see the [`with_structure_alignment` documentation](builders.md#with_structure_alignmentaligntrue-align_speciesnone-align_metricrmsd-align_algorithmnelder-mead-align_minimizer_optionsnone-align_tolerance1e-4) in the builder guide.
 
 ### Site Mapping Configuration
 

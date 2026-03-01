@@ -189,25 +189,7 @@ This approach gives you full control over:
 - How sites are created and configured
 - The workflow for structure analysis
 
-## Comparison with Other Site Types
-
-### Advantages over Regular Voronoi Sites
-- Centres adapt to structural changes
-- Better for flexible frameworks
-- Sites follow local distortions
-- More physically meaningful for deformable systems
-
-### Advantages over Polyhedral Sites
-- Maintains space-filling property of Voronoi sites
-- Computationally more efficient than polyhedral sites
-- Simpler geometric definition
-- No complex containment calculations
-
-### Limitations
-- More complex setup than regular Voronoi sites
-- Requires careful choice of reference atoms
-- Computationally more expensive than fixed-centre sites
-- Site shapes still determined by relative positions only
+For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 
 ## Troubleshooting
 

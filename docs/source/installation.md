@@ -32,8 +32,8 @@ For development or to access the latest features before release, you can install
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/bjmorgan/site_analysis.git
-   cd site_analysis
+   git clone https://github.com/bjmorgan/site-analysis.git
+   cd site-analysis
    ```
 
 2. Install in development mode:

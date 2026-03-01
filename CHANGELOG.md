@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Replaced deprecated `tqdm_notebook` with `tqdm.auto`, which auto-detects the environment (terminal, Jupyter notebook, Jupyter lab). The `progress` parameter on `trajectory_from_structures` is now a simple boolean.
 - Added PEP 561 `py.typed` marker for downstream type checking support.
 - Added `types-tqdm` dev dependency; removed inline `# type: ignore` on tqdm import.
+- Removed redundant mypy ignores for `tqdm`, `pymatgen`, and `scipy` (now covered by type stubs).
 
 ### Removed
 

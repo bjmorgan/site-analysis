@@ -31,7 +31,7 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Sequence
 
-from tqdm.auto import tqdm  # type: ignore
+from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 

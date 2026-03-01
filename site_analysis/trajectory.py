@@ -28,7 +28,7 @@ Note:
 """
 
 from collections import Counter
-from tqdm import tqdm, tqdm_notebook # type: ignore
+from tqdm.auto import tqdm  # type: ignore
 from .polyhedral_site_collection import PolyhedralSiteCollection
 from .polyhedral_site import PolyhedralSite
 from .voronoi_site import VoronoiSite
@@ -40,6 +40,7 @@ from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .site_collection import SiteCollection
 from .site import Site
 from .atom import Atom
+from collections.abc import Iterable
 from typing import Sequence
 from pymatgen.core import Structure
 
@@ -248,30 +249,20 @@ class Trajectory:
         """
         return self.sites_trajectory
 
-    def trajectory_from_structures(self, structures, progress=False):
+    def trajectory_from_structures(self, structures, progress: bool = False):
         """Generate a trajectory from a list of structures.
-        
-        This method processes each structure in sequence, appending a timestep
-        for each one.
-        
+
         Args:
             structures: list of pymatgen Structure objects to analyse.
-            progress: If False, no progress is shown. If True, a progress bar is displayed.
-                If 'notebook', a notebook-friendly progress bar is displayed.
-                
-        Notes:
-            This method uses tqdm for progress tracking when enabled.
+            progress: Show a progress bar. Automatically selects the
+                appropriate widget for terminal or notebook environments.
         """
-        generator = enumerate(structures, 1)
-        params = {'iterable': generator,
-                  'total': len(structures),
-                  'unit': ' steps',
-                  'desc': 'Analysing trajectory'}
+        generator: Iterable[tuple[int, Structure]] = enumerate(structures, 1)
         if progress:
-            if progress=='notebook':
-                generator = tqdm_notebook(**params)
-            else:
-                generator = tqdm(**params)
+            generator = tqdm(generator,
+                             total=len(structures),
+                             unit=' steps',
+                             desc='Analysing trajectory')
         for timestep, s in generator:
             self.append_timestep(s, t=timestep)
    

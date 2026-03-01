@@ -18,7 +18,7 @@ Please include the full citation with DOI.
   title = {site-analysis: Python module for analysing molecular dynamics simulations of ion transport},
   url = {https://github.com/bjmorgan/site-analysis},
   version = {1.5.0},
-  year = {2025}
+  year = {2026}
 }
 ```
 

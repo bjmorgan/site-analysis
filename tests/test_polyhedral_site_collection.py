@@ -4,7 +4,7 @@ from pymatgen.core import Lattice, Structure
 from site_analysis.polyhedral_site_collection import (
     PolyhedralSiteCollection,
     construct_neighbouring_sites,
-    _compute_distance_ranked_sites,
+    _collect_reference_centres,
 )
 from site_analysis.atom import atoms_from_structure
 from site_analysis.tools import get_coordination_indices
@@ -411,19 +411,18 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         self.assertEqual(len(neighbours[site.index]), 0)
                         
 
-class TestComputeDistanceRankedSites(unittest.TestCase):
-    """Tests for _compute_distance_ranked_sites."""
+class TestCollectReferenceCentres(unittest.TestCase):
+    """Tests for _collect_reference_centres."""
 
     def test_returns_none_when_no_reference_centres(self):
-        """Returns (None, None) when any site lacks a reference centre."""
+        """Returns (None, indices) when any site lacks a reference centre."""
         Site._newid = 0
         sites = [
             PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
             PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
         ]
-        ranked, reference_data = _compute_distance_ranked_sites(sites)
-        self.assertIsNone(ranked)
-        self.assertIsNone(reference_data)
+        centres, site_indices = _collect_reference_centres(sites)
+        self.assertIsNone(centres)
 
     def test_returns_none_when_mixed_reference_centres(self):
         """Returns None when only some sites have reference centres."""
@@ -433,38 +432,20 @@ class TestComputeDistanceRankedSites(unittest.TestCase):
                            reference_center=np.array([0.1, 0.1, 0.1])),
             PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
         ]
-        ranked, reference_data = _compute_distance_ranked_sites(sites)
-        self.assertIsNone(ranked)
+        centres, site_indices = _collect_reference_centres(sites)
+        self.assertIsNone(centres)
 
-    def test_ranks_by_distance(self):
-        """Sites are ranked by distance from each site's reference centre."""
+    def test_returns_centres_and_indices(self):
+        """Returns centres array and site indices when all sites have reference centres."""
         Site._newid = 0
         site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.0, 0.0, 0.0]))
+                                reference_center=np.array([0.1, 0.2, 0.3]))
         site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.1, 0.0, 0.0]))
-        site_c = PolyhedralSite(vertex_indices=[8, 9, 10, 11],
-                                reference_center=np.array([0.3, 0.0, 0.0]))
-        ranked, reference_data = _compute_distance_ranked_sites([site_a, site_b, site_c])
-
-        # From site_a: site_b (0.1) is closer than site_c (0.3)
-        self.assertEqual(ranked[site_a.index], [site_b.index, site_c.index])
-        # From site_c: site_b (0.2) is closer than site_a (0.3)
-        self.assertEqual(ranked[site_c.index], [site_b.index, site_a.index])
-
-    def test_minimum_image_convention(self):
-        """Distance ranking uses minimum-image convention."""
-        Site._newid = 0
-        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.05, 0.0, 0.0]))
-        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.5, 0.0, 0.0]))
-        site_c = PolyhedralSite(vertex_indices=[8, 9, 10, 11],
-                                reference_center=np.array([0.95, 0.0, 0.0]))
-        ranked, _ = _compute_distance_ranked_sites([site_a, site_b, site_c])
-
-        # From site_a at 0.05: site_c at 0.95 is 0.1 away via PBC, site_b is 0.45
-        self.assertEqual(ranked[site_a.index], [site_c.index, site_b.index])
+                                reference_center=np.array([0.4, 0.5, 0.6]))
+        centres, site_indices = _collect_reference_centres([site_a, site_b])
+        np.testing.assert_array_equal(centres[0], [0.1, 0.2, 0.3])
+        np.testing.assert_array_equal(centres[1], [0.4, 0.5, 0.6])
+        self.assertEqual(site_indices, [site_a.index, site_b.index])
 
 
 class TestNearestSiteLookup(unittest.TestCase):

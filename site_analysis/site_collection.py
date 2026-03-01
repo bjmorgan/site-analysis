@@ -1,28 +1,27 @@
-"""Abstract base class for collections of sites in crystal structures.
+"""Base classes for collections of sites in crystal structures.
 
-This module defines the SiteCollection abstraction, which manages groups of
-related Site objects and provides methods for assigning atoms to these sites
-based on their positions in a crystal structure.
+This module defines:
 
-The SiteCollection class serves as an abstract base class that all specific
-site collection types (PolyhedralSiteCollection, SphericalSiteCollection, etc.)
-must inherit from. It defines the interface for site-atom assignment logic
-and provides common functionality for managing site occupations.
-
-Concrete site collection classes must implement methods to:
-- Assign atoms to sites for a given structure
-- Analyze structure and update site assignments
-- Define structure-specific site relationships like neighboring sites
-
-This class should not be instantiated directly; use one of the concrete
-subclasses instead.
+- ``SiteCollection``: abstract base class that all site collection types
+  must inherit from. Provides the interface for site-atom assignment and
+  common functionality for managing site occupations.
+- ``PriorityAssignmentMixin``: mixin providing priority-based site
+  assignment ordering. Used by collection types that check sites one at
+  a time (polyhedral, spherical) but not by those that use global
+  distance-matrix assignment (Voronoi, dynamic Voronoi).
+- ``_NearestSiteLookup``: precomputed lookup for finding the nearest
+  site to a given position.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Sequence
+from collections.abc import Generator
+from typing import NamedTuple, Sequence, TYPE_CHECKING
 
 import numpy as np
 from pymatgen.core import Structure # type: ignore
+from .atom import Atom
 from .site import Site
 
 
@@ -50,6 +49,136 @@ class _NearestSiteLookup(NamedTuple):
         diffs -= np.round(diffs)
         dists = np.linalg.norm(diffs, axis=1)
         return self.site_indices[int(np.argmin(dists))]
+
+
+class PriorityAssignmentMixin:
+    """Mixin providing priority-based site assignment ordering.
+
+    Provides ``_get_priority_sites(atom)``, a generator that yields sites
+    in an optimised order based on recent site history, learned transitions,
+    and precomputed distance ranking.
+
+    Subclasses call ``_init_priority_ranking(centres, site_indices)`` from
+    their ``__init__`` to enable distance-ranked ordering. If not called,
+    the generator falls back to ``neighbouring_sites`` then arbitrary
+    order (used by ``PolyhedralSiteCollection`` when reference centres
+    are unavailable).
+
+    Note: distance ranking uses minimum-image convention in fractional
+    space, which is only geometrically exact for orthogonal cells. For
+    non-orthogonal cells the ranking is approximate, but correctness is
+    unaffected since all sites are eventually checked.
+
+    Expects to be mixed with ``SiteCollection`` which provides
+    ``site_by_index``, ``neighbouring_sites``, and ``sites``.
+    """
+
+    # Type stubs for the SiteCollection interface this mixin requires.
+    # These are provided by SiteCollection at runtime via MRO.
+    if TYPE_CHECKING:
+        sites: Sequence[Site]
+        def site_by_index(self, index: int) -> Site: ...
+        def neighbouring_sites(self, site_index: int) -> Sequence[Site]: ...
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._distance_ranked_sites: dict[int, list[int]] | None = None
+        self._nearest_site_lookup: _NearestSiteLookup | None = None
+
+    def _init_priority_ranking(self, centres: np.ndarray, site_indices: list[int]) -> None:
+        """Precompute distance-ranked site ordering from the given centres.
+
+        Does nothing if ``centres`` is empty (zero sites).
+
+        Args:
+            centres: (N, 3) array of fractional coordinates for each site.
+            site_indices: Corresponding site indices.
+        """
+        if len(centres) == 0:
+            return
+        ranked: dict[int, list[int]] = {}
+        for i, idx in enumerate(site_indices):
+            diffs = centres - centres[i]
+            diffs -= np.round(diffs)
+            dists = np.linalg.norm(diffs, axis=1)
+            order = np.argsort(dists)
+            ranked[idx] = [site_indices[j] for j in order if j != i]
+        self._distance_ranked_sites = ranked
+        self._nearest_site_lookup = _NearestSiteLookup(
+            centres=centres, site_indices=site_indices
+        )
+
+    def _get_priority_sites(self, atom: Atom) -> Generator[Site, None, None]:
+        """Generator that yields sites in priority order for optimised atom assignment.
+
+        The generator picks an *anchor site* — the most recent site from
+        the atom's history, or the nearest site centre if no history
+        exists — and uses it to order the remaining sites.
+
+        The checking sequence depends on available information:
+
+        When trajectory history exists:
+            1. Most recently visited site, then previously visited site
+            2. Learned transition destinations from the anchor in
+               frequency order
+            3. Remaining sites by distance from anchor (if distance ranking
+               available), otherwise neighbours then arbitrary order
+
+        When no trajectory history exists:
+            - If distance ranking is available: nearest site centre
+              (anchor) first, then learned transitions, then
+              distance-ranked outward
+            - Otherwise: all sites in arbitrary order
+
+        Each site is yielded at most once.
+
+        Args:
+            atom: Atom object with recent site history used to determine
+                site priorities.
+
+        Yields:
+            Site: Sites in optimal checking order.
+        """
+        checked_indices: set[int] = set()
+        anchor_index = None
+
+        recent = [s for s in atom._recent_sites if s is not None]
+        if recent:
+            anchor_index = recent[0]
+            for index in recent:
+                yield self.site_by_index(index)
+                checked_indices.add(index)
+        elif self._nearest_site_lookup is not None:
+            anchor_index = self._nearest_site_lookup.nearest_site_index(atom.frac_coords)
+            yield self.site_by_index(anchor_index)
+            checked_indices.add(anchor_index)
+
+        if anchor_index is not None:
+            # Learned transitions in frequency order
+            anchor_site = self.site_by_index(anchor_index)
+            for dest_index in anchor_site.most_frequent_transitions():
+                if dest_index not in checked_indices:
+                    yield self.site_by_index(dest_index)
+                    checked_indices.add(dest_index)
+
+            # Remaining sites
+            if self._distance_ranked_sites is not None:
+                for index in self._distance_ranked_sites[anchor_index]:
+                    if index not in checked_indices:
+                        yield self.site_by_index(index)
+                        checked_indices.add(index)
+            else:
+                for neighbour_site in self.neighbouring_sites(anchor_index):
+                    if neighbour_site.index not in checked_indices:
+                        yield neighbour_site
+                        checked_indices.add(neighbour_site.index)
+                for site in self.sites:
+                    if site.index not in checked_indices:
+                        yield site
+        else:
+            for site in self.sites:
+                yield site
+
 
 class SiteCollection(ABC):
     """Parent class for collections of sites.

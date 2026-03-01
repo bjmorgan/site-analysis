@@ -1,5 +1,5 @@
 import unittest
-from site_analysis.site_collection import SiteCollection
+from site_analysis.site_collection import SiteCollection, PriorityAssignmentMixin
 from site_analysis.site import Site
 from site_analysis.atom import Atom
 from pymatgen.core import Structure
@@ -283,6 +283,47 @@ class SiteCollectionTestCase(unittest.TestCase):
         # Should preserve order
         self.assertEqual([s['index'] for s in summaries], [0, 1, 2])
 
+class ConcretePriorityCollection(PriorityAssignmentMixin, SiteCollection):
+    """Concrete class for testing PriorityAssignmentMixin."""
+
+    def assign_site_occupations(self, atoms, structure):
+        raise NotImplementedError
+
+    def analyse_structure(self, atoms, structure):
+        raise NotImplementedError
+
+
+class TestInitPriorityRanking(unittest.TestCase):
+    """Tests for PriorityAssignmentMixin._init_priority_ranking."""
+
+    def test_minimum_image_convention(self):
+        """Distance ranking uses PBC so a site near 0.0 is close to one near 1.0."""
+        site_a = Mock(spec=Site, index=0, frac_coords=np.array([0.05, 0.0, 0.0]))
+        site_b = Mock(spec=Site, index=1, frac_coords=np.array([0.5, 0.0, 0.0]))
+        site_c = Mock(spec=Site, index=2, frac_coords=np.array([0.95, 0.0, 0.0]))
+        site_a.reset = Mock()
+        site_b.reset = Mock()
+        site_c.reset = Mock()
+
+        collection = ConcretePriorityCollection([site_a, site_b, site_c])
+        centres = np.array([s.frac_coords for s in collection.sites])
+        site_indices = [s.index for s in collection.sites]
+        collection._init_priority_ranking(centres, site_indices)
+
+        # From site_a at 0.05: site_c at 0.95 is 0.1 away via PBC, site_b is 0.45
+        self.assertEqual(
+            collection._distance_ranked_sites[site_a.index],
+            [site_c.index, site_b.index],
+        )
+
+    def test_empty_sites_is_noop(self):
+        """Calling _init_priority_ranking with empty centres does nothing."""
+        collection = ConcretePriorityCollection([])
+        collection._init_priority_ranking(np.empty((0, 3)), [])
+        self.assertIsNone(collection._distance_ranked_sites)
+        self.assertIsNone(collection._nearest_site_lookup)
+
+
 if __name__ == '__main__':
     unittest.main()
-    
+

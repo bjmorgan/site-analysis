@@ -4,11 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.5.0] - 2026-02-28
 
 ### Changed
 
-- Optimised polyhedral site assignment priority heuristic: tracks the two most recent distinct sites (catches bounce-back), and uses precomputed distance-ranked site ordering as fallback when reference centres are available. Reduces containment checks by ~68% and gives ~1.4x wall-clock speedup on argyrodite Li6PS5Cl trajectories.
+- Extracted shared priority-based site assignment logic into `PriorityAssignmentMixin`, used by both `PolyhedralSiteCollection` and `SphericalSiteCollection`.
+- Improved priority heuristic for both site collections: tracks two recent distinct sites (catches bounce-back) and uses precomputed distance-ranked site ordering instead of neighbour-cutoff-based ordering. ~68% fewer containment checks and ~1.4x wall-clock speedup on argyrodite Li6PS5Cl trajectories.
+
+### Removed
+
+- Removed `neighbour_cutoff` parameter from `SphericalSiteCollection` (distance-ranked ordering replaces neighbour-based ordering).
 
 ## [1.4.0] - 2026-02-28
 

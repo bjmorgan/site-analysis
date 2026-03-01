@@ -1,9 +1,11 @@
 import unittest
 import numpy as np
+import pytest
 from pymatgen.core import Structure, Lattice
 
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis._compat import HAS_NUMBA
 from site_analysis.site import Site
 from unittest.mock import patch
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center, correct_pbc
@@ -438,6 +440,104 @@ class TestCorrectPbc(unittest.TestCase):
 		corrected, shifts = correct_pbc(frac_coords, None, self.lattice)
 		expected_shifts = np.round(corrected - frac_coords).astype(np.int64)
 		np.testing.assert_array_equal(shifts, expected_shifts)
+
+
+class TestNumpyUpdatePbcShifts(unittest.TestCase):
+	"""Tests for _numpy_update_pbc_shifts."""
+
+	def test_cache_hit_small_displacement(self):
+		"""Small physical displacement returns valid cache."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01  # small vibration
+		shifts = np.array([[0, 0, 1],
+						   [0, 1, 0]], dtype=np.int64)
+		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertTrue(valid)
+		np.testing.assert_array_equal(new_shifts, shifts)
+		expected = new + shifts
+		min_coords = np.min(expected, axis=0)
+		uniform = np.maximum(0, np.ceil(-min_coords))
+		np.testing.assert_array_almost_equal(coords, expected + uniform)
+
+	def test_cache_hit_with_wrapping(self):
+		"""Vertex wrapping from 0.99 to 0.01 is detected and shifts adjusted."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.99, 0.5, 0.5],
+						   [0.5, 0.5, 0.5]])
+		new = np.array([[0.01, 0.5, 0.5],   # wrapped across boundary
+						[0.5, 0.5, 0.5]])
+		shifts = np.array([[0, 0, 0],
+						   [0, 0, 0]], dtype=np.int64)
+		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertTrue(valid)
+		# Wrapping of -0.98 rounds to -1, so shift gains +1
+		np.testing.assert_array_equal(new_shifts[0], [1, 0, 0])
+		np.testing.assert_array_equal(new_shifts[1], [0, 0, 0])
+
+	def test_cache_miss_large_displacement(self):
+		"""Large physical displacement invalidates cache."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.4  # too large
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		valid, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertFalse(valid)
+
+	def test_non_negative_shift_applied(self):
+		"""Uniform shift ensures all output coordinates are non-negative."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.05, 0.05, 0.05],
+						   [0.1, 0.1, 0.1]])
+		new = cached + 0.001
+		shifts = np.array([[0, 0, -1],
+						   [0, 0, -1]], dtype=np.int64)
+		valid, coords, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertTrue(valid)
+		self.assertTrue(np.all(coords >= 0))
+
+
+@pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
+class TestNumbaUpdatePbcShifts(unittest.TestCase):
+	"""Tests that numba and numpy PBC shift implementations agree."""
+
+	def test_agrees_with_numpy_small_displacement(self):
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01
+		shifts = np.array([[0, 0, 1],
+						   [0, 1, 0]], dtype=np.int64)
+		v_np, c_np, s_np = _numpy_update_pbc_shifts(new, cached, shifts)
+		v_nb, c_nb, s_nb = _numba_update_pbc_shifts(new, cached, shifts)
+		self.assertEqual(v_np, v_nb)
+		np.testing.assert_array_almost_equal(c_np, c_nb)
+		np.testing.assert_array_equal(s_np, s_nb)
+
+	def test_agrees_with_numpy_wrapping(self):
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.99, 0.5, 0.5],
+						   [0.5, 0.5, 0.5]])
+		new = np.array([[0.01, 0.5, 0.5],
+						[0.5, 0.5, 0.5]])
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		v_np, c_np, s_np = _numpy_update_pbc_shifts(new, cached, shifts)
+		v_nb, c_nb, s_nb = _numba_update_pbc_shifts(new, cached, shifts)
+		self.assertEqual(v_np, v_nb)
+		np.testing.assert_array_almost_equal(c_np, c_nb)
+		np.testing.assert_array_equal(s_np, s_nb)
+
+	def test_agrees_with_numpy_cache_miss(self):
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.4
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
+		self.assertEqual(v_np, v_nb)
 
 
 if __name__ == '__main__':

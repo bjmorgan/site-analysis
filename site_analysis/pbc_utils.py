@@ -1,4 +1,8 @@
-"""Utilities for handling periodic boundary conditions."""
+"""Utilities for handling periodic boundary conditions.
+
+Includes PBC correction, reference-centre unwrapping, and incremental
+PBC shift updates (with optional numba acceleration).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ from typing import Literal, overload
 
 import numpy as np
 from pymatgen.core import Lattice
+
+from site_analysis._compat import HAS_NUMBA
 
 def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
     """Apply the legacy spread-based periodic boundary condition handling.
@@ -137,3 +143,92 @@ def correct_pbc(
     corrected = apply_legacy_pbc_correction(frac_coords)
     image_shifts = np.round(corrected - frac_coords).astype(np.int64)
     return corrected, image_shifts
+
+
+def _numpy_update_pbc_shifts(
+    frac_coords: np.ndarray,
+    cached_raw_frac: np.ndarray,
+    image_shifts: np.ndarray,
+) -> tuple[bool, np.ndarray, np.ndarray]:
+    """Incrementally update cached PBC image shifts between frames.
+
+    Full PBC unwrapping is expensive because it evaluates all 27
+    periodic images per coordinate. Between successive MD frames,
+    atoms typically move by small amounts, so the integer image
+    shifts rarely change. This function detects coordinate wraps
+    (jumps of ~1.0 in fractional coordinates) and adjusts shifts
+    accordingly, avoiding the full 27-image search.
+
+    If any coordinate has moved by more than 0.3 fractional units
+    (after accounting for wrapping), the cache is considered invalid
+    and the caller should fall back to full PBC recomputation.
+
+    Args:
+        frac_coords: New raw fractional coordinates, shape ``(n, 3)``.
+        cached_raw_frac: Previous raw fractional coordinates from the
+            last frame, shape ``(n, 3)``.
+        image_shifts: Current cached integer image shifts, shape
+            ``(n, 3)``.
+
+    Returns:
+        Tuple of ``(cache_valid, new_vertex_coords, new_image_shifts)``.
+        If ``cache_valid`` is False, the other values are undefined and
+        the caller should perform a full recomputation.
+    """
+    diff = frac_coords - cached_raw_frac
+    wrapping = np.round(diff).astype(np.int64)
+    physical_diff = diff - wrapping
+    if not np.all(np.abs(physical_diff) < 0.3):
+        return False, frac_coords, image_shifts
+    new_shifts = image_shifts - wrapping
+    shifted = frac_coords + new_shifts
+    min_coords = np.min(shifted, axis=0)
+    uniform = np.maximum(0, np.ceil(-min_coords))
+    return True, shifted + uniform, new_shifts
+
+
+if HAS_NUMBA:
+    import numba  # type: ignore
+
+    @numba.njit(cache=True)  # type: ignore[misc]
+    def _numba_update_pbc_shifts(
+        frac_coords: np.ndarray,
+        cached_raw_frac: np.ndarray,
+        image_shifts: np.ndarray,
+    ) -> tuple[bool, np.ndarray, np.ndarray]:
+        """JIT-compiled variant of ``_numpy_update_pbc_shifts``.
+
+        Same algorithm with early exit on first invalid vertex,
+        avoiding full array traversal on cache misses.
+
+        See ``_numpy_update_pbc_shifts`` for full documentation.
+        """
+        n = frac_coords.shape[0]
+        new_shifts = np.empty((n, 3), dtype=np.int64)
+        for i in range(n):
+            for k in range(3):
+                diff = frac_coords[i, k] - cached_raw_frac[i, k]
+                w = int(np.round(diff))
+                physical = diff - w
+                if physical >= 0.3 or physical <= -0.3:
+                    return False, frac_coords, image_shifts
+                new_shifts[i, k] = image_shifts[i, k] - w
+        shifted = np.empty((n, 3))
+        for i in range(n):
+            for k in range(3):
+                shifted[i, k] = frac_coords[i, k] + new_shifts[i, k]
+        for k in range(3):
+            min_val = shifted[0, k]
+            for i in range(1, n):
+                if shifted[i, k] < min_val:
+                    min_val = shifted[i, k]
+            u = 0.0
+            if min_val < 0.0:
+                u = np.ceil(-min_val)
+            for i in range(n):
+                shifted[i, k] += u
+        return True, shifted, new_shifts
+
+    update_pbc_shifts = _numba_update_pbc_shifts
+else:
+    update_pbc_shifts = _numpy_update_pbc_shifts

@@ -51,6 +51,9 @@ dev = [
 [tool.setuptools]
 package-dir = {"" = "."}
 
+[tool.setuptools.package-data]
+site_analysis = ["py.typed"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["site_analysis*"]

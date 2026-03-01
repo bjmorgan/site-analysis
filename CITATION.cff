@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "site-analysis"
+abstract: "Python module for analysing molecular dynamics simulations of solid-state ion transport by assigning positions of mobile ions to specific sites within the host structure."
+authors:
+  - family-names: "Morgan"
+    given-names: "Benjamin J."
+    orcid: "https://orcid.org/0000-0002-3056-8233"
+    affiliation: "University of Bath"
+repository-code: "https://github.com/bjmorgan/site-analysis"
+url: "https://site-analysis.readthedocs.io/"
+license: MIT
+version: "1.5.0"
+date-released: "2026-02-28"
+keywords:
+  - molecular dynamics
+  - solid-state ionics
+  - site analysis
+  - diffusion
+  - pymatgen

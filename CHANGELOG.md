@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added PEP 561 `py.typed` marker for downstream type checking support.
 - Added `types-tqdm` dev dependency; removed inline `# type: ignore` on tqdm import.
 - Removed redundant mypy ignores for `tqdm`, `pymatgen`, and `scipy` (now covered by type stubs).
+- Added Python 3.14 to CI test matrix; separated mypy into its own CI job.
 
 ### Removed
 

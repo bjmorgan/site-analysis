@@ -41,9 +41,10 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
     return corrected_coords
 
 # Generate all 27 possible shifts: [-1,0,1] for each dimension
-_PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1] 
-                                          for dy in [-1, 0, 1] 
-                                          for dz in [-1, 0, 1]])
+_PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
+                                          for dy in [-1, 0, 1]
+                                          for dz in [-1, 0, 1]],
+                                         dtype=np.int64)
                                         
 @overload
 def unwrap_vertices_to_reference_center(

@@ -72,19 +72,20 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
                   [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         
-        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_pbc:
+        with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
             # Mock returns coordinates that produce centre < 1.0
             corrected_coords = np.array([[0.1, 0.1, 0.1],
                                          [0.2, 0.1, 0.1],
                                          [0.1, 0.2, 0.1],
                                          [0.1, 0.1, 0.2]])
-            mock_pbc.return_value = corrected_coords
-            
+            mock_pbc.return_value = (corrected_coords,
+                                     np.zeros((4, 3), dtype=np.int64))
+
             site.calculate_centre(structure)
-            
+
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
-            
+
             # Expected centre: mean = [0.125, 0.125, 0.125], no wrapping needed
             expected_centre = np.mean(corrected_coords, axis=0)
             np.testing.assert_array_almost_equal(site._centre_coords, expected_centre)
@@ -101,19 +102,20 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
                   [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         
-        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_pbc:
+        with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
             # Mock returns coordinates that produce centre > 1.0 to test wrapping
             corrected_coords = np.array([[1.1, 1.1, 1.1],
                                          [1.2, 1.1, 1.1],
                                          [1.1, 1.2, 1.1],
                                          [1.1, 1.1, 1.2]])
-            mock_pbc.return_value = corrected_coords
-            
+            mock_pbc.return_value = (corrected_coords,
+                                     np.ones((4, 3), dtype=np.int64))
+
             site.calculate_centre(structure)
-            
+
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
-            
+
             # Expected centre with wrapping: mean([1.1, 1.2, 1.1, 1.1]) = 1.125 -> 0.125
             centre_before_wrap = np.mean(corrected_coords, axis=0)
             expected_centre = centre_before_wrap % 1.0
@@ -334,128 +336,78 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         np.testing.assert_array_equal(site.reference_center, reference_center)
         self.assertEqual(site.reference_indices, reference_indices)
         
-    def test_calculate_centre_uses_legacy_when_no_reference_center(self):
-        """Test that legacy PBC correction is used when reference_center is None."""
+    def test_calculate_centre_passes_none_reference_center(self):
+        """Test that correct_pbc is called with reference_center=None when not set."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)  # No reference_center
-        
+        site = DynamicVoronoiSite(reference_indices=reference_indices)
+
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1], [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        
-        with patch('site_analysis.dynamic_voronoi_site.apply_legacy_pbc_correction') as mock_legacy:
-            mock_legacy.return_value = np.array(coords)
-            
+
+        with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
+            mock_pbc.return_value = (np.array(coords), np.zeros((4, 3), dtype=np.int64))
             site.calculate_centre(structure)
-            
-            mock_legacy.assert_called_once()
-    
-    def test_calculate_centre_uses_reference_center_when_provided(self):
-        """Test that reference centre-based unwrapping is used when reference_center is provided."""
+            mock_pbc.assert_called_once()
+            self.assertIsNone(mock_pbc.call_args[0][1])
+
+    def test_calculate_centre_passes_reference_center(self):
+        """Test that correct_pbc is called with the reference centre when set."""
         reference_indices = [0, 1, 2, 3]
         reference_center = np.array([0.5, 0.5, 0.5])
         site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=reference_center)
-        
+
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1], [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        
-        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = (np.array(coords), np.zeros((4, 3), dtype=int))
 
+        with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
+            mock_pbc.return_value = (np.array(coords), np.zeros((4, 3), dtype=np.int64))
             site.calculate_centre(structure)
-
-            mock_unwrap.assert_called_once()
+            mock_pbc.assert_called_once()
+            np.testing.assert_array_equal(mock_pbc.call_args[0][1], reference_center)
             
-class TestComputeCorrectedCoords(unittest.TestCase):
-    """Tests for _compute_corrected_coords PBC correction."""
+class TestCalculateCentrePbc(unittest.TestCase):
+    """Integration tests for calculate_centre PBC handling."""
 
     def setUp(self):
         Site._newid = 0
 
-    def test_computes_correct_centre(self):
-        """Centre should be the mean of PBC-corrected reference coordinates."""
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-        lattice = Lattice.cubic(10.0)
-        coords = np.array([[0.1, 0.1, 0.1],
-                           [0.2, 0.1, 0.1],
-                           [0.1, 0.2, 0.1],
-                           [0.1, 0.1, 0.2]])
-
-        site._compute_corrected_coords(coords, lattice)
-
-        expected = np.mean(coords, axis=0)
-        np.testing.assert_array_almost_equal(site._centre_coords, expected)
-
-    def test_returns_image_shifts(self):
-        """Should return integer image shifts applied to each reference atom."""
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-        lattice = Lattice.cubic(10.0)
-        coords = np.array([[0.1, 0.1, 0.1],
-                           [0.2, 0.1, 0.1],
-                           [0.1, 0.2, 0.1],
-                           [0.1, 0.1, 0.2]])
-
-        shifts = site._compute_corrected_coords(coords, lattice)
-
-        self.assertEqual(shifts.shape, (4, 3))
-        self.assertTrue(np.issubdtype(shifts.dtype, np.integer))
-
     def test_wrapping_produces_correct_centre(self):
         """Coordinates straddling the periodic boundary should produce a sensible centre."""
-        site = DynamicVoronoiSite(reference_indices=[0, 1])
         lattice = Lattice.cubic(10.0)
-        # Two atoms straddling the boundary — should unwrap to be near each other
-        coords = np.array([[0.99, 0.5, 0.5],
-                           [0.01, 0.5, 0.5]])
+        coords = [[0.99, 0.5, 0.5],
+                   [0.01, 0.5, 0.5]]
+        structure = Structure(lattice, ["Li", "Li"], coords)
+        site = DynamicVoronoiSite(reference_indices=[0, 1])
 
-        site._compute_corrected_coords(coords, lattice)
+        site.calculate_centre(structure)
 
         # Centre should be near x=0.0 (or 1.0), not at 0.5
         x = site._centre_coords[0]
         self.assertTrue(x < 0.1 or x > 0.9,
                         f"Centre x={x} should be near the boundary, not near 0.5")
 
-    def test_reset_clears_centre(self):
-        """reset() should clear calculated centre coordinates."""
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-        lattice = Lattice.cubic(10.0)
-        coords = np.array([[0.1, 0.1, 0.1],
-                           [0.2, 0.1, 0.1],
-                           [0.1, 0.2, 0.1],
-                           [0.1, 0.1, 0.2]])
 
-        site._compute_corrected_coords(coords, lattice)
-        self.assertIsNotNone(site._centre_coords)
-
-        site.reset()
-
-        self.assertIsNone(site._centre_coords)
-
-
-class TestComputeCorrectedCoordsWithReferenceCentre(unittest.TestCase):
-    """Tests for _compute_corrected_coords using the reference_center path."""
+class TestResetWithCalculatedCentre(unittest.TestCase):
+    """Test that reset clears a previously calculated centre."""
 
     def setUp(self):
         Site._newid = 0
 
-    def test_uses_unwrap_vertices(self):
-        """With reference_center should use unwrap_vertices_to_reference_center."""
-        ref_centre = np.array([0.15, 0.15, 0.15])
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3],
-                                  reference_center=ref_centre)
+    def test_reset_clears_centre(self):
+        """reset() should clear calculated centre coordinates."""
         lattice = Lattice.cubic(10.0)
-        coords = np.array([[0.1, 0.1, 0.1],
-                           [0.2, 0.1, 0.1],
-                           [0.1, 0.2, 0.1],
-                           [0.1, 0.1, 0.2]])
+        coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1],
+                   [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
+        structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
 
-        with patch('site_analysis.dynamic_voronoi_site.unwrap_vertices_to_reference_center') as mock_unwrap:
-            mock_unwrap.return_value = (coords.copy(), np.zeros((4, 3), dtype=int))
-            site._compute_corrected_coords(coords, lattice)
-            mock_unwrap.assert_called_once()
-            args = mock_unwrap.call_args
-            np.testing.assert_array_equal(args[0][1], ref_centre)
+        site.calculate_centre(structure)
+        self.assertIsNotNone(site._centre_coords)
+
+        site.reset()
+        self.assertIsNone(site._centre_coords)
 
 
 if __name__ == '__main__':

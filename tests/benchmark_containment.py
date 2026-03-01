@@ -19,7 +19,7 @@ from pymatgen.core import Lattice, Structure
 from pymatgen.io.vasp import Xdatcar
 
 from site_analysis import TrajectoryBuilder
-from site_analysis.containment import HAS_NUMBA
+from site_analysis._compat import HAS_NUMBA
 from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.site import Site
 

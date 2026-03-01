@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from site_analysis.containment import HAS_NUMBA
+from site_analysis._compat import HAS_NUMBA
 
 # Paths to test data
 DATA_DIR = Path(__file__).resolve().parent.parent / "docs" / "source"

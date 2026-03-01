@@ -84,7 +84,7 @@ def unwrap_vertices_to_reference_center(
     """
     if frac_coords.size == 0:
         if return_image_shifts:
-            return frac_coords, np.zeros((0, 3), dtype=int)
+            return frac_coords, np.zeros((0, 3), dtype=np.int64)
         return frac_coords
 
     n_vertices = len(frac_coords)

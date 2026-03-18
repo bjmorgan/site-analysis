@@ -64,7 +64,7 @@ site.residence_times(include_edge_runs=True)  # (2, 3, 2)
 
 ## Filtering Short Gaps
 
-In molecular dynamics simulations, atoms may briefly leave a site due to thermal fluctuations before returning. The `filter_length` parameter smooths out these short excursions before computing run lengths.
+In molecular dynamics simulations, atoms may briefly leave a site due to thermal fluctuations before returning — for example, an atom vibrating at the boundary of a site may cross back and forth across the site edge over a few frames without undergoing a genuine site-to-site hop. The `filter_length` parameter smooths out these short excursions before computing run lengths.
 
 ```python
 # Without filtering: brief excursion creates two short runs
@@ -90,6 +90,16 @@ O O - - O O O     filter_length=1  ->  O O - - O O O   (gap = 2, exceeds filter)
 O O - - O O O     filter_length=2  ->  O O O O O O O   (interior gap filled)
 - O O O O O O     filter_length=1  ->  - O O O O O O   (edge gap, not filled)
 ```
+
+### Choosing an appropriate filter length
+
+Filtering is intended for removing brief boundary-crossing artefacts, typically `filter_length=1` or `filter_length=2`. If you find that results change significantly with larger filter lengths, this is worth investigating carefully.
+
+Because filtering is applied independently per site, filling gaps at one site does not account for what the atom was doing elsewhere during those frames. If an atom rapidly oscillates between two sites (e.g. an ABABAB pattern), filtering at both sites will extend the apparent residence time at *each* site independently. This can mask genuine site-to-site dynamics and produce misleading statistics.
+
+Frequent rapid oscillation between sites is often a signal that the chosen site definitions do not map well onto the mobile ion dynamics. If atoms routinely cross site boundaries without making committed hops, this may indicate that sites are too small, that site boundaries cut through regions of high ion density, or that the site geometry does not reflect the underlying energy landscape. In such cases, revisiting the site definition is likely more productive than increasing `filter_length`.
+
+As a practical check, compare unfiltered and filtered residence time distributions. If `filter_length=1` produces only modest changes (merging a small fraction of runs), the site definitions are likely adequate. If even moderate filter lengths dramatically reshape the distribution, the site definitions may need attention.
 
 ## Statistical Analysis
 

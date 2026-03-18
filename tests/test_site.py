@@ -477,6 +477,14 @@ class SiteTestCase(unittest.TestCase):
         site.trajectory = [[], [1], [], [1], [], [], [1], []]
         self.assertEqual(site.residence_times(filter_length=1), (3, 1))
 
+    def test_residence_times_filter_with_both_edge_gaps(self):
+        """Test filtering when both edges are gaps in a single atom's sequence."""
+        site = ConcreteSite()
+        site.trajectory = [[], [1], []]
+        # Both gaps are at edges; neither should be filled
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (1,))
+
 if __name__ == '__main__':
     unittest.main()
     

@@ -277,7 +277,7 @@ class SiteTestCase(unittest.TestCase):
         self.assertIn('average_occupation', summary)
         self.assertIsNone(summary['average_occupation'])
 
-    # --- residence_times: Phase 1 (core behaviour, no filtering) ---
+    # --- residence_times: core run extraction (include_edge_runs=True) ---
 
     def test_residence_times_empty_trajectory(self):
         """Test that residence_times returns empty tuple for empty trajectory."""
@@ -294,94 +294,138 @@ class SiteTestCase(unittest.TestCase):
         """Test single atom occupying site for all timesteps."""
         site = ConcreteSite()
         site.trajectory = [[1], [1], [1]]
-        self.assertEqual(site.residence_times(), (3,))
+        self.assertEqual(site.residence_times(include_edge_runs=True), (3,))
 
     def test_residence_times_gap_in_middle(self):
         """Test single atom with a gap produces two separate runs."""
         site = ConcreteSite()
         site.trajectory = [[1], [], [1]]
-        self.assertEqual(site.residence_times(), (1, 1))
+        self.assertEqual(site.residence_times(include_edge_runs=True), (1, 1))
 
     def test_residence_times_gap_at_start(self):
         """Test that leading empty timesteps are not counted."""
         site = ConcreteSite()
         site.trajectory = [[], [1], [1]]
-        self.assertEqual(site.residence_times(), (2,))
+        self.assertEqual(site.residence_times(include_edge_runs=True), (2,))
 
     def test_residence_times_gap_at_end(self):
         """Test that trailing empty timesteps are not counted."""
         site = ConcreteSite()
         site.trajectory = [[1], [1], []]
-        self.assertEqual(site.residence_times(), (2,))
+        self.assertEqual(site.residence_times(include_edge_runs=True), (2,))
 
     def test_residence_times_multiple_atoms_independent_runs(self):
         """Test multiple atoms produce independent run lengths."""
         site = ConcreteSite()
         site.trajectory = [[1], [1], [2], [2], [2]]
-        result = site.residence_times()
+        result = site.residence_times(include_edge_runs=True)
         self.assertCountEqual(result, (2, 3))
 
     def test_residence_times_multiple_atoms_same_timestep(self):
         """Test atoms co-occupying a site produce correct per-atom runs."""
         site = ConcreteSite()
         site.trajectory = [[1, 2], [1, 2], [1]]
-        result = site.residence_times()
+        result = site.residence_times(include_edge_runs=True)
         self.assertCountEqual(result, (3, 2))
 
     def test_residence_times_single_timestep(self):
         """Test single occupied timestep returns run of length 1."""
         site = ConcreteSite()
         site.trajectory = [[1]]
+        self.assertEqual(site.residence_times(include_edge_runs=True), (1,))
+
+    # --- residence_times: edge run exclusion (default) ---
+
+    def test_residence_times_excludes_run_at_trajectory_start(self):
+        """Test that a run touching the first timestep is excluded by default."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [1], [], [1], [1], [1], []]
+        self.assertEqual(site.residence_times(), (3,))
+
+    def test_residence_times_excludes_run_at_trajectory_end(self):
+        """Test that a run touching the last timestep is excluded by default."""
+        site = ConcreteSite()
+        site.trajectory = [[], [1], [1], [1], [], [1], [1]]
+        self.assertEqual(site.residence_times(), (3,))
+
+    def test_residence_times_excludes_both_edge_runs(self):
+        """Test that runs at both edges are excluded, keeping interior runs."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [], [1], [1], [1], [], [1]]
+        self.assertEqual(site.residence_times(), (3,))
+
+    def test_residence_times_all_edge_runs_returns_empty(self):
+        """Test that a single run spanning the whole trajectory is excluded."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [1], [1]]
+        self.assertEqual(site.residence_times(), ())
+
+    def test_residence_times_only_interior_runs_kept(self):
+        """Test that only fully interior runs are returned by default."""
+        site = ConcreteSite()
+        # atom 1: edge run at start (2), interior run (1), edge run at end (2)
+        site.trajectory = [[1], [1], [], [1], [], [1], [1]]
         self.assertEqual(site.residence_times(), (1,))
 
-    # --- residence_times: Phase 2 (filtering) ---
-
-    def test_residence_times_filter_fills_single_frame_gap(self):
-        """Test that filter_length=1 fills a single-frame gap."""
+    def test_residence_times_multiple_atoms_edge_exclusion(self):
+        """Test edge exclusion applied independently per atom."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [1]]
-        self.assertEqual(site.residence_times(filter_length=1), (3,))
+        # atom 1: runs at t0-1 (edge), t4-5 (interior), t8-9 (edge)
+        # atom 2: runs at t2-3 (interior), t6-7 (interior)
+        site.trajectory = [
+            [1], [1], [2], [2], [1], [1], [2], [2], [1], [1],
+        ]
+        result = site.residence_times()
+        self.assertCountEqual(result, (2, 2, 2))
+
+    # --- residence_times: filtering (interior gaps only) ---
+
+    def test_residence_times_filter_fills_interior_gap(self):
+        """Test that filter_length=1 fills a single-frame interior gap."""
+        site = ConcreteSite()
+        site.trajectory = [[], [1], [], [1], []]
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (3,))
 
     def test_residence_times_filter_does_not_fill_longer_gap(self):
         """Test that filter_length=1 does not fill a two-frame gap."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [], [1]]
-        self.assertEqual(site.residence_times(filter_length=1), (1, 1))
+        site.trajectory = [[], [1], [], [], [1], []]
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (1, 1))
 
     def test_residence_times_filter_length_2_fills_two_frame_gap(self):
         """Test that filter_length=2 fills a two-frame gap."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [], [1]]
-        self.assertEqual(site.residence_times(filter_length=2), (4,))
+        site.trajectory = [[], [1], [], [], [1], []]
+        self.assertEqual(
+            site.residence_times(filter_length=2, include_edge_runs=True), (4,))
 
-    def test_residence_times_filter_fills_gap_at_trajectory_start(self):
-        """Test that filter fills edge gap at trajectory start."""
+    def test_residence_times_filter_does_not_fill_edge_gap_at_start(self):
+        """Test that filtering does not fill gaps at the trajectory start."""
         site = ConcreteSite()
         site.trajectory = [[], [1], [1]]
-        self.assertEqual(site.residence_times(filter_length=1), (3,))
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (2,))
 
-    def test_residence_times_filter_fills_gap_at_trajectory_end(self):
-        """Test that filter fills edge gap at trajectory end."""
+    def test_residence_times_filter_does_not_fill_edge_gap_at_end(self):
+        """Test that filtering does not fill gaps at the trajectory end."""
         site = ConcreteSite()
         site.trajectory = [[1], [1], []]
-        self.assertEqual(site.residence_times(filter_length=1), (3,))
-
-    def test_residence_times_filter_does_not_fill_long_edge_gap(self):
-        """Test that filter does not fill edge gap exceeding filter_length."""
-        site = ConcreteSite()
-        site.trajectory = [[], [], [1], [1]]
-        self.assertEqual(site.residence_times(filter_length=1), (2,))
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (2,))
 
     def test_residence_times_filter_does_not_fill_gap_between_different_atoms(self):
         """Test that gaps between different atoms are not filled."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [2]]
-        self.assertEqual(site.residence_times(filter_length=1), (1, 1))
+        site.trajectory = [[], [1], [], [2], []]
+        self.assertEqual(
+            site.residence_times(filter_length=1, include_edge_runs=True), (1, 1))
 
     def test_residence_times_filter_zero_same_as_default(self):
         """Test that filter_length=0 produces same result as default."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [1]]
+        site.trajectory = [[], [1], [], [1], []]
         self.assertEqual(
             site.residence_times(filter_length=0),
             site.residence_times(),
@@ -394,32 +438,43 @@ class SiteTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             site.residence_times(filter_length=-1)
 
-    # --- residence_times: Phase 3 (edge cases) ---
-
-    def test_residence_times_separate_atoms_with_gap(self):
-        """Test two different atoms separated by empty timesteps."""
+    def test_residence_times_filter_and_edge_exclusion_combined(self):
+        """Test that filtering merges interior runs, then edge exclusion applies."""
         site = ConcreteSite()
-        site.trajectory = [[1], [1], [], [2], [2]]
-        result = site.residence_times()
-        self.assertCountEqual(result, (2, 2))
+        # atom 1: edge, gap(1), interior(2), gap(2), edge
+        site.trajectory = [[1], [], [1], [1], [], [], [1]]
+        # filter_length=1 fills the first gap -> merged edge run of 4, then gap(2), edge run
+        # edge exclusion removes both -> empty
+        self.assertEqual(site.residence_times(filter_length=1), ())
+
+    def test_residence_times_filter_creates_interior_run(self):
+        """Test that filtering can merge two interior runs into one."""
+        site = ConcreteSite()
+        site.trajectory = [[], [1], [], [1], []]
+        # Without filter: two interior runs of 1
+        self.assertEqual(site.residence_times(), (1, 1))
+        # With filter: one interior run of 3
+        self.assertEqual(site.residence_times(filter_length=1), (3,))
+
+    # --- residence_times: additional edge cases ---
 
     def test_residence_times_same_atom_revisits(self):
-        """Test same atom visiting site in two separate runs."""
+        """Test same atom visiting site in two separate interior runs."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [], [], [1]]
+        site.trajectory = [[], [1], [], [1], []]
         self.assertEqual(site.residence_times(), (1, 1))
 
     def test_residence_times_large_gap_not_filtered(self):
         """Test that a gap larger than filter_length is not filled."""
         site = ConcreteSite()
-        site.trajectory = [[1], [], [], [], [], [1]]
+        site.trajectory = [[], [1], [], [], [], [1], []]
         self.assertEqual(site.residence_times(filter_length=2), (1, 1))
 
     def test_residence_times_multiple_gaps_partial_filter(self):
         """Test that only gaps within filter_length are filled."""
         site = ConcreteSite()
         # Gap of 1 (filled) then gap of 2 (not filled)
-        site.trajectory = [[1], [], [1], [], [], [1]]
+        site.trajectory = [[], [1], [], [1], [], [], [1], []]
         self.assertEqual(site.residence_times(filter_length=1), (3, 1))
 
 if __name__ == '__main__':

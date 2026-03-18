@@ -31,13 +31,36 @@ Run lengths from all atoms are collected into a single flat tuple.
 Consider a site with the following trajectory (atom indices per timestep):
 
 ```
-timestep:   0     1     2     3     4     5     6     7
-atoms:     [1]   [1]   [1]   []    []    [2]   [2]   [2]
+timestep:   0     1     2     3     4     5     6     7     8     9
+atoms:      []   [1]   [1]   [1]   []    []    [2]   [2]   [2]   []
 ```
 
-- Atom 1 is present for timesteps 0-2: run length = 3
-- Atom 2 is present for timesteps 5-7: run length = 3
+- Atom 1 is present for timesteps 1-3: run length = 3
+- Atom 2 is present for timesteps 6-8: run length = 3
 - Result: `(3, 3)`
+
+## Edge Run Exclusion
+
+By default, runs that touch the first or last timestep of the trajectory are excluded. These runs are truncated by the trajectory boundary and underestimate the true residence time, which would bias the distribution towards shorter values.
+
+```
+timestep:   0     1     2     3     4     5     6     7     8
+atoms:     [1]   [1]   []    [1]   [1]   [1]   []    [1]   [1]
+                       edge --|-- interior --|-- edge
+```
+
+In this example:
+- The run at timesteps 0-1 touches the start: **excluded** (we don't know when atom 1 actually arrived)
+- The run at timesteps 3-5 is fully interior: **included** (run length = 3)
+- The run at timesteps 7-8 touches the end: **excluded** (we don't know when atom 1 would have left)
+
+Result: `(3,)`
+
+To include all runs regardless of whether they touch the trajectory boundary:
+
+```python
+site.residence_times(include_edge_runs=True)  # (2, 3, 2)
+```
 
 ## Filtering Short Gaps
 
@@ -53,21 +76,19 @@ site.residence_times(filter_length=1)  # e.g. (11,)
 
 A gap is filled when:
 - It is `filter_length` or fewer consecutive unoccupied frames
-- It is flanked by occupied frames from the **same atom** on both sides (interior gap), or
-- It is at the start or end of the trajectory with one occupied neighbour from the same atom (edge gap)
+- It is flanked by occupied frames from the **same atom** on both sides (interior gap)
 
-Gaps between runs of **different** atoms are never filled, regardless of their length.
+Gaps at the trajectory edges are never filled, as this would always bias towards longer occupation times. Gaps between runs of **different** atoms are also never filled.
 
 ### Filtering examples
 
 Given atom 1's occupation sequence at a site (`O` = occupied, `-` = unoccupied):
 
 ```
-O O O - O O O     filter_length=1  ->  O O O O O O O   (gap filled, run = 7)
+O O O - O O O     filter_length=1  ->  O O O O O O O   (interior gap filled)
 O O - - O O O     filter_length=1  ->  O O - - O O O   (gap = 2, exceeds filter)
-O O - - O O O     filter_length=2  ->  O O O O O O O   (gap filled, run = 7)
-- O O O O O O     filter_length=1  ->  O O O O O O O   (edge gap filled, run = 7)
-- - O O O O O     filter_length=1  ->  - - O O O O O   (edge gap = 2, exceeds filter)
+O O - - O O O     filter_length=2  ->  O O O O O O O   (interior gap filled)
+- O O O O O O     filter_length=1  ->  - O O O O O O   (edge gap, not filled)
 ```
 
 ## Statistical Analysis

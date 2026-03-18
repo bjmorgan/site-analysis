@@ -289,11 +289,22 @@ class Site(ABC):
 
         Raises:
             ValueError: If ``filter_length`` is negative.
+            TypeError: If ``filter_length`` is not an integer.
 
         Examples:
             >>> site.trajectory = [[], [1], [1], [1], []]
             >>> site.residence_times()
             (3,)
+
+            Runs touching the trajectory boundary are excluded by default:
+
+            >>> site.trajectory = [[1], [1], [1], []]
+            >>> site.residence_times()
+            ()
+            >>> site.residence_times(include_edge_runs=True)
+            (3,)
+
+            Short gaps can be filled before computing run lengths:
 
             >>> site.trajectory = [[], [1], [], [1], []]
             >>> site.residence_times()

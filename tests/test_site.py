@@ -387,6 +387,13 @@ class SiteTestCase(unittest.TestCase):
             site.residence_times(),
         )
 
+    def test_residence_times_negative_filter_length_raises(self):
+        """Test that negative filter_length raises ValueError."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [], [1]]
+        with self.assertRaises(ValueError):
+            site.residence_times(filter_length=-1)
+
     # --- residence_times: Phase 3 (edge cases) ---
 
     def test_residence_times_separate_atoms_with_gap(self):

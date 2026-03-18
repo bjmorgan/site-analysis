@@ -288,6 +288,8 @@ class Site(ABC):
             >>> site.residence_times(filter_length=1)
             (3,)
         """
+        if filter_length < 0:
+            raise ValueError(f"filter_length must be non-negative, got {filter_length}")
         if not self.trajectory:
             return ()
         all_atoms: set[int] = set()

@@ -114,8 +114,6 @@ if times:
     times_array = np.array(times)
     print(f"Number of visits: {len(times_array)}")
     print(f"Mean residence time: {times_array.mean():.1f} timesteps")
-    print(f"Median residence time: {np.median(times_array):.1f} timesteps")
-    print(f"Max residence time: {times_array.max()} timesteps")
 ```
 
 To convert from timesteps to physical time units, multiply by the time interval between frames in your simulation.

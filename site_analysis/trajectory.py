@@ -161,7 +161,77 @@ class Trajectory:
             A list of site labels (or None for sites without labels).
         """
         return [s.label for s in self.sites]
-   
+
+    def transition_counts(self, by: str = 'site') -> dict[int, dict[int, int]] | dict[str, dict[str, int]]:
+        """Return transition counts as a square dict-of-dicts.
+
+        Args:
+            by: Aggregation key. ``'site'`` (default) keys by site index;
+                ``'label'`` aggregates by site label (unlabelled sites are
+                skipped).
+
+        Returns:
+            A square dict-of-dicts ``{from_key: {to_key: count}}``.
+
+        Raises:
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``.
+        """
+        if by == 'site':
+            indices = [s.index for s in self.sites]
+            result_site: dict[int, dict[int, int]] = {
+                i: {j: 0 for j in indices} for i in indices
+            }
+            for site in self.sites:
+                for dest, count in site.transitions.items():
+                    result_site[site.index][dest] = count
+            return result_site
+        if by == 'label':
+            index_to_label = {
+                s.index: s.label for s in self.sites if s.label is not None
+            }
+            labels = sorted(set(index_to_label.values()))
+            result_label: dict[str, dict[str, int]] = {
+                la: {lb: 0 for lb in labels} for la in labels
+            }
+            for site in self.sites:
+                src_label = index_to_label.get(site.index)
+                if src_label is None:
+                    continue
+                for dest, count in site.transitions.items():
+                    dest_label = index_to_label.get(dest)
+                    if dest_label is None:
+                        continue
+                    result_label[src_label][dest_label] += count
+            return result_label
+        raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+
+    def transition_probabilities(self, by: str = 'site') -> dict[int, dict[int, float]] | dict[str, dict[str, float]]:
+        """Return row-normalised transition probabilities as a square dict-of-dicts.
+
+        Each row is normalised so that its values sum to 1.0. Rows with no
+        outgoing transitions remain as all zeros.
+
+        Args:
+            by: Aggregation key. ``'site'`` (default) keys by site index;
+                ``'label'`` aggregates by site label (unlabelled sites are
+                skipped).
+
+        Returns:
+            A square dict-of-dicts ``{from_key: {to_key: probability}}``.
+
+        Raises:
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``.
+        """
+        counts = self.transition_counts(by=by)
+        result: dict = {}
+        for src, row in counts.items():
+            total = sum(row.values())
+            if total > 0:
+                result[src] = {dest: count / total for dest, count in row.items()}
+            else:
+                result[src] = {dest: 0.0 for dest in row}
+        return result
+
     @property
     def atom_sites(self) -> list[int | None]:
         """Return the sites that each atom currently occupies.

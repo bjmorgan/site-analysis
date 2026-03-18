@@ -256,6 +256,118 @@ class Site(ABC):
         occupied_timesteps = sum(1 for timestep in self.trajectory if timestep)
         return occupied_timesteps / len(self.trajectory)
         
+    def residence_times(self,
+                        filter_length: int = 0,
+                        include_edge_runs: bool = False) -> tuple[int, ...]:
+        """Compute per-atom residence time run lengths from the site trajectory.
+
+        For each atom that visits this site, builds a binary
+        occupied/not-occupied sequence across all timesteps, then extracts
+        the lengths of consecutive occupied runs. The result is a flat tuple
+        of all run lengths from all atoms.
+
+        By default, runs that touch the first or last timestep are excluded
+        because they are truncated by the trajectory boundary and
+        underestimate the true residence time. Set ``include_edge_runs=True``
+        to include them.
+
+        Args:
+            filter_length: Maximum interior gap length to fill before
+                computing run lengths. Gaps of ``filter_length`` or fewer
+                consecutive unoccupied frames are filled (treated as if the
+                atom remained in the site) provided the gap is flanked by
+                occupied frames from the same atom on both sides. Gaps at the
+                trajectory edges are never filled. Default is 0 (no
+                filtering).
+            include_edge_runs: Whether to include runs that touch the first
+                or last timestep. Default is False (exclude truncated runs).
+
+        Returns:
+            A tuple of consecutive-occupation run lengths for all atoms
+            that visit this site. Returns an empty tuple if the trajectory
+            is empty or the site is never occupied.
+
+        Raises:
+            ValueError: If ``filter_length`` is negative.
+            TypeError: If ``filter_length`` is not an integer.
+
+        Examples:
+            >>> site.trajectory = [[], [1], [1], [1], []]
+            >>> site.residence_times()
+            (3,)
+
+            Runs touching the trajectory boundary are excluded by default:
+
+            >>> site.trajectory = [[1], [1], [1], []]
+            >>> site.residence_times()
+            ()
+            >>> site.residence_times(include_edge_runs=True)
+            (3,)
+
+            Short gaps can be filled before computing run lengths:
+
+            >>> site.trajectory = [[], [1], [], [1], []]
+            >>> site.residence_times()
+            (1, 1)
+            >>> site.residence_times(filter_length=1)
+            (3,)
+        """
+        if not isinstance(filter_length, int):
+            raise TypeError(f"filter_length must be an integer, got {type(filter_length).__name__}")
+        if filter_length < 0:
+            raise ValueError(f"filter_length must be non-negative, got {filter_length}")
+        if not self.trajectory:
+            return ()
+        all_atoms: set[int] = set()
+        for timestep in self.trajectory:
+            all_atoms.update(timestep)
+        if not all_atoms:
+            return ()
+        n_timesteps = len(self.trajectory)
+        run_lengths: list[int] = []
+        for atom in sorted(all_atoms):
+            occupied = np.array([atom in ts for ts in self.trajectory], dtype=bool)
+            if filter_length > 0:
+                occupied = self._filter_gaps(occupied, filter_length)
+            # Extract run lengths of True values using diff
+            padded = np.concatenate(([False], occupied, [False]))
+            diffs = np.diff(padded.astype(int))
+            starts = np.where(diffs == 1)[0]
+            ends = np.where(diffs == -1)[0]
+            for s, e in zip(starts, ends):
+                if not include_edge_runs:
+                    if s == 0 or e == n_timesteps:
+                        continue
+                run_lengths.append(e - s)
+        return tuple(run_lengths)
+
+    @staticmethod
+    def _filter_gaps(occupied: np.ndarray, filter_length: int) -> np.ndarray:
+        """Fill short interior gaps in an occupied/not-occupied boolean array.
+
+        Only gaps flanked by occupied frames on both sides are filled.
+        Gaps at the trajectory edges are never filled.
+
+        Args:
+            occupied: Boolean array where True means the atom is in the site.
+            filter_length: Maximum gap length to fill.
+
+        Returns:
+            A new boolean array with short interior gaps filled.
+        """
+        result = np.array(occupied)
+        # Find gaps (runs of False)
+        padded = np.concatenate(([True], occupied, [True]))
+        diffs = np.diff(padded.astype(int))
+        gap_starts = np.where(diffs == -1)[0]
+        gap_ends = np.where(diffs == 1)[0]
+        for gs, ge in zip(gap_starts, gap_ends):
+            if gs == 0 or ge == len(occupied):
+                continue
+            if ge - gs <= filter_length:
+                result[gs:ge] = True
+        return result
+
     def summary(self, metrics: list[str] | None = None) -> dict:
         """Generate summary statistics and computed properties.
         

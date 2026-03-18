@@ -438,6 +438,13 @@ class SiteTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             site.residence_times(filter_length=-1)
 
+    def test_residence_times_non_integer_filter_length_raises(self):
+        """Test that non-integer filter_length raises TypeError."""
+        site = ConcreteSite()
+        site.trajectory = [[1], [], [1]]
+        with self.assertRaises(TypeError):
+            site.residence_times(filter_length=1.5)
+
     def test_residence_times_filter_and_edge_exclusion_combined(self):
         """Test that filtering merges interior runs, then edge exclusion applies."""
         site = ConcreteSite()

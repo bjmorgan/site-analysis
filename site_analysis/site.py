@@ -301,6 +301,8 @@ class Site(ABC):
             >>> site.residence_times(filter_length=1)
             (3,)
         """
+        if not isinstance(filter_length, int):
+            raise TypeError(f"filter_length must be an integer, got {type(filter_length).__name__}")
         if filter_length < 0:
             raise ValueError(f"filter_length must be non-negative, got {filter_length}")
         if not self.trajectory:

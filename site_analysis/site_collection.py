@@ -80,7 +80,7 @@ class PriorityAssignmentMixin:
         def site_by_index(self, index: int) -> Site: ...
         def neighbouring_sites(self, site_index: int) -> Sequence[Site]: ...
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._distance_ranked_sites: dict[int, list[int]] | None = None
         self._nearest_site_lookup: _NearestSiteLookup | None = None

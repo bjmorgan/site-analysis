@@ -147,6 +147,72 @@ class TransitionTableReorderTestCase(unittest.TestCase):
             table.reorder(["A", "B", "C"])
 
 
+class TransitionTableFilterTestCase(unittest.TestCase):
+    """Tests for .filter() method."""
+
+    def setUp(self):
+        self.matrix = np.array([
+            [0, 3, 1],
+            [2, 0, 4],
+            [5, 6, 0],
+        ])
+        self.table = TransitionTable(keys=("A", "B", "C"), matrix=self.matrix)
+
+    def test_basic_subset(self):
+        """Test filtering to a subset of keys."""
+        filtered = self.table.filter(["A", "C"])
+        self.assertEqual(filtered.keys, ("A", "C"))
+        np.testing.assert_array_equal(filtered.matrix, np.array([
+            [0, 1],
+            [5, 0],
+        ]))
+
+    def test_preserves_requested_order(self):
+        """Test that filter respects the order of the provided keys."""
+        filtered = self.table.filter(["C", "A"])
+        self.assertEqual(filtered.keys, ("C", "A"))
+        np.testing.assert_array_equal(filtered.matrix, np.array([
+            [0, 5],
+            [1, 0],
+        ]))
+
+    def test_single_key(self):
+        """Test filtering to a single key gives a 1x1 table."""
+        filtered = self.table.filter(["B"])
+        self.assertEqual(filtered.keys, ("B",))
+        np.testing.assert_array_equal(filtered.matrix, np.array([[0]]))
+
+    def test_all_keys(self):
+        """Test filtering with all keys returns an equivalent table."""
+        filtered = self.table.filter(["A", "B", "C"])
+        self.assertEqual(filtered, self.table)
+
+    def test_empty_keys(self):
+        """Test filtering with empty keys returns an empty table."""
+        filtered = self.table.filter([])
+        self.assertEqual(filtered.keys, ())
+        self.assertEqual(filtered.matrix.shape, (0, 0))
+
+    def test_unknown_key_raises(self):
+        """Test that filtering with a key not in the table raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.table.filter(["A", "Z"])
+
+    def test_duplicate_key_raises(self):
+        """Test that filtering with duplicate keys raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.table.filter(["A", "A"])
+
+    def test_filter_then_reorder(self):
+        """Test chaining filter() then reorder()."""
+        result = self.table.filter(["A", "C"]).reorder(["C", "A"])
+        self.assertEqual(result.keys, ("C", "A"))
+        np.testing.assert_array_equal(result.matrix, np.array([
+            [0, 5],
+            [1, 0],
+        ]))
+
+
 class TransitionTableEqualityTestCase(unittest.TestCase):
     """Tests for __eq__."""
 

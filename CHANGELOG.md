@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `Trajectory.transition_counts()` and `Trajectory.transition_probabilities()` methods for aggregating per-site transition data, with `by='site'` or `by='label'` aggregation.
+- `TransitionTable` class: a labelled square matrix with `.matrix`, `.get()`, `.to_dict()`, and `.reorder()` access patterns.
+- `TransitionTable` exported from top-level `site_analysis` package.
+
 ## [1.7.0] - 2026-03-18
 
 ### Added

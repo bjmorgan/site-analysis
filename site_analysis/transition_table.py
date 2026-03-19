@@ -122,8 +122,9 @@ class TransitionTable(Generic[TableKey]):
             ValueError: If *keys* does not match the current key set exactly.
         """
         new_keys: tuple[TableKey, ...] = tuple(keys)
-        if len(new_keys) != len(self._keys) or set(new_keys) != set(self._keys):
-            missing = [k for k in self._keys if k not in set(new_keys)]
+        new_key_set = set(new_keys)
+        if len(new_keys) != len(self._keys) or new_key_set != set(self._keys):
+            missing = [k for k in self._keys if k not in new_key_set]
             extra = [k for k in new_keys if k not in self._key_to_index]
             parts = []
             if missing:

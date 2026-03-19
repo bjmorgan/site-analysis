@@ -269,7 +269,8 @@ class Trajectory:
         row_sums = count_data.sum(axis=1, keepdims=True)
         with np.errstate(invalid='ignore'):
             probs = np.where(row_sums > 0, count_data / row_sums, 0.0)
-        assert not np.any(np.isnan(probs)), "NaN in transition probabilities"
+        if np.any(np.isnan(probs)):
+            raise RuntimeError("NaN in transition probabilities")
         return TransitionTable(keys=counts.keys, matrix=probs)
 
     @property

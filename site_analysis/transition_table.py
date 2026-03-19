@@ -65,6 +65,8 @@ class TransitionTable:
     )
 
     def __post_init__(self) -> None:
+        # Defensive copy so we don't mutate the caller's array
+        object.__setattr__(self, 'matrix', np.array(self.matrix, copy=True))
         if self.matrix.ndim != 2 or self.matrix.shape[0] != self.matrix.shape[1]:
             raise ValueError(
                 f"matrix must be a square 2-D array, got shape {self.matrix.shape}"

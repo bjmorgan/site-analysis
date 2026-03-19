@@ -818,12 +818,12 @@ class TransitionValidationTestCase(unittest.TestCase):
     def test_transition_counts_invalid_by(self):
         """Test that transition_counts raises ValueError for invalid by."""
         with self.assertRaises(ValueError):
-            self.trajectory.transition_counts(by='invalid')
+            self.trajectory.transition_counts(by='invalid')  # type: ignore[arg-type]
 
     def test_transition_probabilities_invalid_by(self):
         """Test that transition_probabilities raises ValueError for invalid by."""
         with self.assertRaises(ValueError):
-            self.trajectory.transition_probabilities(by='invalid')
+            self.trajectory.transition_probabilities(by='invalid')  # type: ignore[arg-type]
 
 
 if __name__ == '__main__':

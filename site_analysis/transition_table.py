@@ -123,8 +123,8 @@ class TransitionTable(Generic[TableKey]):
         """
         new_keys: tuple[TableKey, ...] = tuple(keys)
         if len(new_keys) != len(self._keys) or set(new_keys) != set(self._keys):
-            missing = sorted(set(self._keys) - set(new_keys))
-            extra = sorted(set(new_keys) - set(self._keys))
+            missing = [k for k in self._keys if k not in set(new_keys)]
+            extra = [k for k in new_keys if k not in self._key_to_index]
             parts = []
             if missing:
                 parts.append(f"missing keys: {missing!r}")
@@ -156,7 +156,7 @@ class TransitionTable(Generic[TableKey]):
         new_keys: tuple[TableKey, ...] = tuple(keys)
         if len(new_keys) != len(set(new_keys)):
             raise ValueError("keys must not contain duplicates")
-        unknown = sorted(set(new_keys) - set(self._keys))
+        unknown = [k for k in new_keys if k not in self._key_to_index]
         if unknown:
             raise ValueError(f"unknown keys: {unknown!r}")
         if len(new_keys) == 0:

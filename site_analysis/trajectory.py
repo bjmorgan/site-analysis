@@ -30,7 +30,7 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
-from typing import Literal, Sequence
+from typing import Literal, Sequence, overload
 
 from tqdm.auto import tqdm
 
@@ -163,6 +163,11 @@ class Trajectory:
         """
         return [s.label for s in self.sites]
 
+    @overload
+    def transition_counts(self, by: Literal['site'] = 'site') -> dict[int, dict[int, int]]: ...
+    @overload
+    def transition_counts(self, by: Literal['label']) -> dict[str, dict[str, int]]: ...
+
     def transition_counts(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, int]] | dict[str, dict[str, int]]:
         """Return transition counts as a square dict-of-dicts.
 
@@ -213,6 +218,11 @@ class Trajectory:
                     result_label[src_label][dest_label] += count
             return result_label
         raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+
+    @overload
+    def transition_probabilities(self, by: Literal['site'] = 'site') -> dict[int, dict[int, float]]: ...
+    @overload
+    def transition_probabilities(self, by: Literal['label']) -> dict[str, dict[str, float]]: ...
 
     def transition_probabilities(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, float]] | dict[str, dict[str, float]]:
         """Return row-normalised transition probabilities as a square dict-of-dicts.

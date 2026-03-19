@@ -586,8 +586,14 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
             2: {0: 0, 1: 0, 2: 0},
         })
 
-    def test_self_transitions_are_included(self):
-        """Test that transitions from a site to itself are counted."""
+    def test_self_transitions_are_preserved_if_present(self):
+        """Test that pre-populated self-transition keys are preserved.
+
+        Note: SiteCollection.update_occupation() skips self-transitions,
+        so these should not appear in normal trajectory data. This test
+        verifies that transition_counts() faithfully reports whatever is
+        present in site.transitions without filtering.
+        """
         self.site0.transitions = Counter({0: 2, 1: 3})
         result = self.trajectory.transition_counts(by='site')
         self.assertEqual(result[0][0], 2)

@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `Site.residence_times()` method for computing per-atom consecutive-occupation run lengths from site trajectory data.
 - `filter_length` parameter for smoothing brief boundary-crossing artefacts before computing run lengths.
+- `Trajectory.transition_counts_by_site()`, `Trajectory.transition_counts_by_label()`, `Trajectory.transition_probabilities_by_site()`, and `Trajectory.transition_probabilities_by_label()` methods for aggregating per-site transition data.
+- `TransitionTable` class: a labelled square matrix with `.matrix`, `.get()`, `.to_dict()`, and `.reorder()` access patterns.
+- `TransitionTable` exported from top-level `site_analysis` package.
 - `include_edge_runs` parameter to control whether runs truncated by trajectory boundaries are included (excluded by default to avoid biasing towards shorter times).
 - Residence time analysis guide in documentation.
 

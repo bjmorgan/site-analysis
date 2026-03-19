@@ -30,14 +30,14 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
-from typing import Literal, Sequence
+from typing import Sequence
 
 import numpy as np
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
-from .transition_table import TransitionTable
+from .transition_table import TableKey, TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -166,124 +166,159 @@ class Trajectory:
         """
         return [s.label for s in self.sites]
 
-    def transition_counts(
-        self,
-        by: Literal['site', 'label'] = 'site',
-        *,
-        keys: Sequence[int] | Sequence[str] | None = None,
-    ) -> TransitionTable:
-        """Return transition counts as a :class:`TransitionTable`.
-
-        Args:
-            by: Aggregation key. ``'site'`` (default) keys by site index;
-                ``'label'`` aggregates by site label (unlabelled sites are
-                skipped, with a warning if any transitions are dropped).
-            keys: Optional key ordering for rows and columns. If ``None``,
-                keys are sorted. Must be a permutation of the default keys.
-
-        Returns:
-            A :class:`TransitionTable` of integer counts.
-
-        Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``, if
-                *keys* does not match the default key set, or if a site
-                has a transition to an unknown site index.
-        """
-        if by == 'site':
-            site_keys = tuple(sorted(s.index for s in self.sites))
-            index_set = set(site_keys)
-            idx_lookup = {k: i for i, k in enumerate(site_keys)}
-            n = len(site_keys)
-            matrix = np.zeros((n, n), dtype=int)
-            for site in self.sites:
-                row = idx_lookup[site.index]
-                for dest, count in site.transitions.items():
-                    if dest not in index_set:
-                        raise ValueError(
-                            f"Site {site.index} has a transition to unknown "
-                            f"site index {dest}."
-                        )
-                    matrix[row, idx_lookup[dest]] = count
-            result_keys: tuple[int, ...] | tuple[str, ...] = site_keys
-        elif by == 'label':
-            all_site_indices = {s.index for s in self.sites}
-            index_to_label = {
-                s.index: s.label for s in self.sites if s.label is not None
-            }
-            label_keys = tuple(sorted(set(index_to_label.values())))
-            label_lookup = {k: i for i, k in enumerate(label_keys)}
-            n = len(label_keys)
-            matrix = np.zeros((n, n), dtype=int)
-            dropped = 0
-            for site in self.sites:
-                src_label = index_to_label.get(site.index)
-                if src_label is None:
-                    for dest in site.transitions:
-                        if dest not in all_site_indices:
-                            raise ValueError(
-                                f"Site {site.index} has a transition to unknown "
-                                f"site index {dest}."
-                            )
-                    dropped += sum(site.transitions.values())
-                    continue
-                for dest, count in site.transitions.items():
-                    if dest not in all_site_indices:
-                        raise ValueError(
-                            f"Site {site.index} has a transition to unknown "
-                            f"site index {dest}."
-                        )
-                    dest_label = index_to_label.get(dest)
-                    if dest_label is None:
-                        dropped += count
-                        continue
-                    matrix[label_lookup[src_label], label_lookup[dest_label]] += count
-            if dropped > 0:
-                warnings.warn(
-                    f"{dropped} transition(s) involving unlabelled sites were "
-                    f"excluded from the label-aggregated counts.",
-                    stacklevel=2,
-                )
-            result_keys = label_keys
-        else:
-            raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
-        table = TransitionTable(keys=result_keys, matrix=matrix)
-        if keys is not None:
-            return table.reorder(keys)
-        return table
-
-    def transition_probabilities(
-        self,
-        by: Literal['site', 'label'] = 'site',
-        *,
-        keys: Sequence[int] | Sequence[str] | None = None,
-    ) -> TransitionTable:
-        """Return row-normalised transition probabilities as a :class:`TransitionTable`.
-
-        Each row is normalised so that its values sum to 1.0. Rows with no
-        outgoing transitions remain as all zeros.
-
-        Args:
-            by: Aggregation key. ``'site'`` (default) keys by site index;
-                ``'label'`` aggregates by site label (unlabelled sites are
-                skipped, with a warning if any transitions are dropped).
-            keys: Optional key ordering for rows and columns. If ``None``,
-                keys are sorted. Must be a permutation of the default keys.
-
-        Returns:
-            A :class:`TransitionTable` of float probabilities.
-
-        Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``, if
-                *keys* does not match the default key set, or if a site
-                has a transition to an unknown site index.
-        """
-        counts = self.transition_counts(by=by, keys=keys)
+    @staticmethod
+    def _normalise_counts(counts: TransitionTable[TableKey]) -> TransitionTable[TableKey]:
+        """Row-normalise a counts table into probabilities."""
         count_data = counts.matrix.astype(float)
         row_sums = count_data.sum(axis=1)
         probs = np.zeros_like(count_data)
         nonzero = row_sums > 0
         probs[nonzero] = count_data[nonzero] / row_sums[nonzero, np.newaxis]
         return TransitionTable(keys=counts.keys, matrix=probs)
+
+    @staticmethod
+    def _validate_destination(site_index: int, dest: int, valid_indices: set[int]) -> None:
+        """Raise ValueError if dest is not in valid_indices."""
+        if dest not in valid_indices:
+            raise ValueError(
+                f"Site {site_index} has a transition to unknown "
+                f"site index {dest}."
+            )
+
+    def transition_counts_by_site(
+        self,
+        *,
+        keys: Sequence[int] | None = None,
+    ) -> TransitionTable[int]:
+        """Return per-site transition counts as a :class:`TransitionTable`.
+
+        Args:
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted. Must be a permutation of the default keys.
+
+        Returns:
+            A :class:`TransitionTable` of integer counts keyed by site index.
+
+        Raises:
+            ValueError: If *keys* does not match the default key set, or
+                if a site has a transition to an unknown site index.
+        """
+        site_keys = tuple(sorted(s.index for s in self.sites))
+        index_set = set(site_keys)
+        idx_lookup = {k: i for i, k in enumerate(site_keys)}
+        n = len(site_keys)
+        matrix = np.zeros((n, n), dtype=int)
+        for site in self.sites:
+            row = idx_lookup[site.index]
+            for dest, count in site.transitions.items():
+                self._validate_destination(site.index, dest, index_set)
+                matrix[row, idx_lookup[dest]] = count
+        table = TransitionTable(keys=site_keys, matrix=matrix)
+        if keys is not None:
+            return table.reorder(keys)
+        return table
+
+    def transition_counts_by_label(
+        self,
+        *,
+        keys: Sequence[str] | None = None,
+    ) -> TransitionTable[str]:
+        """Return label-aggregated transition counts as a :class:`TransitionTable`.
+
+        Sites without labels are skipped. A warning is emitted if any
+        transitions are dropped as a result.
+
+        Args:
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted. Must be a permutation of the default keys.
+
+        Returns:
+            A :class:`TransitionTable` of integer counts keyed by site label.
+
+        Raises:
+            ValueError: If *keys* does not match the default key set, or
+                if a site has a transition to an unknown site index.
+        """
+        all_site_indices = {s.index for s in self.sites}
+        index_to_label = {
+            s.index: s.label for s in self.sites if s.label is not None
+        }
+        label_keys = tuple(sorted(set(index_to_label.values())))
+        label_lookup = {k: i for i, k in enumerate(label_keys)}
+        n = len(label_keys)
+        matrix = np.zeros((n, n), dtype=int)
+        dropped = 0
+        for site in self.sites:
+            src_label = index_to_label.get(site.index)
+            if src_label is None:
+                for dest in site.transitions:
+                    self._validate_destination(site.index, dest, all_site_indices)
+                dropped += sum(site.transitions.values())
+                continue
+            for dest, count in site.transitions.items():
+                self._validate_destination(site.index, dest, all_site_indices)
+                dest_label = index_to_label.get(dest)
+                if dest_label is None:
+                    dropped += count
+                    continue
+                matrix[label_lookup[src_label], label_lookup[dest_label]] += count
+        if dropped > 0:
+            warnings.warn(
+                f"{dropped} transition(s) involving unlabelled sites were "
+                f"excluded from the label-aggregated counts.",
+                stacklevel=2,
+            )
+        table = TransitionTable(keys=label_keys, matrix=matrix)
+        if keys is not None:
+            return table.reorder(keys)
+        return table
+
+    def transition_probabilities_by_site(
+        self,
+        *,
+        keys: Sequence[int] | None = None,
+    ) -> TransitionTable[int]:
+        """Return per-site row-normalised transition probabilities.
+
+        Each row is normalised so that its values sum to 1.0. Rows with no
+        outgoing transitions remain as all zeros.
+
+        Args:
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted. Must be a permutation of the default keys.
+
+        Returns:
+            A :class:`TransitionTable` of float probabilities keyed by site index.
+
+        Raises:
+            ValueError: If *keys* does not match the default key set, or
+                if a site has a transition to an unknown site index.
+        """
+        return self._normalise_counts(self.transition_counts_by_site(keys=keys))
+
+    def transition_probabilities_by_label(
+        self,
+        *,
+        keys: Sequence[str] | None = None,
+    ) -> TransitionTable[str]:
+        """Return label-aggregated row-normalised transition probabilities.
+
+        Each row is normalised so that its values sum to 1.0. Rows with no
+        outgoing transitions remain as all zeros. Sites without labels are
+        skipped. A warning is emitted if any transitions are dropped.
+
+        Args:
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted. Must be a permutation of the default keys.
+
+        Returns:
+            A :class:`TransitionTable` of float probabilities keyed by site label.
+
+        Raises:
+            ValueError: If *keys* does not match the default key set, or
+                if a site has a transition to an unknown site index.
+        """
+        return self._normalise_counts(self.transition_counts_by_label(keys=keys))
 
     @property
     def atom_sites(self) -> list[int | None]:

@@ -7,19 +7,21 @@ access patterns.
 
 from __future__ import annotations
 
-from typing import Sequence, overload
+from typing import Generic, Sequence, TypeVar
 
 import numpy as np
 
+TableKey = TypeVar('TableKey', int, str)
 
-class TransitionTable:
+
+class TransitionTable(Generic[TableKey]):
     """A labelled square matrix of transition data.
 
     Stores transition counts or probabilities with named keys for
     rows and columns. Provides multiple access patterns:
 
     - ``.matrix`` — the raw (read-only) :class:`numpy.ndarray`
-    - ``.get(from_key, to_key)`` — key-based lookup (matched types enforced)
+    - ``.get(from_key, to_key)`` — key-based lookup
     - ``.to_dict()`` — square dict-of-dicts
     - ``.reorder(keys)`` — return a new table with reordered rows/columns
 
@@ -37,7 +39,7 @@ class TransitionTable:
 
     def __init__(
         self,
-        keys: tuple[int, ...] | tuple[str, ...],
+        keys: tuple[TableKey, ...],
         matrix: np.ndarray,
     ) -> None:
         self._matrix = np.array(matrix, copy=True)
@@ -52,13 +54,13 @@ class TransitionTable:
             )
         if len(set(keys)) != len(keys):
             raise ValueError("keys must not contain duplicates")
-        self._keys = keys
-        self._key_to_index = {k: i for i, k in enumerate(keys)}
+        self._keys: tuple[TableKey, ...] = keys
+        self._key_to_index: dict[TableKey, int] = {k: i for i, k in enumerate(keys)}
         self._matrix.flags.writeable = False
         self._frozen = True
 
     @property
-    def keys(self) -> tuple[int, ...] | tuple[str, ...]:
+    def keys(self) -> tuple[TableKey, ...]:
         """Row and column labels."""
         return self._keys
 
@@ -67,12 +69,7 @@ class TransitionTable:
         """The transition data as a read-only 2-D numpy array."""
         return self._matrix
 
-    @overload
-    def get(self, from_key: int, to_key: int) -> int | float: ...
-    @overload
-    def get(self, from_key: str, to_key: str) -> int | float: ...
-
-    def get(self, from_key: int | str, to_key: int | str) -> int | float:
+    def get(self, from_key: TableKey, to_key: TableKey) -> int | float:
         """Look up a single transition value by key.
 
         Args:
@@ -96,7 +93,7 @@ class TransitionTable:
         value: int | float = self._matrix[i, j].item()
         return value
 
-    def to_dict(self) -> dict[int | str, dict[int | str, int | float]]:
+    def to_dict(self) -> dict[TableKey, dict[TableKey, int | float]]:
         """Convert to a square dict-of-dicts.
 
         Returns:
@@ -110,7 +107,7 @@ class TransitionTable:
             for i in range(len(self._keys))
         }
 
-    def reorder(self, keys: Sequence[int] | Sequence[str]) -> TransitionTable:
+    def reorder(self, keys: Sequence[TableKey]) -> TransitionTable[TableKey]:
         """Return a new table with rows and columns reordered.
 
         Args:
@@ -123,7 +120,7 @@ class TransitionTable:
         Raises:
             ValueError: If *keys* does not match the current key set exactly.
         """
-        new_keys: tuple[int, ...] | tuple[str, ...] = tuple(keys)  # type: ignore[assignment]
+        new_keys: tuple[TableKey, ...] = tuple(keys)
         if len(new_keys) != len(self._keys) or set(new_keys) != set(self._keys):
             missing = sorted(set(self._keys) - set(new_keys))
             extra = sorted(set(new_keys) - set(self._keys))

@@ -586,6 +586,21 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
             2: {0: 0, 1: 0, 2: 0},
         })
 
+    def test_self_transitions_are_included(self):
+        """Test that transitions from a site to itself are counted."""
+        self.site0.transitions = Counter({0: 2, 1: 3})
+        result = self.trajectory.transition_counts(by='site')
+        self.assertEqual(result[0][0], 2)
+        self.assertEqual(result[0][1], 3)
+
+    def test_unknown_destination_index_warns_and_is_skipped(self):
+        """Test that a transition to a non-existent site index emits a warning."""
+        self.site0.transitions = Counter({1: 3, 99: 5})
+        with self.assertWarns(UserWarning):
+            result = self.trajectory.transition_counts(by='site')
+        self.assertEqual(result[0][1], 3)
+        self.assertNotIn(99, result[0])
+
     def test_single_site(self):
         """Test single-site trajectory produces 1x1 zero matrix."""
         Site._newid = 0
@@ -709,6 +724,14 @@ class TransitionProbabilitiesTestCase(unittest.TestCase):
         self.assertAlmostEqual(result["A"]["B"], 0.6)
         self.assertAlmostEqual(result["A"]["C"], 0.4)
         self.assertAlmostEqual(result["B"]["A"], 1.0)
+
+    def test_zero_transition_label_by_label(self):
+        """Test that a label with no outgoing transitions gives all-zero probabilities."""
+        self.site0.transitions = Counter({1: 4})  # A -> B
+        # site1 (B) and site2 (C) have no transitions
+        result = self.trajectory.transition_probabilities(by='label')
+        self.assertEqual(result["B"], {"A": 0.0, "B": 0.0, "C": 0.0})
+        self.assertEqual(result["C"], {"A": 0.0, "B": 0.0, "C": 0.0})
 
 
 class TransitionValidationTestCase(unittest.TestCase):

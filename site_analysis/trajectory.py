@@ -27,9 +27,10 @@ Note:
     ...              .build())
 """
 
+import warnings
 from collections import Counter
 from collections.abc import Iterable
-from typing import Sequence
+from typing import Literal, Sequence
 
 from tqdm.auto import tqdm
 
@@ -162,7 +163,7 @@ class Trajectory:
         """
         return [s.label for s in self.sites]
 
-    def transition_counts(self, by: str = 'site') -> dict[int, dict[int, int]] | dict[str, dict[str, int]]:
+    def transition_counts(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, int]] | dict[str, dict[str, int]]:
         """Return transition counts as a square dict-of-dicts.
 
         Args:
@@ -178,11 +179,19 @@ class Trajectory:
         """
         if by == 'site':
             indices = [s.index for s in self.sites]
+            index_set = set(indices)
             result_site: dict[int, dict[int, int]] = {
                 i: {j: 0 for j in indices} for i in indices
             }
             for site in self.sites:
                 for dest, count in site.transitions.items():
+                    if dest not in index_set:
+                        warnings.warn(
+                            f"Site {site.index} has a transition to unknown "
+                            f"site index {dest}; skipping.",
+                            stacklevel=2,
+                        )
+                        continue
                     result_site[site.index][dest] = count
             return result_site
         if by == 'label':
@@ -205,7 +214,7 @@ class Trajectory:
             return result_label
         raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
 
-    def transition_probabilities(self, by: str = 'site') -> dict[int, dict[int, float]] | dict[str, dict[str, float]]:
+    def transition_probabilities(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, float]] | dict[str, dict[str, float]]:
         """Return row-normalised transition probabilities as a square dict-of-dicts.
 
         Each row is normalised so that its values sum to 1.0. Rows with no

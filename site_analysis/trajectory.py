@@ -30,14 +30,14 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
-from typing import Literal, Sequence
+from typing import Literal, Sequence, cast, overload
 
 import numpy as np
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
-from .transition_table import TransitionTable
+from .transition_table import TableKey, TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -166,12 +166,35 @@ class Trajectory:
         """
         return [s.label for s in self.sites]
 
+    @staticmethod
+    def _normalise_counts(counts: TransitionTable[TableKey]) -> TransitionTable[TableKey]:
+        """Row-normalise a counts table into probabilities."""
+        count_data = counts.matrix.astype(float)
+        row_sums = count_data.sum(axis=1)
+        probs = np.zeros_like(count_data)
+        nonzero = row_sums > 0
+        probs[nonzero] = count_data[nonzero] / row_sums[nonzero, np.newaxis]
+        return TransitionTable(keys=counts.keys, matrix=probs)
+
+    def _validate_destination(self, site_index: int, dest: int, valid_indices: set[int]) -> None:
+        """Raise ValueError if dest is not in valid_indices."""
+        if dest not in valid_indices:
+            raise ValueError(
+                f"Site {site_index} has a transition to unknown "
+                f"site index {dest}."
+            )
+
+    @overload
+    def transition_counts(self, by: Literal['site'] = 'site', *, keys: Sequence[int] | None = None) -> TransitionTable[int]: ...
+    @overload
+    def transition_counts(self, by: Literal['label'] = ..., *, keys: Sequence[str] | None = None) -> TransitionTable[str]: ...
+
     def transition_counts(
         self,
         by: Literal['site', 'label'] = 'site',
         *,
         keys: Sequence[int] | Sequence[str] | None = None,
-    ) -> TransitionTable:
+    ) -> TransitionTable[int] | TransitionTable[str]:
         """Return transition counts as a :class:`TransitionTable`.
 
         Args:
@@ -198,13 +221,12 @@ class Trajectory:
             for site in self.sites:
                 row = idx_lookup[site.index]
                 for dest, count in site.transitions.items():
-                    if dest not in index_set:
-                        raise ValueError(
-                            f"Site {site.index} has a transition to unknown "
-                            f"site index {dest}."
-                        )
+                    self._validate_destination(site.index, dest, index_set)
                     matrix[row, idx_lookup[dest]] = count
-            result_keys: tuple[int, ...] | tuple[str, ...] = site_keys
+            site_table = TransitionTable(keys=site_keys, matrix=matrix)
+            if keys is not None:
+                return site_table.reorder(cast(Sequence[int], keys))
+            return site_table
         elif by == 'label':
             all_site_indices = {s.index for s in self.sites}
             index_to_label = {
@@ -219,19 +241,11 @@ class Trajectory:
                 src_label = index_to_label.get(site.index)
                 if src_label is None:
                     for dest in site.transitions:
-                        if dest not in all_site_indices:
-                            raise ValueError(
-                                f"Site {site.index} has a transition to unknown "
-                                f"site index {dest}."
-                            )
+                        self._validate_destination(site.index, dest, all_site_indices)
                     dropped += sum(site.transitions.values())
                     continue
                 for dest, count in site.transitions.items():
-                    if dest not in all_site_indices:
-                        raise ValueError(
-                            f"Site {site.index} has a transition to unknown "
-                            f"site index {dest}."
-                        )
+                    self._validate_destination(site.index, dest, all_site_indices)
                     dest_label = index_to_label.get(dest)
                     if dest_label is None:
                         dropped += count
@@ -243,20 +257,23 @@ class Trajectory:
                     f"excluded from the label-aggregated counts.",
                     stacklevel=2,
                 )
-            result_keys = label_keys
-        else:
-            raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
-        table = TransitionTable(keys=result_keys, matrix=matrix)
-        if keys is not None:
-            return table.reorder(keys)
-        return table
+            label_table = TransitionTable(keys=label_keys, matrix=matrix)
+            if keys is not None:
+                return label_table.reorder(cast(Sequence[str], keys))
+            return label_table
+        raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+
+    @overload
+    def transition_probabilities(self, by: Literal['site'] = 'site', *, keys: Sequence[int] | None = None) -> TransitionTable[int]: ...
+    @overload
+    def transition_probabilities(self, by: Literal['label'] = ..., *, keys: Sequence[str] | None = None) -> TransitionTable[str]: ...
 
     def transition_probabilities(
         self,
         by: Literal['site', 'label'] = 'site',
         *,
         keys: Sequence[int] | Sequence[str] | None = None,
-    ) -> TransitionTable:
+    ) -> TransitionTable[int] | TransitionTable[str]:
         """Return row-normalised transition probabilities as a :class:`TransitionTable`.
 
         Each row is normalised so that its values sum to 1.0. Rows with no
@@ -277,13 +294,15 @@ class Trajectory:
                 *keys* does not match the default key set, or if a site
                 has a transition to an unknown site index.
         """
-        counts = self.transition_counts(by=by, keys=keys)
-        count_data = counts.matrix.astype(float)
-        row_sums = count_data.sum(axis=1)
-        probs = np.zeros_like(count_data)
-        nonzero = row_sums > 0
-        probs[nonzero] = count_data[nonzero] / row_sums[nonzero, np.newaxis]
-        return TransitionTable(keys=counts.keys, matrix=probs)
+        if by == 'site':
+            return self._normalise_counts(
+                self.transition_counts(by='site', keys=cast(Sequence[int] | None, keys))
+            )
+        elif by == 'label':
+            return self._normalise_counts(
+                self.transition_counts(by='label', keys=cast(Sequence[str] | None, keys))
+            )
+        raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
 
     @property
     def atom_sites(self) -> list[int | None]:

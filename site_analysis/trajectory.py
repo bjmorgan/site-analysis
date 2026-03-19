@@ -37,7 +37,7 @@ from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
-from .transition_table import TableKey, TransitionTable  # noqa: F401 (TableKey used in _normalise_counts)
+from .transition_table import TableKey, TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite

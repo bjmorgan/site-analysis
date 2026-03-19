@@ -148,7 +148,7 @@ class TransitionTableReorderTestCase(unittest.TestCase):
 
 
 class TransitionTableEqualityTestCase(unittest.TestCase):
-    """Tests for __eq__ and __hash__."""
+    """Tests for __eq__."""
 
     def test_equal_tables(self):
         """Test that identical tables are equal."""
@@ -174,6 +174,12 @@ class TransitionTableEqualityTestCase(unittest.TestCase):
         """Test that comparison with non-TransitionTable returns NotImplemented."""
         table = TransitionTable(keys=("A", "B"), matrix=np.array([[0, 1], [2, 0]]))
         self.assertNotEqual(table, "not a table")
+
+    def test_not_hashable(self):
+        """Test that TransitionTable is not hashable."""
+        table = TransitionTable(keys=("A", "B"), matrix=np.array([[0, 1], [2, 0]]))
+        with self.assertRaises(TypeError):
+            hash(table)
 
 
 class TransitionTableReprTestCase(unittest.TestCase):

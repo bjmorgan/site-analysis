@@ -144,8 +144,7 @@ class TransitionTable:
             return NotImplemented
         return self._keys == other._keys and np.array_equal(self._matrix, other._matrix)
 
-    def __hash__(self) -> int:
-        return hash((self._keys, self._matrix.tobytes()))
+    __hash__ = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
         return (

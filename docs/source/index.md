@@ -53,6 +53,7 @@ guides/dynamic_voronoi_sites
 guides/polyhedral_sites
 guides/trajectories
 guides/residence_times
+guides/transition_tables
 
 ```
 ```{toctree}

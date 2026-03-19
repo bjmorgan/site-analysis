@@ -206,6 +206,7 @@ class Trajectory:
                     matrix[row, idx_lookup[dest]] = count
             result_keys: tuple[int, ...] | tuple[str, ...] = site_keys
         elif by == 'label':
+            all_site_indices = {s.index for s in self.sites}
             index_to_label = {
                 s.index: s.label for s in self.sites if s.label is not None
             }
@@ -217,8 +218,14 @@ class Trajectory:
             for site in self.sites:
                 src_label = index_to_label.get(site.index)
                 if src_label is None:
+                    dropped += sum(site.transitions.values())
                     continue
                 for dest, count in site.transitions.items():
+                    if dest not in all_site_indices:
+                        raise ValueError(
+                            f"Site {site.index} has a transition to unknown "
+                            f"site index {dest}."
+                        )
                     dest_label = index_to_label.get(dest)
                     if dest_label is None:
                         dropped += count
@@ -226,7 +233,7 @@ class Trajectory:
                     matrix[label_lookup[src_label], label_lookup[dest_label]] += count
             if dropped > 0:
                 warnings.warn(
-                    f"{dropped} transition(s) to/from unlabelled sites were "
+                    f"{dropped} transition(s) involving unlabelled sites were "
                     f"excluded from the label-aggregated counts.",
                     stacklevel=2,
                 )

@@ -19,8 +19,9 @@ class TransitionTable:
     rows and columns. Provides multiple access patterns:
 
     - ``.matrix`` — the raw (read-only) :class:`numpy.ndarray`
-    - ``.get(from_key, to_key)`` — key-based lookup
+    - ``.get(from_key, to_key)`` — key-based lookup (matched types enforced)
     - ``.to_dict()`` — square dict-of-dicts
+    - ``.reorder(keys)`` — return a new table with reordered rows/columns
 
     Args:
         keys: Row and column labels (site indices or site labels).
@@ -135,7 +136,7 @@ class TransitionTable:
                 f"keys must be a permutation of the current keys; {'; '.join(parts)}"
             )
         order = [self._key_to_index[k] for k in new_keys]
-        reordered = np.array(self._matrix)[np.ix_(order, order)]
+        reordered = self._matrix[np.ix_(order, order)]
         return TransitionTable(keys=new_keys, matrix=reordered)
 
     def __eq__(self, other: object) -> bool:

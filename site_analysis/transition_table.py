@@ -7,33 +7,9 @@ access patterns.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Sequence, overload
 
 import numpy as np
-
-
-class _LocAccessor:
-    """Key-based accessor for TransitionTable.
-
-    Supports ``table.loc[from_key, to_key]`` lookups.
-    """
-
-    def __init__(self, table: TransitionTable) -> None:
-        self._table = table
-
-    def __getitem__(self, key: tuple[int | str, int | str]) -> int | float:
-        from_key, to_key = key
-        index = self._table._key_to_index
-        try:
-            i = index[from_key]
-        except KeyError:
-            raise KeyError(from_key) from None
-        try:
-            j = index[to_key]
-        except KeyError:
-            raise KeyError(to_key) from None
-        value: int | float = self._table.matrix[i, j].item()
-        return value
 
 
 class TransitionTable:
@@ -43,7 +19,7 @@ class TransitionTable:
     rows and columns. Provides multiple access patterns:
 
     - ``.matrix`` — the raw (read-only) :class:`numpy.ndarray`
-    - ``.loc[from_key, to_key]`` — key-based lookup
+    - ``.get(from_key, to_key)`` — key-based lookup
     - ``.to_dict()`` — square dict-of-dicts
 
     Args:
@@ -56,7 +32,7 @@ class TransitionTable:
             duplicates.
     """
 
-    __slots__ = ('_keys', '_matrix', '_key_to_index', '_loc', '_frozen')
+    __slots__ = ('_keys', '_matrix', '_key_to_index', '_frozen')
 
     def __init__(
         self,
@@ -77,7 +53,6 @@ class TransitionTable:
             raise ValueError("keys must not contain duplicates")
         self._keys = keys
         self._key_to_index = {k: i for i, k in enumerate(keys)}
-        self._loc = _LocAccessor(self)
         self._matrix.flags.writeable = False
         self._frozen = True
 
@@ -91,15 +66,34 @@ class TransitionTable:
         """The transition data as a read-only 2-D numpy array."""
         return self._matrix
 
-    @property
-    def loc(self) -> _LocAccessor:
-        """Key-based accessor.
+    @overload
+    def get(self, from_key: int, to_key: int) -> int | float: ...
+    @overload
+    def get(self, from_key: str, to_key: str) -> int | float: ...
 
-        Usage::
+    def get(self, from_key: int | str, to_key: int | str) -> int | float:
+        """Look up a single transition value by key.
 
-            table.loc["A", "B"]  # value for A -> B
+        Args:
+            from_key: The source key (row).
+            to_key: The destination key (column).
+
+        Returns:
+            The transition value at ``(from_key, to_key)``.
+
+        Raises:
+            KeyError: If either key is not present in the table.
         """
-        return self._loc
+        try:
+            i = self._key_to_index[from_key]
+        except KeyError:
+            raise KeyError(from_key) from None
+        try:
+            j = self._key_to_index[to_key]
+        except KeyError:
+            raise KeyError(to_key) from None
+        value: int | float = self._matrix[i, j].item()
+        return value
 
     def to_dict(self) -> dict[int | str, dict[int | str, int | float]]:
         """Convert to a square dict-of-dicts.

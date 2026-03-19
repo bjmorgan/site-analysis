@@ -56,31 +56,31 @@ class TransitionTableConstructionTestCase(unittest.TestCase):
         self.assertEqual(table.matrix.shape, (0, 0))
 
 
-class TransitionTableLocTestCase(unittest.TestCase):
-    """Tests for key-based .loc access."""
+class TransitionTableGetTestCase(unittest.TestCase):
+    """Tests for key-based .get() access."""
 
     def setUp(self):
         self.matrix = np.array([[0, 3, 1], [2, 0, 4], [5, 6, 0]])
         self.table = TransitionTable(keys=("A", "B", "C"), matrix=self.matrix)
 
-    def test_loc_str_keys(self):
-        """Test .loc access with string keys."""
-        self.assertEqual(self.table.loc["A", "B"], 3)
-        self.assertEqual(self.table.loc["B", "A"], 2)
-        self.assertEqual(self.table.loc["C", "A"], 5)
+    def test_get_str_keys(self):
+        """Test .get() access with string keys."""
+        self.assertEqual(self.table.get("A", "B"), 3)
+        self.assertEqual(self.table.get("B", "A"), 2)
+        self.assertEqual(self.table.get("C", "A"), 5)
 
-    def test_loc_int_keys(self):
-        """Test .loc access with integer keys."""
+    def test_get_int_keys(self):
+        """Test .get() access with integer keys."""
         table = TransitionTable(keys=(10, 20), matrix=np.array([[0, 7], [3, 0]]))
-        self.assertEqual(table.loc[10, 20], 7)
-        self.assertEqual(table.loc[20, 10], 3)
+        self.assertEqual(table.get(10, 20), 7)
+        self.assertEqual(table.get(20, 10), 3)
 
-    def test_loc_invalid_key_raises_key_error(self):
-        """Test that .loc with an invalid key raises KeyError."""
+    def test_get_invalid_key_raises_key_error(self):
+        """Test that .get() with an invalid key raises KeyError."""
         with self.assertRaises(KeyError):
-            self.table.loc["A", "Z"]
+            self.table.get("A", "Z")
         with self.assertRaises(KeyError):
-            self.table.loc["Z", "A"]
+            self.table.get("Z", "A")
 
 
 class TransitionTableToDictTestCase(unittest.TestCase):

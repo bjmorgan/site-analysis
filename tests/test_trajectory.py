@@ -574,8 +574,8 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
         self.site0.transitions = Counter({1: 3})
         # site1 has no transition back to site0
         result = self.trajectory.transition_counts(by='site')
-        self.assertEqual(result.loc[0, 1], 3)
-        self.assertEqual(result.loc[1, 0], 0)
+        self.assertEqual(result.get(0, 1), 3)
+        self.assertEqual(result.get(1, 0), 0)
 
     def test_no_transitions_at_all(self):
         """Test all zeros when no transitions recorded."""
@@ -592,8 +592,8 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
         """
         self.site0.transitions = Counter({0: 2, 1: 3})
         result = self.trajectory.transition_counts(by='site')
-        self.assertEqual(result.loc[0, 0], 2)
-        self.assertEqual(result.loc[0, 1], 3)
+        self.assertEqual(result.get(0, 0), 2)
+        self.assertEqual(result.get(0, 1), 3)
 
     def test_unknown_destination_index_raises(self):
         """Test that a transition to a non-existent site index raises ValueError."""
@@ -676,7 +676,7 @@ class TransitionCountsByLabelTestCase(unittest.TestCase):
         # site0 (A) -> site1 (A): this is an A->A transition
         self.site0.transitions = Counter({1: 4})
         result = self.trajectory.transition_counts(by='label')
-        self.assertEqual(result.loc["A", "A"], 4)
+        self.assertEqual(result.get("A", "A"), 4)
 
 
 class TransitionProbabilitiesTestCase(unittest.TestCase):
@@ -696,11 +696,11 @@ class TransitionProbabilitiesTestCase(unittest.TestCase):
         self.site0.transitions = Counter({1: 3, 2: 1})  # total 4
         self.site1.transitions = Counter({0: 2, 2: 2})  # total 4
         result = self.trajectory.transition_probabilities(by='site')
-        self.assertAlmostEqual(result.loc[0, 1], 0.75)
-        self.assertAlmostEqual(result.loc[0, 2], 0.25)
-        self.assertAlmostEqual(result.loc[0, 0], 0.0)
-        self.assertAlmostEqual(result.loc[1, 0], 0.5)
-        self.assertAlmostEqual(result.loc[1, 2], 0.5)
+        self.assertAlmostEqual(result.get(0, 1), 0.75)
+        self.assertAlmostEqual(result.get(0, 2), 0.25)
+        self.assertAlmostEqual(result.get(0, 0), 0.0)
+        self.assertAlmostEqual(result.get(1, 0), 0.5)
+        self.assertAlmostEqual(result.get(1, 2), 0.5)
 
     def test_row_with_zero_transitions(self):
         """Test that a row with no transitions remains all zeros."""
@@ -714,18 +714,18 @@ class TransitionProbabilitiesTestCase(unittest.TestCase):
         """Test that a single outgoing transition becomes 1.0."""
         self.site0.transitions = Counter({1: 5})
         result = self.trajectory.transition_probabilities(by='site')
-        self.assertAlmostEqual(result.loc[0, 1], 1.0)
-        self.assertAlmostEqual(result.loc[0, 0], 0.0)
-        self.assertAlmostEqual(result.loc[0, 2], 0.0)
+        self.assertAlmostEqual(result.get(0, 1), 1.0)
+        self.assertAlmostEqual(result.get(0, 0), 0.0)
+        self.assertAlmostEqual(result.get(0, 2), 0.0)
 
     def test_by_label(self):
         """Test label-level probabilities are correctly normalised."""
         self.site0.transitions = Counter({1: 6, 2: 4})  # A: total 10
         self.site1.transitions = Counter({0: 3})         # B: total 3
         result = self.trajectory.transition_probabilities(by='label')
-        self.assertAlmostEqual(result.loc["A", "B"], 0.6)
-        self.assertAlmostEqual(result.loc["A", "C"], 0.4)
-        self.assertAlmostEqual(result.loc["B", "A"], 1.0)
+        self.assertAlmostEqual(result.get("A", "B"), 0.6)
+        self.assertAlmostEqual(result.get("A", "C"), 0.4)
+        self.assertAlmostEqual(result.get("B", "A"), 1.0)
 
     def test_zero_transition_label_by_label(self):
         """Test that a label with no outgoing transitions gives all-zero probabilities."""

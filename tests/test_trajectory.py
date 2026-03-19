@@ -678,6 +678,12 @@ class TransitionCountsByLabelTestCase(unittest.TestCase):
         result = self.trajectory.transition_counts_by_label()
         self.assertEqual(result.get("A", "A"), 4)
 
+    def test_unlabelled_site_with_invalid_destination_raises(self):
+        """Test that an unlabelled site transitioning to an invalid index raises."""
+        self.site3.transitions = Counter({99: 5})
+        with self.assertRaises(ValueError):
+            self.trajectory.transition_counts_by_label()
+
 
 class TransitionProbabilitiesTestCase(unittest.TestCase):
     """Tests for Trajectory.transition_probabilities_by_site() and _by_label()."""

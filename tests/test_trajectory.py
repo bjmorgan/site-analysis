@@ -686,7 +686,7 @@ class TransitionCountsByLabelTestCase(unittest.TestCase):
 
 
 class TransitionProbabilitiesTestCase(unittest.TestCase):
-    """Tests for Trajectory.transition_probabilities_by_site() and _by_label()."""
+    """Tests for Trajectory.transition_probabilities_by_site() and transition_probabilities_by_label()."""
 
     def setUp(self):
         Site._newid = 0

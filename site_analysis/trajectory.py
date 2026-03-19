@@ -218,6 +218,12 @@ class Trajectory:
             for site in self.sites:
                 src_label = index_to_label.get(site.index)
                 if src_label is None:
+                    for dest in site.transitions:
+                        if dest not in all_site_indices:
+                            raise ValueError(
+                                f"Site {site.index} has a transition to unknown "
+                                f"site index {dest}."
+                            )
                     dropped += sum(site.transitions.values())
                     continue
                 for dest, count in site.transitions.items():
@@ -274,7 +280,7 @@ class Trajectory:
         counts = self.transition_counts(by=by, keys=keys)
         count_data = counts.matrix.astype(float)
         row_sums = count_data.sum(axis=1, keepdims=True)
-        with np.errstate(invalid='ignore'):
+        with np.errstate(divide='ignore', invalid='ignore'):
             probs = np.where(row_sums > 0, count_data / row_sums, 0.0)
         nan_rows = np.where(np.any(np.isnan(probs), axis=1))[0]
         if len(nan_rows) > 0:

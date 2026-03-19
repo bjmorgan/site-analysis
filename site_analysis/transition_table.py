@@ -24,6 +24,7 @@ class TransitionTable(Generic[TableKey]):
     - ``.get(from_key, to_key)`` — key-based lookup
     - ``.to_dict()`` — square dict-of-dicts
     - ``.reorder(keys)`` — return a new table with reordered rows/columns
+    - ``.filter(keys)`` — return a new table with only the specified keys
 
     Args:
         keys: Row and column labels (site indices or site labels).
@@ -135,6 +136,35 @@ class TransitionTable(Generic[TableKey]):
         order = [self._key_to_index[k] for k in new_keys]
         reordered = self._matrix[np.ix_(order, order)]
         return TransitionTable(keys=new_keys, matrix=reordered)
+
+    def filter(self, keys: Sequence[TableKey]) -> TransitionTable[TableKey]:
+        """Return a new table containing only the specified keys.
+
+        Extracts the requested rows and columns without re-normalising.
+        The order of *keys* is preserved in the result.
+
+        Args:
+            keys: The keys to retain. Must be a subset of the current
+                keys with no duplicates.
+
+        Returns:
+            A new :class:`TransitionTable` with only the requested keys.
+
+        Raises:
+            ValueError: If *keys* contains unknown or duplicate keys.
+        """
+        new_keys: tuple[TableKey, ...] = tuple(keys)
+        if len(new_keys) != len(set(new_keys)):
+            raise ValueError("keys must not contain duplicates")
+        unknown = sorted(set(new_keys) - set(self._keys))
+        if unknown:
+            raise ValueError(f"unknown keys: {unknown!r}")
+        if len(new_keys) == 0:
+            empty: np.ndarray = np.empty((0, 0), dtype=self._matrix.dtype)
+            return TransitionTable(keys=new_keys, matrix=empty)
+        order = [self._key_to_index[k] for k in new_keys]
+        filtered = self._matrix[np.ix_(order, order)]
+        return TransitionTable(keys=new_keys, matrix=filtered)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TransitionTable):

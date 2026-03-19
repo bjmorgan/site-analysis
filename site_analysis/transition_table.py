@@ -125,8 +125,8 @@ class TransitionTable:
         """
         new_keys: tuple[int, ...] | tuple[str, ...] = tuple(keys)  # type: ignore[assignment]
         if len(new_keys) != len(self._keys) or set(new_keys) != set(self._keys):
-            missing = sorted(set(self._keys) - set(new_keys))
-            extra = sorted(set(new_keys) - set(self._keys))
+            missing = sorted(set(self._keys) - set(new_keys), key=str)
+            extra = sorted(set(new_keys) - set(self._keys), key=str)
             parts = []
             if missing:
                 parts.append(f"missing keys: {missing!r}")

@@ -279,17 +279,10 @@ class Trajectory:
         """
         counts = self.transition_counts(by=by, keys=keys)
         count_data = counts.matrix.astype(float)
-        row_sums = count_data.sum(axis=1, keepdims=True)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            probs = np.where(row_sums > 0, count_data / row_sums, 0.0)
-        nan_rows = np.where(np.any(np.isnan(probs), axis=1))[0]
-        if len(nan_rows) > 0:
-            nan_keys = [counts.keys[i] for i in nan_rows]
-            nan_sums = [row_sums[i, 0] for i in nan_rows]
-            raise RuntimeError(
-                f"NaN in transition probabilities for keys {nan_keys} "
-                f"(row sums: {nan_sums})"
-            )
+        row_sums = count_data.sum(axis=1)
+        probs = np.zeros_like(count_data)
+        nonzero = row_sums > 0
+        probs[nonzero] = count_data[nonzero] / row_sums[nonzero, np.newaxis]
         return TransitionTable(keys=counts.keys, matrix=probs)
 
     @property

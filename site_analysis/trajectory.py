@@ -37,7 +37,7 @@ from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
-from site_analysis.transition_table import TransitionTable
+from .transition_table import TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -177,19 +177,20 @@ class Trajectory:
         Args:
             by: Aggregation key. ``'site'`` (default) keys by site index;
                 ``'label'`` aggregates by site label (unlabelled sites are
-                skipped).
+                skipped, with a warning if any transitions are dropped).
             keys: Optional key ordering for rows and columns. If ``None``,
-                keys are sorted.
+                keys are sorted. Must be a permutation of the default keys.
 
         Returns:
             A :class:`TransitionTable` of integer counts.
 
         Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``, or if
-                *keys* contains a key not present in the data.
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``, if
+                *keys* does not match the default key set, or if a site
+                has a transition to an unknown site index.
         """
         if by == 'site':
-            site_keys: list[int] = sorted(s.index for s in self.sites)
+            site_keys = tuple(sorted(s.index for s in self.sites))
             index_set = set(site_keys)
             idx_lookup = {k: i for i, k in enumerate(site_keys)}
             n = len(site_keys)
@@ -198,22 +199,21 @@ class Trajectory:
                 row = idx_lookup[site.index]
                 for dest, count in site.transitions.items():
                     if dest not in index_set:
-                        warnings.warn(
+                        raise ValueError(
                             f"Site {site.index} has a transition to unknown "
-                            f"site index {dest}; skipping.",
-                            stacklevel=2,
+                            f"site index {dest}."
                         )
-                        continue
                     matrix[row, idx_lookup[dest]] = count
-            result_keys: list[int] | list[str] = site_keys
+            result_keys: tuple[int, ...] | tuple[str, ...] = site_keys
         elif by == 'label':
             index_to_label = {
                 s.index: s.label for s in self.sites if s.label is not None
             }
-            label_keys: list[str] = sorted(set(index_to_label.values()))
+            label_keys = tuple(sorted(set(index_to_label.values())))
             label_lookup = {k: i for i, k in enumerate(label_keys)}
             n = len(label_keys)
             matrix = np.zeros((n, n), dtype=int)
+            dropped = 0
             for site in self.sites:
                 src_label = index_to_label.get(site.index)
                 if src_label is None:
@@ -221,14 +221,22 @@ class Trajectory:
                 for dest, count in site.transitions.items():
                     dest_label = index_to_label.get(dest)
                     if dest_label is None:
+                        dropped += count
                         continue
                     matrix[label_lookup[src_label], label_lookup[dest_label]] += count
+            if dropped > 0:
+                warnings.warn(
+                    f"{dropped} transition(s) to/from unlabelled sites were "
+                    f"excluded from the label-aggregated counts.",
+                    stacklevel=2,
+                )
             result_keys = label_keys
         else:
             raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+        table = TransitionTable(keys=result_keys, matrix=matrix)
         if keys is not None:
-            return self._reorder_table(TransitionTable(keys=result_keys, data=matrix), keys)
-        return TransitionTable(keys=result_keys, data=matrix)
+            return table.reorder(keys)
+        return table
 
     def transition_probabilities(
         self,
@@ -244,49 +252,25 @@ class Trajectory:
         Args:
             by: Aggregation key. ``'site'`` (default) keys by site index;
                 ``'label'`` aggregates by site label (unlabelled sites are
-                skipped).
+                skipped, with a warning if any transitions are dropped).
             keys: Optional key ordering for rows and columns. If ``None``,
-                keys are sorted.
+                keys are sorted. Must be a permutation of the default keys.
 
         Returns:
             A :class:`TransitionTable` of float probabilities.
 
         Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``, or if
-                *keys* contains a key not present in the data.
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``, if
+                *keys* does not match the default key set, or if a site
+                has a transition to an unknown site index.
         """
         counts = self.transition_counts(by=by, keys=keys)
-        data = counts.data.astype(float)
-        row_sums = data.sum(axis=1, keepdims=True)
+        count_data = counts.matrix.astype(float)
+        row_sums = count_data.sum(axis=1, keepdims=True)
         with np.errstate(invalid='ignore'):
-            probs = np.where(row_sums > 0, data / row_sums, 0.0)
-        return TransitionTable(keys=counts.keys, data=probs)
-
-    @staticmethod
-    def _reorder_table(
-        table: TransitionTable,
-        keys: Sequence[int] | Sequence[str],
-    ) -> TransitionTable:
-        """Reorder a TransitionTable to match the given key order.
-
-        Args:
-            table: The table to reorder.
-            keys: The desired key ordering.
-
-        Returns:
-            A new :class:`TransitionTable` with reordered rows and columns.
-
-        Raises:
-            ValueError: If *keys* contains a key not present in the table.
-        """
-        new_keys: list[int] | list[str] = list(keys)  # type: ignore[assignment]
-        unknown = set(new_keys) - set(table.keys)
-        if unknown:
-            raise ValueError(f"Keys not found in data: {unknown!r}")
-        old_index = {k: i for i, k in enumerate(table.keys)}
-        order = [old_index[k] for k in new_keys]
-        reordered = table.data[np.ix_(order, order)]
-        return TransitionTable(keys=new_keys, data=reordered)
+            probs = np.where(row_sums > 0, count_data / row_sums, 0.0)
+        assert not np.any(np.isnan(probs)), "NaN in transition probabilities"
+        return TransitionTable(keys=counts.keys, matrix=probs)
 
     @property
     def atom_sites(self) -> list[int | None]:

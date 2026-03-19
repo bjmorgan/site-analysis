@@ -595,13 +595,11 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
         self.assertEqual(result.loc[0, 0], 2)
         self.assertEqual(result.loc[0, 1], 3)
 
-    def test_unknown_destination_index_warns_and_is_skipped(self):
-        """Test that a transition to a non-existent site index emits a warning."""
+    def test_unknown_destination_index_raises(self):
+        """Test that a transition to a non-existent site index raises ValueError."""
         self.site0.transitions = Counter({1: 3, 99: 5})
-        with self.assertWarns(UserWarning):
-            result = self.trajectory.transition_counts(by='site')
-        self.assertEqual(result.loc[0, 1], 3)
-        self.assertNotIn(99, result.keys)
+        with self.assertRaises(ValueError):
+            self.trajectory.transition_counts(by='site')
 
     def test_single_site(self):
         """Test single-site trajectory produces 1x1 zero matrix."""
@@ -640,13 +638,14 @@ class TransitionCountsByLabelTestCase(unittest.TestCase):
             "B": {"A": 1, "B": 0},
         })
 
-    def test_unlabelled_sites_are_skipped(self):
-        """Test that sites with label=None do not appear in output."""
+    def test_unlabelled_sites_are_skipped_with_warning(self):
+        """Test that transitions to unlabelled sites are excluded with a warning."""
         # unlabelled site3 has transitions
         self.site3.transitions = Counter({0: 10})
         # site0 (A) transitions to unlabelled site3
         self.site0.transitions = Counter({3: 7})
-        result = self.trajectory.transition_counts(by='label')
+        with self.assertWarns(UserWarning):
+            result = self.trajectory.transition_counts(by='label')
         # site3 should not appear; site0's transition to site3 is excluded
         self.assertNotIn(None, result.keys)
         self.assertEqual(result.to_dict(), {
@@ -660,7 +659,7 @@ class TransitionCountsByLabelTestCase(unittest.TestCase):
         site = SphericalSite(frac_coords=np.array([0.0, 0.0, 0.0]), rcut=0.3)
         trajectory = Trajectory(sites=[site], atoms=[Atom(index=0)])
         result = trajectory.transition_counts(by='label')
-        self.assertEqual(result.keys, [])
+        self.assertEqual(result.keys, ())
         self.assertEqual(result.matrix.shape, (0, 0))
 
     def test_square_output(self):
@@ -754,7 +753,7 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         self.site0.transitions = Counter({1: 3, 2: 1})
         self.site1.transitions = Counter({0: 2})
         result = self.trajectory.transition_counts(by='site', keys=[2, 0, 1])
-        self.assertEqual(result.keys, [2, 0, 1])
+        self.assertEqual(result.keys, (2, 0, 1))
         np.testing.assert_array_equal(result.matrix, np.array([
             [0, 0, 0],
             [1, 0, 3],
@@ -766,11 +765,23 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         self.site0.transitions = Counter({1: 3, 2: 1})
         self.site1.transitions = Counter({0: 2})
         result = self.trajectory.transition_probabilities(by='label', keys=["C", "B", "A"])
-        self.assertEqual(result.keys, ["C", "B", "A"])
+        self.assertEqual(result.keys, ("C", "B", "A"))
         np.testing.assert_array_almost_equal(result.matrix, np.array([
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 1.0],
             [0.25, 0.75, 0.0],
+        ]))
+
+    def test_custom_key_order_probabilities_by_site(self):
+        """Test that custom keys reorder probabilities by site."""
+        self.site0.transitions = Counter({1: 3, 2: 1})
+        self.site1.transitions = Counter({0: 2})
+        result = self.trajectory.transition_probabilities(by='site', keys=[2, 0, 1])
+        self.assertEqual(result.keys, (2, 0, 1))
+        np.testing.assert_array_almost_equal(result.matrix, np.array([
+            [0.0, 0.0, 0.0],
+            [0.25, 0.0, 0.75],
+            [0.0, 1.0, 0.0],
         ]))
 
     def test_unknown_key_raises_value_error(self):
@@ -778,17 +789,22 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.trajectory.transition_counts(by='label', keys=["A", "Z"])
 
+    def test_subset_keys_raises_value_error(self):
+        """Test that passing a subset of keys raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.trajectory.transition_counts(by='label', keys=["A", "B"])
+
     def test_default_keys_are_sorted(self):
         """Test that keys are sorted by default."""
         self.site0.transitions = Counter({1: 3})
         result = self.trajectory.transition_counts(by='site')
-        self.assertEqual(result.keys, [0, 1, 2])
+        self.assertEqual(result.keys, (0, 1, 2))
 
     def test_default_label_keys_are_sorted(self):
         """Test that label keys are sorted by default."""
         self.site0.transitions = Counter({1: 3})
         result = self.trajectory.transition_counts(by='label')
-        self.assertEqual(result.keys, ["A", "B", "C"])
+        self.assertEqual(result.keys, ("A", "B", "C"))
 
 
 class TransitionValidationTestCase(unittest.TestCase):

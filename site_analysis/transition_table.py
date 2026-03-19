@@ -56,11 +56,11 @@ class TransitionTable:
             duplicates.
     """
 
-    __slots__ = ('_keys', '_matrix', '_key_to_index', '_loc')
+    __slots__ = ('_keys', '_matrix', '_key_to_index', '_loc', '_frozen')
 
     def __init__(
         self,
-        keys: tuple[int, ...] | tuple[str, ...] | tuple[()],
+        keys: tuple[int, ...] | tuple[str, ...],
         matrix: np.ndarray,
     ) -> None:
         self._matrix = np.array(matrix, copy=True)
@@ -79,9 +79,10 @@ class TransitionTable:
         self._key_to_index = {k: i for i, k in enumerate(keys)}
         self._loc = _LocAccessor(self)
         self._matrix.flags.writeable = False
+        self._frozen = True
 
     @property
-    def keys(self) -> tuple[int, ...] | tuple[str, ...] | tuple[()]:
+    def keys(self) -> tuple[int, ...] | tuple[str, ...]:
         """Row and column labels."""
         return self._keys
 
@@ -128,7 +129,7 @@ class TransitionTable:
             ValueError: If *keys* does not match the current key set exactly.
         """
         new_keys: tuple[int, ...] | tuple[str, ...] = tuple(keys)  # type: ignore[assignment]
-        if set(new_keys) != set(self._keys):
+        if len(new_keys) != len(self._keys) or set(new_keys) != set(self._keys):
             missing = set(self._keys) - set(new_keys)
             extra = set(new_keys) - set(self._keys)
             parts = []
@@ -158,6 +159,6 @@ class TransitionTable:
         )
 
     def __setattr__(self, name: str, value: object) -> None:
-        if hasattr(self, '_loc'):
+        if getattr(self, '_frozen', False):
             raise AttributeError("TransitionTable is immutable")
         super().__setattr__(name, value)

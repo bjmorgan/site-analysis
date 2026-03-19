@@ -141,7 +141,7 @@ class TransitionTable(Generic[TableKey]):
         """Return a new table containing only the specified keys.
 
         Extracts the requested rows and columns without re-normalising.
-        The order of *keys* is preserved in the result.
+        Rows and columns in the result follow the order given in *keys*.
 
         Args:
             keys: The keys to retain. Must be a subset of the current

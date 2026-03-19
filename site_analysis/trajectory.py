@@ -30,11 +30,14 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
-from typing import Literal, Sequence, overload
+from typing import Literal, Sequence
 
+import numpy as np
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
+
+from site_analysis.transition_table import TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -163,32 +166,36 @@ class Trajectory:
         """
         return [s.label for s in self.sites]
 
-    @overload
-    def transition_counts(self, by: Literal['site'] = 'site') -> dict[int, dict[int, int]]: ...
-    @overload
-    def transition_counts(self, by: Literal['label']) -> dict[str, dict[str, int]]: ...
-
-    def transition_counts(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, int]] | dict[str, dict[str, int]]:
-        """Return transition counts as a square dict-of-dicts.
+    def transition_counts(
+        self,
+        by: Literal['site', 'label'] = 'site',
+        *,
+        keys: Sequence[int] | Sequence[str] | None = None,
+    ) -> TransitionTable:
+        """Return transition counts as a :class:`TransitionTable`.
 
         Args:
             by: Aggregation key. ``'site'`` (default) keys by site index;
                 ``'label'`` aggregates by site label (unlabelled sites are
                 skipped).
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted.
 
         Returns:
-            A square dict-of-dicts ``{from_key: {to_key: count}}``.
+            A :class:`TransitionTable` of integer counts.
 
         Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``.
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``, or if
+                *keys* contains a key not present in the data.
         """
         if by == 'site':
-            indices = [s.index for s in self.sites]
-            index_set = set(indices)
-            result_site: dict[int, dict[int, int]] = {
-                i: {j: 0 for j in indices} for i in indices
-            }
+            site_keys: list[int] = sorted(s.index for s in self.sites)
+            index_set = set(site_keys)
+            idx_lookup = {k: i for i, k in enumerate(site_keys)}
+            n = len(site_keys)
+            matrix = np.zeros((n, n), dtype=int)
             for site in self.sites:
+                row = idx_lookup[site.index]
                 for dest, count in site.transitions.items():
                     if dest not in index_set:
                         warnings.warn(
@@ -197,16 +204,16 @@ class Trajectory:
                             stacklevel=2,
                         )
                         continue
-                    result_site[site.index][dest] = count
-            return result_site
-        if by == 'label':
+                    matrix[row, idx_lookup[dest]] = count
+            result_keys: list[int] | list[str] = site_keys
+        elif by == 'label':
             index_to_label = {
                 s.index: s.label for s in self.sites if s.label is not None
             }
-            labels = sorted(set(index_to_label.values()))
-            result_label: dict[str, dict[str, int]] = {
-                la: {lb: 0 for lb in labels} for la in labels
-            }
+            label_keys: list[str] = sorted(set(index_to_label.values()))
+            label_lookup = {k: i for i, k in enumerate(label_keys)}
+            n = len(label_keys)
+            matrix = np.zeros((n, n), dtype=int)
             for site in self.sites:
                 src_label = index_to_label.get(site.index)
                 if src_label is None:
@@ -215,17 +222,21 @@ class Trajectory:
                     dest_label = index_to_label.get(dest)
                     if dest_label is None:
                         continue
-                    result_label[src_label][dest_label] += count
-            return result_label
-        raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+                    matrix[label_lookup[src_label], label_lookup[dest_label]] += count
+            result_keys = label_keys
+        else:
+            raise ValueError(f"Invalid value for 'by': {by!r}. Must be 'site' or 'label'.")
+        if keys is not None:
+            return self._reorder_table(TransitionTable(keys=result_keys, data=matrix), keys)
+        return TransitionTable(keys=result_keys, data=matrix)
 
-    @overload
-    def transition_probabilities(self, by: Literal['site'] = 'site') -> dict[int, dict[int, float]]: ...
-    @overload
-    def transition_probabilities(self, by: Literal['label']) -> dict[str, dict[str, float]]: ...
-
-    def transition_probabilities(self, by: Literal['site', 'label'] = 'site') -> dict[int, dict[int, float]] | dict[str, dict[str, float]]:
-        """Return row-normalised transition probabilities as a square dict-of-dicts.
+    def transition_probabilities(
+        self,
+        by: Literal['site', 'label'] = 'site',
+        *,
+        keys: Sequence[int] | Sequence[str] | None = None,
+    ) -> TransitionTable:
+        """Return row-normalised transition probabilities as a :class:`TransitionTable`.
 
         Each row is normalised so that its values sum to 1.0. Rows with no
         outgoing transitions remain as all zeros.
@@ -234,22 +245,48 @@ class Trajectory:
             by: Aggregation key. ``'site'`` (default) keys by site index;
                 ``'label'`` aggregates by site label (unlabelled sites are
                 skipped).
+            keys: Optional key ordering for rows and columns. If ``None``,
+                keys are sorted.
 
         Returns:
-            A square dict-of-dicts ``{from_key: {to_key: probability}}``.
+            A :class:`TransitionTable` of float probabilities.
 
         Raises:
-            ValueError: If ``by`` is not ``'site'`` or ``'label'``.
+            ValueError: If ``by`` is not ``'site'`` or ``'label'``, or if
+                *keys* contains a key not present in the data.
         """
-        counts = self.transition_counts(by=by)
-        result: dict = {}
-        for src, row in counts.items():
-            total = sum(row.values())
-            if total > 0:
-                result[src] = {dest: count / total for dest, count in row.items()}
-            else:
-                result[src] = {dest: 0.0 for dest in row}
-        return result
+        counts = self.transition_counts(by=by, keys=keys)
+        data = counts.data.astype(float)
+        row_sums = data.sum(axis=1, keepdims=True)
+        with np.errstate(invalid='ignore'):
+            probs = np.where(row_sums > 0, data / row_sums, 0.0)
+        return TransitionTable(keys=counts.keys, data=probs)
+
+    @staticmethod
+    def _reorder_table(
+        table: TransitionTable,
+        keys: Sequence[int] | Sequence[str],
+    ) -> TransitionTable:
+        """Reorder a TransitionTable to match the given key order.
+
+        Args:
+            table: The table to reorder.
+            keys: The desired key ordering.
+
+        Returns:
+            A new :class:`TransitionTable` with reordered rows and columns.
+
+        Raises:
+            ValueError: If *keys* contains a key not present in the table.
+        """
+        new_keys: list[int] | list[str] = list(keys)  # type: ignore[assignment]
+        unknown = set(new_keys) - set(table.keys)
+        if unknown:
+            raise ValueError(f"Keys not found in data: {unknown!r}")
+        old_index = {k: i for i, k in enumerate(table.keys)}
+        order = [old_index[k] for k in new_keys]
+        reordered = table.data[np.ix_(order, order)]
+        return TransitionTable(keys=new_keys, data=reordered)
 
     @property
     def atom_sites(self) -> list[int | None]:

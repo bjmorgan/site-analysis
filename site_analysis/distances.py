@@ -57,7 +57,7 @@ if HAS_NUMBA:
                     dist_sq = cx * cx + cy * cy + cz * cz
                     if dist_sq < min_dist_sq:
                         min_dist_sq = dist_sq
-        return min_dist_sq ** 0.5
+        return float(min_dist_sq ** 0.5)
 
     @numba.njit(cache=True, parallel=True)  # type: ignore[misc]
     def _all_mic_distances_numba(
@@ -111,6 +111,9 @@ def mic_distance(
     Uses numba JIT compilation when available for improved performance
     on repeated single-pair calls.
 
+    Note:
+        Behaviour is undefined for non-finite inputs (NaN, inf).
+
     Args:
         frac1: Fractional coordinates of point 1, shape (3,).
         frac2: Fractional coordinates of point 2, shape (3,).
@@ -118,16 +121,16 @@ def mic_distance(
             vectors (pymatgen convention: ``lattice.matrix``).
 
     Returns:
-        The minimum-image distance in Angstroms.
+        The minimum-image distance in the same units as the lattice matrix.
     """
     if HAS_NUMBA:
-        return _mic_distance_numba(frac1, frac2, lattice_matrix)
+        return float(_mic_distance_numba(frac1, frac2, lattice_matrix))
     d_frac = frac1 - frac2
     # (27, 3) shifted difference vectors
     d_frac_all = d_frac + _SHIFTS_27
     # Convert to Cartesian and compute norms
     d_cart_all = d_frac_all @ lattice_matrix
-    return float(np.min(np.linalg.norm(d_cart_all, axis=1)))
+    return float(np.min(np.linalg.norm(d_cart_all, axis=1)))  # type: ignore[arg-type]
 
 
 def all_mic_distances(
@@ -141,6 +144,9 @@ def all_mic_distances(
     distances, which is necessary for triclinic cells. Uses numba
     JIT compilation with parallel execution when available.
 
+    Note:
+        Behaviour is undefined for non-finite inputs (NaN, inf).
+
     Args:
         frac_coords1: Fractional coordinates, shape (N, 3).
         frac_coords2: Fractional coordinates, shape (M, 3).
@@ -148,12 +154,13 @@ def all_mic_distances(
             vectors (pymatgen convention: ``lattice.matrix``).
 
     Returns:
-        (N, M) array of minimum-image distances in Angstroms.
+        (N, M) array of minimum-image distances in the same units as
+            the lattice matrix.
     """
     if frac_coords1.shape[0] == 0 or frac_coords2.shape[0] == 0:
         return np.empty((frac_coords1.shape[0], frac_coords2.shape[0]))
     if HAS_NUMBA:
-        return _all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix)
+        return np.asarray(_all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix))
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
     d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
     n, m = frac_coords1.shape[0], frac_coords2.shape[0]
@@ -167,7 +174,7 @@ def all_mic_distances(
         np.matmul(d_shifted, lattice_matrix, out=d_cart)
         np.einsum("ijk,ijk->ij", d_cart, d_cart, out=dist_sq)
         np.minimum(min_dist_sq, dist_sq, out=min_dist_sq)
-    return np.sqrt(min_dist_sq)
+    return np.asarray(np.sqrt(min_dist_sq))
 
 
 def frac_to_cart(
@@ -175,6 +182,9 @@ def frac_to_cart(
     lattice_matrix: np.ndarray,
 ) -> np.ndarray:
     """Convert fractional coordinates to Cartesian coordinates.
+
+    Computes ``frac_coords @ lattice_matrix`` where lattice_matrix rows
+    are the lattice vectors (pymatgen convention).
 
     Args:
         frac_coords: Fractional coordinates, shape (3,) or (N, 3).
@@ -184,4 +194,4 @@ def frac_to_cart(
     Returns:
         Cartesian coordinates with the same shape as the input.
     """
-    return frac_coords @ lattice_matrix
+    return np.asarray(frac_coords @ lattice_matrix)

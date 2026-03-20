@@ -93,6 +93,28 @@ class TestMicDistance(unittest.TestCase):
             self.assertAlmostEqual(result, float(expected), places=10,
                 msg=f"Mismatch for {frac1} -> {frac2}")
 
+    def test_symmetry(self):
+        """Distance is symmetric: d(a, b) == d(b, a)."""
+        from site_analysis.distances import mic_distance
+        rng = np.random.default_rng(99)
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        for _ in range(20):
+            frac1 = rng.random(3)
+            frac2 = rng.random(3)
+            d_ab = mic_distance(frac1, frac2, lattice.matrix)
+            d_ba = mic_distance(frac2, frac1, lattice.matrix)
+            self.assertAlmostEqual(d_ab, d_ba, places=12)
+
+    def test_coords_outside_unit_cell(self):
+        """Coordinates outside [0, 1) produce correct distances."""
+        from site_analysis.distances import mic_distance
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([1.1, 0.2, 0.3])
+        frac2 = np.array([0.1, 0.2, 0.3])
+        expected = lattice.get_distance_and_image(frac1, frac2)[0]
+        result = mic_distance(frac1, frac2, lattice.matrix)
+        self.assertAlmostEqual(result, float(expected), places=10)
+
 
 class TestAllMicDistances(unittest.TestCase):
     """Tests for batch all-pairs minimum-image distance matrix."""
@@ -147,14 +169,32 @@ class TestAllMicDistances(unittest.TestCase):
         result = all_mic_distances(frac1, frac2, lattice.matrix)
         self.assertAlmostEqual(result[0, 0], 1.0, places=10)
 
-    def test_empty_inputs(self):
-        """Empty input arrays return correctly shaped empty output."""
+    def test_self_distance_diagonal_is_zero(self):
+        """Distance matrix of a set with itself has zeros on the diagonal."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(77)
+        coords = rng.random((5, 3))
+        result = all_mic_distances(coords, coords, lattice.matrix)
+        np.testing.assert_allclose(np.diag(result), 0.0, atol=1e-12)
+
+    def test_empty_first_array(self):
+        """Empty first array returns correctly shaped empty output."""
         from site_analysis.distances import all_mic_distances
         lattice = Lattice.cubic(10.0)
         frac1 = np.empty((0, 3))
         frac2 = np.array([[0.1, 0.2, 0.3]])
         result = all_mic_distances(frac1, frac2, lattice.matrix)
         self.assertEqual(result.shape, (0, 1))
+
+    def test_empty_second_array(self):
+        """Empty second array returns correctly shaped empty output."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.1, 0.2, 0.3]])
+        frac2 = np.empty((0, 3))
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        self.assertEqual(result.shape, (1, 0))
 
 
 class TestNumpyFallback(unittest.TestCase):

@@ -38,15 +38,15 @@ def benchmark_single_pair(lattice, n_pairs=1000, n_repeats=5):
         for f1, f2 in pairs:
             lattice.get_distance_and_image(f1, f2)
 
-    # Numpy algorithm inlined to measure raw numpy cost without dispatch
-    # overhead or mock patching. Must be kept in sync with distances.py.
+    # Force the numpy fallback path by patching HAS_NUMBA
+    import site_analysis.distances as _dist_mod
+    from unittest.mock import patch as _patch
+    _numpy_patch = _patch.object(_dist_mod, 'HAS_NUMBA', False)
+
     def numpy_single():
-        from site_analysis.distances import _SHIFTS_27
-        for f1, f2 in pairs:
-            d_frac = f1 - f2
-            d_frac_all = d_frac + _SHIFTS_27
-            d_cart_all = d_frac_all @ matrix
-            float(np.min(np.linalg.norm(d_cart_all, axis=1)))
+        with _numpy_patch:
+            for f1, f2 in pairs:
+                mic_distance(f1, f2, matrix)
 
     # mic_distance (auto-dispatches to numba if available)
     def mic_single():

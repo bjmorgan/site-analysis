@@ -17,6 +17,7 @@ _SHIFTS_27 = np.array(
     [[i, j, k] for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)],
     dtype=np.float64,
 )
+_SHIFTS_27.flags.writeable = False
 
 
 if HAS_NUMBA:
@@ -38,17 +39,17 @@ if HAS_NUMBA:
         Returns:
             The minimum-image distance.
         """
-        d_frac_base = np.empty(3)
-        for i in range(3):
-            d_frac_base[i] = frac1[i] - frac2[i]
+        d0_base = frac1[0] - frac2[0]
+        d1_base = frac1[1] - frac2[1]
+        d2_base = frac1[2] - frac2[2]
 
         min_dist_sq = np.inf
         for si in range(-1, 2):
             for sj in range(-1, 2):
                 for sk in range(-1, 2):
-                    d0 = d_frac_base[0] + si
-                    d1 = d_frac_base[1] + sj
-                    d2 = d_frac_base[2] + sk
+                    d0 = d0_base + si
+                    d1 = d1_base + sj
+                    d2 = d2_base + sk
                     # Convert to Cartesian: d_frac @ lattice_matrix
                     cx = d0 * lattice_matrix[0, 0] + d1 * lattice_matrix[1, 0] + d2 * lattice_matrix[2, 0]
                     cy = d0 * lattice_matrix[0, 1] + d1 * lattice_matrix[1, 1] + d2 * lattice_matrix[2, 1]
@@ -155,13 +156,16 @@ def all_mic_distances(
         return _all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix)
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
     d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
-    # Loop over 27 shifts with running minimum to avoid (N, M, 27, 3) allocation
-    min_dist_sq = np.full(
-        (frac_coords1.shape[0], frac_coords2.shape[0]), np.inf
-    )
+    n, m = frac_coords1.shape[0], frac_coords2.shape[0]
+    # Pre-allocate work buffers to avoid 54 temporary arrays across 27 iterations
+    d_shifted = np.empty((n, m, 3))
+    d_cart = np.empty((n, m, 3))
+    dist_sq = np.empty((n, m))
+    min_dist_sq = np.full((n, m), np.inf)
     for shift in _SHIFTS_27:
-        d_cart = (d_frac + shift) @ lattice_matrix  # (N, M, 3)
-        dist_sq = np.einsum("ijk,ijk->ij", d_cart, d_cart)  # (N, M)
+        np.add(d_frac, shift, out=d_shifted)
+        np.matmul(d_shifted, lattice_matrix, out=d_cart)
+        np.einsum("ijk,ijk->ij", d_cart, d_cart, out=dist_sq)
         np.minimum(min_dist_sq, dist_sq, out=min_dist_sq)
     return np.sqrt(min_dist_sq)
 

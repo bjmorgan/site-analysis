@@ -38,7 +38,8 @@ def benchmark_single_pair(lattice, n_pairs=1000, n_repeats=5):
         for f1, f2 in pairs:
             lattice.get_distance_and_image(f1, f2)
 
-    # Numpy fallback (bypass numba dispatch via mock)
+    # Numpy algorithm inlined to measure raw numpy cost without dispatch
+    # overhead or mock patching. Must be kept in sync with distances.py.
     def numpy_single():
         from site_analysis.distances import _SHIFTS_27
         for f1, f2 in pairs:
@@ -79,6 +80,11 @@ def benchmark_batch(lattice, sizes=None, n_repeats=5):
     matrix = lattice.matrix
     results = {}
 
+    if HAS_NUMBA:
+        # Warm up JIT before timing
+        warm = rng.random((2, 3))
+        _all_mic_distances_numba(warm, warm, matrix)
+
     for n, m in sizes:
         frac1 = rng.random((n, 3))
         frac2 = rng.random((m, 3))
@@ -96,10 +102,6 @@ def benchmark_batch(lattice, sizes=None, n_repeats=5):
         }
 
         if HAS_NUMBA:
-            # Warm up JIT with a small call
-            if n == sizes[0][0]:
-                _all_mic_distances_numba(frac1[:2], frac2[:2], matrix)
-
             def numba_batch(f1=frac1, f2=frac2, mat=matrix):
                 _all_mic_distances_numba(f1, f2, mat)
 

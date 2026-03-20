@@ -67,8 +67,9 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
         Returns:
             None
         """
+        all_frac_coords = structure.frac_coords
         for a in atoms:
-            a.assign_coords(structure)
+            a.assign_coords(all_frac_coords)
         self.assign_site_occupations(atoms, structure)
 
     def assign_site_occupations(self,

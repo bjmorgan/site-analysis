@@ -82,7 +82,7 @@ def _per_site_analyse_structure(self, atoms, structure):
     pre-batch-optimisation path.
     """
     for atom in atoms:
-        atom.assign_coords(structure)
+        atom.assign_coords(structure.frac_coords)
     for site in self.sites:
         site.calculate_centre(structure)
     self.assign_site_occupations(atoms, structure)

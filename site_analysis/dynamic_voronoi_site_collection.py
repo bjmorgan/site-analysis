@@ -214,9 +214,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         Returns:
             None
         """
-        for atom in atoms:
-            atom.assign_coords(structure)
         all_frac_coords = structure.frac_coords
+        for atom in atoms:
+            atom.assign_coords(all_frac_coords)
         lattice_matrix = structure.lattice.matrix
         self._batch_calculate_centres(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, structure)

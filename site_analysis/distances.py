@@ -9,12 +9,54 @@ from __future__ import annotations
 
 import numpy as np
 
+from site_analysis._compat import HAS_NUMBA
+
 
 # 27 shift vectors for periodic image search: {-1, 0, 1}^3
 _SHIFTS_27 = np.array(
     [[i, j, k] for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)],
     dtype=np.float64,
 )
+
+
+if HAS_NUMBA:
+    import numba  # type: ignore
+
+    @numba.njit(cache=True)  # type: ignore[misc]
+    def _mic_distance_numba(
+        frac1: np.ndarray,
+        frac2: np.ndarray,
+        lattice_matrix: np.ndarray,
+    ) -> float:
+        """JIT-compiled minimum-image distance checking all 27 images.
+
+        Args:
+            frac1: Fractional coordinates of point 1, shape (3,).
+            frac2: Fractional coordinates of point 2, shape (3,).
+            lattice_matrix: (3, 3) lattice matrix.
+
+        Returns:
+            The minimum-image distance.
+        """
+        d_frac_base = np.empty(3)
+        for i in range(3):
+            d_frac_base[i] = frac1[i] - frac2[i]
+
+        min_dist_sq = np.inf
+        for si in range(-1, 2):
+            for sj in range(-1, 2):
+                for sk in range(-1, 2):
+                    d0 = d_frac_base[0] + si
+                    d1 = d_frac_base[1] + sj
+                    d2 = d_frac_base[2] + sk
+                    # Convert to Cartesian: d_frac @ lattice_matrix
+                    cx = d0 * lattice_matrix[0, 0] + d1 * lattice_matrix[1, 0] + d2 * lattice_matrix[2, 0]
+                    cy = d0 * lattice_matrix[0, 1] + d1 * lattice_matrix[1, 1] + d2 * lattice_matrix[2, 1]
+                    cz = d0 * lattice_matrix[0, 2] + d1 * lattice_matrix[1, 2] + d2 * lattice_matrix[2, 2]
+                    dist_sq = cx * cx + cy * cy + cz * cz
+                    if dist_sq < min_dist_sq:
+                        min_dist_sq = dist_sq
+        return min_dist_sq ** 0.5
 
 
 def mic_distance(
@@ -24,9 +66,9 @@ def mic_distance(
 ) -> float:
     """Minimum-image distance between two points in a periodic cell.
 
-    Checks all 27 periodic images to find the true minimum distance,
-    which is necessary for triclinic cells where the simple ``round``
-    approach can select the wrong image.
+    Checks all 27 periodic images to find the true minimum distance.
+    Uses numba JIT compilation when available for improved performance
+    on repeated single-pair calls.
 
     Args:
         frac1: Fractional coordinates of point 1, shape (3,).
@@ -37,6 +79,8 @@ def mic_distance(
     Returns:
         The minimum-image distance in Angstroms.
     """
+    if HAS_NUMBA:
+        return _mic_distance_numba(frac1, frac2, lattice_matrix)
     d_frac = frac1 - frac2
     # (27, 3) shifted difference vectors
     d_frac_all = d_frac + _SHIFTS_27

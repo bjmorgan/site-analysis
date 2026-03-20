@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from pymatgen.core import Lattice
+from site_analysis._compat import HAS_NUMBA
 
 
 class TestFracToCart(unittest.TestCase):
@@ -154,3 +155,39 @@ class TestAllMicDistances(unittest.TestCase):
         frac2 = np.array([[0.1, 0.2, 0.3]])
         result = all_mic_distances(frac1, frac2, lattice.matrix)
         self.assertEqual(result.shape, (0, 1))
+
+
+class TestMicDistanceNumpyFallback(unittest.TestCase):
+    """Tests that the numpy fallback path is correct regardless of numba."""
+
+    def test_numpy_fallback_matches_pymatgen(self):
+        """Numpy fallback produces correct results even when numba is available."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        # Force the numpy path by patching HAS_NUMBA to False
+        with patch.object(dist_mod, 'HAS_NUMBA', False):
+            for _ in range(100):
+                frac1 = rng.random(3)
+                frac2 = rng.random(3)
+                result = dist_mod.mic_distance(frac1, frac2, lattice.matrix)
+                expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
+                self.assertAlmostEqual(result, expected, places=10)
+
+
+@unittest.skipUnless(HAS_NUMBA, "numba not installed")
+class TestMicDistanceNumba(unittest.TestCase):
+    """Tests for the numba-accelerated single-pair distance."""
+
+    def test_matches_pymatgen(self):
+        """Numba version produces same results as pymatgen."""
+        from site_analysis.distances import _mic_distance_numba
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        for _ in range(100):
+            frac1 = rng.random(3)
+            frac2 = rng.random(3)
+            expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
+            result = _mic_distance_numba(frac1, frac2, lattice.matrix)
+            self.assertAlmostEqual(result, expected, places=10)

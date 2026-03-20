@@ -1,8 +1,9 @@
-"""Minimum-image distance functions for periodic systems.
+"""Minimum-image distance and coordinate conversion functions for periodic systems.
 
-Provides distance calculations operating on numpy arrays and a lattice
-matrix, with no pymatgen dependency. Optional numba acceleration for
-single-pair and batch distances.
+Provides distance calculations and fractional-to-Cartesian coordinate
+conversion operating on numpy arrays and a lattice matrix, with no
+pymatgen dependency. Optional numba acceleration for single-pair and
+batch distances.
 """
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ if HAS_NUMBA:
         Args:
             frac1: Fractional coordinates of point 1, shape (3,).
             frac2: Fractional coordinates of point 2, shape (3,).
-            lattice_matrix: (3, 3) lattice matrix.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors (pymatgen convention).
 
         Returns:
             The minimum-image distance.
@@ -70,7 +72,8 @@ if HAS_NUMBA:
         Args:
             frac_coords1: Fractional coordinates, shape (N, 3).
             frac_coords2: Fractional coordinates, shape (M, 3).
-            lattice_matrix: (3, 3) lattice matrix.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors (pymatgen convention).
 
         Returns:
             (N, M) array of minimum-image distances.
@@ -158,7 +161,7 @@ def all_mic_distances(
             the lattice matrix.
     """
     if frac_coords1.shape[0] == 0 or frac_coords2.shape[0] == 0:
-        return np.empty((frac_coords1.shape[0], frac_coords2.shape[0]))
+        return np.zeros((frac_coords1.shape[0], frac_coords2.shape[0]))
     if HAS_NUMBA:
         return np.asarray(_all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix))
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors

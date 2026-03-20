@@ -70,19 +70,20 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
         all_frac_coords = structure.frac_coords
         for a in atoms:
             a.assign_coords(all_frac_coords)
-        self.assign_site_occupations(atoms, structure)
+        self.assign_site_occupations(atoms, structure.lattice.matrix)
 
     def assign_site_occupations(self,
         atoms: list[Atom],
-        structure: Structure) -> None:
+        lattice_matrix: np.ndarray) -> None:
         """Assign atoms to spherical sites based on their positions.
 
         Uses the priority-based site checking approach from
         PriorityAssignmentMixin to check sites in an optimised order.
 
         Args:
-            atoms: List of Atom objects to be assigned to sites
-            structure: Pymatgen Structure containing the atom positions
+            atoms: List of Atom objects to be assigned to sites.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
         """
         self.reset_site_occupations()
         for atom in atoms:
@@ -90,6 +91,6 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
             # Check sites in priority order until found
             for site in self._get_priority_sites(atom):
-                if site.contains_atom(atom, lattice=structure.lattice):
+                if site.contains_atom(atom, lattice_matrix=lattice_matrix):
                     self.update_occupation(site, atom)
                     break

@@ -81,8 +81,11 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
             # Verify that assign_coords was called for each atom
             self.assertEqual(mock_assign_coords.call_count, 2)
 
-            # Verify that assign_site_occupations was called
-            mock_assign_occupations.assert_called_once_with(self.atoms, self.structure)
+            # Verify that assign_site_occupations was called with lattice_matrix
+            mock_assign_occupations.assert_called_once()
+            args = mock_assign_occupations.call_args[0]
+            self.assertIs(args[0], self.atoms)
+            np.testing.assert_array_equal(args[1], self.structure.lattice.matrix)
 
     def test_site_occupation_reset(self):
         """Test that site occupations are reset at the beginning of assign_site_occupations."""
@@ -93,7 +96,7 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         # Patch update_occupation to prevent it from running
         with patch.object(self.collection, 'update_occupation'):
             # Call the method
-            self.collection.assign_site_occupations([], self.structure)
+            self.collection.assign_site_occupations([], self.lattice.matrix)
 
             # Verify sites were reset
             self.assertEqual(self.site1.contains_atoms, [])
@@ -111,7 +114,7 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
              patch.object(SphericalSiteCollection, 'update_occupation') as mock_update:
 
             # Call the method
-            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.collection.assign_site_occupations(self.atoms, self.lattice.matrix)
 
             # Verify update_occupation was called twice (once per atom)
             self.assertEqual(mock_update.call_count, 2)
@@ -198,7 +201,7 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         atoms = [atom1, atom2]
 
         # Run the optimised assignment
-        collection.assign_site_occupations(atoms, structure)
+        collection.assign_site_occupations(atoms, structure.lattice.matrix)
 
         # Verify key integration points
         self.assertEqual(atom1.in_site, site1.index)           # Correct assignment
@@ -334,7 +337,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     def test_calls_generator_for_each_atom(self):
         """Test that _get_priority_sites is called once per atom."""
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
             self.collection._get_priority_sites.assert_called_once_with(self.atom)
 
     def test_calls_generator_for_multiple_atoms(self):
@@ -345,7 +348,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         atoms = [self.atom, atom2]
 
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(atoms, self.structure)
+            self.collection.assign_site_occupations(atoms, self.structure.lattice.matrix)
             self.assertEqual(self.collection._get_priority_sites.call_count, 2)
 
     def test_checks_sites_in_generator_order(self):
@@ -357,7 +360,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         with patch.object(self.collection, '_get_priority_sites') as mock_gen:
             mock_gen.return_value = [self.site2, self.site1]  # site2 first
 
-            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
 
             self.assertEqual(call_order, [2])  # Only site2 checked (found there)
 
@@ -368,7 +371,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
                 with patch.object(self.collection, '_get_priority_sites') as mock_gen:
                     mock_gen.return_value = [self.site1, self.site2]
 
-                    self.collection.assign_site_occupations(self.atoms, self.structure)
+                    self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
 
                     mock_contains1.assert_called_once()
                     mock_contains2.assert_not_called()
@@ -378,7 +381,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         with patch.object(self.site1, 'contains_atom', return_value=True):
             with patch.object(self.collection, '_get_priority_sites', return_value=[self.site1]):
                 with patch.object(self.collection, 'update_occupation') as mock_update:
-                    self.collection.assign_site_occupations(self.atoms, self.structure)
+                    self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
                     mock_update.assert_called_once_with(self.site1, self.atom)
 
     def test_handles_atom_not_found(self):
@@ -386,7 +389,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         with patch.object(self.site1, 'contains_atom', return_value=False):
             with patch.object(self.collection, '_get_priority_sites', return_value=[self.site1]):
                 with patch.object(self.collection, 'update_occupation') as mock_update:
-                    self.collection.assign_site_occupations(self.atoms, self.structure)
+                    self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
 
                     mock_update.assert_not_called()
                     self.assertIsNone(self.atom.in_site)
@@ -395,7 +398,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         """Test that reset_site_occupations is called at start."""
         with patch.object(self.collection, 'reset_site_occupations') as mock_reset:
             with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-                self.collection.assign_site_occupations(self.atoms, self.structure)
+                self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
                 mock_reset.assert_called_once()
 
     def test_resets_atom_in_site(self):
@@ -403,7 +406,7 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         self.atom.in_site = 999  # Set to some previous value
 
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(self.atoms, self.structure)
+            self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
             self.assertIsNone(self.atom.in_site)
 
 

@@ -65,10 +65,10 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         """reset() clears pending fractional coords and lattice."""
         site = self.site
         site._pending_frac_coords = np.zeros((4, 3))
-        site._pending_lattice = Lattice.cubic(10.0)
+        site._pending_lattice_matrix = Lattice.cubic(10.0).matrix
         site.reset()
         self.assertIsNone(site._pending_frac_coords)
-        self.assertIsNone(site._pending_lattice)
+        self.assertIsNone(site._pending_lattice_matrix)
 
     def test_reset_clears_pbc_shift_caches(self):
         """reset() clears PBC image shift caches."""
@@ -435,10 +435,10 @@ class TestNotifyStructureChanged(unittest.TestCase):
                              [0.1, 0.2, 0.3],
                              [0.5, 0.5, 0.5],
                              [0.4, 0.4, 0.4]])
-        lattice = Lattice.cubic(10.0)
-        self.site.notify_structure_changed(all_frac, lattice)
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        self.site.notify_structure_changed(all_frac, lattice_matrix)
         np.testing.assert_array_equal(self.site._pending_frac_coords, all_frac)
-        self.assertIs(self.site._pending_lattice, lattice)
+        self.assertIs(self.site._pending_lattice_matrix, lattice_matrix)
 
     def test_contains_point_triggers_assign_from_pending(self):
         """contains_point flushes pending data before testing."""
@@ -447,13 +447,13 @@ class TestNotifyStructureChanged(unittest.TestCase):
                              [0.4, 0.6, 0.6],
                              [0.6, 0.6, 0.4],
                              [0.6, 0.4, 0.6]])
-        lattice = Lattice.cubic(10.0)
+        lattice_matrix = Lattice.cubic(10.0).matrix
         site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
-        site.notify_structure_changed(all_frac, lattice)
+        site.notify_structure_changed(all_frac, lattice_matrix)
         # After contains_point, pending data should be cleared
         site.contains_point(np.array([0.5, 0.5, 0.5]))
         self.assertIsNone(site._pending_frac_coords)
-        self.assertIsNone(site._pending_lattice)
+        self.assertIsNone(site._pending_lattice_matrix)
         self.assertIsNotNone(site.vertex_coords)
 
     def test_assign_from_pending_uses_vertex_indices(self):
@@ -462,9 +462,9 @@ class TestNotifyStructureChanged(unittest.TestCase):
                              [0.1, 0.2, 0.3],
                              [0.5, 0.5, 0.5],
                              [0.4, 0.4, 0.4]])
-        lattice = Lattice.cubic(10.0)
+        lattice_matrix = Lattice.cubic(10.0).matrix
         with patch.object(self.site, '_store_vertex_coords') as mock_store:
-            self.site._assign_from_pending(all_frac, lattice)
+            self.site._assign_from_pending(all_frac, lattice_matrix)
             called_frac = mock_store.call_args[0][0]
             expected = all_frac[[1, 3]]
             np.testing.assert_array_equal(called_frac, expected)
@@ -475,7 +475,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def setUp(self):
         Site._newid = 0
-        self.lattice = Lattice.cubic(10.0)
+        self.lattice_matrix = Lattice.cubic(10.0).matrix
 
     def test_first_call_computes_full_shifts(self):
         """First call with no cached shifts uses full computation."""
@@ -485,7 +485,7 @@ class TestStoreVertexCoords(unittest.TestCase):
                          [0.3, 0.3, 0.3],
                          [0.4, 0.4, 0.4]])
         self.assertIsNone(site._pbc_image_shifts)
-        site._store_vertex_coords(frac, self.lattice)
+        site._store_vertex_coords(frac, self.lattice_matrix)
         self.assertIsNotNone(site._pbc_image_shifts)
         self.assertIsNotNone(site.vertex_coords)
 
@@ -496,10 +496,10 @@ class TestStoreVertexCoords(unittest.TestCase):
                           [0.2, 0.2, 0.2],
                           [0.3, 0.3, 0.3],
                           [0.4, 0.4, 0.4]])
-        site._store_vertex_coords(frac1, self.lattice)
+        site._store_vertex_coords(frac1, self.lattice_matrix)
         frac2 = frac1 + 0.005  # small vibration
         with patch('site_analysis.polyhedral_site.correct_pbc') as mock_pbc:
-            site._store_vertex_coords(frac2, self.lattice)
+            site._store_vertex_coords(frac2, self.lattice_matrix)
             mock_pbc.assert_not_called()
 
     def test_large_displacement_falls_through_to_full_computation(self):
@@ -509,11 +509,11 @@ class TestStoreVertexCoords(unittest.TestCase):
                           [0.2, 0.2, 0.2],
                           [0.3, 0.3, 0.3],
                           [0.4, 0.4, 0.4]])
-        site._store_vertex_coords(frac1, self.lattice)
+        site._store_vertex_coords(frac1, self.lattice_matrix)
         frac2 = frac1 + 0.4  # large displacement
         with patch('site_analysis.polyhedral_site.correct_pbc',
                    return_value=(frac2, np.zeros((4, 3), dtype=np.int64))) as mock_pbc:
-            site._store_vertex_coords(frac2, self.lattice)
+            site._store_vertex_coords(frac2, self.lattice_matrix)
             mock_pbc.assert_called_once()
 
     def test_wrapping_adjusts_shifts_without_recomputation(self):
@@ -523,14 +523,14 @@ class TestStoreVertexCoords(unittest.TestCase):
                           [0.5, 0.5, 0.5],
                           [0.5, 0.5, 0.5],
                           [0.5, 0.5, 0.5]])
-        site._store_vertex_coords(frac1, self.lattice)
+        site._store_vertex_coords(frac1, self.lattice_matrix)
         original_shifts = site._pbc_image_shifts.copy()
         frac2 = np.array([[0.01, 0.5, 0.5],  # wrapped
                           [0.5, 0.5, 0.5],
                           [0.5, 0.5, 0.5],
                           [0.5, 0.5, 0.5]])
         with patch('site_analysis.polyhedral_site.correct_pbc') as mock_pbc:
-            site._store_vertex_coords(frac2, self.lattice)
+            site._store_vertex_coords(frac2, self.lattice_matrix)
             mock_pbc.assert_not_called()
         # Shift for vertex 0 should have changed to account for wrapping
         self.assertEqual(site._pbc_image_shifts[0, 0], original_shifts[0, 0] + 1)
@@ -544,7 +544,7 @@ class TestStoreVertexCoords(unittest.TestCase):
                          [0.4, 0.6, 0.6],
                          [0.6, 0.6, 0.4],
                          [0.6, 0.4, 0.6]])
-        site._store_vertex_coords(frac, self.lattice)
+        site._store_vertex_coords(frac, self.lattice_matrix)
         self.assertTrue(site._cache_stale)
         site.contains_point(np.array([0.5, 0.5, 0.5]))
         self.assertFalse(site._cache_stale)

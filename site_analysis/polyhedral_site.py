@@ -250,7 +250,7 @@ class PolyhedralSite(Site):
         self._face_topology_cache: FaceTopologyCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
-        self._pending_lattice: np.ndarray | None = None
+        self._pending_lattice_matrix: np.ndarray | None = None
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
@@ -276,7 +276,7 @@ class PolyhedralSite(Site):
         self._delaunay = None
         self._cache_stale = True
         self._pending_frac_coords = None
-        self._pending_lattice = None
+        self._pending_lattice_matrix = None
         self._pbc_image_shifts = None
         self._pbc_cached_raw_frac = None
  
@@ -337,7 +337,7 @@ class PolyhedralSite(Site):
                 lattice vectors.
         """
         self._pending_frac_coords = all_frac_coords
-        self._pending_lattice = lattice_matrix
+        self._pending_lattice_matrix = lattice_matrix
 
     def assign_vertex_coords(self,
             structure: Structure) -> None:
@@ -371,7 +371,7 @@ class PolyhedralSite(Site):
                 lattice vectors.
         """
         self._pending_frac_coords = None
-        self._pending_lattice = None
+        self._pending_lattice_matrix = None
         frac_coords = all_frac_coords[self.vertex_indices]
         self._store_vertex_coords(frac_coords, lattice_matrix)
 
@@ -467,8 +467,8 @@ class PolyhedralSite(Site):
             )
         if structure is not None:
             self.assign_vertex_coords(structure)
-        elif self._pending_frac_coords is not None and self._pending_lattice is not None:
-            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice)
+        elif self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
+            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
         if self.vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'

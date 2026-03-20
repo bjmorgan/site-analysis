@@ -91,3 +91,66 @@ class TestMicDistance(unittest.TestCase):
             result = mic_distance(frac1, frac2, lattice.matrix)
             self.assertAlmostEqual(result, float(expected), places=10,
                 msg=f"Mismatch for {frac1} -> {frac2}")
+
+
+class TestAllMicDistances(unittest.TestCase):
+    """Tests for batch all-pairs minimum-image distance matrix."""
+
+    def test_single_pair(self):
+        """1x1 distance matrix matches mic_distance."""
+        from site_analysis.distances import all_mic_distances, mic_distance
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.1, 0.2, 0.3]])
+        frac2 = np.array([[0.4, 0.5, 0.6]])
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        expected = mic_distance(frac1[0], frac2[0], lattice.matrix)
+        self.assertEqual(result.shape, (1, 1))
+        self.assertAlmostEqual(result[0, 0], expected, places=10)
+
+    def test_shape(self):
+        """Output shape is (N, M) for N and M input points."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        frac2 = np.array([[0.7, 0.8, 0.9], [0.1, 0.1, 0.1], [0.3, 0.3, 0.3]])
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        self.assertEqual(result.shape, (2, 3))
+
+    def test_matches_pymatgen_cubic(self):
+        """Full distance matrix matches pymatgen for cubic lattice."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.1, 0.2, 0.3], [0.8, 0.9, 0.1]])
+        frac2 = np.array([[0.9, 0.1, 0.5], [0.2, 0.3, 0.4]])
+        expected = lattice.get_all_distances(frac1, frac2)
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_matches_pymatgen_triclinic(self):
+        """Full distance matrix matches pymatgen for triclinic lattice."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.random((5, 3))
+        frac2 = rng.random((8, 3))
+        expected = lattice.get_all_distances(frac1, frac2)
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_pbc_distances_shorter_than_direct(self):
+        """Points near opposite boundaries have short PBC distances."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.05, 0.5, 0.5]])
+        frac2 = np.array([[0.95, 0.5, 0.5]])
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        self.assertAlmostEqual(result[0, 0], 1.0, places=10)
+
+    def test_empty_inputs(self):
+        """Empty input arrays return correctly shaped empty output."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.empty((0, 3))
+        frac2 = np.array([[0.1, 0.2, 0.3]])
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        self.assertEqual(result.shape, (0, 1))

@@ -45,6 +45,37 @@ def mic_distance(
     return float(np.min(np.linalg.norm(d_cart_all, axis=1)))
 
 
+def all_mic_distances(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+) -> np.ndarray:
+    """Minimum-image distance matrix between two sets of points.
+
+    Checks all 27 periodic images per pair to find true minimum
+    distances, which is necessary for triclinic cells.
+
+    Args:
+        frac_coords1: Fractional coordinates, shape (N, 3).
+        frac_coords2: Fractional coordinates, shape (M, 3).
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors (pymatgen convention: ``lattice.matrix``).
+
+    Returns:
+        (N, M) array of minimum-image distances in Angstroms.
+    """
+    if frac_coords1.shape[0] == 0 or frac_coords2.shape[0] == 0:
+        return np.empty((frac_coords1.shape[0], frac_coords2.shape[0]))
+    # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
+    d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
+    # (N, M, 1, 3) + (27, 3) -> (N, M, 27, 3) all images
+    d_frac_all = d_frac[:, :, np.newaxis, :] + _SHIFTS_27[np.newaxis, np.newaxis, :, :]
+    # Convert to Cartesian: (N, M, 27, 3) @ (3, 3) -> (N, M, 27, 3)
+    d_cart_all = d_frac_all @ lattice_matrix
+    # Norms: (N, M, 27), then min over images -> (N, M)
+    return np.min(np.linalg.norm(d_cart_all, axis=3), axis=2)
+
+
 def frac_to_cart(
     frac_coords: np.ndarray,
     lattice_matrix: np.ndarray,

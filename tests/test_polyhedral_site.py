@@ -62,7 +62,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertIs(site._face_topology_cache, mock_cache)
 
     def test_reset_clears_pending_state(self):
-        """reset() clears pending fractional coords and lattice."""
+        """reset() clears pending fractional coords and lattice matrix."""
         site = self.site
         site._pending_frac_coords = np.zeros((4, 3))
         site._pending_lattice_matrix = Lattice.cubic(10.0).matrix

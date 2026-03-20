@@ -24,7 +24,7 @@ from site_analysis.distances import (
 from site_analysis._compat import HAS_NUMBA
 
 if HAS_NUMBA:
-    from site_analysis.distances import _mic_distance_numba
+    from site_analysis.distances import _mic_distance_numba, _all_mic_distances_numba
 
 
 def benchmark_single_pair(lattice, n_pairs=1000, n_repeats=5):
@@ -90,10 +90,22 @@ def benchmark_batch(lattice, sizes=None, n_repeats=5):
             all_mic_distances(f1, f2, mat)
 
         key = f"{n}x{m}"
-        results[key] = {
+        times = {
             'pymatgen': min(timeit.repeat(pymatgen_batch, number=n_repeats)) / n_repeats,
-            'numpy': min(timeit.repeat(numpy_batch, number=n_repeats)) / n_repeats,
+            'all_mic_distances': min(timeit.repeat(numpy_batch, number=n_repeats)) / n_repeats,
         }
+
+        if HAS_NUMBA:
+            # Warm up JIT with a small call
+            if n == sizes[0][0]:
+                _all_mic_distances_numba(frac1[:2], frac2[:2], matrix)
+
+            def numba_batch(f1=frac1, f2=frac2, mat=matrix):
+                _all_mic_distances_numba(f1, f2, mat)
+
+            times['numba'] = min(timeit.repeat(numba_batch, number=n_repeats)) / n_repeats
+
+        results[key] = times
 
     return results
 

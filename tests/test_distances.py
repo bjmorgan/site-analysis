@@ -157,16 +157,15 @@ class TestAllMicDistances(unittest.TestCase):
         self.assertEqual(result.shape, (0, 1))
 
 
-class TestMicDistanceNumpyFallback(unittest.TestCase):
-    """Tests that the numpy fallback path is correct regardless of numba."""
+class TestNumpyFallback(unittest.TestCase):
+    """Tests that numpy fallback paths are correct regardless of numba."""
 
-    def test_numpy_fallback_matches_pymatgen(self):
-        """Numpy fallback produces correct results even when numba is available."""
+    def test_mic_distance_numpy_fallback_matches_pymatgen(self):
+        """Numpy mic_distance fallback produces correct results."""
         from unittest.mock import patch
         import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(42)
-        # Force the numpy path by patching HAS_NUMBA to False
         with patch.object(dist_mod, 'HAS_NUMBA', False):
             for _ in range(100):
                 frac1 = rng.random(3)
@@ -175,13 +174,26 @@ class TestMicDistanceNumpyFallback(unittest.TestCase):
                 expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
                 self.assertAlmostEqual(result, expected, places=10)
 
+    def test_all_mic_distances_numpy_fallback_matches_pymatgen(self):
+        """Numpy all_mic_distances fallback produces correct results."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.random((5, 3))
+        frac2 = rng.random((8, 3))
+        expected = lattice.get_all_distances(frac1, frac2)
+        with patch.object(dist_mod, 'HAS_NUMBA', False):
+            result = dist_mod.all_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
-class TestMicDistanceNumba(unittest.TestCase):
-    """Tests for the numba-accelerated single-pair distance."""
+class TestNumbaAcceleration(unittest.TestCase):
+    """Tests for numba-accelerated distance functions."""
 
-    def test_matches_pymatgen(self):
-        """Numba version produces same results as pymatgen."""
+    def test_mic_distance_numba_matches_pymatgen(self):
+        """Numba single-pair version produces same results as pymatgen."""
         from site_analysis.distances import _mic_distance_numba
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(42)
@@ -191,3 +203,14 @@ class TestMicDistanceNumba(unittest.TestCase):
             expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
             result = _mic_distance_numba(frac1, frac2, lattice.matrix)
             self.assertAlmostEqual(result, expected, places=10)
+
+    def test_all_mic_distances_numba_matches_pymatgen(self):
+        """Numba batch version produces same results as pymatgen."""
+        from site_analysis.distances import _all_mic_distances_numba
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.random((5, 3))
+        frac2 = rng.random((8, 3))
+        expected = lattice.get_all_distances(frac1, frac2)
+        result = _all_mic_distances_numba(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)

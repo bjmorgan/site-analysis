@@ -2,7 +2,7 @@
 
 Provides distance calculations operating on numpy arrays and a lattice
 matrix, with no pymatgen dependency. Optional numba acceleration for
-single-pair distances.
+single-pair and batch distances.
 """
 
 from __future__ import annotations
@@ -58,6 +58,46 @@ if HAS_NUMBA:
                         min_dist_sq = dist_sq
         return min_dist_sq ** 0.5
 
+    @numba.njit(cache=True, parallel=True)  # type: ignore[misc]
+    def _all_mic_distances_numba(
+        frac_coords1: np.ndarray,
+        frac_coords2: np.ndarray,
+        lattice_matrix: np.ndarray,
+    ) -> np.ndarray:
+        """JIT-compiled batch minimum-image distance matrix.
+
+        Args:
+            frac_coords1: Fractional coordinates, shape (N, 3).
+            frac_coords2: Fractional coordinates, shape (M, 3).
+            lattice_matrix: (3, 3) lattice matrix.
+
+        Returns:
+            (N, M) array of minimum-image distances.
+        """
+        n = frac_coords1.shape[0]
+        m = frac_coords2.shape[0]
+        result = np.empty((n, m))
+        for i in numba.prange(n):
+            for j in range(m):
+                d0_base = frac_coords1[i, 0] - frac_coords2[j, 0]
+                d1_base = frac_coords1[i, 1] - frac_coords2[j, 1]
+                d2_base = frac_coords1[i, 2] - frac_coords2[j, 2]
+                min_dist_sq = np.inf
+                for si in range(-1, 2):
+                    for sj in range(-1, 2):
+                        for sk in range(-1, 2):
+                            d0 = d0_base + si
+                            d1 = d1_base + sj
+                            d2 = d2_base + sk
+                            cx = d0 * lattice_matrix[0, 0] + d1 * lattice_matrix[1, 0] + d2 * lattice_matrix[2, 0]
+                            cy = d0 * lattice_matrix[0, 1] + d1 * lattice_matrix[1, 1] + d2 * lattice_matrix[2, 1]
+                            cz = d0 * lattice_matrix[0, 2] + d1 * lattice_matrix[1, 2] + d2 * lattice_matrix[2, 2]
+                            dist_sq = cx * cx + cy * cy + cz * cz
+                            if dist_sq < min_dist_sq:
+                                min_dist_sq = dist_sq
+                result[i, j] = min_dist_sq ** 0.5
+        return result
+
 
 def mic_distance(
     frac1: np.ndarray,
@@ -97,7 +137,8 @@ def all_mic_distances(
     """Minimum-image distance matrix between two sets of points.
 
     Checks all 27 periodic images per pair to find true minimum
-    distances, which is necessary for triclinic cells.
+    distances, which is necessary for triclinic cells. Uses numba
+    JIT compilation with parallel execution when available.
 
     Args:
         frac_coords1: Fractional coordinates, shape (N, 3).
@@ -110,6 +151,8 @@ def all_mic_distances(
     """
     if frac_coords1.shape[0] == 0 or frac_coords2.shape[0] == 0:
         return np.empty((frac_coords1.shape[0], frac_coords2.shape[0]))
+    if HAS_NUMBA:
+        return _all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix)
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
     d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
     # Loop over 27 shifts with running minimum to avoid (N, M, 27, 3) allocation

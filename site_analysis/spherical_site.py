@@ -1,7 +1,7 @@
 """Spherical site representation for crystal structure analysis.
 
 This module provides the SphericalSite class, which represents a site defined
-by a sphere with a specific center position and radius. Spherical sites are the
+by a sphere with a specific centre position and radius. Spherical sites are the
 simplest site geometry, useful for quick analysis or when the exact shape of
 the site is less important than its location.
 """
@@ -17,11 +17,11 @@ import numpy as np
 class SphericalSite(Site):
     """A site defined by a spherical volume in real space.
     
-    Represents a spherical site centered at a position in fractional coordinates
+    Represents a spherical site centred at a position in fractional coordinates
     with a radius in Angstroms (not fractional coordinates).
     
     SphericalSite determines whether atoms are inside the site volume by checking
-    if the distance between the atom and the site center is less than or equal to
+    if the distance between the atom and the site centre is less than or equal to
     the site's radius. This calculation considers periodic boundary conditions using
     the structure's lattice.
     
@@ -30,7 +30,7 @@ class SphericalSite(Site):
     consistent site volumes are needed regardless of structural distortions.
     
     Attributes:
-        frac_coords (np.ndarray): Fractional coordinates of the sphere center.
+        frac_coords (np.ndarray): Fractional coordinates of the sphere centre.
         rcut (float): Cutoff radius in Angstroms.
         
     See Also:
@@ -51,7 +51,7 @@ class SphericalSite(Site):
         """Create a SphericalSite instance.
         
         Args:
-            frac_coords: Fractional coordinates of the sphere center.
+            frac_coords: Fractional coordinates of the sphere centre.
             rcut: Cutoff radius in Angstroms.
             label: Optional label for this site. Default is None.
         
@@ -82,7 +82,7 @@ class SphericalSite(Site):
         """Returns the fractional coordinates of the spherical site's centre.
         
         Returns:
-            np.ndarray: Fractional coordinates of the site center.
+            np.ndarray: Fractional coordinates of the site centre.
         """
         return self.frac_coords
     

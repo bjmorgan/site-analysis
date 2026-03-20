@@ -44,6 +44,10 @@ if HAS_NUMBA:
         d0_base = frac1[0] - frac2[0]
         d1_base = frac1[1] - frac2[1]
         d2_base = frac1[2] - frac2[2]
+        # Reduce to nearest integer so 27-image search covers all cases
+        d0_base -= round(d0_base)
+        d1_base -= round(d1_base)
+        d2_base -= round(d2_base)
 
         min_dist_sq = np.inf
         for si in range(-1, 2):
@@ -86,6 +90,9 @@ if HAS_NUMBA:
                 d0_base = frac_coords1[i, 0] - frac_coords2[j, 0]
                 d1_base = frac_coords1[i, 1] - frac_coords2[j, 1]
                 d2_base = frac_coords1[i, 2] - frac_coords2[j, 2]
+                d0_base -= round(d0_base)
+                d1_base -= round(d1_base)
+                d2_base -= round(d2_base)
                 min_dist_sq = np.inf
                 for si in range(-1, 2):
                     for sj in range(-1, 2):
@@ -129,6 +136,7 @@ def mic_distance(
     if HAS_NUMBA:
         return float(_mic_distance_numba(frac1, frac2, lattice_matrix))
     d_frac = frac1 - frac2
+    d_frac -= np.round(d_frac)
     # (27, 3) shifted difference vectors
     d_frac_all = d_frac + _SHIFTS_27
     # Convert to Cartesian and compute norms
@@ -166,6 +174,7 @@ def all_mic_distances(
         return np.asarray(_all_mic_distances_numba(frac_coords1, frac_coords2, lattice_matrix))
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
     d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
+    d_frac -= np.round(d_frac)
     n, m = frac_coords1.shape[0], frac_coords2.shape[0]
     # Pre-allocate work buffers to avoid 54 temporary arrays across 27 iterations
     d_shifted = np.empty((n, m, 3))

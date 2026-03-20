@@ -115,6 +115,16 @@ class TestMicDistance(unittest.TestCase):
         result = mic_distance(frac1, frac2, lattice.matrix)
         self.assertAlmostEqual(result, float(expected), places=10)
 
+    def test_coords_many_cells_away(self):
+        """Coordinates differing by many unit cells produce correct distances."""
+        from site_analysis.distances import mic_distance
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        frac1 = np.array([50.3, -100.7, 25.1])
+        frac2 = np.array([0.1, 0.2, 0.3])
+        expected = lattice.get_distance_and_image(frac1, frac2)[0]
+        result = mic_distance(frac1, frac2, lattice.matrix)
+        self.assertAlmostEqual(result, float(expected), places=10)
+
 
 class TestAllMicDistances(unittest.TestCase):
     """Tests for batch all-pairs minimum-image distance matrix."""
@@ -177,6 +187,16 @@ class TestAllMicDistances(unittest.TestCase):
         coords = rng.random((5, 3))
         result = all_mic_distances(coords, coords, lattice.matrix)
         np.testing.assert_allclose(np.diag(result), 0.0, atol=1e-12)
+
+    def test_coords_many_cells_away(self):
+        """Coordinates differing by many unit cells produce correct distances."""
+        from site_analysis.distances import all_mic_distances
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        frac1 = np.array([[50.3, -100.7, 25.1], [0.1, 0.2, 0.3]])
+        frac2 = np.array([[0.1, 0.2, 0.3], [-50.4, 75.9, -10.8]])
+        expected = lattice.get_all_distances(frac1, frac2)
+        result = all_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
 
     def test_empty_first_array(self):
         """Empty first array returns correctly shaped empty output."""

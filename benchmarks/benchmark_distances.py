@@ -53,14 +53,16 @@ def benchmark_single_pair(lattice, n_pairs=1000, n_repeats=5):
         for f1, f2 in pairs:
             mic_distance(f1, f2, matrix)
 
+    if HAS_NUMBA:
+        # Warm up JIT before any timing that may dispatch to numba
+        _mic_distance_numba(pairs[0][0], pairs[0][1], matrix)
+
     results = {}
     results['pymatgen'] = min(timeit.repeat(pymatgen_single, number=n_repeats)) / n_repeats
     results['numpy'] = min(timeit.repeat(numpy_single, number=n_repeats)) / n_repeats
     results['mic_distance'] = min(timeit.repeat(mic_single, number=n_repeats)) / n_repeats
 
     if HAS_NUMBA:
-        # Warm up JIT
-        _mic_distance_numba(pairs[0][0], pairs[0][1], matrix)
 
         def numba_single():
             for f1, f2 in pairs:

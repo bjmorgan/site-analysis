@@ -10,7 +10,7 @@ import numpy as np
 from typing import Any
 from .site import Site
 from .atom import Atom
-from pymatgen.core import Lattice, Structure
+from pymatgen.core import Structure
 from site_analysis.pbc_utils import correct_pbc
 
 class DynamicVoronoiSite(Site):
@@ -99,7 +99,7 @@ class DynamicVoronoiSite(Site):
             the centre as the mean of the reference atom positions.
         """
         ref_coords = np.array([structure[i].frac_coords for i in self.reference_indices])
-        corrected, _ = correct_pbc(ref_coords, self.reference_center, structure.lattice)
+        corrected, _ = correct_pbc(ref_coords, self.reference_center, structure.lattice.matrix)
         self._centre_coords = np.mean(corrected, axis=0) % 1.0
         
     @property

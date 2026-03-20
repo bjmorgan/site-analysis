@@ -167,7 +167,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
 		site_d = DynamicVoronoiSite(reference_indices=[2, 3])
 		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
-		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+		collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
 
 		np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
 		np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
@@ -208,7 +208,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		site = DynamicVoronoiSite(reference_indices=[0, 1])
 		collection = DynamicVoronoiSiteCollection(sites=[site])
 
-		collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+		collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
 		self.assertTrue(collection._centre_groups[0].initialised)
 
 		collection.reset()
@@ -233,9 +233,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			site_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
-			site_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
-			collection._batch_calculate_centres(frac, structure.lattice)
+			site_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
+			site_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice.matrix)
+			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
 			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
@@ -256,7 +256,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		for i in range(5):
 			coords = base_coords + 0.01 * i
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
-			collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+			collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
 
 		# Only reset sites, not collection — group caches are stale
 		for site in collection.sites:
@@ -274,9 +274,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
-			collection._batch_calculate_centres(frac, structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice.matrix)
+			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
@@ -365,10 +365,10 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 7, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], None, structure.lattice)
-			ref_c._centre_coords = _reference_centre(frac[[5, 6]], None, structure.lattice)
-			collection._batch_calculate_centres(frac, structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], None, structure.lattice.matrix)
+			ref_c._centre_coords = _reference_centre(frac[[5, 6]], None, structure.lattice.matrix)
+			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)
@@ -399,9 +399,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			site_a._centre_coords = _reference_centre(frac[[0, 1]], ref_centre_a, structure.lattice)
-			site_b._centre_coords = _reference_centre(frac[[2, 3]], ref_centre_b, structure.lattice)
-			collection._batch_calculate_centres(frac, structure.lattice)
+			site_a._centre_coords = _reference_centre(frac[[0, 1]], ref_centre_a, structure.lattice.matrix)
+			site_b._centre_coords = _reference_centre(frac[[2, 3]], ref_centre_b, structure.lattice.matrix)
+			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(site_a.centre, site_c.centre)
 			np.testing.assert_array_almost_equal(site_b.centre, site_d.centre)
@@ -420,7 +420,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		for i in range(5):
 			coords = base_coords + 0.01 * i
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
-			collection._batch_calculate_centres(structure.frac_coords, structure.lattice)
+			collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
 
 		collection.reset()
 
@@ -436,9 +436,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice)
-			collection._batch_calculate_centres(frac, structure.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice.matrix)
+			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 			np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)

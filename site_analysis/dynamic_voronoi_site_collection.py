@@ -28,7 +28,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
-from pymatgen.core import Lattice, Structure
+from pymatgen.core import Structure
 from site_analysis.site_collection import SiteCollection
 from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
@@ -162,7 +162,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 
     def _batch_calculate_centres(self,
                                   all_frac_coords: np.ndarray,
-                                  lattice: Lattice) -> None:
+                                  lattice_matrix: np.ndarray) -> None:
         """Compute all site centres in batch, grouped by reference count.
 
         For each group, tries the vectorised fast path first.  If that
@@ -172,7 +172,8 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         Args:
             all_frac_coords: Full fractional coordinate array from the
                 structure, shape ``(n_atoms, 3)``.
-            lattice: Lattice for PBC distance calculations.
+            lattice_matrix: (3, 3) lattice matrix where rows are
+                lattice vectors.
         """
         for group in self._centre_groups:
             batch_ref = all_frac_coords[group.ref_indices]  # (n_sites, n_ref, 3)
@@ -185,7 +186,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             for idx, pos in enumerate(group.site_positions):
                 site = self.sites[pos]
                 corrected, image_shifts = correct_pbc(
-                    batch_ref[idx], site.reference_center, lattice)
+                    batch_ref[idx], site.reference_center, lattice_matrix)
                 site._centre_coords = np.mean(corrected, axis=0) % 1.0
                 group.pbc_shifts[idx] = image_shifts
             group.initialise(batch_ref)
@@ -216,8 +217,8 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         for atom in atoms:
             atom.assign_coords(structure)
         all_frac_coords = structure.frac_coords
-        lattice = structure.lattice
-        self._batch_calculate_centres(all_frac_coords, lattice)
+        lattice_matrix = structure.lattice.matrix
+        self._batch_calculate_centres(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, structure)
         
     def assign_site_occupations(self,

@@ -13,7 +13,7 @@ import warnings
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError # type: ignore
-from pymatgen.core import Lattice, Structure
+from pymatgen.core import Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site
 from site_analysis.atom import Atom
@@ -250,7 +250,7 @@ class PolyhedralSite(Site):
         self._face_topology_cache: FaceTopologyCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
-        self._pending_lattice: Lattice | None = None
+        self._pending_lattice_matrix: np.ndarray | None = None
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
@@ -276,7 +276,7 @@ class PolyhedralSite(Site):
         self._delaunay = None
         self._cache_stale = True
         self._pending_frac_coords = None
-        self._pending_lattice = None
+        self._pending_lattice_matrix = None
         self._pbc_image_shifts = None
         self._pbc_cached_raw_frac = None
  
@@ -323,7 +323,7 @@ class PolyhedralSite(Site):
         
     def notify_structure_changed(self,
             all_frac_coords: np.ndarray,
-            lattice: Lattice) -> None:
+            lattice_matrix: np.ndarray) -> None:
         """Mark vertex coordinates as stale for lazy reassignment.
 
         Stores a reference to the full coordinate array so that
@@ -333,10 +333,11 @@ class PolyhedralSite(Site):
         Args:
             all_frac_coords: Full fractional coordinate array from the
                 structure, shape ``(n_atoms, 3)``.
-            lattice: Lattice for PBC distance calculations.
+            lattice_matrix: (3, 3) lattice matrix where rows are
+                lattice vectors.
         """
         self._pending_frac_coords = all_frac_coords
-        self._pending_lattice = lattice
+        self._pending_lattice_matrix = lattice_matrix
 
     def assign_vertex_coords(self,
             structure: Structure) -> None:
@@ -357,25 +358,26 @@ class PolyhedralSite(Site):
         """
         frac_coords = np.array([s.frac_coords for s in
             [structure[i] for i in self.vertex_indices]])
-        self._store_vertex_coords(frac_coords, structure.lattice)
+        self._store_vertex_coords(frac_coords, structure.lattice.matrix)
 
     def _assign_from_pending(self,
             all_frac_coords: np.ndarray,
-            lattice: Lattice) -> None:
+            lattice_matrix: np.ndarray) -> None:
         """Compute PBC-corrected vertex coords from pending data.
 
         Args:
             all_frac_coords: Full fractional coordinate array.
-            lattice: Lattice for PBC distance calculations.
+            lattice_matrix: (3, 3) lattice matrix where rows are
+                lattice vectors.
         """
         self._pending_frac_coords = None
-        self._pending_lattice = None
+        self._pending_lattice_matrix = None
         frac_coords = all_frac_coords[self.vertex_indices]
-        self._store_vertex_coords(frac_coords, lattice)
+        self._store_vertex_coords(frac_coords, lattice_matrix)
 
     def _store_vertex_coords(self,
             frac_coords: np.ndarray,
-            lattice: Lattice) -> None:
+            lattice_matrix: np.ndarray) -> None:
         """Apply PBC correction and store vertex coordinates.
 
         On the first call (or after an anomalous displacement invalidates
@@ -390,9 +392,9 @@ class PolyhedralSite(Site):
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
                 shape ``(n_vertices, 3)``.
-            lattice: Lattice for Cartesian distance calculations.
-                Passed to ``correct_pbc()``; unused by the incremental
-                update path.
+            lattice_matrix: (3, 3) lattice matrix where rows are
+                lattice vectors. Passed to ``correct_pbc()``; unused
+                by the incremental update path.
         """
         if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
             valid, vertex_coords, new_shifts = update_pbc_shifts(
@@ -407,7 +409,7 @@ class PolyhedralSite(Site):
 
         # Full computation — first call only (or after anomalous displacement)
         corrected, image_shifts = correct_pbc(
-            frac_coords, self.reference_center, lattice)
+            frac_coords, self.reference_center, lattice_matrix)
         self._pbc_image_shifts = image_shifts
         self._pbc_cached_raw_frac = frac_coords.copy()
         self.vertex_coords = corrected
@@ -465,8 +467,8 @@ class PolyhedralSite(Site):
             )
         if structure is not None:
             self.assign_vertex_coords(structure)
-        elif self._pending_frac_coords is not None and self._pending_lattice is not None:
-            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice)
+        elif self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
+            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
         if self.vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'

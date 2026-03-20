@@ -67,9 +67,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
         for a in atoms:
             a.assign_coords(structure)
         all_frac_coords = structure.frac_coords
-        lattice = structure.lattice
+        lattice_matrix = structure.lattice.matrix
         for s in self.sites:
-            s.notify_structure_changed(all_frac_coords, lattice)
+            s.notify_structure_changed(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, structure)
                     
     def assign_site_occupations(self, atoms, structure) -> None:

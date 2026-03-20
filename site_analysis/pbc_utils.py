@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Literal, overload
 
 import numpy as np
-from pymatgen.core import Lattice
+from site_analysis.distances import frac_to_cart
 
 from site_analysis._compat import HAS_NUMBA
 
@@ -50,7 +50,7 @@ _PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
     reference_center: np.ndarray,
-    lattice: Lattice,
+    lattice_matrix: np.ndarray,
     return_image_shifts: Literal[False] = ...,
 ) -> np.ndarray: ...
 
@@ -58,14 +58,14 @@ def unwrap_vertices_to_reference_center(
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
     reference_center: np.ndarray,
-    lattice: Lattice,
+    lattice_matrix: np.ndarray,
     return_image_shifts: Literal[True] = ...,
 ) -> tuple[np.ndarray, np.ndarray]: ...
 
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
     reference_center: np.ndarray,
-    lattice: Lattice,
+    lattice_matrix: np.ndarray,
     return_image_shifts: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
@@ -73,7 +73,7 @@ def unwrap_vertices_to_reference_center(
     Args:
         frac_coords: Array of fractional coordinates with shape (n, 3).
         reference_center: Reference centre position for unwrapping.
-        lattice: Lattice object for distance calculations.
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice vectors.
         return_image_shifts: If True, also return the per-vertex integer
             image shifts (from ``_PERIODIC_SHIFTS``), separate from the
             uniform non-negative shift.
@@ -91,9 +91,8 @@ def unwrap_vertices_to_reference_center(
     n_vertices = len(frac_coords)
     vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
 
-    ref_cart = lattice.get_cartesian_coords(reference_center)
-    vertex_images_cart = lattice.get_cartesian_coords(
-        vertex_images.reshape(n_vertices * 27, 3))
+    ref_cart = frac_to_cart(reference_center, lattice_matrix)
+    vertex_images_cart = frac_to_cart(vertex_images.reshape(n_vertices * 27, 3), lattice_matrix)
     distances = np.linalg.norm(
         vertex_images_cart - ref_cart, axis=1).reshape(n_vertices, 27)
 
@@ -113,7 +112,7 @@ def unwrap_vertices_to_reference_center(
 def correct_pbc(
     frac_coords: np.ndarray,
     reference_center: np.ndarray | None,
-    lattice: Lattice,
+    lattice_matrix: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Apply PBC correction to fractional coordinates.
 
@@ -127,9 +126,9 @@ def correct_pbc(
         frac_coords: Fractional coordinates, shape ``(n, 3)``.
         reference_center: Reference centre for unwrapping, or ``None``
             for legacy spread-based correction.
-        lattice: Lattice for Cartesian distance calculations.
-            Passed to the reference-centre unwrapping path; unused by
-            the legacy spread-based path.
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors. Passed to the reference-centre unwrapping path;
+            unused by the legacy spread-based path.
 
     Returns:
         Tuple of ``(corrected_coords, image_shifts)`` where both have
@@ -139,7 +138,7 @@ def correct_pbc(
         return frac_coords, np.zeros((0, 3), dtype=np.int64)
     if reference_center is not None:
         return unwrap_vertices_to_reference_center(
-            frac_coords, reference_center, lattice,
+            frac_coords, reference_center, lattice_matrix,
             return_image_shifts=True)
     corrected = apply_legacy_pbc_correction(frac_coords)
     image_shifts = np.round(corrected - frac_coords).astype(np.int64)

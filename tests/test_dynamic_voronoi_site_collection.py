@@ -97,7 +97,7 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		atom1.assign_coords(frac_coords)
 		atom2.assign_coords(frac_coords)
 
-		collection.assign_site_occupations([atom1, atom2], structure)
+		collection.assign_site_occupations([atom1, atom2], structure.lattice.matrix)
 
 		self.assertIn(atom1.index, site1.contains_atoms)
 		self.assertIn(atom2.index, site2.contains_atoms)
@@ -127,8 +127,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		)
 		
 		# Call the method with empty atom list
-		collection.assign_site_occupations([], structure)
-		
+		collection.assign_site_occupations([], structure.lattice.matrix)
+
 		# Verify that contains_atoms was reset for both sites
 		self.assertEqual(site1.contains_atoms, [])
 		self.assertEqual(site2.contains_atoms, [])
@@ -188,12 +188,12 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
 
 		# First frame populates caches
-		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice)
+		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice.matrix)
 		self.assertTrue(collection._centre_groups[0].initialised)
 
 		# Second frame should use vectorised path (not per-site fallback)
 		with patch('site_analysis.dynamic_voronoi_site_collection.correct_pbc') as mock_pbc:
-			collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice)
+			collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice.matrix)
 			mock_pbc.assert_not_called()
 
 		# Centres should still be updated
@@ -297,7 +297,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
 
-		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice)
+		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice.matrix)
 
 		# Fresh per-site reference for the post-invalidation frame
 		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
@@ -305,7 +305,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		ref_a.calculate_centre(struct2)
 		ref_b.calculate_centre(struct2)
 
-		collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice)
+		collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice.matrix)
 
 		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 		np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)

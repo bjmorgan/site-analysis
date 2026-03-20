@@ -27,6 +27,7 @@ from site_analysis.site_collection import SiteCollection
 from site_analysis.atom import Atom
 from site_analysis.site import Site
 from site_analysis.voronoi_site import VoronoiSite
+from site_analysis.distances import all_mic_distances
 
 class VoronoiSiteCollection(SiteCollection):
 
@@ -67,43 +68,29 @@ class VoronoiSiteCollection(SiteCollection):
         all_frac_coords = structure.frac_coords
         for a in atoms:
             a.assign_coords(all_frac_coords)
-        self.assign_site_occupations(atoms, structure)
+        self.assign_site_occupations(atoms, structure.lattice.matrix)
 
     def assign_site_occupations(self,
                                 atoms: list[Atom],
-                                structure: Structure):
-        """Assign atoms to Voronoi sites based on closest site centers.
-        
-        This method implements the Voronoi site assignment logic:
-        1. All site occupations are reset (emptied) at the beginning
-        2. Calculate distances from each site center to each atom
-        3. Assign each atom to the site with the nearest center
-        4. Use the structure's lattice to correctly handle distances
-           across periodic boundaries
-        
-        Unlike other site types where individual sites determine containment,
-        Voronoi assignment is a global operation that depends on the relative
-        positions of all sites.
-        
+                                lattice_matrix: np.ndarray) -> None:
+        """Assign atoms to Voronoi sites based on closest site centres.
+
+        Uses minimum-image convention distances to assign each atom to the
+        nearest site centre.
+
         Args:
-            atoms: List of Atom objects to be assigned to sites
-            structure: Pymatgen Structure containing the atom positions
-            
-        Returns:
-            None
-        
-        Note:
-            If atoms is empty, the method simply resets site occupations and returns.
+            atoms: List of Atom objects to be assigned to sites.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
         """
         self.reset_site_occupations()
         if not atoms:
             return
-        lattice = structure.lattice
         site_coords = np.array([s.frac_coords for s in self.sites])
         atom_coords = np.array([a.frac_coords for a in atoms])
-        dist_matrix = lattice.get_all_distances(site_coords, atom_coords)
+        dist_matrix = all_mic_distances(site_coords, atom_coords, lattice_matrix)
         site_list_indices = np.argmin(dist_matrix, axis=0)
-        for atom, site_list_index in zip( atoms, site_list_indices):
+        for atom, site_list_index in zip(atoms, site_list_indices):
             site = self.sites[site_list_index]
             self.update_occupation(site, atom)
 

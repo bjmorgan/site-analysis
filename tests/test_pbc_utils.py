@@ -268,7 +268,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice.matrix)
 		
 		# Should remain unchanged since all vertices are already close
 		np.testing.assert_array_almost_equal(result, vertex_coords, decimal=7)
@@ -286,7 +286,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.05, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice.matrix)
 		
 		# After unwrapping and shifting to ensure non-negative coordinates
 		expected = np.array([
@@ -312,7 +312,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		reference_center = np.array([0.25, 0.25, 0.25])
 		expected_result_centre = np.array([1.25, 1.25, 1.25])
 		
-		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice.matrix)
 		
 		# The centre of the unwrapped vertices should be close to the reference centre
 		result_centre = np.mean(result, axis=0)
@@ -328,7 +328,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice.matrix)
 		
 		# Should remain unchanged since all vertices are already close
 		np.testing.assert_array_almost_equal(result, vertex_coords, decimal=7)
@@ -343,7 +343,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.5, 0.5, 0.5])
 		result = unwrap_vertices_to_reference_center(
-			vertex_coords, reference_center, self.lattice, return_image_shifts=True)
+			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
 		self.assertIsInstance(result, tuple)
 		self.assertEqual(len(result), 2)
 		coords, shifts = result
@@ -360,7 +360,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.5, 0.5, 0.5])
 		result = unwrap_vertices_to_reference_center(
-			vertex_coords, reference_center, self.lattice, return_image_shifts=False)
+			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=False)
 		self.assertIsInstance(result, np.ndarray)
 		self.assertEqual(result.shape, (2, 3))
 
@@ -372,7 +372,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		])
 		reference_center = np.array([0.0, 0.5, 0.5])
 		coords, shifts = unwrap_vertices_to_reference_center(
-			vertex_coords, reference_center, self.lattice, return_image_shifts=True)
+			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
 		# coords = raw + shifts + uniform, so (coords - uniform) - raw = shifts
 		shifted_raw = vertex_coords + shifts
 		min_coords = np.min(shifted_raw, axis=0)
@@ -384,7 +384,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		vertex_coords = np.array([]).reshape(0, 3)
 		reference_center = np.array([0.5, 0.5, 0.5])
 		
-		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice)
+		result = unwrap_vertices_to_reference_center(vertex_coords, reference_center, self.lattice.matrix)
 		
 		# Should return empty array with correct shape
 		self.assertEqual(result.shape, (0, 3))
@@ -400,7 +400,7 @@ class TestCorrectPbc(unittest.TestCase):
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
 		with patch('site_analysis.pbc_utils.apply_legacy_pbc_correction',
 				   return_value=frac_coords.copy()) as mock_legacy:
-			correct_pbc(frac_coords, None, self.lattice)
+			correct_pbc(frac_coords, None, self.lattice.matrix)
 			mock_legacy.assert_called_once()
 
 	def test_delegates_to_unwrap_when_reference_center_provided(self):
@@ -409,27 +409,27 @@ class TestCorrectPbc(unittest.TestCase):
 		ref = np.array([0.15, 0.15, 0.15])
 		with patch('site_analysis.pbc_utils.unwrap_vertices_to_reference_center',
 				   return_value=(frac_coords.copy(), np.zeros((2, 3), dtype=np.int64))) as mock_unwrap:
-			correct_pbc(frac_coords, ref, self.lattice)
+			correct_pbc(frac_coords, ref, self.lattice.matrix)
 			mock_unwrap.assert_called_once()
 			self.assertTrue(mock_unwrap.call_args.kwargs.get('return_image_shifts'))
 
 	def test_returns_int64_shifts_legacy_path(self):
 		"""Image shifts have int64 dtype for the legacy path."""
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
-		_, shifts = correct_pbc(frac_coords, None, self.lattice)
+		_, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
 		self.assertEqual(shifts.dtype, np.int64)
 
 	def test_returns_int64_shifts_reference_centre_path(self):
 		"""Image shifts have int64 dtype for the reference-centre path."""
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
 		ref = np.array([0.15, 0.15, 0.5])
-		_, shifts = correct_pbc(frac_coords, ref, self.lattice)
+		_, shifts = correct_pbc(frac_coords, ref, self.lattice.matrix)
 		self.assertTrue(np.issubdtype(shifts.dtype, np.integer))
 
 	def test_empty_input_returns_empty_arrays(self):
 		"""Empty input should return empty arrays without error."""
 		frac_coords = np.array([]).reshape(0, 3)
-		corrected, shifts = correct_pbc(frac_coords, None, self.lattice)
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
 		self.assertEqual(corrected.shape, (0, 3))
 		self.assertEqual(shifts.shape, (0, 3))
 		self.assertEqual(shifts.dtype, np.int64)
@@ -437,7 +437,7 @@ class TestCorrectPbc(unittest.TestCase):
 	def test_legacy_path_returns_consistent_shifts(self):
 		"""Shifts from the legacy path satisfy corrected = original + shifts."""
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
-		corrected, shifts = correct_pbc(frac_coords, None, self.lattice)
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
 		expected_shifts = np.round(corrected - frac_coords).astype(np.int64)
 		np.testing.assert_array_equal(shifts, expected_shifts)
 

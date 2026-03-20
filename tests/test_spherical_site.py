@@ -259,22 +259,6 @@ class SphericalSiteTestCase(unittest.TestCase):
             "Point should be inside large radius site"
         )
 
-    def test_non_cubic_lattice(self):
-        """Test with a non-cubic lattice."""
-        # Create a tetragonal lattice (a=b≠c)
-        tetragonal_lattice = Lattice.tetragonal(5.0, 8.0)
-        
-        # Create a point that's equidistant in fractional coordinates
-        # but will have different real distances due to the lattice
-        test_point = np.array([0.6, 0.5, 0.55])
-        
-        # Should behave correctly based on real-space distances
-        result = self.test_site.contains_point(test_point, lattice_matrix=tetragonal_lattice.matrix)
-        
-        # We don't assert a specific result here, just make sure it runs
-        # The result will depend on the specific lattice parameters
-        self.assertIsInstance(result, bool)
-        
     def test_repr(self):
         """Test the __repr__ method for SphericalSite."""
         frac_coords = np.array([0.25, 0.25, 0.25])

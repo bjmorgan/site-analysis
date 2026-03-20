@@ -93,9 +93,10 @@ class Trajectory:
         # Find the appropriate site collection class
         site_type = type(sites[0])
         try:
-            self.site_collection = site_collection_map[site_type](sites)
+            collection_class = site_collection_map[site_type]
         except KeyError:
             raise TypeError(f"Site type {site_type} not recognised for Trajectory initialisation")
+        self.site_collection = collection_class(sites)
         
         self.sites = sites
         self.atoms = atoms

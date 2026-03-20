@@ -56,7 +56,7 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
     def test___len___returns_number_of_timesteps(self):
         trajectory = Trajectory.__new__(Trajectory)
         trajectory.timesteps = ['foo', 'bar']
-        assert len(trajectory) == 2
+        self.assertEqual(len(trajectory), 2)
 
     def test_init_raises_type_error_if_passed_mixed_site_types(self):
         sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3]),

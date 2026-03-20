@@ -307,19 +307,17 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertEqual(labels[1], "site2")
         
     def test_assign_site_occupations(self):
-        """Test that assign_site_occupations delegates to site_collection."""
-        # Setup
+        """Test that assign_site_occupations extracts lattice matrix and delegates."""
         structure = Mock()
-        
-        # Mock the site_collection
+        lattice_matrix = Mock()
+        structure.lattice.matrix = lattice_matrix
+
         self.trajectory.site_collection = Mock()
-        
-        # Call the method
+
         self.trajectory.assign_site_occupations(structure)
-        
-        # Check delegation
+
         self.trajectory.site_collection.assign_site_occupations.assert_called_once_with(
-            self.atoms, structure
+            self.atoms, lattice_matrix
         )
     
     def test_trajectory_from_structures_with_progress(self):

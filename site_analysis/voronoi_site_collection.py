@@ -9,10 +9,10 @@ specific functionality for Voronoi sites, implementing a different assignment
 logic than other site collections:
 
 For atom assignment, the collection:
-1. Calculates distances from each site center to each atom
-2. Assigns each atom to the site with the nearest center
-3. Uses the structure's lattice to correctly handle distances across
-   periodic boundaries
+1. Calculates distances from each site centre to each atom
+2. Assigns each atom to the site with the nearest centre
+3. Uses minimum-image convention distances to correctly handle periodic
+   boundaries
 
 Unlike other site types where individual sites can determine containment,
 Voronoi site assignment is a global operation that depends on the relative
@@ -51,7 +51,7 @@ class VoronoiSiteCollection(SiteCollection):
     def analyse_structure(self,
                           atoms: list[Atom],
                           structure: Structure) -> None:
-        """Analyze a structure to assign atoms to Voronoi sites.
+        """Analyse a structure to assign atoms to Voronoi sites.
         
         This method:
         1. Assigns fractional coordinates to each atom based on the structure

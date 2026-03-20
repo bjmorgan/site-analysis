@@ -112,12 +112,15 @@ def all_mic_distances(
         return np.empty((frac_coords1.shape[0], frac_coords2.shape[0]))
     # (N, 1, 3) - (1, M, 3) -> (N, M, 3) difference vectors
     d_frac = frac_coords1[:, np.newaxis, :] - frac_coords2[np.newaxis, :, :]
-    # (N, M, 1, 3) + (27, 3) -> (N, M, 27, 3) all images
-    d_frac_all = d_frac[:, :, np.newaxis, :] + _SHIFTS_27[np.newaxis, np.newaxis, :, :]
-    # Convert to Cartesian: (N, M, 27, 3) @ (3, 3) -> (N, M, 27, 3)
-    d_cart_all = d_frac_all @ lattice_matrix
-    # Norms: (N, M, 27), then min over images -> (N, M)
-    return np.min(np.linalg.norm(d_cart_all, axis=3), axis=2)
+    # Loop over 27 shifts with running minimum to avoid (N, M, 27, 3) allocation
+    min_dist_sq = np.full(
+        (frac_coords1.shape[0], frac_coords2.shape[0]), np.inf
+    )
+    for shift in _SHIFTS_27:
+        d_cart = (d_frac + shift) @ lattice_matrix  # (N, M, 3)
+        dist_sq = np.einsum("ijk,ijk->ij", d_cart, d_cart)  # (N, M)
+        np.minimum(min_dist_sq, dist_sq, out=min_dist_sq)
+    return np.sqrt(min_dist_sq)
 
 
 def frac_to_cart(

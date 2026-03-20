@@ -79,28 +79,22 @@ class SphericalSiteTestCase(unittest.TestCase):
             ]
         )
 
-    def test_contains_atom_raises_valueerror_if_lattice_is_not_passed(self):
+    def test_contains_atom_raises_valueerror_if_lattice_matrix_is_not_passed(self):
         mock_atom = Mock(spec=Atom)
         with self.assertRaises(ValueError):
             self.spherical_site.contains_atom(atom=mock_atom)
-
-    def test_contains_atom_raises_typeerror_if_lattice_is_not_Lattice(self):
-        mock_atom = Mock(spec=Atom)
-        with self.assertRaises(TypeError):
-            self.spherical_site.contains_atom(atom=mock_atom,
-                    lattice="bar")
 
     def test_contains_atom(self):
         with patch('site_analysis.spherical_site.SphericalSite.contains_point') as mock_contains_point:
             mock_contains_point.return_value = "called"
             mock_atom = Mock(spec=Atom)
             mock_atom.frac_coords = np.array([2.0, 3.0, 4.0])
-            mock_lattice = Mock(spec=Lattice)
-            returned = self.spherical_site.contains_atom(atom=mock_atom, lattice=mock_lattice)
+            mock_lattice_matrix = np.eye(3) * 10.0
+            returned = self.spherical_site.contains_atom(atom=mock_atom, lattice_matrix=mock_lattice_matrix)
             self.assertEqual(returned, "called")
             mock_contains_point.assert_called_with(
                     x=mock_atom.frac_coords,
-                    lattice=mock_lattice)
+                    lattice_matrix=mock_lattice_matrix)
 
     def test_centre_property(self):
         """Test the centre property."""
@@ -117,14 +111,14 @@ class SphericalSiteTestCase(unittest.TestCase):
         # Point inside the sphere
         point_inside = np.array([0.55, 0.55, 0.55])
         self.assertTrue(
-            self.test_site.contains_point(point_inside, lattice=self.lattice),
+            self.test_site.contains_point(point_inside, lattice_matrix=self.lattice.matrix),
             "Point inside sphere should be contained"
         )
         
         # Point outside the sphere
         point_outside = np.array([0.8, 0.8, 0.8])
         self.assertFalse(
-            self.test_site.contains_point(point_outside, lattice=self.lattice),
+            self.test_site.contains_point(point_outside, lattice_matrix=self.lattice.matrix),
             "Point outside sphere should not be contained"
         )
         
@@ -132,51 +126,45 @@ class SphericalSiteTestCase(unittest.TestCase):
         point_on_boundary = np.array([0.5, 0.5, 0.7])
         # Due to floating point precision, this might be either True or False
         # We just need to make sure it doesn't raise an error
-        result = self.test_site.contains_point(point_on_boundary, lattice=self.lattice)
+        result = self.test_site.contains_point(point_on_boundary, lattice_matrix=self.lattice.matrix)
         self.assertIsInstance(result, bool)
         
         # Test a point very close to the boundary (just inside)
         point_just_inside = np.array([0.5, 0.5, 0.699])
         self.assertTrue(
-            self.test_site.contains_point(point_just_inside, lattice=self.lattice),
+            self.test_site.contains_point(point_just_inside, lattice_matrix=self.lattice.matrix),
             "Point just inside sphere should be contained"
         )
         
         # Test a point very close to the boundary (just outside)
         point_just_outside = np.array([0.5, 0.5, 0.701])
         self.assertFalse(
-            self.test_site.contains_point(point_just_outside, lattice=self.lattice),
+            self.test_site.contains_point(point_just_outside, lattice_matrix=self.lattice.matrix),
             "Point just outside sphere should not be contained"
         )
 
-    def test_contains_point_without_lattice(self):
-        """Test contains_point raises ValueError when lattice is not provided."""
+    def test_contains_point_without_lattice_matrix(self):
+        """Test contains_point raises ValueError when lattice_matrix is not provided."""
         point = np.array([0.5, 0.5, 0.5])
         with self.assertRaises(ValueError):
             self.test_site.contains_point(point)
-
-    def test_contains_point_with_invalid_lattice(self):
-        """Test contains_point raises TypeError when lattice is not a Lattice object."""
-        point = np.array([0.5, 0.5, 0.5])
-        with self.assertRaises(TypeError):
-            self.test_site.contains_point(point, lattice="not_a_lattice")
 
     def test_contains_atom_with_atoms_at_different_positions(self):
         """Test contains_atom with atoms at different positions."""
         # Atom inside the sphere
         self.assertTrue(
-            self.test_site.contains_atom(self.atom_inside, lattice=self.lattice),
+            self.test_site.contains_atom(self.atom_inside, lattice_matrix=self.lattice.matrix),
             "Atom inside sphere should be contained"
         )
         
         # Atom outside the sphere
         self.assertFalse(
-            self.test_site.contains_atom(self.atom_outside, lattice=self.lattice),
+            self.test_site.contains_atom(self.atom_outside, lattice_matrix=self.lattice.matrix),
             "Atom outside sphere should not be contained"
         )
         
         # Atom on the boundary
-        result = self.test_site.contains_atom(self.atom_on_boundary, lattice=self.lattice)
+        result = self.test_site.contains_atom(self.atom_on_boundary, lattice_matrix=self.lattice.matrix)
         self.assertIsInstance(result, bool)
 
     def test_periodic_boundary_conditions(self):
@@ -194,14 +182,14 @@ class SphericalSiteTestCase(unittest.TestCase):
         
         # Should be contained because of PBC
         self.assertTrue(
-            edge_site.contains_point(pbc_point, lattice=self.lattice),
+            edge_site.contains_point(pbc_point, lattice_matrix=self.lattice.matrix),
             "Point across periodic boundary should be contained"
         )
         
         # Test a point that's outside even with PBC
         outside_point = np.array([0.8, 0.05, 0.05])
         self.assertFalse(
-            edge_site.contains_point(outside_point, lattice=self.lattice),
+            edge_site.contains_point(outside_point, lattice_matrix=self.lattice.matrix),
             "Point outside even with PBC should not be contained"
         )
 
@@ -236,14 +224,14 @@ class SphericalSiteTestCase(unittest.TestCase):
         # With a small lattice (5.0 Å), the distance is small enough
         small_lattice = Lattice.cubic(5.0)
         self.assertTrue(
-            self.test_site.contains_point(test_point, lattice=small_lattice),
+            self.test_site.contains_point(test_point, lattice_matrix=small_lattice.matrix),
             "Point should be inside with small lattice"
         )
         
         # With a large lattice (20.0 Å), the distance is too large
         large_lattice = Lattice.cubic(20.0)
         self.assertFalse(
-            self.test_site.contains_point(test_point, lattice=large_lattice),
+            self.test_site.contains_point(test_point, lattice_matrix=large_lattice.matrix),
             "Point should be outside with large lattice"
         )
 
@@ -257,7 +245,7 @@ class SphericalSiteTestCase(unittest.TestCase):
             rcut=0.5
         )
         self.assertFalse(
-            small_radius_site.contains_point(test_point, lattice=self.lattice),
+            small_radius_site.contains_point(test_point, lattice_matrix=self.lattice.matrix),
             "Point should be outside small radius site"
         )
         
@@ -267,7 +255,7 @@ class SphericalSiteTestCase(unittest.TestCase):
             rcut=3.0
         )
         self.assertTrue(
-            large_radius_site.contains_point(test_point, lattice=self.lattice),
+            large_radius_site.contains_point(test_point, lattice_matrix=self.lattice.matrix),
             "Point should be inside large radius site"
         )
 
@@ -281,7 +269,7 @@ class SphericalSiteTestCase(unittest.TestCase):
         test_point = np.array([0.6, 0.5, 0.55])
         
         # Should behave correctly based on real-space distances
-        result = self.test_site.contains_point(test_point, lattice=tetragonal_lattice)
+        result = self.test_site.contains_point(test_point, lattice_matrix=tetragonal_lattice.matrix)
         
         # We don't assert a specific result here, just make sure it runs
         # The result will depend on the specific lattice parameters

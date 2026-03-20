@@ -10,7 +10,7 @@ from __future__ import annotations
 from .site import Site
 from typing import Any
 from .atom import Atom
-from pymatgen.core.lattice import Lattice
+from site_analysis.distances import mic_distance
 import numpy as np
 
 
@@ -103,57 +103,49 @@ class SphericalSite(Site):
 
     def contains_atom(self,
         atom: Atom,
-        lattice: Lattice | None = None,  # Technically optional for signature compatibility, but required
+        lattice_matrix: np.ndarray | None = None,
         *args: Any,
         **kwargs: Any) -> bool:
         """Test whether this spherical site contains a specific atom.
-        
+
         Args:
             atom: The atom to test.
-            lattice: Lattice object for distance calculations.
-                Although marked as optional for inheritance reasons,
-                this parameter is actually required.
-                
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors. Required for distance calculations.
+
         Returns:
             True if the atom is contained within this site, False otherwise.
-            
+
         Raises:
-            ValueError: If lattice is not provided.
-            TypeError: If lattice is not a Lattice object.
+            ValueError: If lattice_matrix is not provided.
         """
-        if not lattice:
-            raise ValueError("Lattice is required for SphericalSite.contains_atom() to calculate real-space distances")
-        elif not isinstance(lattice, Lattice):
-            raise TypeError(f"Expected Lattice object, got {type(lattice).__name__}. SphericalSite requires a valid Lattice to calculate distances.")
+        if lattice_matrix is None:
+            raise ValueError("lattice_matrix is required for SphericalSite.contains_atom()")
         return self.contains_point(
                 x=atom.frac_coords,
-                lattice=lattice)
+                lattice_matrix=lattice_matrix)
 
     def contains_point(self,
         x: np.ndarray,
-        lattice: Lattice | None=None,  # Technically optional for signature compatibility, but required
+        lattice_matrix: np.ndarray | None = None,
         *args: Any,
         **kwargs: Any) -> bool:
         """Test if the point x is contained by this spherical site.
-        
+
         Args:
             x: Fractional coordinates to test.
-            lattice: Lattice object for distance calculations. 
-                Although marked as optional for inheritance reasons, 
-                this parameter is actually required.
-                
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors. Required for distance calculations.
+
         Returns:
             True if the point is within the cutoff radius, False otherwise.
-                
+
         Raises:
-            ValueError: If lattice is not provided.
-            TypeError: If lattice is not a Lattice object.
+            ValueError: If lattice_matrix is not provided.
         """
-        if not lattice:
-            raise ValueError("Lattice is required for SphericalSite.contains_point() to calculate real-space distances")
-        elif not isinstance(lattice, Lattice):
-            raise TypeError(f"Expected Lattice object, got {type(lattice).__name__}. SphericalSite requires a valid Lattice to calculate distances.")
-        dr = float(lattice.get_distance_and_image(self.frac_coords, x)[0])
+        if lattice_matrix is None:
+            raise ValueError("lattice_matrix is required for SphericalSite.contains_point()")
+        dr = mic_distance(self.frac_coords, x, lattice_matrix)
         return dr <= self.rcut
 
     @classmethod

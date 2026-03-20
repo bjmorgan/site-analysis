@@ -49,8 +49,9 @@ class AtomTestCase(unittest.TestCase):
     def test_assign_coords(self):
         atom = Atom(index=1)
         structure = example_structure()
-        atom.assign_coords(structure=structure)
-        np.testing.assert_array_equal(atom._frac_coords, structure[1].frac_coords )
+        frac_coords = structure.frac_coords
+        atom.assign_coords(frac_coords=frac_coords)
+        np.testing.assert_array_equal(atom._frac_coords, structure[1].frac_coords % 1.0)
    
     def test_frac_coords_getter_raises_atttribute_error_if_frac_coords_is_none(self):
         atom = Atom(index=1)

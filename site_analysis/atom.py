@@ -95,19 +95,15 @@ class Atom:
         self._recent_sites = [None, None]
 
     def assign_coords(self,
-            structure: Structure) -> None:
-        """Assign fractional coordinates to this atom from a 
-        pymatgen Structure.
+            frac_coords: np.ndarray) -> None:
+        """Assign fractional coordinates to this atom from a coordinate array.
 
         Args:
-            structure (pymatgen.Structure): The Structure to use for this atom's
-                fractional coordinates.
-
-        Returns:
-            None
-
+            frac_coords: Full fractional coordinate array, shape ``(N, 3)``,
+                from which this atom's coordinates are extracted using
+                ``self.index``.
         """
-        self._frac_coords = structure[self.index].frac_coords % 1.0
+        self._frac_coords = frac_coords[self.index] % 1.0
 
     @property
     def frac_coords(self) -> np.ndarray:
@@ -247,8 +243,9 @@ def atoms_from_structure(
         for i, s in enumerate(structure)
         if s.species_string in species_string
     ]
+    frac_coords = structure.frac_coords
     for atom in atoms:
-        atom.assign_coords(structure)
+        atom.assign_coords(frac_coords)
     return atoms
 
 def atoms_from_indices(

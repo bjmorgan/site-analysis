@@ -93,8 +93,9 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 
 		atom1 = Atom(index=4)
 		atom2 = Atom(index=5)
-		atom1.assign_coords(structure)
-		atom2.assign_coords(structure)
+		frac_coords = structure.frac_coords
+		atom1.assign_coords(frac_coords)
+		atom2.assign_coords(frac_coords)
 
 		collection.assign_site_occupations([atom1, atom2], structure)
 

@@ -81,8 +81,9 @@ def _per_site_analyse_structure(self, atoms, structure):
     full PBC unwrapping every timestep. This simulates the
     pre-batch-optimisation path.
     """
+    frac_coords = structure.frac_coords
     for atom in atoms:
-        atom.assign_coords(structure)
+        atom.assign_coords(frac_coords)
     for site in self.sites:
         site.calculate_centre(structure)
     self.assign_site_occupations(atoms, structure)

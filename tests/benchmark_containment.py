@@ -76,8 +76,9 @@ def build_argyrodite_trajectory(structures):
 
 def _eager_analyse_structure(self, atoms, structure):
     """Original eager analysis: assign all vertex coords upfront."""
+    frac_coords = structure.frac_coords
     for a in atoms:
-        a.assign_coords(structure)
+        a.assign_coords(frac_coords)
     for s in self.sites:
         s.assign_vertex_coords(structure)
     self.assign_site_occupations(atoms, structure)

@@ -15,14 +15,14 @@ from site_analysis.site import Site
 def _reference_centre(
 	frac_coords: np.ndarray,
 	reference_center: np.ndarray | None,
-	lattice: Lattice,
+	lattice_matrix: np.ndarray,
 ) -> np.ndarray:
 	"""Compute a reference site centre for test assertions.
 
 	Replicates the logic that DynamicVoronoiSite.calculate_centre uses
 	internally, for use in tests that compare batch vs per-site results.
 	"""
-	corrected, _ = correct_pbc(frac_coords, reference_center, lattice)
+	corrected, _ = correct_pbc(frac_coords, reference_center, lattice_matrix)
 	return np.mean(corrected, axis=0) % 1.0
 
 
@@ -329,9 +329,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 
 		for struct in [struct1, struct2]:
 			frac = struct.frac_coords
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, struct.lattice)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, struct.lattice)
-			collection._batch_calculate_centres(frac, struct.lattice)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, struct.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, struct.lattice.matrix)
+			collection._batch_calculate_centres(frac, struct.lattice.matrix)
 
 		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
 		np.testing.assert_array_almost_equal(ref_b.centre, site_b.centre)

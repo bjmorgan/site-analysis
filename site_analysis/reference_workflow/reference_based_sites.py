@@ -45,11 +45,12 @@ class ReferenceBasedSites:
     4. SiteFactory - to create appropriate site objects
     
     Attributes:
-        reference_structure: Reference structure defining ideal coordination environments
-        target_structure: Target structure where sites will be created
-        aligned_structure: Target structure aligned to the reference (same as target if align=False)
-        translation_vector: Translation vector used for alignment (None if align=False)
-        alignment_metrics: Metrics describing quality of structure alignment (None if align=False)
+        reference_structure: Reference structure defining ideal coordination environments.
+        target_structure: Target structure where sites will be created.
+        aligned_structure: Reference structure translated to match the target
+            (None if align=False).
+        translation_vector: Translation vector used for alignment (None if align=False).
+        alignment_metrics: Metrics describing quality of structure alignment (None if align=False).
     """
     
     def __init__(self, 
@@ -209,8 +210,6 @@ class ReferenceBasedSites:
                 or if both label and labels are provided.
         """
         # Find coordination environments in reference structure
-        # Note: CoordinationEnvironmentFinder uses vertex_species terminology,
-        # but conceptually these are reference atoms for dynamic Voronoi sites
         ref_environments = self._find_coordination_environments(
             center_species, reference_species, cutoff, n_reference
         )
@@ -282,7 +281,7 @@ class ReferenceBasedSites:
             self.alignment_metrics = metrics
             self._aligned_frac_coords = aligned_structure.frac_coords
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             raise ValueError(f"Structure alignment failed: {str(e)}") from e
     
@@ -318,7 +317,7 @@ class ReferenceBasedSites:
             
             return environments_dict
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             raise ValueError(
                 f"Failed to find coordination environments for {center_species} centers "
@@ -364,7 +363,7 @@ class ReferenceBasedSites:
             
             return mapped_environments
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             species_str = f" for {target_species} species" if target_species else ""
             raise ValueError(

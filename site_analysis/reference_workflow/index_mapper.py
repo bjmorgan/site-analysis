@@ -68,6 +68,11 @@ class IndexMapper:
             ValueError: If 1:1 mapping cannot be achieved (e.g., missing atoms,
                 ambiguous distances, or insufficient target atoms in target structure).
         """
+        if target_species is not None and len(target_species) != len(target_frac_coords):
+            raise ValueError(
+                f"target_species length ({len(target_species)}) does not match "
+                f"target_frac_coords rows ({len(target_frac_coords)})"
+            )
         # Extract all unique coordinating atoms from reference structure
         unique_indices = self._extract_unique_coordinating_atoms(ref_coordinating)
 

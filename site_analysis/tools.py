@@ -1,22 +1,22 @@
-"""Utility functions for site analysis and crystal structure manipulation.
+"""Utility functions for site analysis.
 
-This module provides a collection of helper functions for working with crystal
-structures, finding coordination environments, mapping between structures, and
-handling periodic boundary conditions.
+This module provides helper functions for finding coordination
+environments, mapping atoms between structures, and handling
+periodic boundary conditions. Most functions accept numpy arrays
+and species lists rather than pymatgen Structure objects.
 
 Key functions include:
 
 Coordination and site analysis:
 - get_coordination_indices: Find atoms with specific coordination environments
-- get_nearest_neighbour_indices: Get indices of nearest neighbors for each site
-- get_vertex_indices: (Deprecated) Find vertex atoms for coordination polyhedra
+- indices_for_species: Get atom indices matching a species string
 
 Structure mapping and comparison:
 - site_index_mapping: Map site indices between two structures
-- calculate_species_distances: Calculate distances between matching atoms in structures
+- calculate_species_distances: Calculate distances between matching atoms
 
 Periodic boundary handling:
-- x_pbc: Generate fractional coordinates for all periodic images in neighboring cells
+- x_pbc: Generate fractional coordinates for all periodic images in neighbouring cells
 
 These utilities provide low-level functionality that can be used directly or are
 used internally by the higher-level site and trajectory analysis classes.
@@ -65,6 +65,11 @@ def get_coordination_indices(
         ValueError: If no centre atoms are found, or if a list of n_coord
             has incorrect length.
     """
+    if len(species) != len(frac_coords):
+        raise ValueError(
+            f"species length ({len(species)}) does not match "
+            f"frac_coords rows ({len(frac_coords)})"
+        )
     if isinstance(coordination_species, str):
         coordination_species = [coordination_species]
 
@@ -199,7 +204,7 @@ def get_vertex_indices(
     """
     warnings.warn(
         "get_vertex_indices is deprecated and will be removed in a future version. "
-        "Please use get_coordinating_indices() for finding atoms with exact coordination "
+        "Please use get_coordination_indices() for finding atoms with exact coordination "
         "environments, or use the ReferenceBasedSites workflow for generating sites based "
         "on reference structures.",
         DeprecationWarning,
@@ -290,8 +295,8 @@ def site_index_mapping(
     lattice_matrix: np.ndarray,
     species1: list[str],
     species2: list[str],
-    species1_filter: list[str] | None = None,
-    species2_filter: list[str] | None = None,
+    species1_filter: str | list[str] | None = None,
+    species2_filter: str | list[str] | None = None,
     one_to_one_mapping: bool = True,
     return_mapping_distances: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
@@ -326,6 +331,20 @@ def site_index_mapping(
         ValueError: If ``one_to_one_mapping`` is ``True`` and the
             mapping is not one-to-one.
     """
+    if len(species1) != len(frac_coords1):
+        raise ValueError(
+            f"species1 length ({len(species1)}) does not match "
+            f"frac_coords1 rows ({len(frac_coords1)})"
+        )
+    if len(species2) != len(frac_coords2):
+        raise ValueError(
+            f"species2 length ({len(species2)}) does not match "
+            f"frac_coords2 rows ({len(frac_coords2)})"
+        )
+    if isinstance(species1_filter, str):
+        species1_filter = [species1_filter]
+    if isinstance(species2_filter, str):
+        species2_filter = [species2_filter]
     if species1_filter is None:
         species1_filter = list(set(species1))
     if species2_filter is None:
@@ -395,6 +414,16 @@ def calculate_species_distances(
         species_distances maps species to lists of minimum distances,
         and all_distances is a flat list of all minimum distances.
     """
+    if len(species1) != len(frac_coords1):
+        raise ValueError(
+            f"species1 length ({len(species1)}) does not match "
+            f"frac_coords1 rows ({len(frac_coords1)})"
+        )
+    if len(species2) != len(frac_coords2):
+        raise ValueError(
+            f"species2 length ({len(species2)}) does not match "
+            f"frac_coords2 rows ({len(frac_coords2)})"
+        )
     if species is None:
         species = sorted(set(species1) & set(species2))
 

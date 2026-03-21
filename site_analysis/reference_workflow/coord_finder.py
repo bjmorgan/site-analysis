@@ -13,8 +13,8 @@ enabling the creation of corresponding sites.
 Key features include:
 - Finding atoms with exactly the specified coordination environment
 - Supporting both single and multiple coordinating species
-- Filtering by center atom species and coordinating atom species
-- Customizing coordination requirements per center atom
+- Filtering by centre atom species and coordinating atom species
+- Customising coordination requirements per centre atom
 
 This module is a key component of the reference-based workflow, providing the
 initial identification of coordination environments that will be used to define

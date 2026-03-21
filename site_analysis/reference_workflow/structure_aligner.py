@@ -38,7 +38,33 @@ class StructureAligner:
         tolerance: float = 1e-4,
         algorithm: str = 'Nelder-Mead',
         minimizer_options: dict[str, Any] | None = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
-        """Align reference structure to target structure via translation."""
+        """Align reference structure to target structure via translation.
+
+        Finds the optimal translation vector that minimises distances
+        between corresponding atoms in the two structures.
+
+        Args:
+            reference: Reference structure to translate.
+            target: Target structure to align to.
+            species: Species to include in alignment. If None, all
+                species present in both structures are used.
+            metric: Distance metric to optimise ('rmsd' or 'max_dist').
+            tolerance: Convergence tolerance for the optimiser.
+            algorithm: Optimisation algorithm ('Nelder-Mead' or
+                'differential_evolution').
+            minimizer_options: Additional options passed to the optimiser.
+
+        Returns:
+            A tuple of (aligned_structure, translation_vector, metrics)
+            where aligned_structure is the translated reference,
+            translation_vector is the applied translation in fractional
+            coordinates, and metrics is a dictionary of alignment quality
+            measures.
+
+        Raises:
+            ValueError: If structures have incompatible compositions or
+                if optimisation fails.
+        """
         # Extract arrays from Structure at the public boundary
         ref_frac_coords = reference.frac_coords
         target_frac_coords = target.frac_coords

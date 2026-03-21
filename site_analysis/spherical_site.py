@@ -22,8 +22,8 @@ class SphericalSite(Site):
     
     SphericalSite determines whether atoms are inside the site volume by checking
     if the distance between the atom and the site centre is less than or equal to
-    the site's radius. This calculation considers periodic boundary conditions using
-    the structure's lattice.
+    the site's radius. This calculation considers periodic boundary conditions
+    via minimum-image convention distances.
     
     Unlike polyhedral sites, spherical sites have a fixed geometry independent of
     atom positions in the structure, making them suitable for applications where

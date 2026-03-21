@@ -85,7 +85,7 @@ def _per_site_analyse_structure(self, atoms, structure):
     for atom in atoms:
         atom.assign_coords(frac_coords)
     for site in self.sites:
-        site.calculate_centre(structure)
+        site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
     self.assign_site_occupations(atoms, structure.lattice.matrix)
 
 

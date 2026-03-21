@@ -131,8 +131,8 @@ class UnwrappedCoordinatesSiteTestCase(unittest.TestCase):
 		site_other = DynamicVoronoiSite(reference_indices=[3, 4])   # Further away
 		
 		# Calculate centres for both sites
-		site_target.calculate_centre(structure)
-		site_other.calculate_centre(structure)
+		site_target.calculate_centre(structure.frac_coords, structure.lattice.matrix)
+		site_other.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# Test using DynamicVoronoiSiteCollection for proper assignment
 		from site_analysis.dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection

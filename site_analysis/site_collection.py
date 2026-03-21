@@ -17,10 +17,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Generator
-from typing import NamedTuple, Sequence, TYPE_CHECKING
+from typing import Generic, NamedTuple, Sequence, TypeVar, TYPE_CHECKING
 
 import numpy as np
-from pymatgen.core import Structure # type: ignore
 from .atom import Atom
 from .site import Site
 
@@ -51,7 +50,10 @@ class _NearestSiteLookup(NamedTuple):
         return self.site_indices[int(np.argmin(dists))]
 
 
-class PriorityAssignmentMixin:
+SiteT = TypeVar('SiteT', bound=Site)
+
+
+class PriorityAssignmentMixin(Generic[SiteT]):
     """Mixin providing priority-based site assignment ordering.
 
     Provides ``_get_priority_sites(atom)``, a generator that yields sites
@@ -76,9 +78,9 @@ class PriorityAssignmentMixin:
     # Type stubs for the SiteCollection interface this mixin requires.
     # These are provided by SiteCollection at runtime via MRO.
     if TYPE_CHECKING:
-        sites: Sequence[Site]
-        def site_by_index(self, index: int) -> Site: ...
-        def neighbouring_sites(self, site_index: int) -> Sequence[Site]: ...
+        sites: Sequence[SiteT]
+        def site_by_index(self, index: int) -> SiteT: ...
+        def neighbouring_sites(self, site_index: int) -> Sequence[SiteT]: ...
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -108,7 +110,7 @@ class PriorityAssignmentMixin:
             centres=centres, site_indices=site_indices
         )
 
-    def _get_priority_sites(self, atom: Atom) -> Generator[Site, None, None]:
+    def _get_priority_sites(self, atom: Atom) -> Generator[SiteT, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
 
         The generator picks an *anchor site* — the most recent site from
@@ -332,19 +334,20 @@ class SiteCollection(ABC):
 
     def sites_contain_points(self,
                              points: np.ndarray,
-                             structure: Structure | None=None) -> bool:
-        """If implemented, Checks whether the set of sites contain
-        a corresponding set of fractional coordinates.
+                             all_frac_coords: np.ndarray,
+                             lattice_matrix: np.ndarray) -> bool:
+        """Check whether the set of sites contain corresponding points.
+
         Args:
-            points (np.array): 3xN numpy array of fractional coordinates.
-                There should be one coordinate for each site being checked.
+            points: (N, 3) array of fractional coordinates.
+                One coordinate per site being checked.
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
         Returns:
-            (bool)
-            
-        Notes:
-            Specific SiteCollection subclass implementations may require
-            additional arguments to be passed.
+            True if every point is contained by its corresponding site.
         """
         raise NotImplementedError('sites_contain_points() should be'
             ' implemented in the derived class')

@@ -8,7 +8,6 @@ the site is less important than its location.
 
 from __future__ import annotations
 from .site import Site
-from typing import Any
 from .atom import Atom
 from site_analysis.distances import mic_distance
 import numpy as np
@@ -103,9 +102,8 @@ class SphericalSite(Site):
 
     def contains_atom(self,
         atom: Atom,
-        lattice_matrix: np.ndarray | None = None,
-        *args: Any,
-        **kwargs: Any) -> bool:
+        *,
+        lattice_matrix: np.ndarray | None = None) -> bool:
         """Test whether this spherical site contains a specific atom.
 
         Args:
@@ -127,9 +125,8 @@ class SphericalSite(Site):
 
     def contains_point(self,
         x: np.ndarray,
-        lattice_matrix: np.ndarray | None = None,
-        *args: Any,
-        **kwargs: Any) -> bool:
+        *,
+        lattice_matrix: np.ndarray | None = None) -> bool:
         """Test if the point x is contained by this spherical site.
 
         Args:

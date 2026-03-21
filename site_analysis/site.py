@@ -20,7 +20,6 @@ from collections import Counter
 from typing import Any
 from .atom import Atom
 import numpy as np
-from pymatgen.core import Structure
 
 class Site(ABC):
     """Parent class for defining sites.
@@ -95,38 +94,27 @@ class Site(ABC):
  
     @abstractmethod
     def contains_point(self,
-            x: np.ndarray,
-            *args: Any,
-            **kwargs: Any) -> bool:
+            x: np.ndarray) -> bool:
         """Test whether the fractional coordinate x is contained by this site.
 
-        This method should be implemented in the derived subclass
-
         Args:
-            x (np.array): Fractional coordinate.
+            x: Fractional coordinate to test.
 
         Returns:
-            (bool)
-
-        Note:
-            Specific Site subclasses may require additional arguments to be passed.
-
+            True if the point is contained by this site.
         """
         raise NotImplementedError('contains_point should be implemented '
                                   'in the derived class')
 
     def contains_atom(self,
-            atom: Atom,
-            *args: Any,
-            **kwargs: Any) -> bool:
+            atom: Atom) -> bool:
         """Test whether this site contains a specific atom.
 
         Args:
-            atom (Atom): The atom to test.
+            atom: The atom to test.
 
         Returns:
-            (bool)
-
+            True if the atom is contained by this site.
         """
         return self.contains_point(atom.frac_coords)
 

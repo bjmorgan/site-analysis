@@ -76,22 +76,31 @@ class ReferenceBasedSites:
         """
         self.reference_structure = reference_structure
         self.target_structure = target_structure
-        
+
+        # Eagerly extract arrays from structures
+        self._ref_frac_coords = reference_structure.frac_coords.copy()
+        self._ref_lattice_matrix = reference_structure.lattice.matrix.copy()
+        self._ref_species = [s.species_string for s in reference_structure]
+        self._target_frac_coords = target_structure.frac_coords.copy()
+        self._target_lattice_matrix = target_structure.lattice.matrix.copy()
+        self._target_species = [s.species_string for s in target_structure]
+
         # Initialise alignment attributes
         self.aligned_structure: Structure | None = None
         self.translation_vector: np.ndarray | None = None
         self.alignment_metrics: dict[str, float] | None = None
-        
+        self._aligned_frac_coords: np.ndarray | None = None
+
         # Perform alignment if requested
         if align:
             self._align_structures(
-                align_species, 
-                align_metric, 
-                align_algorithm, 
+                align_species,
+                align_metric,
+                align_algorithm,
                 align_minimizer_options,
                 align_tolerance
             )
-        
+
         # These will be initialised on first use
         self._coord_finder: CoordinationEnvironmentFinder | None = None
         self._index_mapper: IndexMapper | None = None
@@ -264,6 +273,7 @@ class ReferenceBasedSites:
             self.aligned_structure = aligned_structure
             self.translation_vector = translation_vector
             self.alignment_metrics = metrics
+            self._aligned_frac_coords = aligned_structure.frac_coords.copy()
             
         except Exception as e:
             # Re-raise with more context
@@ -331,21 +341,19 @@ class ReferenceBasedSites:
             # Create index mapper if not already initialised
             if self._index_mapper is None:
                 self._index_mapper = IndexMapper()
-            
-            # Use aligned reference if available, otherwise use original reference
-            reference_to_use = (
-                self.aligned_structure  # When alignment was performed
-                if self.aligned_structure is not None 
-                else self.reference_structure  # When no alignment was performed
-            )
-            
+
+            ref_coords = (self._aligned_frac_coords
+                          if self._aligned_frac_coords is not None
+                          else self._ref_frac_coords)
+            lattice_matrix = self._ref_lattice_matrix
+
             # Map environments
             mapped_environments = self._index_mapper.map_coordinating_atoms(
-                ref_frac_coords=reference_to_use.frac_coords,
-                target_frac_coords=self.target_structure.frac_coords,
-                lattice_matrix=reference_to_use.lattice.matrix,
+                ref_frac_coords=ref_coords,
+                target_frac_coords=self._target_frac_coords,
+                lattice_matrix=lattice_matrix,
                 ref_coordinating=ref_environments,
-                target_species=[s.species_string for s in self.target_structure],
+                target_species=self._target_species,
                 species_filter=target_species,
             )
             
@@ -399,12 +407,7 @@ class ReferenceBasedSites:
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
         """Calculate reference centres from center atom indices."""
-        # Use aligned reference structure if available, otherwise original
-        structure_to_use = self.aligned_structure if self.aligned_structure else self.reference_structure
-        
-        reference_centers = []
-        for center_idx in center_indices:
-            reference_center = structure_to_use[center_idx].frac_coords.copy()
-            reference_centers.append(reference_center)
-        
-        return reference_centers
+        coords = (self._aligned_frac_coords
+                  if self._aligned_frac_coords is not None
+                  else self._ref_frac_coords)
+        return [coords[i].copy() for i in center_indices]

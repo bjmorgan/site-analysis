@@ -33,10 +33,10 @@ class SiteCollectionTestCase(unittest.TestCase):
                  Mock(spec=Site, index=1)]
         atoms = [Mock(spec=Atom), 
                  Mock(spec=Atom)]
-        structure = Mock(spec=Structure)
+        lattice_matrix = np.eye(3) * 10.0
         site_collection = ConcreteSiteCollection(sites=sites)
         with self.assertRaises(NotImplementedError):
-            site_collection.assign_site_occupations(atoms, structure)
+            site_collection.assign_site_occupations(atoms, lattice_matrix)
 
     def test_analyse_structure_raises_not_implemented_error(self):
         sites = [Mock(spec=Site, index=0),

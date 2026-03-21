@@ -210,23 +210,17 @@ class SiteCollection(ABC):
             self._site_lookup[site.index] = site
 
     @abstractmethod
-    def assign_site_occupations(self, atoms, structure):
-        """Assigns atoms to sites for a specific structure.
-
-        This method should be implemented in the derived subclass
+    def assign_site_occupations(self, atoms, lattice_matrix):
+        """Assign atoms to sites.
 
         Args:
-            atoms (list(Atom)): List of Atom objects to be assigned to sites.
-            struture (pymatgen.Structure): Pymatgen Structure object used to specificy
-                the atomic coordinates.
+            atoms: List of Atom objects to be assigned to sites.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
-        Returns:
-            None
-
-        Notes:
-            The atom coordinates should already be consistent with the coordinates
-            in `structure`. Recommended usage is via the ``analyse_structure()`` method.
-
+        Note:
+            The atom coordinates should already be consistent with the
+            structure. Recommended usage is via ``analyse_structure()``.
         """
         raise NotImplementedError('assign_site_occupations should be implemented in'
             ' the derived class')

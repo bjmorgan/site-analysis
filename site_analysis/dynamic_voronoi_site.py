@@ -91,6 +91,9 @@ class DynamicVoronoiSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Calculate the centre of this site from reference atom positions.
 
+        Handles periodic boundary conditions and wraps the result into
+        [0, 1).
+
         Args:
             all_frac_coords: Full fractional coordinate array from the
                 structure, shape ``(n_atoms, 3)``.

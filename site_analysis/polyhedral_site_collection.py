@@ -63,7 +63,16 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
     def analyse_structure(self,
             atoms: list[Atom],
-            structure: Structure):
+            structure: Structure) -> None:
+        """Analyse a structure to assign atoms to polyhedral sites.
+
+        Assigns coordinates to atoms, notifies sites of the new
+        structure, and assigns atoms to sites.
+
+        Args:
+            atoms: List of Atom objects to be assigned to sites.
+            structure: Pymatgen Structure containing atom positions.
+        """
         all_frac_coords = structure.frac_coords
         for a in atoms:
             a.assign_coords(all_frac_coords)
@@ -115,7 +124,16 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
         Returns:
             True if every point is contained by its corresponding site.
+
+        Raises:
+            ValueError: If the number of points does not match the number
+                of sites.
         """
+        if len(points) != len(self.sites):
+            raise ValueError(
+                f"Expected {len(self.sites)} points (one per site), "
+                f"got {len(points)}"
+            )
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))

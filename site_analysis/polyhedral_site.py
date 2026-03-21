@@ -343,6 +343,9 @@ class PolyhedralSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Assign fractional coordinates to the polyhedra vertices.
 
+        Resets the cached Delaunay tessellation, so the next
+        ``contains_point`` call will recompute it.
+
         Args:
             all_frac_coords: Full fractional coordinate array, shape
                 ``(n_atoms, 3)``.
@@ -350,9 +353,9 @@ class PolyhedralSite(Site):
                 vectors.
 
         Note:
-            For bulk analysis prefer ``notify_structure_changed`` via the
-            collection, which pre-extracts coordinates once and defers
-            PBC correction until the site is actually queried.
+            For bulk analysis prefer ``notify_structure_changed``, which
+            pre-extracts coordinates once and defers PBC correction
+            until the site is actually queried.
         """
         frac_coords = all_frac_coords[self.vertex_indices]
         self._store_vertex_coords(frac_coords, lattice_matrix)

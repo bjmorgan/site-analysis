@@ -284,6 +284,31 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             self.assertFalse(result)
 
 
+    def test_sites_contain_points_notifies_structure_changed(self):
+        """Test that sites_contain_points calls notify_structure_changed on each site."""
+        points = np.array([
+            [0.25, 0.25, 0.0],
+            [0.25, 0.25, 0.75],
+            [0.25, 0.0, 0.25]
+        ])
+        frac_coords = self.structure.frac_coords
+        lattice_matrix = self.lattice.matrix
+
+        with patch.object(PolyhedralSite, 'notify_structure_changed') as mock_notify, \
+             patch.object(PolyhedralSite, 'contains_point', return_value=True):
+            self.collection.sites_contain_points(points, frac_coords, lattice_matrix)
+            self.assertEqual(mock_notify.call_count, 3)
+            for call in mock_notify.call_args_list:
+                np.testing.assert_array_equal(call[0][0], frac_coords)
+                np.testing.assert_array_equal(call[0][1], lattice_matrix)
+
+    def test_sites_contain_points_raises_on_length_mismatch(self):
+        """Test that sites_contain_points raises ValueError on point count mismatch."""
+        points = np.array([[0.25, 0.25, 0.0]])  # 1 point, 3 sites
+        with self.assertRaises(ValueError):
+            self.collection.sites_contain_points(
+                points, self.structure.frac_coords, self.lattice.matrix)
+
     def test_checks_recent_site_via_priority_heuristic(self):
         """Test that assign_site_occupations uses _recent_sites for priority."""
         mock_structure = Mock(spec=Structure)

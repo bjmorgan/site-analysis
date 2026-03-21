@@ -77,7 +77,7 @@ def get_coordination_indices(
     centre_atoms = indices_for_species(species, centre_species)
 
     if not centre_atoms:
-        raise ValueError(f"No atoms of species '{centre_species}' found in structure")
+        raise ValueError(f"No atoms of species '{centre_species}' found in species list")
 
     coord_atoms = [i for i, s in enumerate(species)
                    if s in coordination_species_set]
@@ -350,6 +350,10 @@ def site_index_mapping(
     if species2_filter is None:
         species2_filter = list(set(species2))
     structure2_mask = np.array([s in species2_filter for s in species2])
+    if not np.any(structure2_mask):
+        raise ValueError(
+            f"No atoms match species2_filter {species2_filter} in species2"
+        )
     dr_ij = all_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
     to_return = []
     dr_ij_to_return = []

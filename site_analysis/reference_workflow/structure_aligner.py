@@ -159,7 +159,7 @@ class StructureAligner:
                 all species are used and compositions must match exactly.
 
         Returns:
-            Sorted list of species to use for alignment.
+            List of species to use for alignment.
 
         Raises:
             ValueError: If structures cannot be aligned.

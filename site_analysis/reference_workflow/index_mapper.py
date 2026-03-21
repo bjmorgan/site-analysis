@@ -131,6 +131,9 @@ class IndexMapper:
         Raises:
             ValueError: If 1:1 mapping cannot be achieved.
         """
+        if not ref_indices:
+            return {}
+
         # Ensure that species_filter is a list if it is specified
         if isinstance(species_filter, str):
             species_filter = [species_filter]

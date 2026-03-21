@@ -142,16 +142,13 @@ class Trajectory:
     def assign_site_occupations(self,
             structure: Structure) -> None:
         """Assign atoms to sites for a specific structure.
-
-        This delegates the assignment to the site collection's
-        assign_site_occupations method, extracting the lattice matrix
-        from the structure.
-
+        
+        This delegates the assignment to the site collection's assign_site_occupations method.
+        
         Args:
             structure: A pymatgen Structure object to be analysed.
         """
-        self.site_collection.assign_site_occupations(
-            self.atoms, structure.lattice.matrix)
+        self.site_collection.assign_site_occupations(self.atoms, structure)
                     
     def site_coordination_numbers(self) -> Counter:
         """Return the coordination numbers of all sites.

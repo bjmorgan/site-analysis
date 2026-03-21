@@ -17,6 +17,8 @@ persistence can be useful for tracking atoms through small oscillations
 without generating spurious site transitions.
 """
 
+from typing import cast
+
 import numpy as np
 from pymatgen.core import Structure
 from site_analysis.atom import Atom
@@ -85,7 +87,8 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
             atom.in_site = None
 
             # Check sites in priority order until found
-            for site in self._get_priority_sites(atom):
+            for site_ in self._get_priority_sites(atom):
+                site = cast(SphericalSite, site_)
                 if site.contains_atom(atom, lattice_matrix=lattice_matrix):
                     self.update_occupation(site, atom)
                     break

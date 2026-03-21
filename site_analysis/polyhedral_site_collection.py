@@ -18,6 +18,8 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
+from typing import cast
+
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
@@ -99,7 +101,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
             pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
-            for site in self._get_priority_sites(atom):
+            for site_ in self._get_priority_sites(atom):
+                site = cast(PolyhedralSite, site_)
                 if site.contains_atom(atom, pbc_images=pbc_images):
                     self.update_occupation(site, atom)
                     break

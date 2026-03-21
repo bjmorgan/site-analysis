@@ -7,7 +7,6 @@ atoms.
 
 from __future__ import annotations
 import numpy as np
-from typing import Any
 from .site import Site
 from .atom import Atom
 from site_analysis.pbc_utils import correct_pbc
@@ -126,9 +125,7 @@ class DynamicVoronoiSite(Site):
         return self._centre_coords
         
     def contains_point(self,
-                       x: np.ndarray,
-                       *args: Any,
-                       **kwargs: Any) -> bool:
+                       x: np.ndarray) -> bool:
         """A single dynamic Voronoi site cannot determine whether it contains a given point,
         because the site boundaries are defined by the set of all dynamic Voronoi sites.
         

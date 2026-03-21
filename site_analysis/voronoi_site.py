@@ -5,7 +5,6 @@ by a Voronoi cell centered at a fixed position.
 """
 
 from site_analysis.site import Site
-from typing import Any
 import numpy as np
 
 class VoronoiSite(Site):
@@ -106,9 +105,7 @@ class VoronoiSite(Site):
         return self.frac_coords
 
     def contains_point(self,
-                       x: np.ndarray,
-                       *args: Any,
-                       **kwargs: Any) -> bool:
+                       x: np.ndarray) -> bool:
         """A single Voronoi site cannot determine whether it contains a given point, because
         the site boundaries are defined by the set of all Voronoi sites.
 

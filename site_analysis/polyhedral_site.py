@@ -18,7 +18,6 @@ from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
-from typing import Any
 
 
 if HAS_NUMBA:
@@ -431,10 +430,9 @@ class PolyhedralSite(Site):
 
     def contains_point(self,
             x: np.ndarray,
+            *,
             algo: str | None = None,
-            *args,
-            pbc_images: np.ndarray | None = None,
-            **kwargs) -> bool:
+            pbc_images: np.ndarray | None = None) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
         The containment algorithm is selected automatically based on available
@@ -450,17 +448,7 @@ class PolyhedralSite(Site):
 
         Returns:
             True if the point is inside the polyhedron.
-
-        Raises:
-            TypeError: If the removed ``structure`` keyword argument
-                is passed.
         """
-        if 'structure' in kwargs:
-            raise TypeError(
-                "contains_point no longer accepts 'structure'. "
-                "Use notify_structure_changed() or assign_vertex_coords() "
-                "to set vertex coordinates before calling contains_point()."
-            )
         if algo is not None:
             warnings.warn(
                 "The 'algo' parameter is deprecated and will be removed in a "
@@ -505,10 +493,9 @@ class PolyhedralSite(Site):
 
     def contains_atom(self,
             atom: Atom,
+            *,
             algo: str | None = None,
-            *args: Any,
-            pbc_images: np.ndarray | None = None,
-            **kwargs: Any) -> bool:
+            pbc_images: np.ndarray | None = None) -> bool:
         """Test whether an atom is inside this polyhedron.
 
         Args:

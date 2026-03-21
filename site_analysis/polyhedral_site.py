@@ -450,7 +450,17 @@ class PolyhedralSite(Site):
 
         Returns:
             True if the point is inside the polyhedron.
+
+        Raises:
+            TypeError: If the removed ``structure`` keyword argument
+                is passed.
         """
+        if 'structure' in kwargs:
+            raise TypeError(
+                "contains_point no longer accepts 'structure'. "
+                "Use notify_structure_changed() or assign_vertex_coords() "
+                "to set vertex coordinates before calling contains_point()."
+            )
         if algo is not None:
             warnings.warn(
                 "The 'algo' parameter is deprecated and will be removed in a "

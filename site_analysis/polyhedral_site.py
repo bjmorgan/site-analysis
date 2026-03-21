@@ -13,9 +13,8 @@ import warnings
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
-from pymatgen.core import Structure
 from site_analysis.site import Site
-from site_analysis.tools import x_pbc, species_string_from_site
+from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
@@ -208,7 +207,7 @@ class PolyhedralSite(Site):
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
         vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
-            Set using assign_vertex_coords() from a Structure.
+            Set using assign_vertex_coords() or notify_structure_changed().
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
 
     See Also:

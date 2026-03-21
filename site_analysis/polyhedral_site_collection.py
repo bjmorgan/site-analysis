@@ -23,7 +23,7 @@ from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .site import Site
 from .tools import x_pbc
-from pymatgen.core import Structure # type: ignore
+from pymatgen.core import Structure
 import numpy as np
 
 

@@ -20,7 +20,6 @@ from collections.abc import Generator
 from typing import NamedTuple, Sequence, TYPE_CHECKING
 
 import numpy as np
-from pymatgen.core import Structure # type: ignore
 from .atom import Atom
 from .site import Site
 

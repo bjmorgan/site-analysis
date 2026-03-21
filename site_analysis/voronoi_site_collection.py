@@ -10,7 +10,7 @@ logic than other site collections:
 
 For atom assignment, the collection:
 1. Calculates distances from each site centre to each atom
-2. Assigns each atom to the site with the nearest center
+2. Assigns each atom to the site with the nearest centre
 3. Uses minimum-image convention distances to correctly handle periodic
    boundaries
 

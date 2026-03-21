@@ -81,7 +81,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
             mock_pbc.return_value = (corrected_coords,
                                      np.zeros((4, 3), dtype=np.int64))
 
-            site.calculate_centre(structure)
+            site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
@@ -89,19 +89,19 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
             # Expected centre: mean = [0.125, 0.125, 0.125], no wrapping needed
             expected_centre = np.mean(corrected_coords, axis=0)
             np.testing.assert_array_almost_equal(site._centre_coords, expected_centre)
-    
+
     def test_calculate_centre_with_wrapping(self):
         """Test centre calculation when result needs wrapping."""
         reference_indices = [0, 1, 2, 3]
         site = DynamicVoronoiSite(reference_indices=reference_indices)
-        
+
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1],
                   [0.2, 0.1, 0.1],
                   [0.1, 0.2, 0.1],
                   [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        
+
         with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
             # Mock returns coordinates that produce centre > 1.0 to test wrapping
             corrected_coords = np.array([[1.1, 1.1, 1.1],
@@ -111,7 +111,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
             mock_pbc.return_value = (corrected_coords,
                                      np.ones((4, 3), dtype=np.int64))
 
-            site.calculate_centre(structure)
+            site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
             mock_pbc.assert_called_once()
             np.testing.assert_array_almost_equal(mock_pbc.call_args[0][0], coords)
@@ -152,18 +152,18 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         structure1 = Structure(lattice, ["Li", "Li", "Li", "Li"], coords1)
         
         # Calculate initial centre
-        site.calculate_centre(structure1)
+        site.calculate_centre(structure1.frac_coords, structure1.lattice.matrix)
         initial_centre = site._centre_coords.copy()
-        
+
         # Create a new structure with moved atoms
         coords2 = [[0.2, 0.2, 0.2],
                 [0.3, 0.2, 0.2],
                 [0.2, 0.3, 0.2],
                 [0.2, 0.2, 0.3]]
         structure2 = Structure(lattice, ["Li", "Li", "Li", "Li"], coords2)
-        
+
         # Calculate new centre
-        site.calculate_centre(structure2)
+        site.calculate_centre(structure2.frac_coords, structure2.lattice.matrix)
         new_centre = site._centre_coords
         
         # Check that the centre has changed
@@ -347,7 +347,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
 
         with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
             mock_pbc.return_value = (np.array(coords), np.zeros((4, 3), dtype=np.int64))
-            site.calculate_centre(structure)
+            site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
             mock_pbc.assert_called_once()
             self.assertIsNone(mock_pbc.call_args[0][1])
 
@@ -363,7 +363,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
 
         with patch('site_analysis.dynamic_voronoi_site.correct_pbc') as mock_pbc:
             mock_pbc.return_value = (np.array(coords), np.zeros((4, 3), dtype=np.int64))
-            site.calculate_centre(structure)
+            site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
             mock_pbc.assert_called_once()
             np.testing.assert_array_equal(mock_pbc.call_args[0][1], reference_center)
             
@@ -381,7 +381,7 @@ class TestCalculateCentrePbc(unittest.TestCase):
         structure = Structure(lattice, ["Li", "Li"], coords)
         site = DynamicVoronoiSite(reference_indices=[0, 1])
 
-        site.calculate_centre(structure)
+        site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
         # Centre should be near x=0.0 (or 1.0), not at 0.5
         x = site._centre_coords[0]
@@ -403,7 +403,7 @@ class TestResetWithCalculatedCentre(unittest.TestCase):
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
         site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
 
-        site.calculate_centre(structure)
+        site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
         self.assertIsNotNone(site._centre_coords)
 
         site.reset()

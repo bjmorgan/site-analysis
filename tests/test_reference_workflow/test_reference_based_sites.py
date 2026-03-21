@@ -70,12 +70,22 @@ class TestReferenceBasedSites(unittest.TestCase):
         """Set up a mock StructureAligner."""
         mock = Mock()
         aligned_reference = Mock(spec=Structure)
+        # Give aligned reference the array attributes needed by _map_environments
+        aligned_reference.frac_coords = np.array([
+            [0.05, 0.05, 0.05],
+            [0.55, 0.55, 0.55],
+            [0.55, 0.05, 0.05],
+            [0.05, 0.55, 0.55],
+        ])
+        aligned_lattice = Mock()
+        aligned_lattice.matrix = np.diag([5.0, 5.0, 5.0])
+        aligned_reference.lattice = aligned_lattice
         translation_vector = np.array([0.1, 0.1, 0.1])
         metrics = {'rmsd': 0.1, 'max_dist': 0.2, 'mean_dist': 0.15}
-        
+
         # Mock align method to return the aligned reference structure
         mock.align.return_value = (aligned_reference, translation_vector, metrics)
-        
+
         return mock
     
     def _setup_mock_coord_finder(self):
@@ -205,12 +215,13 @@ class TestReferenceBasedSites(unittest.TestCase):
             )
             
             # Check that map_coordinating_atoms was called with correct parameters
-            self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
-                self.reference,
-                self.target,  # Should use target directly since no alignment
-                self.ref_environments,
-                target_species='Cl'
-            )
+            args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
+            np.testing.assert_array_equal(kwargs['ref_frac_coords'], self.reference.frac_coords)
+            np.testing.assert_array_equal(kwargs['target_frac_coords'], self.target.frac_coords)
+            np.testing.assert_array_equal(kwargs['lattice_matrix'], self.reference.lattice.matrix)
+            self.assertEqual(kwargs['ref_coordinating'], self.ref_environments)
+            self.assertEqual(kwargs['target_species'], [s.species_string for s in self.target])
+            self.assertEqual(kwargs['species_filter'], 'Cl')
             
             # Check returned environments
             self.assertEqual(mapped, self.mapped_environments)
@@ -232,16 +243,14 @@ class TestReferenceBasedSites(unittest.TestCase):
             
             # Check map_coordinating_atoms call - use individual argument checks
             args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
-            
-            # First arg should be the aligned reference
-            self.assertIs(args[0], aligned_reference)
-            
-            # Second arg should be the target
-            self.assertIs(args[1], self.target)
-            
-            # Verify other arguments
-            self.assertEqual(args[2], self.ref_environments)
-            self.assertEqual(kwargs['target_species'], 'Cl')
+
+            # Should use aligned reference coords and lattice
+            np.testing.assert_array_equal(kwargs['ref_frac_coords'], aligned_reference.frac_coords)
+            np.testing.assert_array_equal(kwargs['target_frac_coords'], self.target.frac_coords)
+            np.testing.assert_array_equal(kwargs['lattice_matrix'], aligned_reference.lattice.matrix)
+            self.assertEqual(kwargs['ref_coordinating'], self.ref_environments)
+            self.assertEqual(kwargs['target_species'], [s.species_string for s in self.target])
+            self.assertEqual(kwargs['species_filter'], 'Cl')
             
             # Check returned environments
             self.assertEqual(mapped, self.mapped_environments)
@@ -277,14 +286,15 @@ class TestReferenceBasedSites(unittest.TestCase):
                 # Check that _calculate_reference_centers_from_indices was called
                 mock_calc_centers.assert_called_once_with([0])  # center indices from ref_environments.keys()
                 
-                # Check that map_coordinating_atoms was called
-                self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
-                    self.reference,
-                    self.target,
-                    self.mapped_environments,
-                    target_species='Cl'
-                )
-                
+                # Check that map_coordinating_atoms was called with arrays
+                call_args = self.mock_index_mapper.map_coordinating_atoms.call_args
+                np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], self.reference.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], self.reference.lattice.matrix)
+                self.assertEqual(call_args.kwargs['ref_coordinating'], self.mapped_environments)
+                self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+                self.assertEqual(call_args.kwargs['species_filter'], 'Cl')
+
                 # Check that create_polyhedral_sites was called with reference_centers
                 self.mock_site_factory.create_polyhedral_sites.assert_called_with(
                     self.mapped_environments,
@@ -327,13 +337,14 @@ class TestReferenceBasedSites(unittest.TestCase):
                 # Check that _calculate_reference_centers_from_indices was called
                 mock_calc_centers.assert_called_once_with([0])  # center indices from ref_environments.keys()
                 
-                # Check that map_coordinating_atoms was called
-                self.mock_index_mapper.map_coordinating_atoms.assert_called_with(
-                    self.reference,
-                    self.target,
-                    self.ref_environments_list,
-                    target_species='Cl'
-                )
+                # Check that map_coordinating_atoms was called with arrays
+                call_args = self.mock_index_mapper.map_coordinating_atoms.call_args
+                np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], self.reference.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], self.reference.lattice.matrix)
+                self.assertEqual(call_args.kwargs['ref_coordinating'], self.ref_environments_list)
+                self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+                self.assertEqual(call_args.kwargs['species_filter'], 'Cl')
                 
                 # Check that create_dynamic_voronoi_sites was called with reference_centers
                 self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_with(
@@ -374,18 +385,16 @@ class TestReferenceBasedSites(unittest.TestCase):
                 mock_calc_centers.assert_called_once_with([0])
                 
                 # Check map_coordinating_atoms call
-                args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
-                
-                # First arg should be the aligned reference
-                self.assertIs(args[0], aligned_reference)
-                
-                # Second arg should be the target
-                self.assertIs(args[1], self.target)
-                
-                # Verify other arguments
-                self.assertEqual(args[2], self.ref_environments_list)
-                self.assertEqual(kwargs['target_species'], 'Cl')
-                
+                call_args = self.mock_index_mapper.map_coordinating_atoms.call_args
+
+                # Should use aligned reference coords and lattice
+                np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], aligned_reference.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], aligned_reference.lattice.matrix)
+                self.assertEqual(call_args.kwargs['ref_coordinating'], self.ref_environments_list)
+                self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+                self.assertEqual(call_args.kwargs['species_filter'], 'Cl')
+
                 # Check that create_dynamic_voronoi_sites was called with reference_centers
                 self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_with(
                     self.mapped_environments,
@@ -425,18 +434,16 @@ class TestReferenceBasedSites(unittest.TestCase):
                 mock_calc_centers.assert_called_once_with([0])
                 
                 # Check map_coordinating_atoms call
-                args, kwargs = self.mock_index_mapper.map_coordinating_atoms.call_args
-                
-                # First arg should be the aligned reference
-                self.assertIs(args[0], aligned_reference)
-                
-                # Second arg should be the target
-                self.assertIs(args[1], self.target)
-                
-                # Verify other arguments
-                self.assertEqual(args[2], self.ref_environments_list)
-                self.assertEqual(kwargs['target_species'], 'Cl')
-                
+                call_args = self.mock_index_mapper.map_coordinating_atoms.call_args
+
+                # Should use aligned reference coords and lattice
+                np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], aligned_reference.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+                np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], aligned_reference.lattice.matrix)
+                self.assertEqual(call_args.kwargs['ref_coordinating'], self.ref_environments_list)
+                self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+                self.assertEqual(call_args.kwargs['species_filter'], 'Cl')
+
                 # Check that create_polyhedral_sites was called with reference_centers
                 self.mock_site_factory.create_polyhedral_sites.assert_called_with(
                     self.mapped_environments,
@@ -444,7 +451,7 @@ class TestReferenceBasedSites(unittest.TestCase):
                     label='test_label',
                     labels=None
                 )
-                
+
                 # Verify expected sites are returned
                 self.assertEqual(sites, self.mock_site_factory.create_polyhedral_sites.return_value)
 
@@ -626,24 +633,35 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs1 = ReferenceBasedSites(self.reference, self.target, align=False)
             rbs1._index_mapper = mock_mapper
             
-            # Set an aligned structure
+            # Set an aligned structure with array attributes
             aligned_reference = Mock(spec=Structure)
+            aligned_reference.frac_coords = np.array([
+                [0.05, 0.05, 0.05],
+                [0.55, 0.55, 0.55],
+                [0.55, 0.05, 0.05],
+                [0.05, 0.55, 0.55],
+            ])
+            aligned_lattice = Mock()
+            aligned_lattice.matrix = np.diag([5.0, 5.0, 5.0])
+            aligned_reference.lattice = aligned_lattice
             rbs1.aligned_structure = aligned_reference
-            
+
             # Call the method
             rbs1._map_environments(ref_environments, target_species="Na")
-            
+
             # Check that the method was called once
             mock_mapper.map_coordinating_atoms.assert_called_once()
-            
+
             # Get the call arguments
-            args, kwargs = mock_mapper.map_coordinating_atoms.call_args
-            
-            # Check arguments individually
-            self.assertIs(args[0], aligned_reference)  # First arg should be aligned reference
-            self.assertIs(args[1], self.target)        # Second arg should be target structure
-            self.assertEqual(args[2], ref_environments) # Third arg should be environments list
-            self.assertEqual(kwargs['target_species'], "Na")
+            call_args = mock_mapper.map_coordinating_atoms.call_args
+
+            # Check arguments - should use aligned reference arrays
+            np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], aligned_reference.frac_coords)
+            np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+            np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], aligned_reference.lattice.matrix)
+            self.assertEqual(call_args.kwargs['ref_coordinating'], ref_environments)
+            self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+            self.assertEqual(call_args.kwargs['species_filter'], "Na")
         
         # Case 2: When no alignment has been performed
         # -----------------------------------------
@@ -654,21 +672,23 @@ class TestReferenceBasedSites(unittest.TestCase):
             rbs2 = ReferenceBasedSites(self.reference, self.target, align=False)
             rbs2._index_mapper = mock_mapper
             rbs2.aligned_structure = None  # No aligned structure
-            
+
             # Call the method
             rbs2._map_environments(ref_environments)
-            
+
             # Check that the method was called once
             mock_mapper.map_coordinating_atoms.assert_called_once()
-            
+
             # Get the call arguments
-            args, kwargs = mock_mapper.map_coordinating_atoms.call_args
-            
-            # Check arguments individually
-            self.assertIs(args[0], self.reference)     # First arg should be original reference
-            self.assertIs(args[1], self.target)        # Second arg should be target structure
-            self.assertEqual(args[2], ref_environments) # Third arg should be environments list
-            self.assertEqual(kwargs.get('target_species'), None)
+            call_args = mock_mapper.map_coordinating_atoms.call_args
+
+            # Check arguments - should use original reference arrays
+            np.testing.assert_array_equal(call_args.kwargs['ref_frac_coords'], self.reference.frac_coords)
+            np.testing.assert_array_equal(call_args.kwargs['target_frac_coords'], self.target.frac_coords)
+            np.testing.assert_array_equal(call_args.kwargs['lattice_matrix'], self.reference.lattice.matrix)
+            self.assertEqual(call_args.kwargs['ref_coordinating'], ref_environments)
+            self.assertEqual(call_args.kwargs['target_species'], [s.species_string for s in self.target])
+            self.assertIsNone(call_args.kwargs['species_filter'])
             
     def test_align_structures_unit(self):
         """Unit test for _align_structures - verifies parameters are correctly passed to StructureAligner."""

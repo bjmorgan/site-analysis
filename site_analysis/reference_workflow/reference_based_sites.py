@@ -341,10 +341,12 @@ class ReferenceBasedSites:
             
             # Map environments
             mapped_environments = self._index_mapper.map_coordinating_atoms(
-                reference_to_use,      # Aligned reference if available
-                self.target_structure, # Always use original target
-                ref_environments,
-                target_species=target_species
+                ref_frac_coords=reference_to_use.frac_coords,
+                target_frac_coords=self.target_structure.frac_coords,
+                lattice_matrix=reference_to_use.lattice.matrix,
+                ref_coordinating=ref_environments,
+                target_species=[s.species_string for s in self.target_structure],
+                species_filter=target_species,
             )
             
             return mapped_environments

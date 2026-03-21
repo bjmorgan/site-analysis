@@ -19,7 +19,6 @@ sites in one structure based on a template from another structure.
 
 import numpy as np
 from pymatgen.core import Structure
-from scipy.optimize import minimize
 from typing import Any, Callable
 from site_analysis.tools import calculate_species_distances
 
@@ -168,22 +167,6 @@ class StructureAligner:
                     f"{ref_count} in reference vs {target_count} in target"
                 )
         return species_to_use
-    
-    def _translate_coords(self, 
-                         coords: np.ndarray, 
-                         translation_vector: np.ndarray) -> np.ndarray:
-        """Apply translation to coordinates.
-        
-        Args:
-            coords: Fractional coordinates to translate
-            translation_vector: Translation vector to apply
-            
-        Returns:
-            Translated coordinates
-        """
-        translated = coords + translation_vector
-        # Ensure coordinates are within [0, 1)
-        return np.array(translated % 1.0)
     
     def _apply_translation(self, 
                           structure: Structure, 

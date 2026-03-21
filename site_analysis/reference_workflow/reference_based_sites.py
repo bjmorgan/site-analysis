@@ -78,11 +78,11 @@ class ReferenceBasedSites:
         self.target_structure = target_structure
 
         # Eagerly extract arrays from structures
-        self._ref_frac_coords = reference_structure.frac_coords.copy()
-        self._ref_lattice_matrix = reference_structure.lattice.matrix.copy()
+        self._ref_frac_coords: np.ndarray = reference_structure.frac_coords
+        self._ref_lattice_matrix: np.ndarray = reference_structure.lattice.matrix
         self._ref_species = [s.species_string for s in reference_structure]
-        self._target_frac_coords = target_structure.frac_coords.copy()
-        self._target_lattice_matrix = target_structure.lattice.matrix.copy()
+        self._target_frac_coords = target_structure.frac_coords
+        self._target_lattice_matrix = target_structure.lattice.matrix
         self._target_species = [s.species_string for s in target_structure]
 
         # Initialise alignment attributes
@@ -106,7 +106,14 @@ class ReferenceBasedSites:
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
         
-    def create_polyhedral_sites(self, 
+    @property
+    def _effective_ref_coords(self) -> np.ndarray:
+        """Reference coordinates to use, preferring aligned if available."""
+        if self._aligned_frac_coords is not None:
+            return self._aligned_frac_coords
+        return self._ref_frac_coords
+
+    def create_polyhedral_sites(self,
                             center_species: str, 
                             vertex_species: str | list[str], 
                             cutoff: float, 
@@ -273,7 +280,7 @@ class ReferenceBasedSites:
             self.aligned_structure = aligned_structure
             self.translation_vector = translation_vector
             self.alignment_metrics = metrics
-            self._aligned_frac_coords = aligned_structure.frac_coords.copy()
+            self._aligned_frac_coords = aligned_structure.frac_coords
             
         except Exception as e:
             # Re-raise with more context
@@ -342,9 +349,7 @@ class ReferenceBasedSites:
             if self._index_mapper is None:
                 self._index_mapper = IndexMapper()
 
-            ref_coords = (self._aligned_frac_coords
-                          if self._aligned_frac_coords is not None
-                          else self._ref_frac_coords)
+            ref_coords = self._effective_ref_coords
             lattice_matrix = self._ref_lattice_matrix
 
             # Map environments
@@ -407,7 +412,5 @@ class ReferenceBasedSites:
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
         """Calculate reference centres from center atom indices."""
-        coords = (self._aligned_frac_coords
-                  if self._aligned_frac_coords is not None
-                  else self._ref_frac_coords)
+        coords = self._effective_ref_coords
         return [coords[i].copy() for i in center_indices]

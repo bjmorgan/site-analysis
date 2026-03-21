@@ -36,12 +36,14 @@ class SiteFactory:
     """
     
     def __init__(self, structure: Structure):
-        """Initialize SiteFactory with a structure.
-        
+        """Initialise SiteFactory with a structure.
+
         Args:
             structure: A pymatgen Structure used to assign coordinates to sites.
         """
         self.structure = structure
+        self._frac_coords = structure.frac_coords
+        self._lattice_matrix = structure.lattice.matrix
     
     def create_polyhedral_sites(
         self, 
@@ -248,8 +250,8 @@ class SiteFactory:
         site: PolyhedralSite
     ) -> None:
         """Assign vertex coordinates to a PolyhedralSite.
-        
+
         Args:
             site: PolyhedralSite to assign coordinates to.
         """
-        site.assign_vertex_coords(self.structure)
+        site.assign_vertex_coords(self._frac_coords, self._lattice_matrix)

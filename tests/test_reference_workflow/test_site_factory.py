@@ -188,8 +188,10 @@ class TestSiteFactory(unittest.TestCase):
 		# Call the method directly with the mock
 		self.site_factory._assign_vertex_coords(mock_site)
 		
-		# Verify method was called with correct argument
-		mock_site.assign_vertex_coords.assert_called_once_with(self.structure)
+		# Verify method was called with correct arguments
+		call_args = mock_site.assign_vertex_coords.call_args
+		np.testing.assert_array_equal(call_args[0][0], self.structure.frac_coords)
+		np.testing.assert_array_equal(call_args[0][1], self.structure.lattice.matrix)
 	
 	def test_vertex_coords_assignment(self):
 		"""Test that vertex coordinates are correctly assigned for PolyhedralSite."""
@@ -202,8 +204,10 @@ class TestSiteFactory(unittest.TestCase):
 			# Test creating a single site
 			self.site_factory.create_polyhedral_sites(self.tetrahedral_env)
 			
-			# Verify assign_vertex_coords was called with the correct structure
-			mock_site.assign_vertex_coords.assert_called_once_with(self.structure)
+			# Verify assign_vertex_coords was called with the correct arrays
+			call_args = mock_site.assign_vertex_coords.call_args
+			np.testing.assert_array_equal(call_args[0][0], self.structure.frac_coords)
+			np.testing.assert_array_equal(call_args[0][1], self.structure.lattice.matrix)
 	
 	def test_minimum_vertices_for_polyhedral_sites(self):
 		"""Test minimum vertices validation for PolyhedralSite."""

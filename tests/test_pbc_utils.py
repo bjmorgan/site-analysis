@@ -142,7 +142,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Should remain unchanged (this works correctly)
 		expected_coords = np.array(coords)
@@ -178,7 +178,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Current algorithm should correctly shift small z-coordinates
 		expected_coords = np.array([
@@ -226,7 +226,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Should remain unchanged (spread < 0.5, no correction needed)
 		expected_coords = np.array(coords)

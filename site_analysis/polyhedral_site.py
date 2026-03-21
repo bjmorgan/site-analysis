@@ -340,25 +340,23 @@ class PolyhedralSite(Site):
         self._pending_lattice_matrix = lattice_matrix
 
     def assign_vertex_coords(self,
-            structure: Structure) -> None:
-        """Assign fractional coordinates to the polyhedra vertices
-        from the corresponding atom positions in a pymatgen Structure.
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> None:
+        """Assign fractional coordinates to the polyhedra vertices.
 
         Args:
-            structure: The pymatgen Structure used to assign
-                the fractional coordinates of the vertices.
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
-        Notes:
-            This method assumes the coordinates of the vertices may
-            have changed, so unsets the Delaunay tessellation for this site.
-
+        Note:
             For bulk analysis prefer ``notify_structure_changed`` via the
             collection, which pre-extracts coordinates once and defers
             PBC correction until the site is actually queried.
         """
-        frac_coords = np.array([s.frac_coords for s in
-            [structure[i] for i in self.vertex_indices]])
-        self._store_vertex_coords(frac_coords, structure.lattice.matrix)
+        frac_coords = all_frac_coords[self.vertex_indices]
+        self._store_vertex_coords(frac_coords, lattice_matrix)
 
     def _assign_from_pending(self,
             all_frac_coords: np.ndarray,
@@ -417,19 +415,17 @@ class PolyhedralSite(Site):
         self._cache_stale = True
 
     def get_vertex_species(self,
-            structure: Structure) -> list[str]:
-        """Returns a list of species strings for the vertex atoms of this
-        polyhedral site.
+            species: list[str]) -> list[str]:
+        """Return species strings for this site's vertex atoms.
 
         Args:
-            structure (Structure): Pymatgen Structure used to assign species
-                to each vertex atom.
+            species: List of species strings for all atoms in the
+                structure, indexed by atom index.
 
         Returns:
-            (list(str)): list of species strings of the vertex atoms.
-
+            Species strings for this site's vertex atoms.
         """
-        return [structure[i].species_string for i in self.vertex_indices]
+        return [species[i] for i in self.vertex_indices]
 
     def contains_point(self,
             x: np.ndarray,
@@ -466,7 +462,7 @@ class PolyhedralSite(Site):
                 stacklevel=2,
             )
         if structure is not None:
-            self.assign_vertex_coords(structure)
+            self.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
         elif self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
             self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
         if self.vertex_coords is None:

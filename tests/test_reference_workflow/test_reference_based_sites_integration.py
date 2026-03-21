@@ -512,7 +512,7 @@ class TestPBCImplemenetation(unittest.TestCase):
         )
         
         # Test that site 3 gets incorrectly unwrapped by legacy method
-        sites[3].assign_vertex_coords(target_structure)
+        sites[3].assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Check for incorrect unwrapping - coordinates should not match target structure
         expected_coords = target_structure.frac_coords[sites[3].vertex_indices]
@@ -544,7 +544,7 @@ class TestPBCImplemenetation(unittest.TestCase):
         )
         
         # Test that site 3 is correctly handled by new method
-        sites[3].assign_vertex_coords(target_structure)
+        sites[3].assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Verify vertex coordinates match target structure exactly
         expected_coords = target_structure.frac_coords[sites[3].vertex_indices]

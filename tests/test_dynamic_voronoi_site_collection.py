@@ -161,8 +161,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		# Per-site path
 		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
 		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
-		site_a.calculate_centre(structure)
-		site_b.calculate_centre(structure)
+		site_a.calculate_centre(structure.frac_coords, structure.lattice.matrix)
+		site_b.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
 		# Batch path
 		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
@@ -302,8 +302,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		# Fresh per-site reference for the post-invalidation frame
 		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
 		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
-		ref_a.calculate_centre(struct2)
-		ref_b.calculate_centre(struct2)
+		ref_a.calculate_centre(struct2.frac_coords, struct2.lattice.matrix)
+		ref_b.calculate_centre(struct2.frac_coords, struct2.lattice.matrix)
 
 		collection._batch_calculate_centres(struct2.frac_coords, struct2.lattice.matrix)
 

@@ -142,7 +142,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Should remain unchanged (this works correctly)
 		expected_coords = np.array(coords)
@@ -160,7 +160,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 		
 		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-		site.calculate_centre(structure)
+		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# Should calculate centre correctly (this works correctly)
 		expected_centre = np.mean(coords, axis=0)
@@ -178,7 +178,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Current algorithm should correctly shift small z-coordinates
 		expected_coords = np.array([
@@ -201,7 +201,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 		
 		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-		site.calculate_centre(structure)
+		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# DynamicVoronoiSite applies correction AND wraps centre back to [0,1)
 		corrected_coords = np.array([
@@ -226,7 +226,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-		site.assign_vertex_coords(structure)
+		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Should remain unchanged (spread < 0.5, no correction needed)
 		expected_coords = np.array(coords)
@@ -244,7 +244,7 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		structure = Structure(self.lattice, species, coords)
 		
 		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-		site.calculate_centre(structure)
+		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# Should calculate centre correctly (no correction needed)
 		expected_centre = np.mean(coords, axis=0) % 1.0

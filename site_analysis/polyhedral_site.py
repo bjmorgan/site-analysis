@@ -12,14 +12,12 @@ import itertools
 import warnings
 
 import numpy as np
-from scipy.spatial import ConvexHull, Delaunay, QhullError # type: ignore
-from pymatgen.core import Structure
+from scipy.spatial import ConvexHull, Delaunay, QhullError
 from site_analysis.site import Site
-from site_analysis.tools import x_pbc, species_string_from_site
+from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
-from typing import Any
 
 
 if HAS_NUMBA:
@@ -208,7 +206,7 @@ class PolyhedralSite(Site):
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
         vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
-            Set using assign_vertex_coords() from a Structure.
+            Set using assign_vertex_coords() or notify_structure_changed().
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
 
     See Also:
@@ -340,25 +338,26 @@ class PolyhedralSite(Site):
         self._pending_lattice_matrix = lattice_matrix
 
     def assign_vertex_coords(self,
-            structure: Structure) -> None:
-        """Assign fractional coordinates to the polyhedra vertices
-        from the corresponding atom positions in a pymatgen Structure.
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> None:
+        """Assign fractional coordinates to the polyhedra vertices.
+
+        Resets the cached Delaunay tessellation, so the next
+        ``contains_point`` call will recompute it.
 
         Args:
-            structure: The pymatgen Structure used to assign
-                the fractional coordinates of the vertices.
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
-        Notes:
-            This method assumes the coordinates of the vertices may
-            have changed, so unsets the Delaunay tessellation for this site.
-
-            For bulk analysis prefer ``notify_structure_changed`` via the
-            collection, which pre-extracts coordinates once and defers
-            PBC correction until the site is actually queried.
+        Note:
+            For bulk analysis prefer ``notify_structure_changed``, which
+            pre-extracts coordinates once and defers PBC correction
+            until the site is actually queried.
         """
-        frac_coords = np.array([s.frac_coords for s in
-            [structure[i] for i in self.vertex_indices]])
-        self._store_vertex_coords(frac_coords, structure.lattice.matrix)
+        frac_coords = all_frac_coords[self.vertex_indices]
+        self._store_vertex_coords(frac_coords, lattice_matrix)
 
     def _assign_from_pending(self,
             all_frac_coords: np.ndarray,
@@ -417,27 +416,23 @@ class PolyhedralSite(Site):
         self._cache_stale = True
 
     def get_vertex_species(self,
-            structure: Structure) -> list[str]:
-        """Returns a list of species strings for the vertex atoms of this
-        polyhedral site.
+            species: list[str]) -> list[str]:
+        """Return species strings for this site's vertex atoms.
 
         Args:
-            structure (Structure): Pymatgen Structure used to assign species
-                to each vertex atom.
+            species: List of species strings for all atoms in the
+                structure, indexed by atom index.
 
         Returns:
-            (list(str)): list of species strings of the vertex atoms.
-
+            Species strings for this site's vertex atoms.
         """
-        return [structure[i].species_string for i in self.vertex_indices]
+        return [species[i] for i in self.vertex_indices]
 
     def contains_point(self,
             x: np.ndarray,
-            structure: Structure | None = None,
+            *,
             algo: str | None = None,
-            *args,
-            pbc_images: np.ndarray | None = None,
-            **kwargs) -> bool:
+            pbc_images: np.ndarray | None = None) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
         The containment algorithm is selected automatically based on available
@@ -446,9 +441,6 @@ class PolyhedralSite(Site):
 
         Args:
             x: Fractional coordinates of the point to test (length 3 array).
-            structure: Optional pymatgen Structure. If provided, the vertex
-                coordinates for this polyhedral site will be assigned using
-                this structure.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
             pbc_images: Optional pre-computed PBC images of x, shape (N, 3).
@@ -465,9 +457,7 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        if structure is not None:
-            self.assign_vertex_coords(structure)
-        elif self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
+        if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
             self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
         if self.vertex_coords is None:
             raise RuntimeError(
@@ -503,10 +493,9 @@ class PolyhedralSite(Site):
 
     def contains_atom(self,
             atom: Atom,
+            *,
             algo: str | None = None,
-            *args: Any,
-            pbc_images: np.ndarray | None = None,
-            **kwargs: Any) -> bool:
+            pbc_images: np.ndarray | None = None) -> bool:
         """Test whether an atom is inside this polyhedron.
 
         Args:

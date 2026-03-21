@@ -14,8 +14,8 @@ For atom assignment, the collection:
    reference atoms, with special handling for periodic boundary conditions
 2. Calculates distances from each (dynamically determined) site centre to each atom
 3. Assigns each atom to the site with the nearest centre
-4. Uses the structure's lattice to correctly handle distances across
-   periodic boundaries
+4. Uses minimum-image convention distances to correctly handle periodic
+   boundaries
 
 This collection is particularly useful for tracking sites in frameworks
 that deform during simulation, as the site centres adapt to the changing
@@ -202,18 +202,13 @@ class DynamicVoronoiSiteCollection(SiteCollection):
                           atoms: list[Atom],
                           structure: Structure) -> None:
         """Analyse a structure to assign atoms to sites.
-        
-        This method:
-        1. Assigns coordinates to atoms
-        2. Calculates the centres of all dynamic Voronoi sites
-        3. Assigns atoms to sites based on these centres
-        
+
+        Assigns coordinates to atoms, calculates site centres, and
+        assigns atoms to the nearest site.
+
         Args:
-            atoms (list[Atom]): list of atoms to be assigned to sites.
-            structure (Structure): Pymatgen Structure containing atom positions.
-            
-        Returns:
-            None
+            atoms: List of atoms to be assigned to sites.
+            structure: Pymatgen Structure containing atom positions.
         """
         all_frac_coords = structure.frac_coords
         for atom in atoms:

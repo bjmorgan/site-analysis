@@ -23,11 +23,11 @@ from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .site import Site
 from .tools import x_pbc
-from pymatgen.core import Structure # type: ignore
+from pymatgen.core import Structure
 import numpy as np
 
 
-class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
+class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
     """A collection of PolyhedralSite objects.
     
     Extends the base SiteCollection class with specific functionality for
@@ -63,7 +63,16 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
     def analyse_structure(self,
             atoms: list[Atom],
-            structure: Structure):
+            structure: Structure) -> None:
+        """Analyse a structure to assign atoms to polyhedral sites.
+
+        Assigns coordinates to atoms, notifies sites of the new
+        structure, and assigns atoms to sites.
+
+        Args:
+            atoms: List of Atom objects to be assigned to sites.
+            structure: Pymatgen Structure containing atom positions.
+        """
         all_frac_coords = structure.frac_coords
         for a in atoms:
             a.assign_coords(all_frac_coords)
@@ -101,24 +110,33 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
     def sites_contain_points(self,
             points: np.ndarray,
-            structure: Structure | None=None) -> bool:
-        """Checks whether the set of sites contain 
-        a corresponding set of fractional coordinates.
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> bool:
+        """Check whether the set of sites contain corresponding points.
 
         Args:
-            points (np.array): 3xN numpy array of fractional coordinates.
-                There should be one coordinate for each site being checked.
-            structure (Structure): Pymatgen Structure used to define the
-                vertex coordinates of each polyhedral site.
-        
-        Returns:
-            (bool)
+            points: (N, 3) array of fractional coordinates.
+                One coordinate per site being checked.
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
+        Returns:
+            True if every point is contained by its corresponding site.
+
+        Raises:
+            ValueError: If the number of points does not match the number
+                of sites.
         """
-        if not isinstance(structure, Structure):
-            raise TypeError(f"Expected a Structure, got {type(structure).__name__}")
-        check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
-        return check
+        if len(points) != len(self.sites):
+            raise ValueError(
+                f"Expected {len(self.sites)} points (one per site), "
+                f"got {len(points)}"
+            )
+        for s in self.sites:
+            s.notify_structure_changed(all_frac_coords, lattice_matrix)
+        return all(s.contains_point(p) for s, p in zip(self.sites, points))
 
 def _collect_reference_centres(
         sites: list[PolyhedralSite],

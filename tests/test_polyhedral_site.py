@@ -141,7 +141,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             mock_pbc.return_value = (expected_frac_coords,
                                      np.zeros((4, 3), dtype=np.int64))
 
-            site.assign_vertex_coords(structure)
+            site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
             # Verify PBC function was called with the raw coordinates
             mock_pbc.assert_called_once()
@@ -150,7 +150,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             # Verify site uses the coordinates and resets Delaunay
             np.testing.assert_array_almost_equal(site.vertex_coords, expected_frac_coords)
             self.assertEqual(site._delaunay, None)
-            
+
     def test_assign_vertex_coords_with_wrapping(self):
         """Test assign_vertex_coords when PBC correction crosses boundaries."""
         # Create structure with coordinates that span boundaries (need PBC correction)
@@ -174,7 +174,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                      np.array([[1, 1, 1], [0, 1, 1],
                                                [1, 0, 0], [0, 0, 0]]))
 
-            site.assign_vertex_coords(structure)
+            site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
             # Verify PBC function was called with the raw coordinates
             mock_pbc.assert_called_once()
@@ -187,7 +187,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def test_get_vertex_species(self):
         structure = example_structure(species=['S', 'P', 'O', 'I', 'Cl'])
         site = self.site
-        self.assertEqual(site.get_vertex_species(structure),
+        self.assertEqual(site.get_vertex_species([s.species_string for s in structure]),
                          ['S', 'P', 'I', 'Cl'])
 
     def test_contains_point_raises_runtime_error_if_vertex_coords_are_none(self):
@@ -195,21 +195,6 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             site.contains_point(np.array([0.0, 0.0, 0.0]))
 
-    def test_contains_point_assigns_vertex_coords_if_called_with_structure(self):
-        site = self.site
-        structure = example_structure()
-        site.assign_vertex_coords = Mock()
-        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
-                                       [0.4, 0.6, 0.6],
-                                       [0.6, 0.6, 0.4],
-                                       [0.6, 0.4, 0.6]])
-        x = np.array([0.5, 0.5, 0.5])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
-            site.contains_point(x, structure=structure)
-            site.assign_vertex_coords.assert_called_with(structure)
-            mock_x_pbc.assert_called_once_with(x)
-    
     def test_contains_point_algo_parameter_emits_deprecation_warning(self):
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
@@ -670,7 +655,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
                 np.array([[0.1, 0.1, 0.1]]),
                 np.zeros((1, 3), dtype=np.int64),
             )
-            site.assign_vertex_coords(structure)
+            site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
             mock_pbc.assert_called_once()
             self.assertIsNone(mock_pbc.call_args[0][1])
 
@@ -685,7 +670,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
                 np.array([[0.1, 0.1, 0.1]]),
                 np.array([[0, 0, 0]]),
             )
-            site.assign_vertex_coords(structure)
+            site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
             mock_pbc.assert_called_once()
             np.testing.assert_array_equal(mock_pbc.call_args[0][1], reference_center)
 

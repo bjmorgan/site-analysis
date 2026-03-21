@@ -80,7 +80,7 @@ def _eager_analyse_structure(self, atoms, structure):
     for a in atoms:
         a.assign_coords(frac_coords)
     for s in self.sites:
-        s.assign_vertex_coords(structure)
+        s.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
     self.assign_site_occupations(atoms, structure.lattice.matrix)
 
 

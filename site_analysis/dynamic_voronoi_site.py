@@ -7,10 +7,8 @@ atoms.
 
 from __future__ import annotations
 import numpy as np
-from typing import Any
 from .site import Site
 from .atom import Atom
-from pymatgen.core import Structure
 from site_analysis.pbc_utils import correct_pbc
 
 class DynamicVoronoiSite(Site):
@@ -87,19 +85,22 @@ class DynamicVoronoiSite(Site):
         super(DynamicVoronoiSite, self).reset()
         self._centre_coords = None
         
-    def calculate_centre(self, structure: Structure) -> None:
-        """Calculate the centre of this site based on the positions of reference atoms.
+    def calculate_centre(self,
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> None:
+        """Calculate the centre of this site from reference atom positions.
+
+        Handles periodic boundary conditions and wraps the result into
+        [0, 1).
 
         Args:
-            structure: The pymatgen Structure used to assign
-                fractional coordinates to the reference atoms.
-
-        Notes:
-            This method handles periodic boundary conditions and calculates
-            the centre as the mean of the reference atom positions.
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
         """
-        ref_coords = np.array([structure[i].frac_coords for i in self.reference_indices])
-        corrected, _ = correct_pbc(ref_coords, self.reference_center, structure.lattice.matrix)
+        ref_coords = all_frac_coords[self.reference_indices]
+        corrected, _ = correct_pbc(ref_coords, self.reference_center, lattice_matrix)
         self._centre_coords = np.mean(corrected, axis=0) % 1.0
         
     @property
@@ -124,9 +125,7 @@ class DynamicVoronoiSite(Site):
         return self._centre_coords
         
     def contains_point(self,
-                       x: np.ndarray,
-                       *args: Any,
-                       **kwargs: Any) -> bool:
+                       x: np.ndarray) -> bool:
         """A single dynamic Voronoi site cannot determine whether it contains a given point,
         because the site boundaries are defined by the set of all dynamic Voronoi sites.
         

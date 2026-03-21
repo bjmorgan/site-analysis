@@ -345,184 +345,100 @@ class TestStructureAligner(unittest.TestCase):
         
     def test_validate_structures(self):
         """Test the _validate_structures method with various scenarios."""
-        # Create test structures with different compositions
-        lattice = Lattice.cubic(5.0)
-        
-        # Structure A: Na2Cl2
-        species_a = ["Na", "Na", "Cl", "Cl"]
-        coords_a = [
-            [0.1, 0.1, 0.1],
-            [0.3, 0.3, 0.3],
-            [0.5, 0.5, 0.5],
-            [0.7, 0.7, 0.7]
-        ]
-        structure_a = Structure(lattice, species_a, coords_a)
-        
-        # Structure B: Na2Cl2 with different atom ordering
-        species_b = ["Cl", "Na", "Cl", "Na"]
-        coords_b = [
-            [0.5, 0.5, 0.5],
-            [0.3, 0.3, 0.3],
-            [0.7, 0.7, 0.7],
-            [0.1, 0.1, 0.1]
-        ]
-        structure_b = Structure(lattice, species_b, coords_b)
-        
-        # Structure C: Na3Cl2 (different Na count)
-        species_c = ["Na", "Na", "Na", "Cl", "Cl"]
-        coords_c = [
-            [0.1, 0.1, 0.1],
-            [0.3, 0.3, 0.3],
-            [0.4, 0.4, 0.4],
-            [0.5, 0.5, 0.5],
-            [0.7, 0.7, 0.7]
-        ]
-        structure_c = Structure(lattice, species_c, coords_c)
-        
-        # Structure D: Na2Cl2F1 (extra species)
-        species_d = ["Na", "Na", "Cl", "Cl", "F"]
-        coords_d = [
-            [0.1, 0.1, 0.1],
-            [0.3, 0.3, 0.3],
-            [0.5, 0.5, 0.5],
-            [0.7, 0.7, 0.7],
-            [0.9, 0.9, 0.9]
-        ]
-        structure_d = Structure(lattice, species_d, coords_d)
-        
-        # Create StructureAligner
+        # Species lists for different compositions
+        species_a = ["Na", "Na", "Cl", "Cl"]       # Na2Cl2
+        species_b = ["Cl", "Na", "Cl", "Na"]       # Na2Cl2 (different ordering)
+        species_c = ["Na", "Na", "Na", "Cl", "Cl"] # Na3Cl2
+        species_d = ["Na", "Na", "Cl", "Cl", "F"]  # Na2Cl2F1
+
         aligner = StructureAligner()
-        
-        # Case 1: Both structures have identical composition, species=None
-        species_list = aligner._validate_structures(structure_a, structure_b, None)
-        self.assertCountEqual(species_list, ["Na", "Cl"])
-        
-        # Case 2: Both structures have different composition, species=None
+
+        # Case 1: Both have identical composition, species=None
+        species_list = aligner._validate_structures(species_a, species_b, None)
+        self.assertCountEqual(species_list, ["Cl", "Na"])
+
+        # Case 2: Different composition, species=None
         with self.assertRaises(ValueError) as context:
-            aligner._validate_structures(structure_a, structure_c, None)
+            aligner._validate_structures(species_a, species_c, None)
         self.assertIn("different compositions", str(context.exception))
-        
+
         with self.assertRaises(ValueError) as context:
-            aligner._validate_structures(structure_a, structure_d, None)
+            aligner._validate_structures(species_a, species_d, None)
         self.assertIn("different compositions", str(context.exception))
-        
-        # Case 3: Species is explicitly specified and exists in both structures
-        species_list = aligner._validate_structures(structure_a, structure_b, ["Na"])
+
+        # Case 3: Species explicitly specified and exists in both
+        species_list = aligner._validate_structures(species_a, species_b, ["Na"])
         self.assertEqual(species_list, ["Na"])
-        
-        # Case 4: Species is explicitly specified but doesn't exist in reference
+
+        # Case 4: Species explicitly specified but doesn't exist in reference
         with self.assertRaises(ValueError) as context:
-            aligner._validate_structures(structure_a, structure_d, ["F"])
-        self.assertIn("not found in reference structure", str(context.exception))
-        
-        # Case 5: Species is explicitly specified but doesn't exist in target
+            aligner._validate_structures(species_a, species_d, ["F"])
+        self.assertIn("not found in reference", str(context.exception))
+
+        # Case 5: Species explicitly specified but doesn't exist in target
         with self.assertRaises(ValueError) as context:
-            aligner._validate_structures(structure_d, structure_a, ["F"])
-        self.assertIn("not found in target structure", str(context.exception))
-        
-        # Case 6: Species is explicitly specified but has different counts
+            aligner._validate_structures(species_d, species_a, ["F"])
+        self.assertIn("not found in target", str(context.exception))
+
+        # Case 6: Species explicitly specified but has different counts
         with self.assertRaises(ValueError) as context:
-            aligner._validate_structures(structure_a, structure_c, ["Na"])
+            aligner._validate_structures(species_a, species_c, ["Na"])
         self.assertIn("Different number of Na atoms", str(context.exception))
         
     def test_tolerance_passed_to_minimizer(self):
         """Test that the tolerance parameter is correctly passed to the minimizer."""
-        # Mock structures - simple mocks are sufficient
-        reference = Mock(spec=Structure)
-        target = Mock(spec=Structure)
-        
-        # Create aligner
+        # Create mock structures that support iteration and array extraction
+        reference = self._make_iterable_mock_structure()
+        target = self._make_iterable_mock_structure()
+
         aligner = StructureAligner()
-        
-        # Mock _validate_structures to avoid structure validation
+
+        # Mock internal methods to isolate tolerance passing
         aligner._validate_structures = Mock(return_value=["Na"])
-        
-        # Mock _create_objective_function to return a simple objective function
         mock_objective = Mock(return_value=0.1)
         aligner._create_objective_function = Mock(return_value=mock_objective)
-        
-        # Custom tolerance value
+
         custom_tolerance = 0.05
-        
-        # Mock _run_nelder_mead to check if it receives the correct tolerance
+
         with patch.object(aligner, '_run_nelder_mead') as mock_run_nelder_mead:
-            # Configure mock to return a valid translation vector
             mock_run_nelder_mead.return_value = np.array([0.1, 0.1, 0.1])
-            
-            # Mock _apply_translation to return a mock structure
-            aligned_structure = MagicMock(spec=Structure)
-            aligned_structure.__iter__ = Mock(return_value=iter([]))
-            aligned_structure.frac_coords = np.array([])
-            aligned_structure.lattice.matrix = np.eye(3)
+
+            aligned_structure = self._make_iterable_mock_structure()
             aligner._apply_translation = Mock(return_value=aligned_structure)
 
-            # Mock target to support iteration
-            target.__iter__ = Mock(return_value=iter([]))
-            target.frac_coords = np.array([])
-
-            # Also mock calculate_species_distances for the metrics calculation
             with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
                 mock_calc_distances.return_value = ({}, [0.1])
 
-                # Call align with custom tolerance
                 aligner.align(reference, target, tolerance=custom_tolerance)
-                
-                # Check that _run_nelder_mead was called with the correct tolerance value
+
                 mock_run_nelder_mead.assert_called_once()
                 args, kwargs = mock_run_nelder_mead.call_args
-                self.assertEqual(args[0], mock_objective)  # First arg is objective function
-                self.assertEqual(args[1], custom_tolerance)  # Second arg is tolerance
+                self.assertEqual(args[0], mock_objective)
+                self.assertEqual(args[1], custom_tolerance)
                 
     def test_create_objective_function(self):
         """Test that _create_objective_function properly creates an objective function."""
-        # Create aligner
         aligner = StructureAligner()
 
-        # Use MagicMock which handles magic methods better
-        reference = MagicMock(spec=Structure)
-        target = MagicMock(spec=Structure)
-
-        # Set up frac_coords and length behaviour
         frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
-        reference.frac_coords = frac_coords
-        reference.__len__.return_value = 2
-        reference.lattice.matrix = np.eye(3) * 5.0
-
-        # Create site mocks with species_string for iteration
-        ref_site_mocks = []
-        for i in range(2):
-            site_mock = MagicMock()
-            site_mock.species_string = "Na"
-            ref_site_mocks.append(site_mock)
-        reference.__iter__.return_value = iter(ref_site_mocks)
-
-        target_site_mocks = []
-        for i in range(2):
-            site_mock = MagicMock()
-            site_mock.species_string = "Na"
-            target_site_mocks.append(site_mock)
-        target.__iter__.return_value = iter(target_site_mocks)
-        target.frac_coords = frac_coords.copy()
+        lattice_matrix = np.eye(3) * 5.0
+        ref_species = ["Na", "Na"]
+        target_species = ["Na", "Na"]
 
         # Mock calculate_species_distances
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
-            # Configure mock to return a known value
             mock_calc_distances.return_value = ({}, [0.1, 0.2])
 
-            # Create the objective function
             objective_function = aligner._create_objective_function(
-                reference, target, valid_species=["Na"], metric='rmsd')
+                frac_coords, frac_coords.copy(), lattice_matrix,
+                ref_species, target_species,
+                valid_species=["Na"], metric='rmsd')
 
-            # Verify the objective function is callable
             self.assertTrue(callable(objective_function))
 
-            # Test the objective function with a translation vector
             result = objective_function(np.array([0.1, 0.1, 0.1]))
 
-            # Verify calculate_species_distances was called
             mock_calc_distances.assert_called_once()
-
-            # Verify result is a float (the RMSD value)
             self.assertIsInstance(result, float)
             
     def test_run_nelder_mead(self):
@@ -666,9 +582,9 @@ class TestStructureAligner(unittest.TestCase):
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
             mock_calc.return_value = ({}, [0.1])
 
-            # Call align with no algorithm specified
+            reference = self._make_iterable_mock_structure()
             target = self._make_iterable_mock_structure()
-            aligner.align(Mock(), target)
+            aligner.align(reference, target)
 
             # Verify Nelder-Mead was called and differential_evolution was not
             aligner._run_nelder_mead.assert_called_once()
@@ -690,9 +606,9 @@ class TestStructureAligner(unittest.TestCase):
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
             mock_calc.return_value = ({}, [0.1])
 
-            # Call align with differential_evolution specified
+            reference = self._make_iterable_mock_structure()
             target = self._make_iterable_mock_structure()
-            aligner.align(Mock(), target, algorithm='differential_evolution')
+            aligner.align(reference, target, algorithm='differential_evolution')
 
             # Verify differential_evolution was called and Nelder-Mead was not
             aligner._run_differential_evolution.assert_called_once()
@@ -701,16 +617,17 @@ class TestStructureAligner(unittest.TestCase):
     def test_align_raises_error_for_unknown_algorithm(self):
         """Test that align raises an error for unknown algorithms."""
         aligner = StructureAligner()
-        
+
         # Mock minimum dependencies needed for the test
         aligner._validate_structures = Mock(return_value=["Na"])
         aligner._create_objective_function = Mock()
-        
-        # Test with an invalid algorithm
+
+        reference = self._make_iterable_mock_structure()
+        target = self._make_iterable_mock_structure()
+
         with self.assertRaises(ValueError) as context:
-            aligner.align(Mock(), Mock(), algorithm='invalid_algorithm')
-        
-        # Verify error message mentions the unknown algorithm
+            aligner.align(reference, target, algorithm='invalid_algorithm')
+
         self.assertIn("invalid_algorithm", str(context.exception))
         
     def test_algorithm_registry(self):

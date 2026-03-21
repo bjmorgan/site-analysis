@@ -594,171 +594,205 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         
     def test_calculate_species_distances_identical_structures(self):
         """Test distance calculation between identical structures."""
-        # Create a simple structure
-        lattice = Lattice.cubic(5.0)
         species = ["Na", "Cl", "Na", "Cl"]
-        coords = [
+        coords = np.array([
             [0.1, 0.1, 0.1],
             [0.6, 0.6, 0.6],
             [0.3, 0.3, 0.3],
             [0.8, 0.8, 0.8]
-        ]
-        structure1 = Structure(lattice, species, coords)
-        structure2 = Structure(lattice, species, coords)
-        
+        ])
+        lattice_matrix = np.eye(3) * 5.0
+
         # Calculate distances
-        species_distances, all_distances = calculate_species_distances(structure1, structure2)
-        
+        species_distances, all_distances = calculate_species_distances(
+            coords, coords, lattice_matrix, species, species)
+
         # Check results
         self.assertEqual(len(species_distances), 2)  # Na and Cl
         self.assertIn("Na", species_distances)
         self.assertIn("Cl", species_distances)
-        
+
         # Distances should be zero for identical structures
         self.assertEqual(len(species_distances["Na"]), 2)  # Two Na atoms
         self.assertEqual(len(species_distances["Cl"]), 2)  # Two Cl atoms
         for dist in all_distances:
             self.assertAlmostEqual(dist, 0.0, places=5)
-    
+
     def test_calculate_species_distances_translated_structures(self):
         """Test distance calculation between translated structures."""
-        # Create a simple structure
-        lattice = Lattice.cubic(5.0)
         species = ["Na", "Cl", "Na", "Cl"]
-        coords1 = [
+        coords1 = np.array([
             [0.1, 0.1, 0.1],
             [0.6, 0.6, 0.6],
             [0.3, 0.3, 0.3],
             [0.8, 0.8, 0.8]
-        ]
-        structure1 = Structure(lattice, species, coords1)
-        
+        ])
+
         # Create a translated version (shift by [0.1, 0.1, 0.1])
-        coords2 = [
+        coords2 = np.array([
             [0.2, 0.2, 0.2],  # +0.1 in each direction
             [0.7, 0.7, 0.7],
             [0.4, 0.4, 0.4],
             [0.9, 0.9, 0.9]
-        ]
-        structure2 = Structure(lattice, species, coords2)
-        
+        ])
+        lattice_matrix = np.eye(3) * 5.0
+
         # Calculate distances
-        species_distances, all_distances = calculate_species_distances(structure1, structure2)
-        
-        # Expected distance for a [0.1, 0.1, 0.1] shift in a 5.0 Å unit cell
+        species_distances, all_distances = calculate_species_distances(
+            coords1, coords2, lattice_matrix, species, species)
+
+        # Expected distance for a [0.1, 0.1, 0.1] shift in a 5.0 A unit cell
         expected_dist = 5.0 * np.sqrt(3 * (0.1**2))
-        
+
         # Check results
         for sp, distances in species_distances.items():
             for dist in distances:
                 self.assertAlmostEqual(dist, expected_dist, places=5)
-    
+
     def test_calculate_species_distances_different_compositions(self):
         """Test distance calculation between structures with different compositions."""
-        # Create structures with different compositions
-        lattice = Lattice.cubic(5.0)
-        
+        lattice_matrix = np.eye(3) * 5.0
+
         # Structure 1: Na2Cl2
         species1 = ["Na", "Na", "Cl", "Cl"]
-        coords1 = [
+        coords1 = np.array([
             [0.1, 0.1, 0.1],
             [0.3, 0.3, 0.3],
             [0.6, 0.6, 0.6],
             [0.8, 0.8, 0.8]
-        ]
-        structure1 = Structure(lattice, species1, coords1)
-        
+        ])
+
         # Structure 2: Na1Cl3
         species2 = ["Na", "Cl", "Cl", "Cl"]
-        coords2 = [
+        coords2 = np.array([
             [0.1, 0.1, 0.1],  # Same Na position
             [0.6, 0.6, 0.6],  # Same Cl position
             [0.7, 0.7, 0.7],  # Extra Cl
             [0.8, 0.8, 0.8]   # Same Cl position
-        ]
-        structure2 = Structure(lattice, species2, coords2)
-        
+        ])
+
         # Calculate distances with auto-detection of common species
-        species_distances, all_distances = calculate_species_distances(structure1, structure2)
-        
+        species_distances, all_distances = calculate_species_distances(
+            coords1, coords2, lattice_matrix, species1, species2)
+
         # Should include Na and Cl (common to both)
         self.assertEqual(len(species_distances), 2)
         self.assertIn("Na", species_distances)
         self.assertIn("Cl", species_distances)
-        
+
         # Should include 2 Na atoms (the number in structure1)
         self.assertEqual(len(species_distances["Na"]), 2)
-        
+
         # Should include 2 Cl atoms (the number in structure1)
         self.assertEqual(len(species_distances["Cl"]), 2)
-        
+
         # First Na atom should have zero distance (same position in both structures)
         self.assertAlmostEqual(species_distances["Na"][0], 0.0, places=5)
-        
+
         # Second Na atom should have non-zero distance (different position)
         self.assertGreater(species_distances["Na"][1], 0.0)
-    
+
     def test_calculate_species_distances_species_filtering(self):
         """Test distance calculation with explicit species filtering."""
-        # Create a multi-species structure
-        lattice = Lattice.cubic(5.0)
         species = ["Na", "Cl", "K", "F"]
-        coords = [
+        coords = np.array([
             [0.1, 0.1, 0.1],
             [0.3, 0.3, 0.3],
             [0.6, 0.6, 0.6],
             [0.8, 0.8, 0.8]
-        ]
-        structure1 = Structure(lattice, species, coords)
-        structure2 = Structure(lattice, species, coords)
-        
+        ])
+        lattice_matrix = np.eye(3) * 5.0
+
         # Calculate distances with only Na and K
         species_distances, all_distances = calculate_species_distances(
-            structure1, structure2, species=["Na", "K"])
-        
+            coords, coords, lattice_matrix, species, species, species=["Na", "K"])
+
         # Should only include Na and K
         self.assertEqual(len(species_distances), 2)
         self.assertIn("Na", species_distances)
         self.assertIn("K", species_distances)
         self.assertNotIn("Cl", species_distances)
         self.assertNotIn("F", species_distances)
-        
+
         # Each should have exactly one atom
         self.assertEqual(len(species_distances["Na"]), 1)
         self.assertEqual(len(species_distances["K"]), 1)
-        
+
         # All distances should be 0 (identical structures)
         self.assertEqual(len(all_distances), 2)
         for dist in all_distances:
             self.assertAlmostEqual(dist, 0.0, places=5)
-    
+
     def test_calculate_species_distances_edge_cases(self):
         """Test edge cases for calculate_species_distances."""
-        # Create a minimal structure
-        lattice = Lattice.cubic(5.0)
-        species = ["Na"]
-        coords = [[0.0, 0.0, 0.0]]
-        structure = Structure(lattice, species, coords)
-        
-        # Empty second structure
-        empty_structure = Structure(lattice, [], [])
-        
-        # Calculate distances between structure and empty structure
-        species_distances, all_distances = calculate_species_distances(structure, empty_structure)
-        
+        lattice_matrix = np.eye(3) * 5.0
+
+        # Calculate distances with no common species
+        species_distances, all_distances = calculate_species_distances(
+            np.array([[0.0, 0.0, 0.0]]), np.zeros((0, 3)), lattice_matrix,
+            ["Na"], [])
+
         # No common species, should return empty results
         self.assertEqual(len(species_distances), 0)
         self.assertEqual(len(all_distances), 0)
-        
+
         # Non-existent species
+        coords = np.array([[0.0, 0.0, 0.0]])
         species_distances, all_distances = calculate_species_distances(
-            structure, structure, species=["Cl"])
-        
+            coords, coords, lattice_matrix, ["Na"], ["Na"], species=["Cl"])
+
         # No matches for Cl, should return empty results
         self.assertEqual(len(species_distances), 0)
         self.assertEqual(len(all_distances), 0)
         
         
+class CalculateSpeciesDistancesArrayTestCase(unittest.TestCase):
+    """Tests for array-based calculate_species_distances."""
+
+    def test_calculate_species_distances_basic(self):
+        """Test calculate_species_distances with arrays."""
+        frac_coords1 = np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        frac_coords2 = np.array([[0.01, 0.0, 0.0], [0.49, 0.5, 0.5]])
+        lattice_matrix = np.eye(3) * 10.0
+        species1 = ["Li", "Na"]
+        species2 = ["Li", "Na"]
+
+        result, all_dists = calculate_species_distances(
+            frac_coords1, frac_coords2, lattice_matrix, species1, species2)
+
+        self.assertIn("Li", result)
+        self.assertIn("Na", result)
+        self.assertEqual(len(all_dists), 2)
+        self.assertAlmostEqual(result["Li"][0], 0.1, places=5)
+
+    def test_calculate_species_distances_with_species_filter(self):
+        """Test species parameter filters which species to include."""
+        frac_coords1 = np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        frac_coords2 = np.array([[0.01, 0.0, 0.0], [0.49, 0.5, 0.5]])
+        lattice_matrix = np.eye(3) * 10.0
+        species1 = ["Li", "Na"]
+        species2 = ["Li", "Na"]
+
+        result, all_dists = calculate_species_distances(
+            frac_coords1, frac_coords2, lattice_matrix,
+            species1, species2, species=["Li"])
+
+        self.assertIn("Li", result)
+        self.assertNotIn("Na", result)
+        self.assertEqual(len(all_dists), 1)
+
+    def test_calculate_species_distances_returns_list(self):
+        """Test that all_distances is a plain list, not numpy array."""
+        frac_coords1 = np.array([[0.0, 0.0, 0.0]])
+        frac_coords2 = np.array([[0.1, 0.0, 0.0]])
+        lattice_matrix = np.eye(3) * 10.0
+
+        _, all_dists = calculate_species_distances(
+            frac_coords1, frac_coords2, lattice_matrix, ["Li"], ["Li"])
+
+        self.assertIsInstance(all_dists, list)
+
+
 class ToolsValidationTestCase(unittest.TestCase):
     
     def setUp(self):

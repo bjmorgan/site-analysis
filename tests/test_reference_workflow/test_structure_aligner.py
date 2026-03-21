@@ -239,8 +239,12 @@ class TestStructureAligner(unittest.TestCase):
         
         # Use the helper function to verify alignment quality by species
         from site_analysis.tools import calculate_species_distances
+        aligned_species = [s.species_string for s in aligned_structure]
+        target_species = [s.species_string for s in target]
         species_distances, all_distances = calculate_species_distances(
-            aligned_structure, target)
+            aligned_structure.frac_coords, target.frac_coords,
+            aligned_structure.lattice.matrix,
+            aligned_species, target_species)
         
         # Verify overall alignment quality
         rmsd = np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf')
@@ -446,13 +450,20 @@ class TestStructureAligner(unittest.TestCase):
             mock_run_nelder_mead.return_value = np.array([0.1, 0.1, 0.1])
             
             # Mock _apply_translation to return a mock structure
-            aligned_structure = Mock(spec=Structure)
+            aligned_structure = MagicMock(spec=Structure)
+            aligned_structure.__iter__ = Mock(return_value=iter([]))
+            aligned_structure.frac_coords = np.array([])
+            aligned_structure.lattice.matrix = np.eye(3)
             aligner._apply_translation = Mock(return_value=aligned_structure)
-            
+
+            # Mock target to support iteration
+            target.__iter__ = Mock(return_value=iter([]))
+            target.frac_coords = np.array([])
+
             # Also mock calculate_species_distances for the metrics calculation
             with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
                 mock_calc_distances.return_value = ({}, [0.1])
-                
+
                 # Call align with custom tolerance
                 aligner.align(reference, target, tolerance=custom_tolerance)
                 
@@ -466,51 +477,51 @@ class TestStructureAligner(unittest.TestCase):
         """Test that _create_objective_function properly creates an objective function."""
         # Create aligner
         aligner = StructureAligner()
-        
+
         # Use MagicMock which handles magic methods better
         reference = MagicMock(spec=Structure)
         target = MagicMock(spec=Structure)
-        
+
         # Set up frac_coords and length behaviour
         frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
         reference.frac_coords = frac_coords
         reference.__len__.return_value = 2
-        
-        # Create site mocks
-        site_mocks = []
+        reference.lattice.matrix = np.eye(3) * 5.0
+
+        # Create site mocks with species_string for iteration
+        ref_site_mocks = []
         for i in range(2):
             site_mock = MagicMock()
-            site_mock.species = f"species_{i}"
-            site_mocks.append(site_mock)
-        
-        # Configure indexing behaviour
-        reference.__getitem__.side_effect = lambda i: site_mocks[i]
-        
-        # Create a copy mock with the same behaviour
-        copy_mock = MagicMock(spec=Structure)
-        copy_mock.frac_coords = frac_coords.copy()
-        copy_mock.__len__.return_value = 2
-        copy_mock.__getitem__.side_effect = lambda i: site_mocks[i]
-        reference.copy.return_value = copy_mock
-        
+            site_mock.species_string = "Na"
+            ref_site_mocks.append(site_mock)
+        reference.__iter__.return_value = iter(ref_site_mocks)
+
+        target_site_mocks = []
+        for i in range(2):
+            site_mock = MagicMock()
+            site_mock.species_string = "Na"
+            target_site_mocks.append(site_mock)
+        target.__iter__.return_value = iter(target_site_mocks)
+        target.frac_coords = frac_coords.copy()
+
         # Mock calculate_species_distances
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
             # Configure mock to return a known value
             mock_calc_distances.return_value = ({}, [0.1, 0.2])
-            
+
             # Create the objective function
             objective_function = aligner._create_objective_function(
                 reference, target, valid_species=["Na"], metric='rmsd')
-            
+
             # Verify the objective function is callable
             self.assertTrue(callable(objective_function))
-            
+
             # Test the objective function with a translation vector
             result = objective_function(np.array([0.1, 0.1, 0.1]))
-            
+
             # Verify calculate_species_distances was called
             mock_calc_distances.assert_called_once()
-            
+
             # Verify result is a float (the RMSD value)
             self.assertIsInstance(result, float)
             
@@ -631,46 +642,58 @@ class TestStructureAligner(unittest.TestCase):
             self.assertIn('bounds', options)
             self.assertEqual(options['popsize'], 20)
 
+    def _make_iterable_mock_structure(self):
+        """Create a mock Structure that supports iteration for species extraction."""
+        mock = MagicMock(spec=Structure)
+        mock.__iter__ = Mock(return_value=iter([]))
+        mock.frac_coords = np.array([]).reshape(0, 3)
+        mock.lattice.matrix = np.eye(3)
+        return mock
+
     def test_align_calls_nelder_mead_by_default(self):
         """Test that align uses Nelder-Mead by default."""
         aligner = StructureAligner()
-        
+
         # Mock all dependencies to isolate just the algorithm selection
         aligner._validate_structures = Mock(return_value=["Na"])
         aligner._create_objective_function = Mock(return_value=Mock())
         aligner._run_nelder_mead = Mock(return_value=np.array([0, 0, 0]))
         aligner._run_differential_evolution = Mock()
-        aligner._apply_translation = Mock(return_value=Mock())
-        
+        aligned = self._make_iterable_mock_structure()
+        aligner._apply_translation = Mock(return_value=aligned)
+
         # Mock calculate_species_distances to avoid dependencies
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
             mock_calc.return_value = ({}, [0.1])
-            
+
             # Call align with no algorithm specified
-            aligner.align(Mock(), Mock())
-            
+            target = self._make_iterable_mock_structure()
+            aligner.align(Mock(), target)
+
             # Verify Nelder-Mead was called and differential_evolution was not
             aligner._run_nelder_mead.assert_called_once()
             aligner._run_differential_evolution.assert_not_called()
-            
+
     def test_align_calls_differential_evolution_when_specified(self):
         """Test that align uses differential_evolution when specified."""
         aligner = StructureAligner()
-        
+
         # Mock all dependencies to isolate just the algorithm selection
         aligner._validate_structures = Mock(return_value=["Na"])
         aligner._create_objective_function = Mock(return_value=Mock())
         aligner._run_nelder_mead = Mock()
         aligner._run_differential_evolution = Mock(return_value=np.array([0, 0, 0]))
-        aligner._apply_translation = Mock(return_value=Mock())
-        
+        aligned = self._make_iterable_mock_structure()
+        aligner._apply_translation = Mock(return_value=aligned)
+
         # Mock calculate_species_distances to avoid dependencies
         with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
             mock_calc.return_value = ({}, [0.1])
-            
+
             # Call align with differential_evolution specified
-            aligner.align(Mock(), Mock(), algorithm='differential_evolution')
-            
+            target = self._make_iterable_mock_structure()
+            aligner.align(Mock(), target, algorithm='differential_evolution')
+
             # Verify differential_evolution was called and Nelder-Mead was not
             aligner._run_differential_evolution.assert_called_once()
             aligner._run_nelder_mead.assert_not_called()

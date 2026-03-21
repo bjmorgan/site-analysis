@@ -27,6 +27,7 @@ import numpy as np
 
 from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
+from site_analysis.distances import all_mic_distances
 
 def get_coordination_indices(
     structure: Structure,
@@ -335,47 +336,72 @@ def site_index_mapping(structure1: Structure,
     else:
         return np.array(to_return)
         
-def calculate_species_distances(structure1, structure2, species=None):
-    """Calculate minimum distances between atoms of the same species in two structures.
-    
+def indices_for_species(
+    all_species: list[str],
+    target: str,
+) -> list[int]:
+    """Return indices where all_species matches target.
+
     Args:
-        structure1: First structure to compare
-        structure2: Second structure to compare
-        species: list of species to include. If None, includes all species
-                 present in both structures.
-                 
+        all_species: List of species strings for all atoms.
+        target: Species string to match.
+
     Returns:
-        dict: Dictionary mapping species to lists of minimum distances for each atom
-        list: Flattened list of all minimum distances
+        List of indices where species matches target.
     """
-    # Determine which species to include
+    return [i for i, s in enumerate(all_species) if s == target]
+
+
+def calculate_species_distances(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species1: list[str],
+    species2: list[str],
+    species: list[str] | None = None,
+) -> tuple[dict[str, list[float]], list[float]]:
+    """Calculate minimum distances between atoms of the same species.
+
+    For each species, computes the distance from each atom of that
+    species in frac_coords1 to the nearest atom of the same species
+    in frac_coords2.
+
+    Args:
+        frac_coords1: Fractional coordinates of first structure,
+            shape ``(N, 3)``.
+        frac_coords2: Fractional coordinates of second structure,
+            shape ``(M, 3)``.
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors.
+        species1: Species strings for each atom in frac_coords1.
+        species2: Species strings for each atom in frac_coords2.
+        species: Optional filter - only include these species.
+            If None, includes all species present in both structures.
+
+    Returns:
+        A tuple of (species_distances, all_distances) where
+        species_distances maps species to lists of minimum distances,
+        and all_distances is a flat list of all minimum distances.
+    """
     if species is None:
-        species = set([site.species_string for site in structure1])
-        species = species.intersection([site.species_string for site in structure2])
-        species = list(species)
-    
-    # Calculate minimum distances for each atom by species
-    species_distances = {}
-    all_distances = []
-    
+        species = sorted(set(species1) & set(species2))
+
+    species_distances: dict[str, list[float]] = {}
+    all_distances: list[float] = []
+
     for sp in species:
-        indices1 = list(structure1.indices_from_symbol(sp))
-        indices2 = list(structure2.indices_from_symbol(sp))
-        
-        if not indices1 or not indices2:
+        idx1 = indices_for_species(species1, sp)
+        idx2 = indices_for_species(species2, sp)
+
+        if not idx1 or not idx2:
             continue
-        
-        # Get coordinates for this species
-        coords1 = structure1.frac_coords[indices1]
-        coords2 = structure2.frac_coords[indices2]
-        
-        # Calculate distance matrix for this species
-        distance_matrix = structure1.lattice.get_all_distances(coords1, coords2)
-        
-        # Find minimum distance for each atom in structure1
-        min_distances = np.min(distance_matrix, axis=1)
-        
-        species_distances[sp] = min_distances.tolist()
-        all_distances.extend(min_distances)
-    
+
+        coords1 = frac_coords1[idx1]
+        coords2 = frac_coords2[idx2]
+        dist_matrix = all_mic_distances(coords1, coords2, lattice_matrix)
+        min_dists = np.min(dist_matrix, axis=1).tolist()
+
+        species_distances[sp] = min_dists
+        all_distances.extend(min_dists)
+
     return species_distances, all_distances

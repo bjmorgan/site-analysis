@@ -53,13 +53,17 @@ class StructureAligner:
         aligned_structure = self._apply_translation(reference, translation_vector)
         
         # Calculate final metrics
+        aligned_species = [s.species_string for s in aligned_structure]
+        target_species = [s.species_string for s in target]
         species_distances, all_distances = calculate_species_distances(
-            aligned_structure, target, species=valid_species)
+            aligned_structure.frac_coords, target.frac_coords,
+            aligned_structure.lattice.matrix,
+            aligned_species, target_species, species=valid_species)
         
         metrics = {
-            'rmsd': np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf'),
-            'max_dist': np.max(all_distances) if all_distances else float('inf'),
-            'mean_dist': np.mean(all_distances) if all_distances else float('inf')
+            'rmsd': float(np.sqrt(np.mean(np.array(all_distances)**2))) if all_distances else float('inf'),
+            'max_dist': float(np.max(all_distances)) if all_distances else float('inf'),
+            'mean_dist': float(np.mean(all_distances)) if all_distances else float('inf'),
         }
         
         return aligned_structure, translation_vector, metrics
@@ -81,34 +85,38 @@ class StructureAligner:
             function: The objective function that takes a translation vector and
                     returns the distance metric value
         """
+        # Extract arrays that don't change per iteration
+        ref_frac_coords = reference.frac_coords
+        ref_species = [s.species_string for s in reference]
+        target_frac_coords = target.frac_coords
+        target_species = [s.species_string for s in target]
+        lattice_matrix = reference.lattice.matrix
+
         def objective_function(
             translation_vector: np.ndarray) -> float:
             # Ensure translation is in [0,1) range
             translation_vector = translation_vector % 1.0
-            
+
             # Apply translation to reference coordinates
-            translated_coords = reference.frac_coords + translation_vector
+            translated_coords = ref_frac_coords + translation_vector
             translated_coords = translated_coords % 1.0  # Apply PBC
-            
-            # Create a temporary translated structure for distance calculation
-            temp_structure = reference.copy()
-            for i in range(len(temp_structure)):
-                temp_structure[i] = temp_structure[i].species, translated_coords[i]
-            
+
             # Calculate distances using our helper function
-            _, all_distances = calculate_species_distances(temp_structure, target, species=valid_species)
-            
+            _, all_distances = calculate_species_distances(
+                translated_coords, target_frac_coords, lattice_matrix,
+                ref_species, target_species, species=valid_species)
+
             # Calculate the desired metric
             if not all_distances:  # Handle empty distance list
                 return float('inf')
-                
+
             if metric == 'rmsd':
                 return float(np.sqrt(np.mean(np.array(all_distances)**2)))
             elif metric == 'max_dist':
                 return float(np.max(all_distances))
             else:
                 raise ValueError(f"Unknown metric: {metric}")
-        
+
         return objective_function
     
     def _validate_structures(self, 

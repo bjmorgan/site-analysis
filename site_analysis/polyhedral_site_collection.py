@@ -70,17 +70,19 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
         lattice_matrix = structure.lattice.matrix
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
-        self.assign_site_occupations(atoms, structure)
-                    
-    def assign_site_occupations(self, atoms, structure) -> None:
+        self.assign_site_occupations(atoms, lattice_matrix)
+
+    def assign_site_occupations(self, atoms, lattice_matrix) -> None:
         """Assign atoms to polyhedral sites based on their positions.
-        
+
         This method implements an optimised assignment logic using a priority-based
         site checking approach.
-        
+
         Args:
-            atoms: List of Atom objects to be assigned to sites
-            structure: Pymatgen Structure containing the atom positions
+            atoms: List of Atom objects to be assigned to sites.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors. Not currently used for polyhedral containment
+                checks, but accepted for interface consistency.
         """
         self.reset_site_occupations()
         for atom in atoms:

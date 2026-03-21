@@ -81,7 +81,7 @@ def _eager_analyse_structure(self, atoms, structure):
         a.assign_coords(frac_coords)
     for s in self.sites:
         s.assign_vertex_coords(structure)
-    self.assign_site_occupations(atoms, structure)
+    self.assign_site_occupations(atoms, structure.lattice.matrix)
 
 
 def benchmark_assignment(trajectory, structures, repeats):

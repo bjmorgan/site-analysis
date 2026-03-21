@@ -90,6 +90,10 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 				self.atoms, self.structure.lattice.matrix)
 
 			mock_distances.assert_called_once()
+			args = mock_distances.call_args[0]
+			np.testing.assert_array_equal(args[0], np.array([s.frac_coords for s in self.collection.sites]))
+			np.testing.assert_array_equal(args[1], np.array([a.frac_coords for a in self.atoms]))
+			np.testing.assert_array_equal(args[2], self.structure.lattice.matrix)
 			mock_update.assert_any_call(self.site1, self.atom1)
 			mock_update.assert_any_call(self.site2, self.atom2)
 			self.assertEqual(mock_update.call_count, 2)

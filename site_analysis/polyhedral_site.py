@@ -12,7 +12,7 @@ import itertools
 import warnings
 
 import numpy as np
-from scipy.spatial import ConvexHull, Delaunay, QhullError # type: ignore
+from scipy.spatial import ConvexHull, Delaunay, QhullError
 from pymatgen.core import Structure
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc, species_string_from_site

@@ -1,7 +1,7 @@
 """Spherical site representation for crystal structure analysis.
 
 This module provides the SphericalSite class, which represents a site defined
-by a sphere with a specific center position and radius. Spherical sites are the
+by a sphere with a specific centre position and radius. Spherical sites are the
 simplest site geometry, useful for quick analysis or when the exact shape of
 the site is less important than its location.
 """
@@ -10,27 +10,27 @@ from __future__ import annotations
 from .site import Site
 from typing import Any
 from .atom import Atom
-from pymatgen.core.lattice import Lattice
+from site_analysis.distances import mic_distance
 import numpy as np
 
 
 class SphericalSite(Site):
     """A site defined by a spherical volume in real space.
     
-    Represents a spherical site centered at a position in fractional coordinates
+    Represents a spherical site centred at a position in fractional coordinates
     with a radius in Angstroms (not fractional coordinates).
     
     SphericalSite determines whether atoms are inside the site volume by checking
-    if the distance between the atom and the site center is less than or equal to
-    the site's radius. This calculation considers periodic boundary conditions using
-    the structure's lattice.
+    if the distance between the atom and the site centre is less than or equal to
+    the site's radius. This calculation considers periodic boundary conditions
+    via minimum-image convention distances.
     
     Unlike polyhedral sites, spherical sites have a fixed geometry independent of
     atom positions in the structure, making them suitable for applications where
     consistent site volumes are needed regardless of structural distortions.
     
     Attributes:
-        frac_coords (np.ndarray): Fractional coordinates of the sphere center.
+        frac_coords (np.ndarray): Fractional coordinates of the sphere centre.
         rcut (float): Cutoff radius in Angstroms.
         
     See Also:
@@ -51,7 +51,7 @@ class SphericalSite(Site):
         """Create a SphericalSite instance.
         
         Args:
-            frac_coords: Fractional coordinates of the sphere center.
+            frac_coords: Fractional coordinates of the sphere centre.
             rcut: Cutoff radius in Angstroms.
             label: Optional label for this site. Default is None.
         
@@ -82,7 +82,7 @@ class SphericalSite(Site):
         """Returns the fractional coordinates of the spherical site's centre.
         
         Returns:
-            np.ndarray: Fractional coordinates of the site center.
+            np.ndarray: Fractional coordinates of the site centre.
         """
         return self.frac_coords
     
@@ -103,57 +103,49 @@ class SphericalSite(Site):
 
     def contains_atom(self,
         atom: Atom,
-        lattice: Lattice | None = None,  # Technically optional for signature compatibility, but required
+        lattice_matrix: np.ndarray | None = None,
         *args: Any,
         **kwargs: Any) -> bool:
         """Test whether this spherical site contains a specific atom.
-        
+
         Args:
             atom: The atom to test.
-            lattice: Lattice object for distance calculations.
-                Although marked as optional for inheritance reasons,
-                this parameter is actually required.
-                
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors. Required for distance calculations.
+
         Returns:
             True if the atom is contained within this site, False otherwise.
-            
+
         Raises:
-            ValueError: If lattice is not provided.
-            TypeError: If lattice is not a Lattice object.
+            ValueError: If lattice_matrix is not provided.
         """
-        if not lattice:
-            raise ValueError("Lattice is required for SphericalSite.contains_atom() to calculate real-space distances")
-        elif not isinstance(lattice, Lattice):
-            raise TypeError(f"Expected Lattice object, got {type(lattice).__name__}. SphericalSite requires a valid Lattice to calculate distances.")
+        if lattice_matrix is None:
+            raise ValueError("lattice_matrix is required for SphericalSite.contains_atom()")
         return self.contains_point(
                 x=atom.frac_coords,
-                lattice=lattice)
+                lattice_matrix=lattice_matrix)
 
     def contains_point(self,
         x: np.ndarray,
-        lattice: Lattice | None=None,  # Technically optional for signature compatibility, but required
+        lattice_matrix: np.ndarray | None = None,
         *args: Any,
         **kwargs: Any) -> bool:
         """Test if the point x is contained by this spherical site.
-        
+
         Args:
             x: Fractional coordinates to test.
-            lattice: Lattice object for distance calculations. 
-                Although marked as optional for inheritance reasons, 
-                this parameter is actually required.
-                
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors. Required for distance calculations.
+
         Returns:
             True if the point is within the cutoff radius, False otherwise.
-                
+
         Raises:
-            ValueError: If lattice is not provided.
-            TypeError: If lattice is not a Lattice object.
+            ValueError: If lattice_matrix is not provided.
         """
-        if not lattice:
-            raise ValueError("Lattice is required for SphericalSite.contains_point() to calculate real-space distances")
-        elif not isinstance(lattice, Lattice):
-            raise TypeError(f"Expected Lattice object, got {type(lattice).__name__}. SphericalSite requires a valid Lattice to calculate distances.")
-        dr = float(lattice.get_distance_and_image(self.frac_coords, x)[0])
+        if lattice_matrix is None:
+            raise ValueError("lattice_matrix is required for SphericalSite.contains_point()")
+        dr = mic_distance(self.frac_coords, x, lattice_matrix)
         return dr <= self.rcut
 
     @classmethod

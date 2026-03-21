@@ -38,7 +38,7 @@ class UnwrappedCoordinatesSiteTestCase(unittest.TestCase):
 		)
 		
 		# Should contain the atom after coordinate wrapping
-		self.assertTrue(site.contains_atom(atom, lattice))
+		self.assertTrue(site.contains_atom(atom, lattice_matrix=lattice.matrix))
 
 	def test_voronoi_site_with_unwrapped_coordinates(self):
 		"""Test that Voronoi sites work correctly with unwrapped coordinates."""

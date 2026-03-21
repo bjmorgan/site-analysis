@@ -265,38 +265,25 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             mock_contains_point.side_effect = [True, True, True]
             
             # Test with all points
-            result = self.collection.sites_contain_points(points, self.structure)
+            result = self.collection.sites_contain_points(
+                points, self.structure.frac_coords, self.lattice.matrix)
             self.assertTrue(result)
-            
+
             # Check contains_point was called for each site-point pair
             self.assertEqual(mock_contains_point.call_count, 3)
-            
+
             # Reset mock
             mock_contains_point.reset_mock()
-            
+
             # Configure mock for failure case
             mock_contains_point.side_effect = [True, False, True]
-            
+
             # Test with one point not in its site
-            result = self.collection.sites_contain_points(points, self.structure)
+            result = self.collection.sites_contain_points(
+                points, self.structure.frac_coords, self.lattice.matrix)
             self.assertFalse(result)
-    
-    def test_sites_contain_points_requires_structure(self):
-        """Test that sites_contain_points requires a structure argument."""
-        # Setup points
-        points = np.array([
-            [0.25, 0.25, 0.0],
-            [0.25, 0.25, 0.75]
-        ])
-        
-        # Test without structure
-        with self.assertRaises(TypeError):
-            self.collection.sites_contain_points(points)
-        
-        # Test with None structure
-        with self.assertRaises(TypeError):
-            self.collection.sites_contain_points(points, None)
-            
+
+
     def test_checks_recent_site_via_priority_heuristic(self):
         """Test that assign_site_occupations uses _recent_sites for priority."""
         mock_structure = Mock(spec=Structure)

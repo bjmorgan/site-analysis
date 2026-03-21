@@ -332,19 +332,20 @@ class SiteCollection(ABC):
 
     def sites_contain_points(self,
                              points: np.ndarray,
-                             structure: Structure | None=None) -> bool:
-        """If implemented, Checks whether the set of sites contain
-        a corresponding set of fractional coordinates.
+                             all_frac_coords: np.ndarray,
+                             lattice_matrix: np.ndarray) -> bool:
+        """Check whether the set of sites contain corresponding points.
+
         Args:
-            points (np.array): 3xN numpy array of fractional coordinates.
-                There should be one coordinate for each site being checked.
+            points: (N, 3) array of fractional coordinates.
+                One coordinate per site being checked.
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
         Returns:
-            (bool)
-            
-        Notes:
-            Specific SiteCollection subclass implementations may require
-            additional arguments to be passed.
+            True if every point is contained by its corresponding site.
         """
         raise NotImplementedError('sites_contain_points() should be'
             ' implemented in the derived class')

@@ -101,24 +101,24 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
 
     def sites_contain_points(self,
             points: np.ndarray,
-            structure: Structure | None=None) -> bool:
-        """Checks whether the set of sites contain 
-        a corresponding set of fractional coordinates.
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> bool:
+        """Check whether the set of sites contain corresponding points.
 
         Args:
-            points (np.array): 3xN numpy array of fractional coordinates.
-                There should be one coordinate for each site being checked.
-            structure (Structure): Pymatgen Structure used to define the
-                vertex coordinates of each polyhedral site.
-        
-        Returns:
-            (bool)
+            points: (N, 3) array of fractional coordinates.
+                One coordinate per site being checked.
+            all_frac_coords: Full fractional coordinate array from the
+                structure, shape ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
 
+        Returns:
+            True if every point is contained by its corresponding site.
         """
-        if not isinstance(structure, Structure):
-            raise TypeError(f"Expected a Structure, got {type(structure).__name__}")
-        check = all([s.contains_point(p,structure) for s, p in zip(self.sites, points)])
-        return check
+        for s in self.sites:
+            s.notify_structure_changed(all_frac_coords, lattice_matrix)
+        return all(s.contains_point(p) for s, p in zip(self.sites, points))
 
 def _collect_reference_centres(
         sites: list[PolyhedralSite],

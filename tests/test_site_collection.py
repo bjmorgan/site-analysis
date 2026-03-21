@@ -155,7 +155,10 @@ class SiteCollectionTestCase(unittest.TestCase):
         points = np.array([[0.0, 0.0, 0.0],
                            [0.5, 0.5, 0.5]])
         with self.assertRaises(NotImplementedError):
-            site_collection.sites_contain_points(points=points)  
+            site_collection.sites_contain_points(
+                points=points,
+                all_frac_coords=np.eye(3),
+                lattice_matrix=np.eye(3) * 10.0)
             
     def test_site_lookup_dict_creation(self):
         """Test that a site lookup dictionary is created during initialization."""

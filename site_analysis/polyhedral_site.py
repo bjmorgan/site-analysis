@@ -429,7 +429,6 @@ class PolyhedralSite(Site):
 
     def contains_point(self,
             x: np.ndarray,
-            structure: Structure | None = None,
             algo: str | None = None,
             *args,
             pbc_images: np.ndarray | None = None,
@@ -442,9 +441,6 @@ class PolyhedralSite(Site):
 
         Args:
             x: Fractional coordinates of the point to test (length 3 array).
-            structure: Optional pymatgen Structure. If provided, the vertex
-                coordinates for this polyhedral site will be assigned using
-                this structure.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
             pbc_images: Optional pre-computed PBC images of x, shape (N, 3).
@@ -461,9 +457,7 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        if structure is not None:
-            self.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
-        elif self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
+        if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
             self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
         if self.vertex_coords is None:
             raise RuntimeError(

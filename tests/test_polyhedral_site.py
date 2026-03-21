@@ -195,23 +195,6 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             site.contains_point(np.array([0.0, 0.0, 0.0]))
 
-    def test_contains_point_assigns_vertex_coords_if_called_with_structure(self):
-        site = self.site
-        structure = example_structure()
-        site.assign_vertex_coords = Mock()
-        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
-                                       [0.4, 0.6, 0.6],
-                                       [0.6, 0.6, 0.4],
-                                       [0.6, 0.4, 0.6]])
-        x = np.array([0.5, 0.5, 0.5])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
-            site.contains_point(x, structure=structure)
-            call_args = site.assign_vertex_coords.call_args
-            np.testing.assert_array_equal(call_args[0][0], structure.frac_coords)
-            np.testing.assert_array_equal(call_args[0][1], structure.lattice.matrix)
-            mock_x_pbc.assert_called_once_with(x)
-    
     def test_contains_point_algo_parameter_emits_deprecation_warning(self):
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],

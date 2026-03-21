@@ -30,49 +30,53 @@ from pymatgen.core import Structure, Site, PeriodicSite
 from site_analysis.distances import all_mic_distances
 
 def get_coordination_indices(
-    structure: Structure,
-    centre_species: str, 
+    frac_coords: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species: list[str],
+    centre_species: str,
     coordination_species: str | list[str],
     cutoff: float,
-    n_coord: int | list[int]) -> dict[int, list[int]]:
-    """
-    Find atoms with exactly the specified coordination environment.
-    
+    n_coord: int | list[int],
+) -> dict[int, list[int]]:
+    """Find atoms with exactly the specified coordination environment.
+
     For each atom of centre_species, finds environments with exactly n_coord
     coordinating atoms of coordination_species within the cutoff distance.
-    
+
     Args:
-        structure: A pymatgen Structure object.
+        frac_coords: Fractional coordinates for all atoms, shape ``(N, 3)``.
+        lattice_matrix: Lattice matrix (3x3) for distance calculations.
+        species: Species strings for each atom.
         centre_species: Species string identifying the atoms at the centres.
-        coordination_species: Species string or list of strings identifying 
+        coordination_species: Species string or list of strings identifying
             the coordinating atoms.
         cutoff: Distance cutoff for neighbour search in Angstroms.
-        n_coord: Number(s) of coordinating atoms required for 
-            each environment. If an int is provided, the same number is used for all
-            centre atoms. If a list is provided, it should have the same length as 
-            the number of centre atoms found.
-            
+        n_coord: Number(s) of coordinating atoms required for
+            each environment. If an int is provided, the same number is used
+            for all centre atoms. If a list is provided, it should have the
+            same length as the number of centre atoms found.
+
     Returns:
-        dict[int, list[int]]: Dictionary mapping center atom indices to lists of 
-            coordinating atom indices. Only includes environments with exactly 
-            n_coord coordinating atoms within cutoff.
-            
+        Dictionary mapping centre atom indices to lists of coordinating atom
+        indices. Only includes environments with exactly n_coord coordinating
+        atoms within cutoff.
+
     Raises:
         ValueError: If no centre atoms are found, or if a list of n_coord
             has incorrect length.
     """
-    # Standardize coordination_species to list
     if isinstance(coordination_species, str):
         coordination_species = [coordination_species]
-        
-    # Find all centre atoms
-    centre_atoms = [i for i, site in enumerate(structure) 
-                    if site.species_string == centre_species]
-    
+
+    coordination_species_set = set(coordination_species)
+    centre_atoms = indices_for_species(species, centre_species)
+
     if not centre_atoms:
         raise ValueError(f"No atoms of species '{centre_species}' found in structure")
-    
-    # Standardize n_coord to list
+
+    coord_atoms = [i for i, s in enumerate(species)
+                   if s in coordination_species_set]
+
     if isinstance(n_coord, int):
         required_coord = [n_coord] * len(centre_atoms)
     else:
@@ -80,26 +84,25 @@ def get_coordination_indices(
             raise ValueError(f"Length of n_coord list ({len(n_coord)}) does not match "
                             f"number of {centre_species} atoms ({len(centre_atoms)})")
         required_coord = n_coord
-    
-    # Find coordinating environments
-    complete_environments = {}
-    
+
+    # Compute distance matrix between centre and coordinating atoms
+    if coord_atoms:
+        centre_coords = frac_coords[centre_atoms]
+        coord_coords = frac_coords[coord_atoms]
+        dist_matrix = all_mic_distances(centre_coords, coord_coords, lattice_matrix)
+    else:
+        dist_matrix = np.empty((len(centre_atoms), 0))
+
+    complete_environments: dict[int, list[int]] = {}
     for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
-        centre_site = structure[centre_idx]
-        
-        # Get all neighbors within cutoff that match coordination_species
-        neighbors = []
-        for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
-            if neighbor.species_string in coordination_species:
-                neighbors.append((int(neighbor.index), neighbor.nn_distance))
-        
-        # Only include environments with exactly the required number of coordinating atoms
-        if len(neighbors) == required:
-            # Sort by distance
-            neighbors.sort(key=lambda x: x[1])
-            neighbor_indices = [idx for idx, _ in neighbors]
-            complete_environments[centre_idx] = neighbor_indices
-    
+        distances = dist_matrix[i]
+        within_cutoff = [(coord_atoms[j], float(distances[j]))
+                         for j in range(len(coord_atoms))
+                         if distances[j] <= cutoff and coord_atoms[j] != centre_idx]
+        if len(within_cutoff) == required:
+            within_cutoff.sort(key=lambda x: x[1])
+            complete_environments[centre_idx] = [idx for idx, _ in within_cutoff]
+
     return complete_environments
 
 def get_nearest_neighbour_indices(

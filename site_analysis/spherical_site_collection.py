@@ -55,17 +55,12 @@ class SphericalSiteCollection(PriorityAssignmentMixin, SiteCollection):
             structure: Structure) -> None:
         """Analyse a structure to assign atoms to spherical sites.
 
-        This method:
-        1. Assigns fractional coordinates to each atom based on the structure
-        2. Delegates to assign_site_occupations to determine which atoms
-           belong in which sites
+        Assigns fractional coordinates to each atom, then delegates
+        to assign_site_occupations to determine site membership.
 
         Args:
-            atoms: List of Atom objects to be assigned to sites
-            structure: Pymatgen Structure containing the atom positions
-
-        Returns:
-            None
+            atoms: List of Atom objects to be assigned to sites.
+            structure: Pymatgen Structure containing the atom positions.
         """
         all_frac_coords = structure.frac_coords
         for a in atoms:

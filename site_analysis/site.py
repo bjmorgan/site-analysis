@@ -20,7 +20,6 @@ from collections import Counter
 from typing import Any
 from .atom import Atom
 import numpy as np
-from pymatgen.core import Structure
 
 class Site(ABC):
     """Parent class for defining sites.

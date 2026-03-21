@@ -73,168 +73,140 @@ class ToolsTestCase(unittest.TestCase):
  
     def test_site_index_mapping_one(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.1, 0.1, 0.1],
                             [0.4, 0.6, 0.4]])
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords2]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2)
+        species = ['Na', 'Na']
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species, species)
         np.testing.assert_array_equal(mapping, np.array([0, 1]))
 
     def test_site_index_mapping_two(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords2]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2)
+        species = ['Na', 'Na']
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species, species)
         np.testing.assert_array_equal(mapping, np.array([1, 0]))
-        mapping = site_index_mapping(structure1, structure2)
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species, species)
         np.testing.assert_array_equal(mapping, np.array([1, 0]))
-        
-    def test_site_index_mapping_with_species_1_as_string(self):
+
+    def test_site_index_mapping_with_species1_filter_as_string(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
         species1 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species1, coords1)]
-        sites2 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords2]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species1='Na')
+        species2 = ['Na', 'Na']
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2, species1_filter=['Na'])
         np.testing.assert_array_equal(mapping, np.array([1]))
-        
-    def test_site_index_mapping_with_species_1_as_list(self):
+
+    def test_site_index_mapping_with_species1_filter_as_list(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
         species1 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species1, coords1)]
-        sites2 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords2]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species1=['Na'])
+        species2 = ['Na', 'Na']
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2, species1_filter=['Na'])
         np.testing.assert_array_equal(mapping, np.array([1]))
-                
-    def test_site_index_mapping_with_species_2_as_string(self):
+
+    def test_site_index_mapping_with_species2_filter_as_string(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
+        species1 = ['Na', 'Na']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species2='Na', one_to_one_mapping=False)
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                                     species2_filter=['Na'], one_to_one_mapping=False)
         np.testing.assert_array_equal(mapping, np.array([0, 0]))
 
-    def test_site_index_mapping_with_species_2_as_list(self):
+    def test_site_index_mapping_with_species2_filter_as_list(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
+        species1 = ['Na', 'Na']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species2=['Na'], one_to_one_mapping=False)
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                                     species2_filter=['Na'], one_to_one_mapping=False)
         np.testing.assert_array_equal(mapping, np.array([0, 0]))
-                
+
     def test_site_index_mapping_with_one_to_one_mapping_raises_ValueError_one(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
+        species1 = ['Na', 'Na']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
         with self.assertRaises(ValueError):
-            site_index_mapping(structure1, structure2, species2='Na')
-            
+            site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                               species2_filter=['Na'])
+
     def test_site_index_mapping_with_one_to_one_mapping_raises_ValueError_two(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
+        species1 = ['Na', 'Na']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
         with self.assertRaises(ValueError):
-            site_index_mapping(structure1, structure2, species2='Na', one_to_one_mapping=True)
-        
-    def test_site_index_mapping_with_species_1_and_species_2_as_strings_one(self):
+            site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                               species2_filter=['Na'], one_to_one_mapping=True)
+
+    def test_site_index_mapping_with_species1_filter_and_species2_filter_one(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
         species1 = ['Na', 'Cl']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species1, coords1)]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species1='Na', species2='Na')
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                                     species1_filter=['Na'], species2_filter=['Na'])
         np.testing.assert_array_equal(mapping, np.array([0]))
-        
-    def test_site_index_mapping_with_species_1_and_species_2_as_strings_two(self):
+
+    def test_site_index_mapping_with_species1_filter_and_species2_filter_two(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.4, 0.6, 0.4],
                             [0.1, 0.1, 0.1]])
         species1 = ['Na', 'Cl']
         species2 = ['Na', 'Cl']
-        sites1 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species1, coords1)]
-        sites2 = [PeriodicSite(species=s, coords=c, lattice=lattice) for s, c in zip(species2, coords2)]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping = site_index_mapping(structure1, structure2, species1='Na', species2='Cl')
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
+                                     species1_filter=['Na'], species2_filter=['Cl'])
         np.testing.assert_array_equal(mapping, np.array([1]))
-        
+
     def test_site_index_mapping_with_return_mapping_distances(self):
         a = 6.19399
-        lattice = Lattice.from_parameters(a, a, a, 90, 90, 90)
+        lattice_matrix = np.eye(3) * a
         coords1 = np.array([[0.0, 0.0, 0.0],
                             [0.5, 0.5, 0.5]])
         coords2 = np.array([[0.1, 0.1, 0.1],
                             [0.4, 0.6, 0.4]])
-        sites1 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords1]
-        sites2 = [PeriodicSite(species='Na', coords=c, lattice=lattice) for c in coords2]
-        structure1 = Structure.from_sites(sites1)
-        structure2 = Structure.from_sites(sites2)
-        mapping, distances = site_index_mapping(structure1, structure2, return_mapping_distances=True)
+        species = ['Na', 'Na']
+        mapping, distances = site_index_mapping(coords1, coords2, lattice_matrix, species, species,
+                                                return_mapping_distances=True)
         np.testing.assert_array_equal(mapping, np.array([0, 1]))
         expected_distance = np.sqrt(3*((0.1*a)**2))
         np.testing.assert_array_almost_equal(distances, np.array([expected_distance, expected_distance]))

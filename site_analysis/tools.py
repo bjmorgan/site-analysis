@@ -281,58 +281,67 @@ def species_string_from_site(site: Site) -> str:
     """
     return site.species_string
 
-def site_index_mapping(structure1: Structure, 
-                       structure2: Structure,
-                       species1: str | list[str] | None = None,
-                       species2: str | list[str] | None = None,
-                       one_to_one_mapping: bool = True,
-                       return_mapping_distances: bool = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-    """Compute the site index mapping between two structures based on the closest corresponding site in
-    structure2 to each selected site in structure1.
-    
+def site_index_mapping(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species1: list[str],
+    species2: list[str],
+    species1_filter: list[str] | None = None,
+    species2_filter: list[str] | None = None,
+    one_to_one_mapping: bool = True,
+    return_mapping_distances: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Compute the site index mapping based on closest distances.
+
+    For each selected site in ``frac_coords1`` (filtered by
+    ``species1_filter``), finds the closest site in ``frac_coords2``
+    (filtered by ``species2_filter``) using minimum-image convention
+    distances.
+
     Args:
-        structure1 (pymatgen.Structure): The structure to map from.
-        structure2 (pymatgen.Structure): The structure to map to.
-        species1 (optional, str or list(str)): Optional argument to select a subset of atomic species
-            to map site indices from.
-        species2 (optional, str of list(str)): Optional argument to specify a subset of atomic species
-            to map site indices to.
-        one_to_one_mapping (optional, bool): Optional argument to check that a one-to-one mapping is found
-            between the relevant subsets of sites in structure1 and structure2. Default is `True`.
-            
+        frac_coords1: Fractional coordinates to map from, shape (N, 3).
+        frac_coords2: Fractional coordinates to map to, shape (M, 3).
+        lattice_matrix: Lattice matrix (3x3) for distance calculations.
+        species1: Species strings for each site in ``frac_coords1``.
+        species2: Species strings for each site in ``frac_coords2``.
+        species1_filter: If given, only map from sites whose species
+            are in this list. Defaults to all species in ``species1``.
+        species2_filter: If given, only map to sites whose species
+            are in this list. Defaults to all species in ``species2``.
+        one_to_one_mapping: If ``True``, raise ``ValueError`` when the
+            mapping is not one-to-one. Default is ``True``.
+        return_mapping_distances: If ``True``, also return the distances
+            for each mapped pair.
+
     Returns:
-        np.ndarray
-        
+        Array of mapped indices into ``frac_coords2``. If
+        ``return_mapping_distances`` is ``True``, returns a tuple of
+        (mapping, distances).
+
     Raises:
-        ValueError: if `one_to_one_mapping = True` and a one-to-one mapping is not found.
- 
+        ValueError: If ``one_to_one_mapping`` is ``True`` and the
+            mapping is not one-to-one.
     """
-    # Ensure species1 and species2 are lists of site species strings.
-    if species1 is None:
-        species1 = list(set([site.species_string for site in structure1]))
-    if isinstance(species1, str):
-        species1 = [species1]
-    if isinstance(species2, str):
-        species2 = [species2]
-    if species2 is None:
-        species2 = list(set([site.species_string for site in structure2]))
-    structure2_mask = np.array([site.species_string in species2 for site in structure2])
-    lattice = structure1.lattice
-    dr_ij = np.array(lattice.get_all_distances(structure1.frac_coords, structure2.frac_coords))
+    if species1_filter is None:
+        species1_filter = list(set(species1))
+    if species2_filter is None:
+        species2_filter = list(set(species2))
+    structure2_mask = np.array([s in species2_filter for s in species2])
+    dr_ij = all_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
     to_return = []
     dr_ij_to_return = []
-    for site1, dr_i in zip(structure1, dr_ij):
-        if site1.species_string in species1:
-                dr_i_array = np.asarray(dr_i)
-                subset_idx = np.argmin(dr_i_array[structure2_mask])
-                parent_idx = np.arange(dr_i_array.size)[structure2_mask][subset_idx] 
-                to_return.append(parent_idx)
-                dr_ij_to_return.append(dr_i_array[parent_idx])
+    for i, dr_i in enumerate(dr_ij):
+        if species1[i] in species1_filter:
+            subset_idx = np.argmin(dr_i[structure2_mask])
+            parent_idx = np.arange(dr_i.size)[structure2_mask][subset_idx]
+            to_return.append(parent_idx)
+            dr_ij_to_return.append(dr_i[parent_idx])
     if one_to_one_mapping:
         if len(to_return) != len(set(to_return)):
-            raise ValueError("One-to-one mapping between structures not found.")   
+            raise ValueError("One-to-one mapping between structures not found.")
     if return_mapping_distances:
-        return np.array(to_return), np.array(dr_ij_to_return)     
+        return np.array(to_return), np.array(dr_ij_to_return)
     else:
         return np.array(to_return)
         

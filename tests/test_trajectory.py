@@ -307,20 +307,15 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertEqual(labels[1], "site2")
         
     def test_assign_site_occupations(self):
-        """Test that assign_site_occupations delegates to site_collection."""
-        # Setup
-        structure = Mock()
-        
-        # Mock the site_collection
+        """Test that assign_site_occupations extracts lattice_matrix and delegates."""
         self.trajectory.site_collection = Mock()
-        
-        # Call the method
-        self.trajectory.assign_site_occupations(structure)
-        
-        # Check delegation
-        self.trajectory.site_collection.assign_site_occupations.assert_called_once_with(
-            self.atoms, structure
-        )
+
+        self.trajectory.assign_site_occupations(self.structure)
+
+        self.trajectory.site_collection.assign_site_occupations.assert_called_once()
+        args = self.trajectory.site_collection.assign_site_occupations.call_args[0]
+        self.assertIs(args[0], self.atoms)
+        np.testing.assert_array_equal(args[1], self.structure.lattice.matrix)
     
     def test_trajectory_from_structures_with_progress(self):
         """Test trajectory_from_structures wraps iterator with tqdm."""

@@ -34,6 +34,7 @@ from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
+from site_analysis.distances import all_mic_distances
 
 
 @dataclass
@@ -219,31 +220,28 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             atom.assign_coords(all_frac_coords)
         lattice_matrix = structure.lattice.matrix
         self._batch_calculate_centres(all_frac_coords, lattice_matrix)
-        self.assign_site_occupations(atoms, structure)
+        self.assign_site_occupations(atoms, lattice_matrix)
         
     def assign_site_occupations(self,
                                 atoms: list[Atom],
-                                structure: Structure) -> None:
+                                lattice_matrix: np.ndarray) -> None:
         """Assign atoms to sites based on Voronoi tessellation.
-        
-        This method assigns each atom to the nearest site centre,
-        taking into account periodic boundary conditions.
-        
+
+        Uses minimum-image convention distances to assign each atom
+        to the nearest site centre.
+
         Args:
-            atoms (list[Atom]): list of atoms to be assigned to sites.
-            structure (Structure): Pymatgen Structure containing atom positions.
-            
-        Returns:
-            None
+            atoms: List of atoms to be assigned to sites.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
         """
         self.reset_site_occupations()
         if not atoms:
             return
-        lattice = structure.lattice
         site_coords = np.array([site.centre for site in self.sites])
         atom_coords = np.array([atom.frac_coords for atom in atoms])
-        dist_matrix = lattice.get_all_distances(site_coords, atom_coords)
+        dist_matrix = all_mic_distances(site_coords, atom_coords, lattice_matrix)
         site_list_indices = np.argmin(dist_matrix, axis=0)
-        for atom, site_list_index in zip( atoms, site_list_indices):
+        for atom, site_list_index in zip(atoms, site_list_indices):
             site = self.sites[site_list_index]
             self.update_occupation(site, atom)

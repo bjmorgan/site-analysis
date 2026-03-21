@@ -63,57 +63,46 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 	
 	def test_analyse_structure(self):
 		"""Test that analyse_structure assigns coordinates and calls assign_site_occupations."""
-		# Patch the methods we want to verify
 		with patch.object(Atom, 'assign_coords') as mock_assign_coords, \
 			 patch.object(self.collection, 'assign_site_occupations') as mock_assign:
-			
-			# Call the method being tested
+
 			self.collection.analyse_structure(self.atoms, self.structure)
-			
-			# Verify assign_coords was called for each atom (twice)
+
 			self.assertEqual(mock_assign_coords.call_count, 2)
-			
-			# Verify assign_site_occupations was called with atoms and structure
-			mock_assign.assert_called_once_with(self.atoms, self.structure)
+			mock_assign.assert_called_once()
+			args = mock_assign.call_args[0]
+			self.assertIs(args[0], self.atoms)
+			np.testing.assert_array_equal(args[1], self.structure.lattice.matrix)
 	
 	def test_assign_site_occupations_distance_matrix(self):
 		"""Test that assign_site_occupations uses distance matrix correctly."""
-		# First reset the sites to ensure they're empty
 		self.collection.reset_site_occupations()
-		
-		# Patch lattice.get_all_distances to return a known distance matrix
-		# Row 0: distances from site1 to atoms [atom1, atom2]
-		# Row 1: distances from site2 to atoms [atom1, atom2]
 		distance_matrix = np.array([
 			[1.0, 5.0],  # site1 is closer to atom1
 			[5.0, 1.0]   # site2 is closer to atom2
 		])
-		
-		with patch.object(self.structure.lattice, 'get_all_distances', 
-						 return_value=distance_matrix) as mock_get_distances, \
+
+		with patch('site_analysis.voronoi_site_collection.all_mic_distances',
+				   return_value=distance_matrix) as mock_distances, \
 			 patch.object(self.collection, 'update_occupation') as mock_update:
-			
-			# Call the method with non-empty atoms list
-			self.collection.assign_site_occupations(self.atoms, self.structure)
-			
-			# Verify get_all_distances was called
-			mock_get_distances.assert_called_once()
-			
-			# Verify update_occupation was called for each atom-site pair
+
+			self.collection.assign_site_occupations(
+				self.atoms, self.structure.lattice.matrix)
+
+			mock_distances.assert_called_once()
+			args = mock_distances.call_args[0]
+			np.testing.assert_array_equal(args[0], np.array([s.frac_coords for s in self.collection.sites]))
+			np.testing.assert_array_equal(args[1], np.array([a.frac_coords for a in self.atoms]))
+			np.testing.assert_array_equal(args[2], self.structure.lattice.matrix)
 			mock_update.assert_any_call(self.site1, self.atom1)
 			mock_update.assert_any_call(self.site2, self.atom2)
 			self.assertEqual(mock_update.call_count, 2)
 	
 	def test_empty_atoms_list(self):
-		"""Test behavior with empty atoms list - verifies the early return after reset."""
-		# Populate the sites with some atoms
+		"""Test behaviour with empty atoms list."""
 		self.site1.contains_atoms = [1, 2]
 		self.site2.contains_atoms = [3, 4]
-		
-		# Call assign_site_occupations with empty list
-		self.collection.assign_site_occupations([], self.structure)
-		
-		# Verify sites were reset (contains_atoms should be empty)
+		self.collection.assign_site_occupations([], self.lattice.matrix)
 		self.assertEqual(self.site1.contains_atoms, [])
 		self.assertEqual(self.site2.contains_atoms, [])
 	

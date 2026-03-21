@@ -86,7 +86,7 @@ def _per_site_analyse_structure(self, atoms, structure):
         atom.assign_coords(frac_coords)
     for site in self.sites:
         site.calculate_centre(structure)
-    self.assign_site_occupations(atoms, structure)
+    self.assign_site_occupations(atoms, structure.lattice.matrix)
 
 
 def benchmark_full_workflow(trajectory, structures, repeats):

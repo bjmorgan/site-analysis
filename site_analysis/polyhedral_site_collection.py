@@ -18,8 +18,6 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
-from typing import cast
-
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
@@ -29,7 +27,7 @@ from pymatgen.core import Structure
 import numpy as np
 
 
-class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
+class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
     """A collection of PolyhedralSite objects.
     
     Extends the base SiteCollection class with specific functionality for
@@ -101,8 +99,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin, SiteCollection):
             pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
-            for site_ in self._get_priority_sites(atom):
-                site = cast(PolyhedralSite, site_)
+            for site in self._get_priority_sites(atom):
                 if site.contains_atom(atom, pbc_images=pbc_images):
                     self.update_occupation(site, atom)
                     break

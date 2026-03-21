@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Generator
-from typing import NamedTuple, Sequence, TYPE_CHECKING
+from typing import Generic, NamedTuple, Sequence, TypeVar, TYPE_CHECKING
 
 import numpy as np
 from .atom import Atom
@@ -50,7 +50,10 @@ class _NearestSiteLookup(NamedTuple):
         return self.site_indices[int(np.argmin(dists))]
 
 
-class PriorityAssignmentMixin:
+SiteT = TypeVar('SiteT', bound=Site)
+
+
+class PriorityAssignmentMixin(Generic[SiteT]):
     """Mixin providing priority-based site assignment ordering.
 
     Provides ``_get_priority_sites(atom)``, a generator that yields sites
@@ -75,9 +78,9 @@ class PriorityAssignmentMixin:
     # Type stubs for the SiteCollection interface this mixin requires.
     # These are provided by SiteCollection at runtime via MRO.
     if TYPE_CHECKING:
-        sites: Sequence[Site]
-        def site_by_index(self, index: int) -> Site: ...
-        def neighbouring_sites(self, site_index: int) -> Sequence[Site]: ...
+        sites: Sequence[SiteT]
+        def site_by_index(self, index: int) -> SiteT: ...
+        def neighbouring_sites(self, site_index: int) -> Sequence[SiteT]: ...
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -107,7 +110,7 @@ class PriorityAssignmentMixin:
             centres=centres, site_indices=site_indices
         )
 
-    def _get_priority_sites(self, atom: Atom) -> Generator[Site, None, None]:
+    def _get_priority_sites(self, atom: Atom) -> Generator[SiteT, None, None]:
         """Generator that yields sites in priority order for optimised atom assignment.
 
         The generator picks an *anchor site* — the most recent site from

@@ -287,6 +287,25 @@ Sets species to use for mapping sites between reference and target structures.
 builder.with_site_mapping(mapping_species=["O", "Ti"])
 ```
 
+#### `with_min_atom_distance(distance)`
+Sets the minimum allowed distance between same-species atoms in the reference structure.
+
+When `build()` is called with a reference structure, the builder checks that no two atoms of the same species are closer than this threshold. This catches a common mistake where an atom coordinate sits on a general Wyckoff position instead of the correct special position, which produces pairs of atoms very close together and results in duplicate coordination environments.
+
+This check runs whenever a reference structure is set, regardless of site type. Set to 0 to disable the check.
+
+**Parameters:**
+- `distance`: Minimum distance in the same units as the lattice parameters. Must be non-negative. Default is 0.5.
+
+**Examples:**
+```python
+# Tighten the threshold
+builder.with_min_atom_distance(1.0)
+
+# Disable the check entirely
+builder.with_min_atom_distance(0)
+```
+
 #### `with_existing_sites(sites)`
 Uses pre-existing site objects instead of creating new ones.
 
@@ -510,4 +529,34 @@ trajectory = builder.build()  # Raises TypeError
 # Missing reference structure
 builder.with_polyhedral_sites(...)  # Without with_reference_structure()
 trajectory = builder.build()  # Raises ValueError
+```
+
+### Reference Structure Validation
+
+When a reference structure is set, `build()` checks for two problems that can produce incorrect site definitions:
+
+**Close same-species atoms**: If any pair of atoms of the same species are closer than `min_atom_distance` (default 0.5), the build fails with a `ValueError`. This typically means an atom coordinate is on a general Wyckoff position instead of the correct special position, producing near-duplicate atoms in the same coordination environment.
+
+```python
+# This will raise ValueError because the Mg coordinate is on a
+# general position (96i), producing Mg pairs ~0.14 apart
+builder.with_reference_structure(bad_reference)
+       .with_polyhedral_sites(...)
+trajectory = builder.build()
+# ValueError: Reference structure has Mg atoms at indices 42 and 43
+# that are only 0.140 apart (threshold: 0.5). ...
+
+# To disable this check (e.g. if close atoms are intentional):
+builder.with_min_atom_distance(0)
+```
+
+**Duplicate sites**: After generating sites, the builder checks that no two polyhedral sites share the same vertex indices and no two dynamic Voronoi sites share the same reference indices. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+
+```python
+# Even with the distance check disabled, duplicate sites are caught
+builder.with_min_atom_distance(0)
+       .with_polyhedral_sites(...)
+trajectory = builder.build()
+# ValueError: Duplicate sites: site 0 and site 1 share the same
+# vertex_indices [3, 7, 12, 15]. ...
 ```

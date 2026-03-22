@@ -139,7 +139,10 @@ class TrajectoryBuilder:
         
         # Mapping options
         self._mapping_species: list[str] | None = None
-        
+
+        # Validation options
+        self._min_atom_distance: float = 0.5
+
         # Functions to be called during build() to create sites
         self._site_generators: list[Callable] = []
         
@@ -282,6 +285,41 @@ class TrajectoryBuilder:
             self._mapping_species = mapping_species
         return self
         
+    def with_min_atom_distance(self, distance: float) -> 'TrajectoryBuilder':
+        """Set the minimum allowed distance between same-species atoms
+        in the reference structure.
+
+        If any pair of atoms of the same species in the reference
+        structure is closer than this threshold, ``build()`` raises
+        ``ValueError``. This catches reference structures where atoms
+        sit on a general Wyckoff position instead of the correct
+        special position, producing duplicate coordination environments.
+
+        This check runs whenever a reference structure is set,
+        regardless of site type. It is most relevant for polyhedral
+        and dynamic Voronoi site workflows, but also applies when a
+        reference structure is provided for mapping or alignment.
+
+        Set to 0 to disable the check.
+
+        Args:
+            distance: Minimum distance in the same units as the
+                lattice parameters. Must be non-negative.
+                The builder default is 0.5.
+
+        Returns:
+            self: For method chaining.
+
+        Raises:
+            ValueError: If distance is negative.
+        """
+        if distance < 0:
+            raise ValueError(
+                f"min_atom_distance must be non-negative, got {distance}"
+            )
+        self._min_atom_distance = distance
+        return self
+
     def with_spherical_sites(self, 
                     centres: list[list[float]], 
                     radii: float | list[float], 
@@ -630,6 +668,80 @@ class TrajectoryBuilder:
         self._atoms = atoms
         return self
         
+    def _validate_reference_atom_distances(self) -> None:
+        """Check that no same-species atom pairs in the reference
+        structure are closer than ``_min_atom_distance``."""
+        from site_analysis.distances import all_mic_distances
+        from site_analysis.tools import indices_for_species
+
+        ref = self._reference_structure
+        lattice_matrix = np.array(ref.lattice.matrix)  # type: ignore[union-attr]
+        species_list = [s.species_string for s in ref]  # type: ignore[union-attr]
+        frac_coords = np.array(ref.frac_coords)  # type: ignore[union-attr]
+
+        for sp in set(species_list):
+            indices = indices_for_species(species_list, sp)
+            if len(indices) < 2:
+                continue
+
+            coords = frac_coords[indices]
+            dists = all_mic_distances(coords, coords, lattice_matrix)
+            np.fill_diagonal(dists, np.inf)
+
+            min_dist = float(np.min(dists))
+            if min_dist < self._min_atom_distance:
+                i_local, j_local = np.unravel_index(
+                    int(np.argmin(dists)), dists.shape)
+                raise ValueError(
+                    f"Reference structure has {sp} atoms at indices "
+                    f"{indices[i_local]} and {indices[j_local]} that are "
+                    f"only {min_dist:.3f} apart (threshold: "
+                    f"{self._min_atom_distance}). This typically means "
+                    f"the atom coordinate is on a general Wyckoff position "
+                    f"instead of the correct special position, which "
+                    f"produces duplicate coordination environments. "
+                    f"To disable this check, call "
+                    f".with_min_atom_distance(0) on the builder."
+                )
+
+    def _validate_unique_sites(self, sites: list[Site]) -> None:
+        """Check that no two sites share the same defining indices.
+
+        Applies to PolyhedralSite (vertex_indices) and
+        DynamicVoronoiSite (reference_indices). Skipped for
+        VoronoiSite and SphericalSite where duplicate detection
+        based on coordinates is unreliable.
+        """
+        from site_analysis.polyhedral_site import PolyhedralSite
+        from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+        from site_analysis.voronoi_site import VoronoiSite
+        from site_analysis.spherical_site import SphericalSite
+
+        if not sites:
+            return
+
+        if isinstance(sites[0], PolyhedralSite):
+            index_attr = "vertex_indices"
+        elif isinstance(sites[0], DynamicVoronoiSite):
+            index_attr = "reference_indices"
+        elif isinstance(sites[0], (VoronoiSite, SphericalSite)):
+            return
+        else:
+            return  # Unknown site type — skip gracefully
+
+        seen: dict[frozenset[int], int] = {}
+        for site in sites:
+            key = frozenset(getattr(site, index_attr))
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate sites: site {seen[key]} and site "
+                    f"{site.index} share the same {index_attr} "
+                    f"{sorted(key)}. This typically means the reference "
+                    f"structure has multiple atoms inside the same "
+                    f"coordination environment."
+                )
+            seen[key] = site.index
+
     def build(self) -> Trajectory:
         """Build and return the Trajectory object.
         
@@ -637,10 +749,13 @@ class TrajectoryBuilder:
         using the previously configured site generator.
         
         Returns:
-            Trajectory: The constructed Trajectory object
-            
+            The constructed Trajectory object.
+
         Raises:
-            ValueError: If required parameters are missing
+            ValueError: If required parameters are missing, if the
+                reference structure has same-species atom pairs closer
+                than ``min_atom_distance``, or if duplicate sites are
+                detected.
         """
         # Validate basic requirements
         if not self._structure:
@@ -648,16 +763,20 @@ class TrajectoryBuilder:
         if not self._site_generators:
             raise ValueError("Site type must be defined using one of the with_*_sites methods")
             
+        # Pre-build: validate reference structure
+        if self._reference_structure is not None and self._min_atom_distance > 0:
+            self._validate_reference_atom_distances()
+
         # Reset the site index counter
         Site.reset_index()
-            
+
         # Generate all sites
         sites: list[Site] = []
         site_type = None
-        
+
         for generator in self._site_generators:
             generated_sites = generator()
-            
+
             # Verify site type consistency
             if generated_sites:
                 current_type = type(generated_sites[0])
@@ -667,7 +786,10 @@ class TrajectoryBuilder:
                     raise TypeError(f"Cannot mix site types: {site_type.__name__} and {current_type.__name__}")
             
             sites.extend(generated_sites)
-        
+
+        # Post-build: check for duplicate sites
+        self._validate_unique_sites(sites)
+
         # Create atoms if not already set
         if not self._atoms:
             if not self._mobile_species:

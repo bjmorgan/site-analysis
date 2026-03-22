@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.7.0] - 2026-03-18
+## [1.7.0] - 2026-03-22
 
 ### Added
 
@@ -14,7 +14,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `TransitionTable` class: a labelled square matrix with `.matrix`, `.get()`, `.to_dict()`, and `.reorder()` access patterns.
 - `TransitionTable` exported from top-level `site_analysis` package.
 - `include_edge_runs` parameter to control whether runs truncated by trajectory boundaries are included (excluded by default to avoid biasing towards shorter times).
+- `TransitionTable.filter()` method for filtering transitions by site label.
 - Residence time analysis guide in documentation.
+- `site_analysis.distances` module providing minimum-image convention distance functions (`mic_distance`, `all_mic_distances`, `frac_to_cart`) with optional numba acceleration, independent of pymatgen.
+- `indices_for_species()` helper in `tools.py` replacing `structure.indices_from_symbol()`.
+- Builder validation: `TrajectoryBuilder.build()` now checks for same-species atom pairs in the reference structure closer than `min_atom_distance` (default 0.5), catching incorrect Wyckoff positions that produce duplicate sites. Configurable via `.with_min_atom_distance()`.
+- Builder validation: post-build duplicate site detection for polyhedral and dynamic Voronoi sites (rejects sites sharing the same vertex/reference indices).
+
+### Changed
+
+- **Pymatgen decoupling (#59)**: Structure and Lattice objects are now only used at public API boundaries (`TrajectoryBuilder`, `analyse_structure`, `ReferenceBasedSites`, `StructureAligner.align`). All internal computation operates on numpy arrays and lattice matrices. This is a purely internal refactoring — the public TrajectoryBuilder API is unchanged.
+  - `Atom.assign_coords()` accepts a coordinate array instead of a Structure.
+  - `correct_pbc()` and `unwrap_vertices_to_reference_center()` accept a lattice matrix instead of a Lattice.
+  - `assign_site_occupations()` accepts a lattice matrix instead of a Structure across all site collection types.
+  - `SphericalSite.contains_point()` and `contains_atom()` accept a lattice matrix instead of a Lattice.
+  - `PolyhedralSite.assign_vertex_coords()` accepts arrays instead of a Structure.
+  - `DynamicVoronoiSite.calculate_centre()` accepts arrays instead of a Structure.
+  - `calculate_species_distances()`, `site_index_mapping()`, and `get_coordination_indices()` accept arrays instead of Structure objects.
+  - `StructureAligner` optimisation loop no longer creates temporary Structure objects per iteration.
+  - `IndexMapper` and `CoordinationEnvironmentFinder` extract arrays at their boundaries.
+  - `ReferenceBasedSites` eagerly extracts arrays from both structures in its constructor.
+- `Site.contains_point()` and `Site.contains_atom()` base class signatures no longer use `*args/**kwargs`. Subclasses declare concrete keyword-only parameters, so invalid arguments raise `TypeError` immediately.
+- `PriorityAssignmentMixin` is now generic over site type (`PriorityAssignmentMixin[SiteT]`), so `_get_priority_sites` yields the concrete site type.
+- `PolyhedralSite.contains_point()` no longer accepts a `structure` parameter. Use `notify_structure_changed()` or `assign_vertex_coords()` to set vertex coordinates before calling.
+- `PolyhedralSiteCollection.sites_contain_points()` accepts arrays instead of a Structure, with length validation.
+
+### Fixed
+
+- Fixed type 2 (Mg) site Wyckoff position in argyrodite reference structure. The coordinate `[0.23, 0.92, 0.09]` was on the 96i general position, producing 384 duplicate sites. Replaced with `[0.77, 0.585, 0.585]` on the 48h special position.
+- Removed stale `# type: ignore` on scipy import (scipy-stubs now provides types).
+- Removed unused pymatgen imports from `polyhedral_site.py`, `dynamic_voronoi_site.py`, `site_collection.py`, `site.py`, and `index_mapper.py`.
+- Fixed `get_vertex_indices` deprecation warning referencing non-existent `get_coordinating_indices` (should be `get_coordination_indices`).
+
+### Performance
+
+Benchmarked on Li6PS5Cl argyrodite (1056 sites, 192 mobile Li atoms, 140 MD frames):
+
+| Site type | Before (ms/frame) | After (ms/frame) | Speedup |
+|-----------|-------------------|-------------------|---------|
+| Polyhedral | 9.95 | 7.26 | 1.37x |
+| Voronoi | 7.35 | 3.28 | 2.24x |
+| Dynamic Voronoi | 7.86 | 3.59 | 2.19x |
+| Spherical | 4.79 | 1.70 | 2.82x |
+
+Speedups come from replacing pymatgen's Cython `lattice.get_all_distances` with numba-accelerated `all_mic_distances`, and eliminating per-atom pymatgen PeriodicSite object creation in `assign_coords`.
 
 ## [1.6.0] - 2026-03-01
 

@@ -53,8 +53,13 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
                              f"Si {center_idx} has {len(coordinating)} neighbors, expected 4")
     
     def test_find_cspbi3_coordination(self):
-        """Test finding Pb coordination around I in cubic perovskite."""
-        # Create cubic perovskite CsPbI3
+        """Test finding Pb coordination around I in cubic perovskite.
+
+        With a single unit cell there is only 1 unique Pb atom per I site
+        (minimum image convention returns one distance per atom pair).
+        A 2x2x2 supercell gives 8 Pb atoms, each I having 2 Pb neighbours
+        within cutoff.
+        """
         lattice = Lattice.cubic(6.0)
         species = ["Cs", "Pb", "I", "I", "I"]
         coords = [
@@ -64,18 +69,18 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
             [0.5, 0, 0.5],   # I
             [0, 0.5, 0.5]    # I
         ]
-        structure = Structure(lattice, species, coords)
-        
+        structure = Structure(lattice, species, coords) * [2, 2, 2]
+
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="I",
             coordination_species="Pb",
             n_coord=2,
-            cutoff=4.0
+            cutoff=4.0,
         )
-        
-        # Each I should have 2 Pb neighbors in cubic perovskite
-        self.assertEqual(len(environments), 3)  # 3 I atoms
+
+        # Each I should have 2 Pb neighbours in cubic perovskite
+        self.assertEqual(len(environments), 24)  # 3 * 8 = 24 I atoms
         for center_idx, vertices in environments.items():
             self.assertEqual(len(vertices), 2)
 
@@ -107,42 +112,51 @@ class CoordinationEnvironmentFinderTestCase(unittest.TestCase):
         self.assertEqual(indices, {})
 
     def test_find_environments_with_single_coordination_species(self):
-        """Test find_environments with single coordination species as string."""
+        """Test find_environments with single coordination species as string.
+
+        Uses a 2x2x2 NaCl supercell so that each Na has 6 unique Cl
+        neighbours within 3.0 A (no periodic-image duplication).
+        """
         lattice = Lattice.cubic(5.0)
-        structure = Structure(lattice, 
-                              species=["Na", "Cl", "Cl"], 
-                              coords=[[0, 0, 0], [0.5, 0.0, 0.0], [0.0, 0.5, 0]])
-        
+        structure = Structure.from_spacegroup(
+            sg='Fm-3m', lattice=lattice,
+            species=['Na', 'Cl'],
+            coords=[[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
+        ) * [2, 2, 2]
+
         finder = CoordinationEnvironmentFinder(structure)
         environments = finder.find_environments(
             center_species="Na",
             coordination_species="Cl",  # Single string, not list
-            n_coord=4,
-            cutoff=3.0
+            n_coord=6,
+            cutoff=3.0,
         )
-        
-        self.assertEqual(len(environments), 1)
-        self.assertIn(0, environments)
-        self.assertEqual(len(environments[0]), 4)
+
+        self.assertEqual(len(environments), 32)  # All 32 Na atoms
+        for center_idx, coords in environments.items():
+            self.assertEqual(len(coords), 6)
 
     def test_find_environments_with_multiple_coordination_species(self):
         """Test find_environments with multiple coordination species."""
         lattice = Lattice.cubic(5.0)
-        structure = Structure(lattice, 
-                              species=["Na", "Cl", "O", "Cl"], 
+        structure = Structure(lattice,
+                              species=["Na", "Cl", "O", "Cl"],
                               coords=[[0, 0, 0], [0.5, 0.0, 0.0], [0.0, 0.5, 0.0], [0.0, 0.0, 0.5]])
-        
+
         finder = CoordinationEnvironmentFinder(structure)
+        # With only 3 unique coordinating atoms (2 Cl + 1 O) in a single
+        # unit cell, each having minimum image distance 2.5 A, we expect
+        # exactly 3 neighbours within cutoff.
         environments = finder.find_environments(
             center_species="Na",
-            coordination_species=["Cl", "O"],  # Multiple species as list
-            n_coord=6,
-            cutoff=3.0
+            coordination_species=["Cl", "O"],
+            n_coord=3,
+            cutoff=3.0,
         )
-        
+
         self.assertEqual(len(environments), 1)
         self.assertIn(0, environments)
-        self.assertEqual(len(environments[0]), 6)
+        self.assertEqual(len(environments[0]), 3)
         
     def test_find_environments_maps_to_correct_center_index_minimal(self):
         """Test that find_environments correctly maps environment to the right center atom."""

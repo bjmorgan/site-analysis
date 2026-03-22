@@ -45,11 +45,12 @@ class ReferenceBasedSites:
     4. SiteFactory - to create appropriate site objects
     
     Attributes:
-        reference_structure: Reference structure defining ideal coordination environments
-        target_structure: Target structure where sites will be created
-        aligned_structure: Target structure aligned to the reference (same as target if align=False)
-        translation_vector: Translation vector used for alignment (None if align=False)
-        alignment_metrics: Metrics describing quality of structure alignment (None if align=False)
+        reference_structure: Reference structure defining ideal coordination environments.
+        target_structure: Target structure where sites will be created.
+        aligned_structure: Reference structure translated to match the target
+            (None if align=False).
+        translation_vector: Translation vector used for alignment (None if align=False).
+        alignment_metrics: Metrics describing quality of structure alignment (None if align=False).
     """
     
     def __init__(self, 
@@ -76,28 +77,44 @@ class ReferenceBasedSites:
         """
         self.reference_structure = reference_structure
         self.target_structure = target_structure
-        
+
+        # Eagerly extract arrays from structures
+        self._ref_frac_coords: np.ndarray = reference_structure.frac_coords
+        self._ref_lattice_matrix: np.ndarray = reference_structure.lattice.matrix
+        self._ref_species = [s.species_string for s in reference_structure]
+        self._target_frac_coords = target_structure.frac_coords
+        self._target_lattice_matrix = target_structure.lattice.matrix
+        self._target_species = [s.species_string for s in target_structure]
+
         # Initialise alignment attributes
         self.aligned_structure: Structure | None = None
         self.translation_vector: np.ndarray | None = None
         self.alignment_metrics: dict[str, float] | None = None
-        
+        self._aligned_frac_coords: np.ndarray | None = None
+
         # Perform alignment if requested
         if align:
             self._align_structures(
-                align_species, 
-                align_metric, 
-                align_algorithm, 
+                align_species,
+                align_metric,
+                align_algorithm,
                 align_minimizer_options,
                 align_tolerance
             )
-        
+
         # These will be initialised on first use
         self._coord_finder: CoordinationEnvironmentFinder | None = None
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
         
-    def create_polyhedral_sites(self, 
+    @property
+    def _effective_ref_coords(self) -> np.ndarray:
+        """Reference coordinates to use, preferring aligned if available."""
+        if self._aligned_frac_coords is not None:
+            return self._aligned_frac_coords
+        return self._ref_frac_coords
+
+    def create_polyhedral_sites(self,
                             center_species: str, 
                             vertex_species: str | list[str], 
                             cutoff: float, 
@@ -193,8 +210,6 @@ class ReferenceBasedSites:
                 or if both label and labels are provided.
         """
         # Find coordination environments in reference structure
-        # Note: CoordinationEnvironmentFinder uses vertex_species terminology,
-        # but conceptually these are reference atoms for dynamic Voronoi sites
         ref_environments = self._find_coordination_environments(
             center_species, reference_species, cutoff, n_reference
         )
@@ -264,8 +279,9 @@ class ReferenceBasedSites:
             self.aligned_structure = aligned_structure
             self.translation_vector = translation_vector
             self.alignment_metrics = metrics
+            self._aligned_frac_coords = aligned_structure.frac_coords
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             raise ValueError(f"Structure alignment failed: {str(e)}") from e
     
@@ -301,7 +317,7 @@ class ReferenceBasedSites:
             
             return environments_dict
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             raise ValueError(
                 f"Failed to find coordination environments for {center_species} centers "
@@ -331,25 +347,23 @@ class ReferenceBasedSites:
             # Create index mapper if not already initialised
             if self._index_mapper is None:
                 self._index_mapper = IndexMapper()
-            
-            # Use aligned reference if available, otherwise use original reference
-            reference_to_use = (
-                self.aligned_structure  # When alignment was performed
-                if self.aligned_structure is not None 
-                else self.reference_structure  # When no alignment was performed
-            )
-            
+
+            ref_coords = self._effective_ref_coords
+            lattice_matrix = self._ref_lattice_matrix
+
             # Map environments
             mapped_environments = self._index_mapper.map_coordinating_atoms(
-                reference_to_use,      # Aligned reference if available
-                self.target_structure, # Always use original target
-                ref_environments,
-                target_species=target_species
+                ref_frac_coords=ref_coords,
+                target_frac_coords=self._target_frac_coords,
+                lattice_matrix=lattice_matrix,
+                ref_coordinating=ref_environments,
+                target_species=self._target_species,
+                species_filter=target_species,
             )
             
             return mapped_environments
             
-        except Exception as e:
+        except ValueError as e:
             # Re-raise with more context
             species_str = f" for {target_species} species" if target_species else ""
             raise ValueError(
@@ -397,12 +411,5 @@ class ReferenceBasedSites:
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
         """Calculate reference centres from center atom indices."""
-        # Use aligned reference structure if available, otherwise original
-        structure_to_use = self.aligned_structure if self.aligned_structure else self.reference_structure
-        
-        reference_centers = []
-        for center_idx in center_indices:
-            reference_center = structure_to_use[center_idx].frac_coords.copy()
-            reference_centers.append(reference_center)
-        
-        return reference_centers
+        coords = self._effective_ref_coords
+        return [coords[i].copy() for i in center_indices]

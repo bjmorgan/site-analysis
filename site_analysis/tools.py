@@ -1,22 +1,22 @@
-"""Utility functions for site analysis and crystal structure manipulation.
+"""Utility functions for site analysis.
 
-This module provides a collection of helper functions for working with crystal
-structures, finding coordination environments, mapping between structures, and
-handling periodic boundary conditions.
+This module provides helper functions for finding coordination
+environments, mapping atoms between structures, and handling
+periodic boundary conditions. Most functions accept numpy arrays
+and species lists rather than pymatgen Structure objects.
 
 Key functions include:
 
 Coordination and site analysis:
 - get_coordination_indices: Find atoms with specific coordination environments
-- get_nearest_neighbour_indices: Get indices of nearest neighbors for each site
-- get_vertex_indices: (Deprecated) Find vertex atoms for coordination polyhedra
+- indices_for_species: Get atom indices matching a species string
 
 Structure mapping and comparison:
 - site_index_mapping: Map site indices between two structures
-- calculate_species_distances: Calculate distances between matching atoms in structures
+- calculate_species_distances: Calculate distances between matching atoms
 
 Periodic boundary handling:
-- x_pbc: Generate fractional coordinates for all periodic images in neighboring cells
+- x_pbc: Generate fractional coordinates for all periodic images in neighbouring cells
 
 These utilities provide low-level functionality that can be used directly or are
 used internally by the higher-level site and trajectory analysis classes.
@@ -27,51 +27,61 @@ import numpy as np
 
 from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
+from site_analysis.distances import all_mic_distances
 
 def get_coordination_indices(
-    structure: Structure,
-    centre_species: str, 
+    frac_coords: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species: list[str],
+    centre_species: str,
     coordination_species: str | list[str],
     cutoff: float,
-    n_coord: int | list[int]) -> dict[int, list[int]]:
-    """
-    Find atoms with exactly the specified coordination environment.
-    
+    n_coord: int | list[int],
+) -> dict[int, list[int]]:
+    """Find atoms with exactly the specified coordination environment.
+
     For each atom of centre_species, finds environments with exactly n_coord
     coordinating atoms of coordination_species within the cutoff distance.
-    
+
     Args:
-        structure: A pymatgen Structure object.
+        frac_coords: Fractional coordinates for all atoms, shape ``(N, 3)``.
+        lattice_matrix: Lattice matrix (3x3) for distance calculations.
+        species: Species strings for each atom.
         centre_species: Species string identifying the atoms at the centres.
-        coordination_species: Species string or list of strings identifying 
+        coordination_species: Species string or list of strings identifying
             the coordinating atoms.
         cutoff: Distance cutoff for neighbour search in Angstroms.
-        n_coord: Number(s) of coordinating atoms required for 
-            each environment. If an int is provided, the same number is used for all
-            centre atoms. If a list is provided, it should have the same length as 
-            the number of centre atoms found.
-            
+        n_coord: Number(s) of coordinating atoms required for
+            each environment. If an int is provided, the same number is used
+            for all centre atoms. If a list is provided, it should have the
+            same length as the number of centre atoms found.
+
     Returns:
-        dict[int, list[int]]: Dictionary mapping center atom indices to lists of 
-            coordinating atom indices. Only includes environments with exactly 
-            n_coord coordinating atoms within cutoff.
-            
+        Dictionary mapping centre atom indices to lists of coordinating atom
+        indices. Only includes environments with exactly n_coord coordinating
+        atoms within cutoff.
+
     Raises:
         ValueError: If no centre atoms are found, or if a list of n_coord
             has incorrect length.
     """
-    # Standardize coordination_species to list
+    if len(species) != len(frac_coords):
+        raise ValueError(
+            f"species length ({len(species)}) does not match "
+            f"frac_coords rows ({len(frac_coords)})"
+        )
     if isinstance(coordination_species, str):
         coordination_species = [coordination_species]
-        
-    # Find all centre atoms
-    centre_atoms = [i for i, site in enumerate(structure) 
-                    if site.species_string == centre_species]
-    
+
+    coordination_species_set = set(coordination_species)
+    centre_atoms = indices_for_species(species, centre_species)
+
     if not centre_atoms:
-        raise ValueError(f"No atoms of species '{centre_species}' found in structure")
-    
-    # Standardize n_coord to list
+        raise ValueError(f"No atoms of species '{centre_species}' found in species list")
+
+    coord_atoms = [i for i, s in enumerate(species)
+                   if s in coordination_species_set]
+
     if isinstance(n_coord, int):
         required_coord = [n_coord] * len(centre_atoms)
     else:
@@ -79,26 +89,25 @@ def get_coordination_indices(
             raise ValueError(f"Length of n_coord list ({len(n_coord)}) does not match "
                             f"number of {centre_species} atoms ({len(centre_atoms)})")
         required_coord = n_coord
-    
-    # Find coordinating environments
-    complete_environments = {}
-    
+
+    # Compute distance matrix between centre and coordinating atoms
+    if coord_atoms:
+        centre_coords = frac_coords[centre_atoms]
+        coord_coords = frac_coords[coord_atoms]
+        dist_matrix = all_mic_distances(centre_coords, coord_coords, lattice_matrix)
+    else:
+        dist_matrix = np.empty((len(centre_atoms), 0))
+
+    complete_environments: dict[int, list[int]] = {}
     for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
-        centre_site = structure[centre_idx]
-        
-        # Get all neighbors within cutoff that match coordination_species
-        neighbors = []
-        for neighbor in structure.get_neighbors(cast(PeriodicSite, centre_site), cutoff):
-            if neighbor.species_string in coordination_species:
-                neighbors.append((int(neighbor.index), neighbor.nn_distance))
-        
-        # Only include environments with exactly the required number of coordinating atoms
-        if len(neighbors) == required:
-            # Sort by distance
-            neighbors.sort(key=lambda x: x[1])
-            neighbor_indices = [idx for idx, _ in neighbors]
-            complete_environments[centre_idx] = neighbor_indices
-    
+        distances = dist_matrix[i]
+        within_cutoff = [(coord_atoms[j], float(distances[j]))
+                         for j in range(len(coord_atoms))
+                         if distances[j] <= cutoff and coord_atoms[j] != centre_idx]
+        if len(within_cutoff) == required:
+            within_cutoff.sort(key=lambda x: x[1])
+            complete_environments[centre_idx] = [idx for idx, _ in within_cutoff]
+
     return complete_environments
 
 def get_nearest_neighbour_indices(
@@ -195,7 +204,7 @@ def get_vertex_indices(
     """
     warnings.warn(
         "get_vertex_indices is deprecated and will be removed in a future version. "
-        "Please use get_coordinating_indices() for finding atoms with exact coordination "
+        "Please use get_coordination_indices() for finding atoms with exact coordination "
         "environments, or use the ReferenceBasedSites workflow for generating sites based "
         "on reference structures.",
         DeprecationWarning,
@@ -280,102 +289,164 @@ def species_string_from_site(site: Site) -> str:
     """
     return site.species_string
 
-def site_index_mapping(structure1: Structure, 
-                       structure2: Structure,
-                       species1: str | list[str] | None = None,
-                       species2: str | list[str] | None = None,
-                       one_to_one_mapping: bool = True,
-                       return_mapping_distances: bool = False) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
-    """Compute the site index mapping between two structures based on the closest corresponding site in
-    structure2 to each selected site in structure1.
-    
+def site_index_mapping(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species1: list[str],
+    species2: list[str],
+    species1_filter: str | list[str] | None = None,
+    species2_filter: str | list[str] | None = None,
+    one_to_one_mapping: bool = True,
+    return_mapping_distances: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Compute the site index mapping based on closest distances.
+
+    For each selected site in ``frac_coords1`` (filtered by
+    ``species1_filter``), finds the closest site in ``frac_coords2``
+    (filtered by ``species2_filter``) using minimum-image convention
+    distances.
+
     Args:
-        structure1 (pymatgen.Structure): The structure to map from.
-        structure2 (pymatgen.Structure): The structure to map to.
-        species1 (optional, str or list(str)): Optional argument to select a subset of atomic species
-            to map site indices from.
-        species2 (optional, str of list(str)): Optional argument to specify a subset of atomic species
-            to map site indices to.
-        one_to_one_mapping (optional, bool): Optional argument to check that a one-to-one mapping is found
-            between the relevant subsets of sites in structure1 and structure2. Default is `True`.
-            
+        frac_coords1: Fractional coordinates to map from, shape (N, 3).
+        frac_coords2: Fractional coordinates to map to, shape (M, 3).
+        lattice_matrix: Lattice matrix (3x3) for distance calculations.
+        species1: Species strings for each site in ``frac_coords1``.
+        species2: Species strings for each site in ``frac_coords2``.
+        species1_filter: If given, only map from sites whose species
+            are in this list. Defaults to all species in ``species1``.
+        species2_filter: If given, only map to sites whose species
+            are in this list. Defaults to all species in ``species2``.
+        one_to_one_mapping: If ``True``, raise ``ValueError`` when the
+            mapping is not one-to-one. Default is ``True``.
+        return_mapping_distances: If ``True``, also return the distances
+            for each mapped pair.
+
     Returns:
-        np.ndarray
-        
+        Array of mapped indices into ``frac_coords2``. If
+        ``return_mapping_distances`` is ``True``, returns a tuple of
+        (mapping, distances).
+
     Raises:
-        ValueError: if `one_to_one_mapping = True` and a one-to-one mapping is not found.
- 
+        ValueError: If ``one_to_one_mapping`` is ``True`` and the
+            mapping is not one-to-one.
     """
-    # Ensure species1 and species2 are lists of site species strings.
-    if species1 is None:
-        species1 = list(set([site.species_string for site in structure1]))
-    if isinstance(species1, str):
-        species1 = [species1]
-    if isinstance(species2, str):
-        species2 = [species2]
-    if species2 is None:
-        species2 = list(set([site.species_string for site in structure2]))
-    structure2_mask = np.array([site.species_string in species2 for site in structure2])
-    lattice = structure1.lattice
-    dr_ij = np.array(lattice.get_all_distances(structure1.frac_coords, structure2.frac_coords))
+    if len(species1) != len(frac_coords1):
+        raise ValueError(
+            f"species1 length ({len(species1)}) does not match "
+            f"frac_coords1 rows ({len(frac_coords1)})"
+        )
+    if len(species2) != len(frac_coords2):
+        raise ValueError(
+            f"species2 length ({len(species2)}) does not match "
+            f"frac_coords2 rows ({len(frac_coords2)})"
+        )
+    if isinstance(species1_filter, str):
+        species1_filter = [species1_filter]
+    if isinstance(species2_filter, str):
+        species2_filter = [species2_filter]
+    if species1_filter is None:
+        species1_filter = list(set(species1))
+    if species2_filter is None:
+        species2_filter = list(set(species2))
+    structure2_mask = np.array([s in species2_filter for s in species2])
+    if not np.any(structure2_mask):
+        raise ValueError(
+            f"No atoms match species2_filter {species2_filter} in species2"
+        )
+    dr_ij = all_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
     to_return = []
     dr_ij_to_return = []
-    for site1, dr_i in zip(structure1, dr_ij):
-        if site1.species_string in species1:
-                dr_i_array = np.asarray(dr_i)
-                subset_idx = np.argmin(dr_i_array[structure2_mask])
-                parent_idx = np.arange(dr_i_array.size)[structure2_mask][subset_idx] 
-                to_return.append(parent_idx)
-                dr_ij_to_return.append(dr_i_array[parent_idx])
+    for i, dr_i in enumerate(dr_ij):
+        if species1[i] in species1_filter:
+            subset_idx = np.argmin(dr_i[structure2_mask])
+            parent_idx = np.arange(dr_i.size)[structure2_mask][subset_idx]
+            to_return.append(parent_idx)
+            dr_ij_to_return.append(dr_i[parent_idx])
     if one_to_one_mapping:
         if len(to_return) != len(set(to_return)):
-            raise ValueError("One-to-one mapping between structures not found.")   
+            raise ValueError("One-to-one mapping between structures not found.")
     if return_mapping_distances:
-        return np.array(to_return), np.array(dr_ij_to_return)     
+        return np.array(to_return), np.array(dr_ij_to_return)
     else:
         return np.array(to_return)
         
-def calculate_species_distances(structure1, structure2, species=None):
-    """Calculate minimum distances between atoms of the same species in two structures.
-    
+def indices_for_species(
+    all_species: list[str],
+    target: str,
+) -> list[int]:
+    """Return indices where all_species matches target.
+
     Args:
-        structure1: First structure to compare
-        structure2: Second structure to compare
-        species: list of species to include. If None, includes all species
-                 present in both structures.
-                 
+        all_species: List of species strings for all atoms.
+        target: Species string to match.
+
     Returns:
-        dict: Dictionary mapping species to lists of minimum distances for each atom
-        list: Flattened list of all minimum distances
+        List of indices where species matches target.
     """
-    # Determine which species to include
+    return [i for i, s in enumerate(all_species) if s == target]
+
+
+def calculate_species_distances(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+    species1: list[str],
+    species2: list[str],
+    species: list[str] | None = None,
+) -> tuple[dict[str, list[float]], list[float]]:
+    """Calculate minimum distances between atoms of the same species.
+
+    For each species, computes the distance from each atom of that
+    species in frac_coords1 to the nearest atom of the same species
+    in frac_coords2.
+
+    Args:
+        frac_coords1: Fractional coordinates of first structure,
+            shape ``(N, 3)``.
+        frac_coords2: Fractional coordinates of second structure,
+            shape ``(M, 3)``.
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors.
+        species1: Species strings for each atom in frac_coords1.
+        species2: Species strings for each atom in frac_coords2.
+        species: Optional filter - only include these species.
+            If None, includes all species present in both structures.
+
+    Returns:
+        A tuple of (species_distances, all_distances) where
+        species_distances maps species to lists of minimum distances,
+        and all_distances is a flat list of all minimum distances.
+    """
+    if len(species1) != len(frac_coords1):
+        raise ValueError(
+            f"species1 length ({len(species1)}) does not match "
+            f"frac_coords1 rows ({len(frac_coords1)})"
+        )
+    if len(species2) != len(frac_coords2):
+        raise ValueError(
+            f"species2 length ({len(species2)}) does not match "
+            f"frac_coords2 rows ({len(frac_coords2)})"
+        )
     if species is None:
-        species = set([site.species_string for site in structure1])
-        species = species.intersection([site.species_string for site in structure2])
-        species = list(species)
-    
-    # Calculate minimum distances for each atom by species
-    species_distances = {}
-    all_distances = []
-    
+        species = sorted(set(species1) & set(species2))
+
+    species_distances: dict[str, list[float]] = {}
+    all_distances: list[float] = []
+
     for sp in species:
-        indices1 = list(structure1.indices_from_symbol(sp))
-        indices2 = list(structure2.indices_from_symbol(sp))
-        
-        if not indices1 or not indices2:
+        idx1 = indices_for_species(species1, sp)
+        idx2 = indices_for_species(species2, sp)
+
+        if not idx1 or not idx2:
             continue
-        
-        # Get coordinates for this species
-        coords1 = structure1.frac_coords[indices1]
-        coords2 = structure2.frac_coords[indices2]
-        
-        # Calculate distance matrix for this species
-        distance_matrix = structure1.lattice.get_all_distances(coords1, coords2)
-        
-        # Find minimum distance for each atom in structure1
-        min_distances = np.min(distance_matrix, axis=1)
-        
-        species_distances[sp] = min_distances.tolist()
-        all_distances.extend(min_distances)
-    
+
+        coords1 = frac_coords1[idx1]
+        coords2 = frac_coords2[idx2]
+        dist_matrix = all_mic_distances(coords1, coords2, lattice_matrix)
+        min_dists = np.min(dist_matrix, axis=1).tolist()
+
+        species_distances[sp] = min_dists
+        all_distances.extend(min_dists)
+
     return species_distances, all_distances

@@ -19,7 +19,6 @@ sites in one structure based on a template from another structure.
 
 import numpy as np
 from pymatgen.core import Structure
-from scipy.optimize import minimize
 from typing import Any, Callable
 from site_analysis.tools import calculate_species_distances
 
@@ -39,148 +38,161 @@ class StructureAligner:
         tolerance: float = 1e-4,
         algorithm: str = 'Nelder-Mead',
         minimizer_options: dict[str, Any] | None = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
-        """Align reference structure to target structure via translation."""
+        """Align reference structure to target structure via translation.
+
+        Finds the optimal translation vector that minimises distances
+        between corresponding atoms in the two structures.
+
+        Args:
+            reference: Reference structure to translate.
+            target: Target structure to align to.
+            species: Species to include in alignment. If None, all
+                species present in both structures are used.
+            metric: Distance metric to optimise ('rmsd' or 'max_dist').
+            tolerance: Convergence tolerance for the optimiser.
+            algorithm: Optimisation algorithm ('Nelder-Mead' or
+                'differential_evolution').
+            minimizer_options: Additional options passed to the optimiser.
+
+        Returns:
+            A tuple of (aligned_structure, translation_vector, metrics)
+            where aligned_structure is the translated reference,
+            translation_vector is the applied translation in fractional
+            coordinates, and metrics is a dictionary of alignment quality
+            measures.
+
+        Raises:
+            ValueError: If structures have incompatible compositions or
+                if optimisation fails.
+        """
+        # Extract arrays from Structure at the public boundary
+        ref_frac_coords = reference.frac_coords
+        target_frac_coords = target.frac_coords
+        lattice_matrix = reference.lattice.matrix
+        ref_species = [s.species_string for s in reference]
+        target_species_list = [s.species_string for s in target]
+
         # Validate structures and get species to use
-        valid_species = self._validate_structures(reference, target, species)
-        
+        valid_species = self._validate_structures(
+            ref_species, target_species_list, species)
+
         # Create objective function
-        objective_function = self._create_objective_function(reference, target, valid_species, metric)
-        
-        # Run the appropriate optimizer using the dispatcher
-        translation_vector = self._run_minimizer(algorithm, objective_function, tolerance, minimizer_options)
-        
+        objective_function = self._create_objective_function(
+            ref_frac_coords, target_frac_coords, lattice_matrix,
+            ref_species, target_species_list, valid_species, metric)
+
+        # Run the appropriate optimiser using the dispatcher
+        translation_vector = self._run_minimizer(
+            algorithm, objective_function, tolerance, minimizer_options)
+
         # Apply the translation to get the aligned structure
         aligned_structure = self._apply_translation(reference, translation_vector)
-        
-        # Calculate final metrics
+
+        # Calculate final metrics using arrays
+        aligned_coords = (ref_frac_coords + translation_vector) % 1.0
         species_distances, all_distances = calculate_species_distances(
-            aligned_structure, target, species=valid_species)
-        
+            aligned_coords, target_frac_coords, lattice_matrix,
+            ref_species, target_species_list, species=valid_species)
+
         metrics = {
-            'rmsd': np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf'),
-            'max_dist': np.max(all_distances) if all_distances else float('inf'),
-            'mean_dist': np.mean(all_distances) if all_distances else float('inf')
+            'rmsd': float(np.sqrt(np.mean(np.array(all_distances)**2))) if all_distances else float('inf'),
+            'max_dist': float(np.max(all_distances)) if all_distances else float('inf'),
+            'mean_dist': float(np.mean(all_distances)) if all_distances else float('inf'),
         }
-        
+
         return aligned_structure, translation_vector, metrics
         
-    def _create_objective_function(self, 
-        reference: Structure,
-        target: Structure,
+    def _create_objective_function(self,
+        ref_frac_coords: np.ndarray,
+        target_frac_coords: np.ndarray,
+        lattice_matrix: np.ndarray,
+        ref_species: list[str],
+        target_species: list[str],
         valid_species: list[str],
         metric: str) -> Callable[[np.ndarray], float]:
-        """Create the objective function for optimization.
-        
+        """Create the objective function for optimisation.
+
         Args:
-            reference: Reference structure
-            target: Target structure
-            valid_species: List of species to include in alignment
-            metric: Metric to optimize ('rmsd' or 'max_dist')
-            
+            ref_frac_coords: Fractional coordinates of the reference structure.
+            target_frac_coords: Fractional coordinates of the target structure.
+            lattice_matrix: Lattice matrix for distance calculations.
+            ref_species: Species strings for each site in the reference.
+            target_species: Species strings for each site in the target.
+            valid_species: List of species to include in alignment.
+            metric: Metric to optimise (``'rmsd'`` or ``'max_dist'``).
+
         Returns:
-            function: The objective function that takes a translation vector and
-                    returns the distance metric value
+            Objective function that takes a translation vector and returns
+            the distance metric value.
         """
         def objective_function(
             translation_vector: np.ndarray) -> float:
-            # Ensure translation is in [0,1) range
             translation_vector = translation_vector % 1.0
-            
-            # Apply translation to reference coordinates
-            translated_coords = reference.frac_coords + translation_vector
-            translated_coords = translated_coords % 1.0  # Apply PBC
-            
-            # Create a temporary translated structure for distance calculation
-            temp_structure = reference.copy()
-            for i in range(len(temp_structure)):
-                temp_structure[i] = temp_structure[i].species, translated_coords[i]
-            
-            # Calculate distances using our helper function
-            _, all_distances = calculate_species_distances(temp_structure, target, species=valid_species)
-            
-            # Calculate the desired metric
-            if not all_distances:  # Handle empty distance list
+            translated_coords = (ref_frac_coords + translation_vector) % 1.0
+
+            _, all_distances = calculate_species_distances(
+                translated_coords, target_frac_coords, lattice_matrix,
+                ref_species, target_species, species=valid_species)
+
+            if not all_distances:
                 return float('inf')
-                
+
             if metric == 'rmsd':
                 return float(np.sqrt(np.mean(np.array(all_distances)**2)))
             elif metric == 'max_dist':
                 return float(np.max(all_distances))
             else:
                 raise ValueError(f"Unknown metric: {metric}")
-        
+
         return objective_function
     
-    def _validate_structures(self, 
-                            reference: Structure, 
-                            target: Structure, 
+    def _validate_structures(self,
+                            ref_species: list[str],
+                            target_species: list[str],
                             species: list[str] | None = None) -> list[str]:
         """Validate that structures can be aligned and determine species to use.
-        
+
         Args:
-            reference: Reference structure
-            target: Target structure
-            species: list of species to use for alignment
-            
+            ref_species: List of species strings for each site in the reference.
+            target_species: List of species strings for each site in the target.
+            species: Optional list of species to use for alignment. If ``None``,
+                all species are used and compositions must match exactly.
+
         Returns:
-            list of species to use for alignment
-            
+            List of species to use for alignment.
+
         Raises:
-            ValueError: If structures cannot be aligned
+            ValueError: If structures cannot be aligned.
         """
-        # Check if species is provided
         if species is None:
-            # No specific species provided - get all species from reference
-            ref_species_counts = reference.composition.as_dict()
-            target_species_counts = target.composition.as_dict()
-            
-            # Verify compositions match exactly
-            if ref_species_counts != target_species_counts:
+            ref_counts: dict[str, int] = {}
+            for s in ref_species:
+                ref_counts[s] = ref_counts.get(s, 0) + 1
+            target_counts: dict[str, int] = {}
+            for s in target_species:
+                target_counts[s] = target_counts.get(s, 0) + 1
+            if ref_counts != target_counts:
                 raise ValueError(
                     f"Structures have different compositions: "
-                    f"{reference.composition.formula} vs {target.composition.formula}"
+                    f"{ref_counts} vs {target_counts}"
                 )
-            
-            # Use all species from reference
-            species_to_use = list(ref_species_counts.keys())
+            species_to_use = sorted(ref_counts.keys())
         else:
             species_to_use = species
-        
-        # Validate each species has matching counts
+
         for sp in species_to_use:
-            ref_sp_indices = reference.indices_from_symbol(sp)
-            target_sp_indices = target.indices_from_symbol(sp)
-            
-            if not ref_sp_indices:
+            ref_count = sum(1 for s in ref_species if s == sp)
+            target_count = sum(1 for s in target_species if s == sp)
+            if ref_count == 0:
                 raise ValueError(f"Species {sp} not found in reference structure")
-            if not target_sp_indices:
+            if target_count == 0:
                 raise ValueError(f"Species {sp} not found in target structure")
-            
-            # Check if we have the same number of atoms for this species
-            if len(ref_sp_indices) != len(target_sp_indices):
+            if ref_count != target_count:
                 raise ValueError(
                     f"Different number of {sp} atoms: "
-                    f"{len(ref_sp_indices)} in reference vs "
-                    f"{len(target_sp_indices)} in target"
+                    f"{ref_count} in reference vs {target_count} in target"
                 )
-        
         return species_to_use
-    
-    def _translate_coords(self, 
-                         coords: np.ndarray, 
-                         translation_vector: np.ndarray) -> np.ndarray:
-        """Apply translation to coordinates.
-        
-        Args:
-            coords: Fractional coordinates to translate
-            translation_vector: Translation vector to apply
-            
-        Returns:
-            Translated coordinates
-        """
-        translated = coords + translation_vector
-        # Ensure coordinates are within [0, 1)
-        return np.array(translated % 1.0)
     
     def _apply_translation(self, 
                           structure: Structure, 

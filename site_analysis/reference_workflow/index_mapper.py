@@ -20,68 +20,82 @@ of site definitions between different structures or timesteps in a simulation.
 
 import numpy as np
 
-from pymatgen.core import Structure
+from site_analysis.distances import all_mic_distances
 
 
 class IndexMapper:
     """Maps coordinating atom indices between reference and target crystal structures.
-    
+
     Used to translate coordination environments defined in an ideal reference
     structure to corresponding atoms in a target structure, handling permutations
     and structural distortions via distance-based matching.
-    
+
     The mapper verifies 1:1 correspondence between reference and target atoms,
     ensuring each coordinating position maps to exactly one target atom. If
     this constraint is violated, a ValueError is raised.
     """
-    
+
     def map_coordinating_atoms(
         self,
-        reference: Structure,
-        target: Structure,
+        ref_frac_coords: np.ndarray,
+        target_frac_coords: np.ndarray,
+        lattice_matrix: np.ndarray,
         ref_coordinating: list[list[int]],
-        target_species: str | list[str] | None = None
+        target_species: list[str] | None = None,
+        species_filter: str | list[str] | None = None,
     ) -> list[list[int]]:
         """Map coordinating atom indices from reference to target structure.
-        
+
         Args:
-            reference: Reference structure containing ideal coordination environments.
-            target: target structure with potentially distorted or permuted atoms.
+            ref_frac_coords: Fractional coordinates of the reference structure,
+                shape (N, 3).
+            target_frac_coords: Fractional coordinates of the target structure,
+                shape (M, 3).
+            lattice_matrix: Lattice matrix (3x3) for distance calculations.
             ref_coordinating: List of coordinating atom index lists from reference.
                 Each sublist contains indices of atoms that define a site.
-            target_species: Optional filter for target atom species to map to.
-                If specified, only maps to atoms of these species in the target structure.
-                
+            target_species: Full species list for all atoms in the target structure.
+                Required when using species_filter.
+            species_filter: Optional filter for which species to map to.
+                If specified, only maps to atoms of these species in the target
+                structure.
+
         Returns:
             List of coordinating atom index lists mapped to the target structure.
             Maintains the same structure as input but with updated indices.
-            
+
         Raises:
             ValueError: If 1:1 mapping cannot be achieved (e.g., missing atoms,
                 ambiguous distances, or insufficient target atoms in target structure).
         """
+        if target_species is not None and len(target_species) != len(target_frac_coords):
+            raise ValueError(
+                f"target_species length ({len(target_species)}) does not match "
+                f"target_frac_coords rows ({len(target_frac_coords)})"
+            )
         # Extract all unique coordinating atoms from reference structure
         unique_indices = self._extract_unique_coordinating_atoms(ref_coordinating)
-        
+
         # Create mapping from reference to target structure
         index_mapping = self._find_closest_atom_mapping(
-            reference, target, unique_indices, target_species
+            ref_frac_coords, target_frac_coords, lattice_matrix,
+            unique_indices, target_species, species_filter,
         )
-        
+
         # Map the coordination lists using the established mapping
         mapped_coordinating = self._apply_mapping(ref_coordinating, index_mapping)
-        
+
         return mapped_coordinating
-    
+
     def _extract_unique_coordinating_atoms(
         self,
         ref_coordinating: list[list[int]]
     ) -> list[int]:
         """Extract unique coordinating atom indices from coordination lists.
-        
+
         Args:
             ref_coordinating: List of coordinating atom index lists.
-            
+
         Returns:
             Sorted list of unique coordinating atom indices.
         """
@@ -89,54 +103,69 @@ class IndexMapper:
         for coord_list in ref_coordinating:
             unique_indices.update(coord_list)
         return sorted(list(unique_indices))
-    
+
     def _find_closest_atom_mapping(
         self,
-        reference: Structure,
-        target: Structure,
+        ref_frac_coords: np.ndarray,
+        target_frac_coords: np.ndarray,
+        lattice_matrix: np.ndarray,
         ref_indices: list[int],
-        target_species: str | list[str] | None
+        target_species: list[str] | None,
+        species_filter: str | list[str] | None,
     ) -> dict[int, int]:
         """Find closest atom in target structure for each reference atom.
-        
+
         Args:
-            reference: Reference structure.
-            target: Target structure.
+            ref_frac_coords: Fractional coordinates of the reference structure,
+                shape (N, 3).
+            target_frac_coords: Fractional coordinates of the target structure,
+                shape (M, 3).
+            lattice_matrix: Lattice matrix (3x3) for distance calculations.
             ref_indices: List of reference atom indices to map.
-            target_species: Optional species filter for the target structure.
-            
+            target_species: Full species list for all atoms in the target structure.
+            species_filter: Optional species filter for the target structure.
+
         Returns:
             Dictionary mapping reference indices to target indices.
-            
+
         Raises:
             ValueError: If 1:1 mapping cannot be achieved.
         """
-        # Ensure that target_species is a list if it is specified
-        if isinstance(target_species, str):
-            target_species = [target_species]
-            
+        if not ref_indices:
+            return {}
+
+        # Ensure that species_filter is a list if it is specified
+        if isinstance(species_filter, str):
+            species_filter = [species_filter]
+
         # Create a filtered list of target atoms in the target structure
-        if target_species is not None:
-            target_mask = np.array([site.species_string in target_species for site in target])
+        if species_filter is not None:
+            if target_species is None:
+                raise ValueError(
+                    "target_species must be provided when using species_filter"
+                )
+            target_mask = np.array([s in species_filter for s in target_species])
             if not np.any(target_mask):
-                raise ValueError(f"No atoms of species {target_species} found in target structure")
+                raise ValueError(
+                    f"No atoms of species {species_filter} found in target structure"
+                )
         else:
-            target_mask = np.ones(len(target), dtype=bool)
-            
+            target_mask = np.ones(len(target_frac_coords), dtype=bool)
+
         # Get coordinates of reference atoms to map
-        ref_coords = np.array([reference[i].frac_coords for i in ref_indices])
-        
+        ref_coords = ref_frac_coords[ref_indices]
+
         # Get coordinates of target atoms in the target structure
         target_indices = np.where(target_mask)[0]
-        target_coords = np.array([target[int(i)].frac_coords for i in target_indices])
-        
+        filtered_target_coords = target_frac_coords[target_indices]
+
         # Calculate distances between reference and target atoms (with PBC)
-        dr_ij = reference.lattice.get_all_distances(ref_coords, target_coords)
-        
+        dr_ij = all_mic_distances(ref_coords, filtered_target_coords, lattice_matrix)
+
         # Find closest target atom for each reference atom
         closest_indices = np.argmin(dr_ij, axis=1)
         mapped_indices = target_indices[closest_indices]
-        
+
         # Check for 1:1 mapping violations
         if len(mapped_indices) != len(np.unique(mapped_indices)):
             # Find the duplicates
@@ -146,28 +175,28 @@ class IndexMapper:
                 if idx in seen:
                     duplicates.append(int(idx))
                 seen.add(idx)
-            
+
             raise ValueError(
                 f"1:1 mapping violation: Multiple reference atoms map to "
                 f"the same target atom(s) at indices {duplicates}"
             )
-        
+
         # Create mapping dictionary
         mapping = {ref_indices[i]: int(mapped_indices[i]) for i in range(len(ref_indices))}
-        
+
         return mapping
-    
+
     def _apply_mapping(
         self,
         ref_coordinating: list[list[int]],
         index_mapping: dict[int, int]
     ) -> list[list[int]]:
         """Apply the index mapping to coordination lists.
-        
+
         Args:
             ref_coordinating: Original coordination lists from reference.
             index_mapping: Mapping from reference to target indices.
-            
+
         Returns:
             Coordination lists with mapped indices.
         """
@@ -176,5 +205,5 @@ class IndexMapper:
             # Convert each index to Python int to ensure consistent types
             mapped_list = [int(index_mapping[ref_idx]) for ref_idx in coord_list]
             mapped_coordinating.append(mapped_list)
-        
+
         return mapped_coordinating

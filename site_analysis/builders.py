@@ -295,8 +295,10 @@ class TrajectoryBuilder:
         sit on a general Wyckoff position instead of the correct
         special position, producing duplicate coordination environments.
 
-        Only applies when a reference structure is set (polyhedral and
-        dynamic Voronoi site workflows).
+        This check runs whenever a reference structure is set,
+        regardless of site type. It is most relevant for polyhedral
+        and dynamic Voronoi site workflows, but also applies when a
+        reference structure is provided for mapping or alignment.
 
         Set to 0 to disable the check.
 
@@ -719,9 +721,9 @@ class TrajectoryBuilder:
             return
 
         if isinstance(sites[0], PolyhedralSite):
-            label = "vertex_indices"
+            index_attr = "vertex_indices"
         elif isinstance(sites[0], DynamicVoronoiSite):
-            label = "reference_indices"
+            index_attr = "reference_indices"
         elif isinstance(sites[0], (VoronoiSite, SphericalSite)):
             return
         else:
@@ -729,14 +731,14 @@ class TrajectoryBuilder:
 
         seen: dict[frozenset[int], int] = {}
         for site in sites:
-            key = frozenset(getattr(site, label))
+            key = frozenset(getattr(site, index_attr))
             if key in seen:
                 raise ValueError(
                     f"Duplicate sites: site {seen[key]} and site "
-                    f"{site.index} share the same {label} {sorted(key)}. "
-                    f"This typically means the reference structure has "
-                    f"multiple atoms inside the same coordination "
-                    f"environment."
+                    f"{site.index} share the same {index_attr} "
+                    f"{sorted(key)}. This typically means the reference "
+                    f"structure has multiple atoms inside the same "
+                    f"coordination environment."
                 )
             seen[key] = site.index
 

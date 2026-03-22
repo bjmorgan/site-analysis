@@ -9,7 +9,7 @@
 
 `site-analysis` is a Python module for analysing molecular dynamics simulations of solid-state ion transport, by assigning positions of mobile ions to specific &ldquo;sites&rdquo; within the host structure.
 
-The code is built on top of [`pymatgen`](https://pymatgen.org) and operates on molecular dynamics trajectories represented as lists of pymatgen `Structure` objects. Any trajectory source that can produce pymatgen structures can be used as input.
+The code uses [`pymatgen`](https://pymatgen.org) `Structure` objects as its input format for MD trajectories. Any trajectory source that can produce pymatgen structures can be used as input.
 
 The code can use the following definitions for assigning mobile ions to sites:
 1. **Spherical cutoff**: Atoms occupy a site if they lie within a spherical cutoff from a fixed position.

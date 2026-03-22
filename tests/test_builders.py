@@ -1160,7 +1160,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		"""Test that the builder resets its entire state after build() is called."""
 		# Create a builder
 		builder = TrajectoryBuilder()
-		
+
 		# Set state directly to non-default values
 		builder._structure = Mock(spec=Structure)
 		builder._reference_structure = Mock(spec=Structure)
@@ -1171,12 +1171,14 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._align_metric = "max_dist"
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
-		
-		# Mock the methods called within build
+
+		# Mock the methods called within build (including validation)
 		with patch('site_analysis.builders.atoms_from_structure'), \
 			patch('site_analysis.builders.Trajectory'), \
-			patch('site_analysis.builders.Site.reset_index'):
-			
+			patch('site_analysis.builders.Site.reset_index'), \
+			patch.object(builder, '_validate_reference_atom_distances'), \
+			patch.object(builder, '_validate_unique_sites'):
+
 			# Call build
 			builder.build()
 			
@@ -1526,5 +1528,168 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				use_reference_centers=False
 			)
 	
+class TestBuilderValidation(unittest.TestCase):
+	"""Tests for builder validation of reference structures and duplicate sites."""
+
+	def _make_argyrodite_ref(self, mg_coord):
+		"""Build an argyrodite reference with a given Mg coordinate."""
+		lattice = Lattice.cubic(a=10.155)
+		coords = np.array([
+			[0.5, 0.5, 0.5],
+			[0.9, 0.9, 0.6],
+			mg_coord,
+			[0.25, 0.25, 0.25],
+			[0.15, 0.15, 0.15],
+			[0.0, 0.183, 0.183],
+			[0.0, 0.0, 0.0],
+			[0.75, 0.25, 0.25],
+			[0.11824, 0.11824, 0.38176],
+		])
+		return Structure.from_spacegroup(
+			sg="F-43m", lattice=lattice,
+			species=["P", "Li", "Mg", "Na", "Be", "K", "S", "S", "S"],
+			coords=coords,
+		) * [2, 2, 2]
+
+	def _make_target(self, ref):
+		"""Build a target structure from a reference (just use the reference)."""
+		return ref.copy()
+
+	def test_close_atoms_raises_valueerror(self):
+		"""Pre-build check rejects reference with close same-species atoms."""
+		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])  # 96i — produces close pairs
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		with self.assertRaises(ValueError) as ctx:
+			builder.build()
+		self.assertIn("Mg", str(ctx.exception))
+		self.assertIn("with_min_atom_distance(0)", str(ctx.exception))
+
+	def test_min_atom_distance_zero_disables_check(self):
+		"""Setting min_atom_distance to 0 disables the pre-build check."""
+		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_min_atom_distance(0)
+			.with_polyhedral_sites(centre_species="Li", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		# Should not raise
+		traj = builder.build()
+		self.assertGreater(len(traj.sites), 0)
+
+	def test_custom_threshold(self):
+		"""Custom threshold below the close pair distance allows build."""
+		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
+		target = self._make_target(ref)
+
+		# Close pairs are ~0.14 A apart; threshold of 0.1 should pass
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_min_atom_distance(0.1)
+			.with_polyhedral_sites(centre_species="Li", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		traj = builder.build()
+		self.assertGreater(len(traj.sites), 0)
+
+	def test_valid_reference_passes(self):
+		"""A correct reference structure passes validation."""
+		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])  # 48h — no close pairs
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		traj = builder.build()
+		self.assertGreater(len(traj.sites), 0)
+
+	def test_only_checks_within_same_species(self):
+		"""Different species at close distances should not trigger the check."""
+		lattice = Lattice.cubic(5.0)
+		# Li and Na at almost the same position — different species, should be fine
+		structure = Structure(lattice=lattice,
+			species=["Li", "Na", "O", "O", "O", "O"],
+			coords=[[0.0, 0.0, 0.0], [0.01, 0.0, 0.0],
+					[0.5, 0.0, 0.0], [0.0, 0.5, 0.0],
+					[0.0, 0.0, 0.5], [0.5, 0.5, 0.5]])
+
+		builder = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_reference_structure(structure)
+			.with_mobile_species("Li")
+			.with_spherical_sites(centres=[[0.0, 0.0, 0.0]], radii=1.0))
+
+		# Should not raise — Li and Na are different species
+		traj = builder.build()
+		self.assertEqual(len(traj.sites), 1)
+
+	def test_duplicate_polyhedral_sites_raises(self):
+		"""Post-build check rejects duplicate polyhedral sites."""
+		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_min_atom_distance(0)  # Disable pre-build to test post-build
+			.with_polyhedral_sites(centre_species="Mg", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		with self.assertRaises(ValueError) as ctx:
+			builder.build()
+		self.assertIn("Duplicate sites", str(ctx.exception))
+
+	def test_duplicate_dynamic_voronoi_sites_raises(self):
+		"""Post-build check rejects duplicate dynamic voronoi sites."""
+		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_min_atom_distance(0)  # Disable pre-build to test post-build
+			.with_dynamic_voronoi_sites(centre_species="Mg", reference_species="S",
+				cutoff=3.0, n_reference=4, label="test"))
+
+		with self.assertRaises(ValueError) as ctx:
+			builder.build()
+		self.assertIn("Duplicate sites", str(ctx.exception))
+
+	def test_non_duplicate_sites_pass(self):
+		"""Non-duplicate polyhedral sites pass the post-build check."""
+		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(ref)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Mg", vertex_species="S",
+				cutoff=3.0, n_vertices=4, label="test"))
+
+		traj = builder.build()
+		self.assertEqual(len(traj.sites), 384)
+
+
 if __name__ == '__main__':
 	unittest.main()

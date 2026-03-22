@@ -301,11 +301,20 @@ class TrajectoryBuilder:
         Set to 0 to disable the check.
 
         Args:
-            distance: Minimum distance in Angstroms. Default is 0.5.
+            distance: Minimum distance in the same units as the
+                lattice parameters. Must be non-negative.
+                The builder default is 0.5.
 
         Returns:
             self: For method chaining.
+
+        Raises:
+            ValueError: If distance is negative.
         """
+        if distance < 0:
+            raise ValueError(
+                f"min_atom_distance must be non-negative, got {distance}"
+            )
         self._min_atom_distance = distance
         return self
 
@@ -661,20 +670,15 @@ class TrajectoryBuilder:
         """Check that no same-species atom pairs in the reference
         structure are closer than ``_min_atom_distance``."""
         from site_analysis.distances import all_mic_distances
+        from site_analysis.tools import indices_for_species
 
         ref = self._reference_structure
-        assert ref is not None
-        lattice_matrix = np.array(ref.lattice.matrix)
-        species_list = [s.species_string for s in ref]
-        frac_coords = np.array(ref.frac_coords)
+        lattice_matrix = np.array(ref.lattice.matrix)  # type: ignore[union-attr]
+        species_list = [s.species_string for s in ref]  # type: ignore[union-attr]
+        frac_coords = np.array(ref.frac_coords)  # type: ignore[union-attr]
 
-        seen_species: set[str] = set()
-        for sp in species_list:
-            if sp in seen_species:
-                continue
-            seen_species.add(sp)
-
-            indices = [i for i, s in enumerate(species_list) if s == sp]
+        for sp in set(species_list):
+            indices = indices_for_species(species_list, sp)
             if len(indices) < 2:
                 continue
 
@@ -689,8 +693,8 @@ class TrajectoryBuilder:
                 raise ValueError(
                     f"Reference structure has {sp} atoms at indices "
                     f"{indices[i_local]} and {indices[j_local]} that are "
-                    f"only {min_dist:.3f} A apart (threshold: "
-                    f"{self._min_atom_distance} A). This typically means "
+                    f"only {min_dist:.3f} apart (threshold: "
+                    f"{self._min_atom_distance}). This typically means "
                     f"the atom coordinate is on a general Wyckoff position "
                     f"instead of the correct special position, which "
                     f"produces duplicate coordination environments. "
@@ -699,9 +703,17 @@ class TrajectoryBuilder:
                 )
 
     def _validate_unique_sites(self, sites: list[Site]) -> None:
-        """Check that no two sites share the same defining indices."""
+        """Check that no two sites share the same defining indices.
+
+        Applies to PolyhedralSite (vertex_indices) and
+        DynamicVoronoiSite (reference_indices). Skipped for
+        VoronoiSite and SphericalSite where duplicate detection
+        based on coordinates is unreliable.
+        """
         from site_analysis.polyhedral_site import PolyhedralSite
         from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+        from site_analysis.voronoi_site import VoronoiSite
+        from site_analysis.spherical_site import SphericalSite
 
         if not sites:
             return
@@ -710,8 +722,10 @@ class TrajectoryBuilder:
             label = "vertex_indices"
         elif isinstance(sites[0], DynamicVoronoiSite):
             label = "reference_indices"
+        elif isinstance(sites[0], (VoronoiSite, SphericalSite)):
+            return
         else:
-            return  # Skip for Voronoi/Spherical
+            return  # Unknown site type — skip gracefully
 
         seen: dict[frozenset[int], int] = {}
         for site in sites:
@@ -733,10 +747,13 @@ class TrajectoryBuilder:
         using the previously configured site generator.
         
         Returns:
-            Trajectory: The constructed Trajectory object
-            
+            The constructed Trajectory object.
+
         Raises:
-            ValueError: If required parameters are missing
+            ValueError: If required parameters are missing, if the
+                reference structure has same-species atom pairs closer
+                than ``min_atom_distance``, or if duplicate sites are
+                detected.
         """
         # Validate basic requirements
         if not self._structure:

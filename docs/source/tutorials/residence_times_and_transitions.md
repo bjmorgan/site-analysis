@@ -37,7 +37,7 @@ lattice = Lattice.cubic(a=10.155)
 coords = np.array(
     [[0.5,     0.5,     0.5],     # P (type 0) - PS4 tetrahedra
      [0.9,     0.9,     0.6],     # type 1 (Li in reference)
-     [0.23,    0.92,    0.09],    # type 2 (Mg in reference)
+     [0.77,    0.585,   0.585],   # type 2 (Mg in reference, 48h)
      [0.25,    0.25,    0.25],    # type 3 (Na in reference)
      [0.15,    0.15,    0.15],    # type 4 (Be in reference)
      [0.0,     0.183,   0.183],   # type 5 (K in reference)

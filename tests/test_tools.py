@@ -104,7 +104,7 @@ class ToolsTestCase(unittest.TestCase):
                             [0.1, 0.1, 0.1]])
         species1 = ['Na', 'Cl']
         species2 = ['Na', 'Na']
-        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2, species1_filter=['Na'])
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2, species1_filter='Na')
         np.testing.assert_array_equal(mapping, np.array([1]))
 
     def test_site_index_mapping_with_species1_filter_as_list(self):
@@ -129,7 +129,7 @@ class ToolsTestCase(unittest.TestCase):
         species1 = ['Na', 'Na']
         species2 = ['Na', 'Cl']
         mapping = site_index_mapping(coords1, coords2, lattice_matrix, species1, species2,
-                                     species2_filter=['Na'], one_to_one_mapping=False)
+                                     species2_filter='Na', one_to_one_mapping=False)
         np.testing.assert_array_equal(mapping, np.array([0, 0]))
 
     def test_site_index_mapping_with_species2_filter_as_list(self):

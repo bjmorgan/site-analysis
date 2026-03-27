@@ -37,6 +37,11 @@ class TransitionTableConstructionTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             TransitionTable(keys=("A", "A"), matrix=np.array([[0, 1], [2, 0]]))
 
+    def test_non_numeric_dtype_raises(self):
+        """Test that a non-numeric matrix dtype raises ValueError."""
+        with self.assertRaises(ValueError):
+            TransitionTable(keys=("A", "B"), matrix=np.array([["x", "y"], ["z", "w"]]))
+
     def test_frozen(self):
         """Test that TransitionTable is immutable."""
         table = TransitionTable(keys=("A", "B"), matrix=np.array([[0, 1], [2, 0]]))

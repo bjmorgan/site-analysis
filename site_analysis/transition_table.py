@@ -33,8 +33,8 @@ class TransitionTable(Generic[TableKey]):
 
     Raises:
         ValueError: If *matrix* is not 2-D and square, if
-            ``len(keys) != matrix.shape[0]``, or if *keys* contains
-            duplicates.
+            ``len(keys) != matrix.shape[0]``, if *keys* contains
+            duplicates, or if *matrix* has a non-numeric dtype.
     """
 
     __slots__ = ('_keys', '_matrix', '_key_to_index', '_frozen')
@@ -53,6 +53,10 @@ class TransitionTable(Generic[TableKey]):
             raise ValueError(
                 f"len(keys) ({len(keys)}) != matrix dimension "
                 f"({self._matrix.shape[0]})"
+            )
+        if not np.issubdtype(self._matrix.dtype, np.number):
+            raise ValueError(
+                f"matrix must have a numeric dtype, got {self._matrix.dtype}"
             )
         if len(set(keys)) != len(keys):
             raise ValueError("keys must not contain duplicates")

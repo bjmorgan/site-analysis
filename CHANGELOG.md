@@ -17,10 +17,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Minimum Python version bumped from 3.10 to 3.11 (required by pymatgen-core).
 - Runtime dependency changed from `pymatgen` to `pymatgen-core`; full `pymatgen` moved to dev dependencies.
 
-### Fixed
-
-- Typo in comparing_site_definitions tutorial ("unambigious" -> "unambiguous").
-
 ## [1.7.0] - 2026-03-22
 
 ### Added

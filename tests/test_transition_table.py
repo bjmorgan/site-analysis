@@ -37,6 +37,11 @@ class TransitionTableConstructionTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             TransitionTable(keys=("A", "A"), matrix=np.array([[0, 1], [2, 0]]))
 
+    def test_non_numeric_dtype_raises(self):
+        """Test that a non-numeric matrix dtype raises ValueError."""
+        with self.assertRaises(ValueError):
+            TransitionTable(keys=("A", "B"), matrix=np.array([["x", "y"], ["z", "w"]]))
+
     def test_frozen(self):
         """Test that TransitionTable is immutable."""
         table = TransitionTable(keys=("A", "B"), matrix=np.array([[0, 1], [2, 0]]))
@@ -258,6 +263,93 @@ class TransitionTableReprTestCase(unittest.TestCase):
         self.assertIn("A", r)
         self.assertIn("B", r)
         self.assertIn("2", r)
+
+
+class TransitionTableStrTestCase(unittest.TestCase):
+    """Tests for __str__."""
+
+    def test_str_integer_matrix(self):
+        """Test that integer matrices are formatted without decimals."""
+        matrix = np.array([[0, 3], [2, 0]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        result = str(table)
+        self.assertIn('0', result)
+        self.assertIn('3', result)
+        self.assertNotIn('.', result)
+
+    def test_str_float_matrix(self):
+        """Test that float matrices are formatted with 3 decimal places."""
+        matrix = np.array([[0.0, 0.75], [1.0, 0.0]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        result = str(table)
+        self.assertIn('0.750', result)
+        self.assertIn('1.000', result)
+
+    def test_str_empty_table(self):
+        """Test that an empty table returns an empty string."""
+        table = TransitionTable(keys=(), matrix=np.empty((0, 0)))
+        self.assertEqual(str(table), '')
+
+    def test_str_alignment_with_varying_key_lengths(self):
+        """Test that columns are aligned with keys of different lengths."""
+        matrix = np.array([[0, 1], [2, 0]])
+        table = TransitionTable(keys=("short", "much longer key"), matrix=matrix)
+        result = str(table)
+        lines = result.split('\n')
+        # All lines should have the same length
+        self.assertEqual(len(set(len(line) for line in lines)), 1)
+
+    def test_str_contains_all_keys(self):
+        """Test that all keys appear in the string output."""
+        matrix = np.array([[0, 3, 1], [2, 0, 4], [5, 6, 0]])
+        table = TransitionTable(keys=("type 2", "type 4", "type 5"), matrix=matrix)
+        result = str(table)
+        self.assertIn('type 2', result)
+        self.assertIn('type 4', result)
+        self.assertIn('type 5', result)
+
+
+class TransitionTableReprHtmlTestCase(unittest.TestCase):
+    """Tests for _repr_html_."""
+
+    def test_repr_html_contains_table_tags(self):
+        """Test that _repr_html_ returns valid HTML table markup."""
+        matrix = np.array([[0, 3], [2, 0]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        html = table._repr_html_()
+        self.assertTrue(html.startswith('<table>'))
+        self.assertTrue(html.endswith('</table>'))
+        self.assertIn('<th>A</th>', html)
+        self.assertIn('<th>B</th>', html)
+
+    def test_repr_html_empty_table(self):
+        """Test that an empty table returns an empty string."""
+        table = TransitionTable(keys=(), matrix=np.empty((0, 0)))
+        self.assertEqual(table._repr_html_(), '')
+
+    def test_repr_html_float_formatting(self):
+        """Test that float values are formatted with 3 decimal places."""
+        matrix = np.array([[0.0, 0.75], [1.0, 0.0]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        html = table._repr_html_()
+        self.assertIn('0.750', html)
+        self.assertIn('1.000', html)
+
+    def test_repr_html_integer_formatting(self):
+        """Test that integer values are formatted without decimals."""
+        matrix = np.array([[0, 5], [2, 0]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        html = table._repr_html_()
+        self.assertNotIn('.', html)
+
+    def test_repr_html_escapes_keys(self):
+        """Test that HTML special characters in keys are escaped."""
+        matrix = np.array([[0, 1], [1, 0]])
+        table = TransitionTable(keys=("<script>", "B&C"), matrix=matrix)
+        result = table._repr_html_()
+        self.assertNotIn('<script>', result)
+        self.assertIn('&lt;script&gt;', result)
+        self.assertIn('B&amp;C', result)
 
 
 if __name__ == '__main__':

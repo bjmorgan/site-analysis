@@ -18,6 +18,10 @@ probs = trajectory.transition_probabilities_by_label()
 
 Both return a `TransitionTable` — a labelled square matrix with convenient access patterns.
 
+## Displaying Tables
+
+`TransitionTable` displays as a formatted text table via `print()` and renders as an HTML table automatically in Jupyter notebooks. Integer tables (counts) show whole numbers; float tables (probabilities) show three decimal places.
+
 ## Accessing the Data
 
 `TransitionTable` provides several ways to access the data:

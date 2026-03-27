@@ -24,7 +24,7 @@ You will learn how to:
 
 **Argyrodite Site Analysis** — [`argyrodite_site_analysis.ipynb`](https://github.com/bjmorgan/site-analysis/blob/main/tutorials/argyrodite_site_analysis.ipynb)
 
-A realistic example analysing lithium-ion site occupations in Li6PS5Cl argyrodite solid electrolytes with varying degrees of anion disorder. Uses MD trajectory data included in the repository at `tutorials/data/`.
+A realistic example analysing lithium-ion site occupations in Li<sub>6</sub>PS<sub>5</sub>Cl argyrodite solid electrolytes with varying degrees of anion disorder. Uses MD trajectory data included in the repository at `tutorials/data/`.
 
 You will learn how to:
 

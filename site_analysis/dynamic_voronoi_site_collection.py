@@ -6,10 +6,12 @@ atoms to these sites based on their positions in a crystal structure.
 
 The DynamicVoronoiSiteCollection extends the base SiteCollection class with
 specific functionality for dynamic Voronoi sites, including:
+
 1. Calculating the dynamic centres of sites based on reference atom positions
 2. Assigning atoms to sites using Voronoi tessellation principles
 
 For atom assignment, the collection:
+
 1. First updates each site's centre by calculating the mean position of its
    reference atoms, with special handling for periodic boundary conditions
 2. Calculates distances from each (dynamically determined) site centre to each atom

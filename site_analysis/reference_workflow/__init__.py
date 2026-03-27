@@ -7,24 +7,23 @@ The main entry point is the ReferenceBasedSites class, which orchestrates the en
 workflow of structure alignment, coordination environment finding, index mapping,
 and site creation.
 
-Example:
-    ```python
+Example::
+
     from site_analysis.reference_workflow import ReferenceBasedSites
-    
+
     # Create reference-based sites workflow
     rbs = ReferenceBasedSites(
         reference_structure=reference_structure,
         target_structure=target_structure
     )
-    
+
     # Create polyhedral sites
     sites = rbs.create_polyhedral_sites(
         center_species="Li",
-        vertex_species="O", 
+        vertex_species="O",
         cutoff=3.0,
         n_vertices=4
     )
-    ```
 """
 
 from .reference_based_sites import ReferenceBasedSites

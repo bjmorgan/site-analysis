@@ -61,15 +61,14 @@ myst_enable_extensions = [
     'deflist',         # Definition lists
 ]
 
-# Enable HTML pass-through
-myst_html_meta = {
-    "html_context": {
-        "raw_enabled": True,
-    }
-}
+# myst_html_meta expects string values (HTML meta tags), not dicts.
+# HTML pass-through is handled by myst_allow_html below.
 
 # Allow all HTML tags to remain during conversion (important for superscripts/subscripts)
 myst_allow_html = True
+
+# Generate heading anchors for h1-h4 to support cross-document #anchor links
+myst_heading_anchors = 4
 
 # Configure sphinx search to use 'english' stemmer instead of 'porter'
 search_language_stemming_code = 'english'
@@ -94,7 +93,7 @@ master_doc = 'index'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.

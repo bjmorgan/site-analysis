@@ -29,8 +29,6 @@ class Atom:
         index (int): Unique numeric index identifying this atom.
         in_site (int): Site index for the site this atom
             currently occupies.
-        frac_coords (np.array): Numpy array containing the current fractional
-            coordinates for this atom.
         trajectory (list): list of site indices occupied at each timestep.
 
     Note:

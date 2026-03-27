@@ -3,10 +3,8 @@
 This module provides a fluent builder interface for creating site analysis
 objects, making it easier to set up and run site analysis workflows.
 
-Examples:
-    Creating a simple trajectory with spherical sites:
-    
-    ```python
+Examples::
+
     # Using the builder directly
     trajectory = (TrajectoryBuilder()
                  .with_structure(structure)
@@ -17,7 +15,7 @@ Examples:
                      labels=["octahedral", "tetrahedral"]
                  )
                  .build())
-    
+
     # Using a factory function
     trajectory = create_trajectory_with_spherical_sites(
         structure=structure,
@@ -26,22 +24,18 @@ Examples:
         radii=2.0,
         labels=["octahedral", "tetrahedral"]
     )
-    ```
-    
-    Creating a trajectory with polyhedral sites:
-    
-    ```python
+
+    # Creating a trajectory with polyhedral sites
     trajectory = create_trajectory_with_polyhedral_sites(
         structure=target_structure,
         reference_structure=reference_structure,
         mobile_species="Li",
         centre_species="O",
-        vertex_species=["Li", "Na"], 
+        vertex_species=["Li", "Na"],
         cutoff=3.0,
         n_vertices=4,
         label="tetrahedral"
     )
-    ```
 """
 
 from __future__ import annotations
@@ -61,49 +55,45 @@ from typing import cast, Callable, Sequence, Any
 
 class TrajectoryBuilder:
     """Builder for creating Trajectory objects for site analysis.
-    
+
     This class provides a step-by-step approach to creating a Trajectory
     object for analysing site occupations in crystal structures.
-    
-    Structure Alignment and Site Mapping:
-    ------------------------------------
+
+    **Structure Alignment and Site Mapping**
+
     The builder supports separate control over structure alignment (finding optimal
     translations) and site mapping (identifying corresponding sites):
-    
-    - Structure alignment: Use with_structure_alignment() to control whether and how
-    structures are aligned before site creation.
-    
-    - Site mapping: Use with_site_mapping() to specify which species are used to
-    identify corresponding sites between structures.
-    
-    Default Behaviors:
-    - Alignment is enabled by default
-    - If mapping species are specified but alignment species are not, mapping species
-    will be used for alignment
-    - If alignment species are specified but mapping species are not, alignment species
-    will be used for mapping
-    
-    Example:
-        ```python
-        # Create a builder
+
+    - Structure alignment: Use ``with_structure_alignment()`` to control whether
+      and how structures are aligned before site creation.
+    - Site mapping: Use ``with_site_mapping()`` to specify which species are used
+      to identify corresponding sites between structures.
+
+    **Default Behaviors**
+
+    - Alignment is enabled by default.
+    - If mapping species are specified but alignment species are not, mapping
+      species will be used for alignment.
+    - If alignment species are specified but mapping species are not, alignment
+      species will be used for mapping.
+
+    Example::
+
         builder = TrajectoryBuilder()
-        
-        # Configure it
+
         builder.with_structure(structure)
             .with_reference_structure(reference_structure)
             .with_mobile_species("Li")
-            .with_structure_alignment(align=True, align_species=["O"])  # Align on framework
-            .with_site_mapping(mapping_species=["Na"])  # Map using Na atoms
+            .with_structure_alignment(align=True, align_species=["O"])
+            .with_site_mapping(mapping_species=["Na"])
             .with_polyhedral_sites(
                 centre_species="Li",
                 vertex_species="O",
                 cutoff=2.0,
                 n_vertices=4
             )
-        
-        # Build the trajectory
+
         trajectory = builder.build()
-        ```
     """
     
     def __init__(self) -> None:
@@ -225,24 +215,23 @@ class TrajectoryBuilder:
         Returns:
             self: For method chaining
             
-        Examples:
+        Example::
+
             # Use default alignment (enabled, all species)
             builder.with_reference_structure(reference)
-                .with_polyhedral_sites(...)
-            
+            builder.with_polyhedral_sites(...)
+
             # Specify alignment species explicitly
             builder.with_structure_alignment(align_species=["O", "Ti"])
-                .with_polyhedral_sites(...)
-            
+
             # Disable alignment
             builder.with_structure_alignment(align=False)
-                .with_polyhedral_sites(...)
-            
+
             # Use global optimization for challenging alignments
             builder.with_structure_alignment(
-                    align_algorithm='differential_evolution',
-                    align_minimizer_options={'popsize': 20}
-                )
+                align_algorithm='differential_evolution',
+                align_minimizer_options={'popsize': 20}
+            )
         """
         self._align = align
         
@@ -423,41 +412,41 @@ class TrajectoryBuilder:
                 part of the coordination environment.
             n_vertices: Number of vertex atoms required for each polyhedral site.
             label: Optional label to assign to all created sites. Default is None.
-            use_reference_centers: Controls periodic boundary condition handling for 
-                reference-based sites (polyhedral and dynamic Voronoi sites). Default is True.
-                
-                - True (recommended): Reference-based PBC correction. Defines a reference 
-                center for each site and unwraps vertex coordinates relative to this center.
-                Correctly handles sites that naturally span >50% of unit cell dimensions,
-                even in small simulation cells.
-                
-                - False (advanced usage): Spread-based PBC correction. If vertex coordinates 
-                span >50% of the unit cell in any dimension, assumes this indicates PBC 
-                wrapping and shifts coordinates accordingly. 
-                
-                WARNING: Gives incorrect results when sites legitimately span >50% of 
-                the unit cell (e.g., octahedral sites in a 2×2×2 FCC supercell). May 
-                offer performance benefits for some setups.
-                
-                Only use False after verifying it works correctly for your structures.
-                
+            use_reference_centers: Controls periodic boundary condition handling for
+                reference-based sites (polyhedral and dynamic Voronoi sites).
+                Default is True.
+
+                * ``True`` (recommended) -- Reference-based PBC correction. Defines
+                  a reference center for each site and unwraps vertex coordinates
+                  relative to this center. Correctly handles sites that naturally
+                  span >50% of unit cell dimensions, even in small simulation cells.
+                * ``False`` (advanced usage) -- Spread-based PBC correction. If
+                  vertex coordinates span >50% of the unit cell in any dimension,
+                  assumes this indicates PBC wrapping and shifts coordinates
+                  accordingly. WARNING: Gives incorrect results when sites
+                  legitimately span >50% of the unit cell (e.g., octahedral sites
+                  in a 2x2x2 FCC supercell). May offer performance benefits for
+                  some setups. Only use after verifying it works correctly for your
+                  structures.
+
         Returns:
             self: For method chaining
-            
+
         Raises:
             ValueError: At build() time if no coordination environments are found,
                 or if required structures are not set.
-                
-        Examples:
+
+        Example::
+
             # Tetrahedral sites around Li atoms
             builder.with_polyhedral_sites(
                 centre_species="Li",
-                vertex_species="O", 
+                vertex_species="O",
                 cutoff=2.5,
                 n_vertices=4,
                 label="tetrahedral"
             )
-            
+
             # Octahedral sites with mixed vertex species
             builder.with_polyhedral_sites(
                 centre_species="Ti",
@@ -550,32 +539,32 @@ class TrajectoryBuilder:
                 part of the coordination environment.
             n_reference: Number of reference atoms required for each dynamic site.
             label: Optional label to assign to all created sites. Default is None.
-            use_reference_centers: Controls periodic boundary condition handling for 
-                reference-based sites (polyhedral and dynamic Voronoi sites). Default is True.
-                
-                - True (recommended): Reference-based PBC correction. Defines a reference 
-                center for each site and unwraps vertex coordinates relative to this center.
-                Correctly handles sites that naturally span >50% of unit cell dimensions,
-                even in small simulation cells.
-                
-                - False (advanced usage): Spread-based PBC correction. If vertex coordinates 
-                span >50% of the unit cell in any dimension, assumes this indicates PBC 
-                wrapping and shifts coordinates accordingly. 
-                
-                WARNING: Gives incorrect results when sites legitimately span >50% of 
-                the unit cell (e.g., octahedral sites in a 2×2×2 FCC supercell). May 
-                offer performance benefits for some setups.
-                
-                Only use False after verifying it works correctly for your structures.
-                
+            use_reference_centers: Controls periodic boundary condition handling for
+                reference-based sites (polyhedral and dynamic Voronoi sites).
+                Default is True.
+
+                * ``True`` (recommended) -- Reference-based PBC correction. Defines
+                  a reference center for each site and unwraps vertex coordinates
+                  relative to this center. Correctly handles sites that naturally
+                  span >50% of unit cell dimensions, even in small simulation cells.
+                * ``False`` (advanced usage) -- Spread-based PBC correction. If
+                  vertex coordinates span >50% of the unit cell in any dimension,
+                  assumes this indicates PBC wrapping and shifts coordinates
+                  accordingly. WARNING: Gives incorrect results when sites
+                  legitimately span >50% of the unit cell (e.g., octahedral sites
+                  in a 2x2x2 FCC supercell). May offer performance benefits for
+                  some setups. Only use after verifying it works correctly for your
+                  structures.
+
         Returns:
             self: For method chaining
-            
+
         Raises:
             ValueError: At build() time if no coordination environments are found,
                 or if required structures are not set.
-                
-        Examples:
+
+        Example::
+
             # Dynamic sites at Li positions defined by neighbouring O atoms
             builder.with_dynamic_voronoi_sites(
                 centre_species="Li",
@@ -584,7 +573,7 @@ class TrajectoryBuilder:
                 n_reference=4,
                 label="tetrahedral_dynamic"
             )
-            
+
             # Sites with mixed reference species
             builder.with_dynamic_voronoi_sites(
                 centre_species="Na",

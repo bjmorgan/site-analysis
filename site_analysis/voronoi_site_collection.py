@@ -9,6 +9,7 @@ specific functionality for Voronoi sites, implementing a different assignment
 logic than other site collections:
 
 For atom assignment, the collection:
+
 1. Calculates distances from each site centre to each atom
 2. Assigns each atom to the site with the nearest centre
 3. Uses minimum-image convention distances to correctly handle periodic
@@ -52,8 +53,10 @@ class VoronoiSiteCollection(SiteCollection):
                           atoms: list[Atom],
                           structure: Structure) -> None:
         """Analyse a structure to assign atoms to Voronoi sites.
-        
+
+
         This method:
+
         1. Assigns fractional coordinates to each atom based on the structure
         2. Delegates to assign_site_occupations to determine which atoms
            belong in which sites based on Voronoi tessellation principles
@@ -77,6 +80,7 @@ class VoronoiSiteCollection(SiteCollection):
 
         Uses minimum-image convention distances to assign each atom to the
         nearest site centre.
+
 
         Args:
             atoms: List of Atom objects to be assigned to sites.

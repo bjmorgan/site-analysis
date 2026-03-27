@@ -58,6 +58,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         Assigns fractional coordinates to each atom, then delegates
         to assign_site_occupations to determine site membership.
 
+
         Args:
             atoms: List of Atom objects to be assigned to sites.
             structure: Pymatgen Structure containing the atom positions.

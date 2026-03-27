@@ -6,15 +6,17 @@ atoms to these sites based on their positions in a crystal structure.
 
 The PolyhedralSiteCollection extends the base SiteCollection class with
 specific functionality for polyhedral sites, including:
+
 - Maintaining a map of neighbouring polyhedral sites that share faces
 - Optimised atom assignment via the PriorityAssignmentMixin
 - Precomputed distance-ranked site ordering when reference centres are
   available
 
 The module also includes utility functions:
-- construct_neighbouring_sites: analyses polyhedral sites to determine which
-  ones are face-sharing neighbours (sharing three or more vertices).
-- _collect_reference_centres: extracts reference centres from polyhedral
+
+- ``construct_neighbouring_sites``: analyses polyhedral sites to determine
+  which ones are face-sharing neighbours (sharing three or more vertices).
+- ``_collect_reference_centres``: extracts reference centres from polyhedral
   sites for distance-ranked ordering.
 """
 

@@ -1,6 +1,6 @@
 # Residence Times and Transition Probabilities in Argyrodite
 
-This tutorial demonstrates how to compute residence times and transition probabilities from a site-analysis trajectory. We reuse the argyrodite Li6PS5Cl dataset from {doc}`the previous tutorial </tutorials/argyrodite_site_analysis>`, so the setup code here is largely the same — see that tutorial for a detailed explanation of the reference structure and trajectory builder configuration.
+This tutorial demonstrates how to compute residence times and transition probabilities from a site-analysis trajectory. We reuse the argyrodite Li6PS5Cl dataset from {doc}`the previous tutorial </tutorials/argyrodite_site_definitions>`, so the setup code here is largely the same — see that tutorial for a detailed explanation of the reference structure and trajectory builder configuration.
 
 ## Prerequisites
 
@@ -20,11 +20,9 @@ The data files are included in the `site-analysis` GitHub repository at
 
 These files are available in the [tutorials/data](https://github.com/bjmorgan/site-analysis/tree/main/tutorials/data) directory of the GitHub repository. The code examples below assume you are running from the repository root directory.
 
-A {download}`Jupyter notebook version <../../../tutorials/residence_times_and_transitions.ipynb>` of this tutorial is available for download.
-
 ## Setting up the trajectory
 
-We set up the reference structure and trajectory builder exactly as in the argyrodite tutorial. See {doc}`/tutorials/argyrodite_site_analysis` for a full explanation of these steps.
+We set up the reference structure and trajectory builder exactly as in the argyrodite tutorial. See {doc}`/tutorials/argyrodite_site_definitions` for a full explanation of these steps.
 
 ```python
 from pymatgen.io.vasp import Xdatcar

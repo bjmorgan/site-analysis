@@ -40,13 +40,8 @@ class Site(ABC):
             occupying this site.
         transitions (collections.Counter): Stores observed transitions from this
             site to other sites. Format is {index: count} with ``index`` giving
-            the index of each destination site, and ``count`` giving the number 
+            the index of each destination site, and ``count`` giving the number
             of observed transitions to this site.
-        average_occupation (float or None): Average fraction of timesteps where
-            the site was occupied. Returns None if no trajectory data has been
-            processed. Values range from 0.0 (never occupied) to 1.0 (always
-            occupied).
- 
     """
 
     _newid = 0

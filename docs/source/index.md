@@ -62,6 +62,7 @@ guides/transition_tables
 
 tutorials/simple_fcc_example
 tutorials/argyrodite_site_definitions
+tutorials/residence_times_and_transitions
 
 ```
 

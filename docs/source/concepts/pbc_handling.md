@@ -57,9 +57,9 @@ builder.with_polyhedral_sites(..., use_reference_centers=True)
 builder.with_polyhedral_sites(..., use_reference_centers=False)
 ```
 
-For more details on using these workflows, see {doc}`../guides/builders` and {doc}`../guides/reference_workflow`.
+For more details on using these workflows, see the {doc}`../guides/builders` and {doc}`../guides/reference_workflow` guides.
 
-### Manual Site Creation
+## Manual Site Creation
 
 When creating sites directly using constructors:
 

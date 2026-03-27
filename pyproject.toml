@@ -19,7 +19,7 @@ requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",
-    "pymatgen",
+    "pymatgen-core",
     "tqdm",
     "monty",
 ]
@@ -42,6 +42,7 @@ dev = [
     "myst-parser",          # For markdown in Sphinx
     "matplotlib",           # For plots in the docs
     "numba",                # For testing numba-accelerated containment
+    "pymatgen",             # For io.vasp and symmetry in tests/benchmarks
 ]
 
 [project.urls]

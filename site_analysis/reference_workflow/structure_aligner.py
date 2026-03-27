@@ -207,7 +207,7 @@ class StructureAligner:
             Translated structure
         """
         # Create a copy of the structure
-        new_structure = structure.copy()
+        new_structure: Structure = structure.copy()
         
         # Apply translation to all sites
         for i, site in enumerate(new_structure):

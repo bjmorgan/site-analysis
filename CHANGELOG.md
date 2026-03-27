@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.0] - 2026-03-27
+
+### Added
+
+- `TransitionTable.__str__()` for formatted text display with auto-detected integer/float formatting.
+- `TransitionTable._repr_html_()` for automatic HTML table rendering in Jupyter notebooks.
+- Displaying Tables section in the transition tables guide.
+
+### Changed
+
+- Minimum Python version bumped from 3.10 to 3.11 (required by pymatgen-core).
+- Runtime dependency changed from `pymatgen` to `pymatgen-core`; full `pymatgen` moved to dev dependencies.
+
+### Fixed
+
+- Typo in comparing_site_definitions tutorial ("unambigious" -> "unambiguous").
+
 ## [1.7.0] - 2026-03-22
 
 ### Added

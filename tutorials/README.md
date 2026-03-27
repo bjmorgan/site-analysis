@@ -18,13 +18,12 @@ Install the required packages:
 pip install site-analysis matplotlib
 ```
 
-Then open a notebook:
+Then launch Jupyter from the `tutorials/` directory:
 
 ```bash
-jupyter notebook tutorials/comparing_site_definitions.ipynb
+cd tutorials
+jupyter notebook
 ```
-
-The notebooks assume you are running from the `tutorials/` directory.
 
 ## Tutorial data
 

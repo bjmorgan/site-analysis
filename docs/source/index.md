@@ -60,9 +60,7 @@ guides/transition_tables
 :maxdepth: 1
 :caption: Tutorials
 
-tutorials/simple_fcc_example
-tutorials/argyrodite_site_definitions
-tutorials/residence_times_and_transitions
+tutorials
 
 ```
 

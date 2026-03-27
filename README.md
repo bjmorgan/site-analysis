@@ -47,6 +47,14 @@ print(trajectory.sites_trajectory)  # Which atoms in each site
 
 For detailed examples and tutorials, see the [documentation](https://site-analysis.readthedocs.io/en/latest/).
 
+Executable Jupyter notebook tutorials are available in the [`tutorials/`](https://github.com/bjmorgan/site-analysis/tree/main/tutorials) directory. These are not included when installing via `pip` — to run them locally, clone the repository:
+
+```bash
+git clone https://github.com/bjmorgan/site-analysis.git
+cd site-analysis/tutorials
+jupyter notebook
+```
+
 ## Installation
 
 ### Standard Installation

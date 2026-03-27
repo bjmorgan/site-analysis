@@ -174,6 +174,48 @@ class TransitionTable(Generic[TableKey]):
 
     __hash__ = None  # type: ignore[assignment]
 
+    def _formatted_cells(self) -> tuple[list[str], list[list[str]]]:
+        """Return string keys and a grid of formatted cell values.
+
+        Auto-detects formatting from the matrix dtype: integers are
+        formatted with ``d``, floats with ``.3f``.
+        """
+        fmt = 'd' if np.issubdtype(self._matrix.dtype, np.integer) else '.3f'
+        n = len(self._keys)
+        str_keys = [str(k) for k in self._keys]
+        cells = [[f'{self._matrix[i, j]:{fmt}}' for j in range(n)]
+                 for i in range(n)]
+        return str_keys, cells
+
+    def __str__(self) -> str:
+        """Return a formatted table of transition values."""
+        if len(self._keys) == 0:
+            return ''
+        str_keys, cells = self._formatted_cells()
+        col_width = max(
+            max(len(k) for k in str_keys),
+            max(len(v) for row in cells for v in row),
+        )
+        header = ' ' * col_width + ''.join(v.rjust(col_width + 2) for v in str_keys)
+        rows = []
+        for key, row in zip(str_keys, cells):
+            row_values = ''.join(v.rjust(col_width + 2) for v in row)
+            rows.append(key.rjust(col_width) + row_values)
+        return header + '\n' + '\n'.join(rows)
+
+    def _repr_html_(self) -> str:
+        """Return an HTML table for Jupyter notebook display."""
+        if len(self._keys) == 0:
+            return ''
+        str_keys, cells = self._formatted_cells()
+        header_cells = ''.join(f'<th>{k}</th>' for k in str_keys)
+        header = f'<tr><th></th>{header_cells}</tr>'
+        rows = []
+        for key, row in zip(str_keys, cells):
+            row_cells = ''.join(f'<td>{v}</td>' for v in row)
+            rows.append(f'<tr><th>{key}</th>{row_cells}</tr>')
+        return f'<table>{header}{"".join(rows)}</table>'
+
     def __repr__(self) -> str:
         return (
             f"TransitionTable(keys={self._keys!r}, "

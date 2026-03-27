@@ -7,6 +7,7 @@ access patterns.
 
 from __future__ import annotations
 
+import html
 from typing import Generic, Sequence, TypeVar
 
 import numpy as np
@@ -208,10 +209,11 @@ class TransitionTable(Generic[TableKey]):
         if len(self._keys) == 0:
             return ''
         str_keys, cells = self._formatted_cells()
-        header_cells = ''.join(f'<th>{k}</th>' for k in str_keys)
+        esc_keys = [html.escape(k) for k in str_keys]
+        header_cells = ''.join(f'<th>{k}</th>' for k in esc_keys)
         header = f'<tr><th></th>{header_cells}</tr>'
         rows = []
-        for key, row in zip(str_keys, cells):
+        for key, row in zip(esc_keys, cells):
             row_cells = ''.join(f'<td>{v}</td>' for v in row)
             rows.append(f'<tr><th>{key}</th>{row_cells}</tr>')
         return f'<table>{header}{"".join(rows)}</table>'

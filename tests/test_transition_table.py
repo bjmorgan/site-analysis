@@ -337,6 +337,15 @@ class TransitionTableReprHtmlTestCase(unittest.TestCase):
         html = table._repr_html_()
         self.assertNotIn('.', html)
 
+    def test_repr_html_escapes_keys(self):
+        """Test that HTML special characters in keys are escaped."""
+        matrix = np.array([[0, 1], [1, 0]])
+        table = TransitionTable(keys=("<script>", "B&C"), matrix=matrix)
+        result = table._repr_html_()
+        self.assertNotIn('<script>', result)
+        self.assertIn('&lt;script&gt;', result)
+        self.assertIn('B&amp;C', result)
+
 
 if __name__ == '__main__':
     unittest.main()

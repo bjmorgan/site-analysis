@@ -1,6 +1,22 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite the paper given in preferred-citation."
 type: software
+preferred-citation:
+  type: article
+  title: "site-analysis: A Python package for site-projection analysis of molecular dynamics trajectories"
+  authors:
+    - family-names: "Morgan"
+      given-names: "Benjamin J."
+      orcid: "https://orcid.org/0000-0002-3056-8233"
+      affiliation: "University of Bath"
+  doi: "10.21105/joss.09606"
+  journal: "Journal of Open Source Software"
+  publisher:
+    name: "The Open Journal"
+  year: 2026
+  volume: 11
+  issue: 122
+  start: 9606
 title: "site-analysis"
 abstract: "Python module for analysing molecular dynamics simulations of solid-state ion transport by assigning positions of mobile ions to specific sites within the host structure."
 authors:

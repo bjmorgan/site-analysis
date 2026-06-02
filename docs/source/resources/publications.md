@@ -10,13 +10,31 @@ Please include the full citation with DOI.
 
 ## Citing site-analysis
 
-**If you use `site_analysis` in your research, please cite:**
+**If you use `site_analysis` in your research, please cite the paper published in the [Journal of Open Source Software](https://doi.org/10.21105/joss.09606):**
+
+```bibtex
+@article{Morgan2026,
+  doi = {10.21105/joss.09606},
+  url = {https://doi.org/10.21105/joss.09606},
+  year = {2026},
+  publisher = {The Open Journal},
+  volume = {11},
+  number = {122},
+  pages = {9606},
+  author = {Benjamin J. Morgan},
+  title = {site-analysis: A Python package for site-projection analysis of molecular dynamics trajectories},
+  journal = {Journal of Open Source Software}
+}
+```
+
+To cite a specific version of the software, please also cite the archived release on [Zenodo](https://doi.org/10.5281/zenodo.20275363):
 
 ```bibtex
 @software{site_analysis,
   author = {Morgan, Benjamin J.},
   title = {site-analysis: Python module for analysing molecular dynamics simulations of ion transport},
-  url = {https://github.com/bjmorgan/site-analysis},
+  doi = {10.5281/zenodo.20275363},
+  url = {https://doi.org/10.5281/zenodo.20275363},
   version = {1.5.0},
   year = {2026}
 }

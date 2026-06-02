@@ -101,8 +101,29 @@ pytest
 python -m unittest discover
 ```
 
-The code requires Python 3.10 or above.
+The code requires Python 3.11 or above.
 
 ## Contributing
 
 Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Citation
+
+If you use `site-analysis` in your research, please cite the paper published in the [Journal of Open Source Software](https://doi.org/10.21105/joss.09606):
+
+```bibtex
+@article{Morgan2026,
+  doi = {10.21105/joss.09606},
+  url = {https://doi.org/10.21105/joss.09606},
+  year = {2026},
+  publisher = {The Open Journal},
+  volume = {11},
+  number = {122},
+  pages = {9606},
+  author = {Benjamin J. Morgan},
+  title = {site-analysis: A Python package for site-projection analysis of molecular dynamics trajectories},
+  journal = {Journal of Open Source Software}
+}
+```
+
+To cite a specific version of the software, please also cite the archived release on [Zenodo](https://doi.org/10.5281/zenodo.20275363).

@@ -32,17 +32,17 @@ dev = [
     "pytest",               # Test runner
     "coverage",             # For test coverage reporting
     "pytest-cov",           # Pytest coverage plugin
-    "mypy>=2.4",            # Type checking (2.4+ reads numpy 2.5 stubs)
+    "mypy>=2.4",            # Type checking
     "types-PyYAML",         # Type stubs for PyYAML
     "types-tqdm",           # Type stubs for tqdm
-    "scipy-stubs>=1.18.1; python_version >= '3.12'",  # Type stubs for SciPy (1.18.1+ needs Python 3.12)
-    "scipy-stubs; python_version < '3.12'",  # Older stubs fail mypy; type-check on Python 3.12+
+    "scipy-stubs>=1.18.1; python_version >= '3.12'",  # Type stubs for SciPy
+    "scipy-stubs; python_version < '3.12'",
     "sphinx",               # Documentation generation
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme
     "myst-parser",          # For markdown in Sphinx
     "matplotlib",           # For plots in the docs
-    "numba>=0.68",          # For testing numba-accelerated containment (0.68+ types prange correctly)
+    "numba>=0.68",          # For testing numba-accelerated containment
     "pymatgen",             # For io.vasp and symmetry in tests/benchmarks
 ]
 

@@ -790,6 +790,7 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
 
 
 class TrajectoryTransitionCountingTestCase(unittest.TestCase):
+    """Tests for transition counting during trajectory analysis."""
 
     def test_transition_recorded_across_unassigned_timestep(self):
         """An atom moving A -> (between sites) -> B records one A -> B transition."""

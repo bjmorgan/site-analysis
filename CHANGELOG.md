@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Transitions through unassigned timesteps are now counted. An atom that moves from site A to site B via one or more timesteps in which it is not assigned to any site now records an A to B transition; previously no transition was recorded. Transition counts, and quantities derived from them, from spherical-site or non-space-filling polyhedral-site analyses will therefore increase. Transitions are now also recorded when `analyse_structure` is called directly rather than through `append_timestep`; call `reset()` before a fresh analysis if `analyse_structure` was used for diagnostic checks on the same trajectory.
+
 ## [1.8.0] - 2026-03-27
 
 ### Added

@@ -69,10 +69,18 @@ New tests:
 The first two fail on `main`; the last two are guards that pass already.
 
 Updated tests: `test_update_occupation_if_atom_has_moved`,
-`test_update_occupation_if_atom_has_not_moved` and
-`test_update_occupation_records_transition_from_site_index_zero` currently
-set the previous site through `atom.trajectory`. They will set
-`most_recent_site` instead.
+`test_update_occupation_if_atom_has_not_moved`,
+`test_update_occupation_records_transition_from_site_index_zero` and
+`test_update_occupation_calls_update_recent_site` (in
+`tests/test_site_collection.py`), and `test_update_occupation_with_transition`
+(in `tests/test_spherical_site_collection.py`), set the previous site through
+`atom.trajectory` (or left it unset). They now set it through
+`most_recent_site` (or `update_recent_site` for a real `Atom`).
+
+A further test with real objects,
+`TrajectoryTransitionCountingTestCase.test_transition_recorded_across_unassigned_timestep`
+in `tests/test_trajectory.py`, runs the A -> (unassigned) -> B case through
+`Trajectory.trajectory_from_structures`.
 
 Then run the full test suite.
 

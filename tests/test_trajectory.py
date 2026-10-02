@@ -206,6 +206,8 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertIsNone(self.atom2.in_site)
         self.assertEqual(len(self.atom1.trajectory), 0)
         self.assertEqual(len(self.atom2.trajectory), 0)
+        self.assertIsNone(self.atom1.most_recent_site)
+        self.assertIsNone(self.atom2.most_recent_site)
         
         # Check sites are reset
         self.assertEqual(len(self.site1.contains_atoms), 0)
@@ -787,6 +789,58 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         self.site0.transitions = Counter({1: 3})
         result = self.trajectory.transition_counts_by_label()
         self.assertEqual(result.keys, ("A", "B", "C"))
+
+
+class TrajectoryTransitionCountingTestCase(unittest.TestCase):
+    """Tests for transition counting during trajectory analysis."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.site_a = SphericalSite(frac_coords=np.array([0.25, 0.25, 0.25]), rcut=0.5)
+        self.site_b = SphericalSite(frac_coords=np.array([0.75, 0.25, 0.25]), rcut=0.5)
+        self.atom = Atom(index=0)
+        self.trajectory = Trajectory(sites=[self.site_a, self.site_b], atoms=[self.atom])
+        lattice = Lattice.cubic(10.0)
+        self.in_a = Structure(lattice, ["Li"], [[0.25, 0.25, 0.25]])
+        self.between = Structure(lattice, ["Li"], [[0.5, 0.25, 0.25]])
+        self.in_b = Structure(lattice, ["Li"], [[0.75, 0.25, 0.25]])
+
+    def test_transition_recorded_between_appended_timesteps(self):
+        """An atom moving A -> B records one A -> B transition (A has index 0)."""
+        self.trajectory.trajectory_from_structures([self.in_a, self.in_b])
+        self.assertEqual(self.site_a.index, 0)
+        self.assertEqual(self.site_a.transitions, {self.site_b.index: 1})
+
+    def test_transition_recorded_across_unassigned_timestep(self):
+        """An atom moving A -> (between sites) -> B records one A -> B transition."""
+        self.trajectory.trajectory_from_structures([self.in_a, self.between, self.in_b])
+        self.assertEqual(self.atom.trajectory,
+                         [self.site_a.index, None, self.site_b.index])
+        self.assertEqual(self.site_a.transitions, {self.site_b.index: 1})
+
+    def test_no_transition_when_atom_returns_to_same_site(self):
+        """A -> A -> (between sites) -> A records no transitions."""
+        self.trajectory.trajectory_from_structures(
+            [self.in_a, self.in_a, self.between, self.in_a])
+        self.assertEqual(self.site_a.transitions, Counter())
+        self.assertEqual(self.site_b.transitions, Counter())
+
+    def test_analyse_structure_records_no_transitions(self):
+        """Direct analyse_structure calls do not record transitions."""
+        self.trajectory.append_timestep(self.in_a)
+        self.trajectory.analyse_structure(self.in_b)
+        self.trajectory.analyse_structure(self.in_b)
+        self.assertEqual(self.site_a.transitions, Counter())
+        self.assertEqual(self.site_b.transitions, Counter())
+
+    def test_analyse_structure_does_not_affect_later_transitions(self):
+        """A one-off analysis between appended timesteps is ignored for transitions."""
+        self.trajectory.analyse_structure(self.in_b)
+        self.trajectory.append_timestep(self.in_a)
+        self.trajectory.analyse_structure(self.in_b)
+        self.trajectory.append_timestep(self.in_a)
+        self.assertEqual(self.site_a.transitions, Counter())
+        self.assertEqual(self.site_b.transitions, Counter())
 
 
 if __name__ == '__main__':

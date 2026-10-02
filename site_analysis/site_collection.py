@@ -290,24 +290,15 @@ class SiteCollection(ABC):
 
             This method does the following:
 
-            1. If the atom has moved to a new site, record a old_site --> new_site transition.
-            2. Add this atom's index to the list of atoms occupying this site.
-            3. Add this atom's fractional coordinates to the list of
+            1. Add this atom's index to the list of atoms occupying this site.
+            2. Add this atom's fractional coordinates to the list of
                coordinates observed occupying this site.
-            4. Assign this atom this site index.
+            3. Assign this atom this site index.
 
         """
-        previous_site_index = None
-        if atom.trajectory:
-            previous_site_index = atom.trajectory[-1]
-        if previous_site_index is not None:
-            if previous_site_index != site.index: # this atom has moved
-                previous_site = self.site_by_index(previous_site_index)
-                previous_site.transitions[site.index] += 1
         site.contains_atoms.append(atom.index)
         site.points.append(atom.frac_coords)
         atom.in_site = site.index
-        atom.update_recent_site(site.index)
 
     def reset(self) -> None:
         """Reset the collection and all its sites for a fresh analysis run.

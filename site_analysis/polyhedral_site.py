@@ -21,9 +21,9 @@ from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 
 
 if HAS_NUMBA:
-    import numba  # type: ignore
+    import numba
 
-    @numba.njit(cache=True)  # type: ignore[misc]
+    @numba.njit(cache=True)
     def _numba_update_faces(
         vertex_coords: np.ndarray,
         face_simplices: np.ndarray,
@@ -80,7 +80,7 @@ if HAS_NUMBA:
 
         return face_normals, face_ref_points, centre_signs
 
-    @numba.njit(cache=True)  # type: ignore[misc]
+    @numba.njit(cache=True)
     def _numba_sn_query(
         x_pbc_points: np.ndarray,
         face_normals: np.ndarray,

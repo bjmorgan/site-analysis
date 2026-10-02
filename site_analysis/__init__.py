@@ -6,7 +6,7 @@ with a focus on tracking ion migration pathways through crystallographic sites.
 
 # Get version from installed package metadata
 try:
-    from importlib.metadata import version as importlib_version  # type: ignore
+    from importlib.metadata import version as importlib_version
     __version__ = importlib_version("site_analysis")
 except ImportError:
     __version__ = "unknown"

@@ -1,4 +1,5 @@
 import unittest
+from collections import Counter
 from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
@@ -159,12 +160,12 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         # Verify atom coords are added to site points
         np.testing.assert_array_equal(self.site1.points[-1], atom.frac_coords)
 
-    def test_update_occupation_with_transition(self):
-        """Test the update_occupation method when an atom transitions between sites."""
+    def test_update_occupation_moves_atom_without_recording_transition(self):
+        """update_occupation assigns the atom but leaves transitions to append_timestep."""
         # Initialize an atom in site2
         atom = Atom(index=5)
         atom.in_site = self.site2.index
-        atom.trajectory = [atom.in_site]
+        atom.update_recent_site(atom.in_site)
         atom._frac_coords = np.array([0.3, 0.3, 0.3])
 
         # Call update_occupation to move the atom to site1
@@ -173,8 +174,8 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         # Verify atom has been assigned to the new site
         self.assertEqual(atom.in_site, self.site1.index)
 
-        # Verify transition was recorded in site2
-        self.assertEqual(self.site2.transitions[self.site1.index], 1)
+        # Verify no transition was recorded
+        self.assertEqual(self.site2.transitions, Counter())
 
     def test_full_optimised_assignment_integration(self):
         """Integration test for the complete optimised site assignment algorithm."""

@@ -6,7 +6,7 @@ PBC shift updates (with optional numba acceleration).
 
 from __future__ import annotations
 
-from typing import Literal, overload
+from typing import Callable, Literal, overload
 
 import numpy as np
 from site_analysis.distances import frac_to_cart
@@ -187,10 +187,14 @@ def _numpy_update_pbc_shifts(
     return True, shifted + uniform, new_shifts
 
 
-if HAS_NUMBA:
-    import numba  # type: ignore
+update_pbc_shifts: Callable[
+    [np.ndarray, np.ndarray, np.ndarray], tuple[bool, np.ndarray, np.ndarray]
+]
 
-    @numba.njit(cache=True)  # type: ignore[misc]
+if HAS_NUMBA:
+    import numba
+
+    @numba.njit(cache=True)
     def _numba_update_pbc_shifts(
         frac_coords: np.ndarray,
         cached_raw_frac: np.ndarray,

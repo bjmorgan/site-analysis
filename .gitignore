@@ -11,4 +11,5 @@ dist
 !/CHANGELOG.md
 !/CONTRIBUTING.md
 !/README.md
+/docs/notes/
 benchmarks/

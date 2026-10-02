@@ -22,9 +22,9 @@ _SHIFTS_27.flags.writeable = False
 
 
 if HAS_NUMBA:
-    import numba  # type: ignore
+    import numba
 
-    @numba.njit(cache=True)  # type: ignore[misc]
+    @numba.njit(cache=True)
     def _mic_distance_numba(
         frac1: np.ndarray,
         frac2: np.ndarray,
@@ -65,7 +65,7 @@ if HAS_NUMBA:
                         min_dist_sq = dist_sq
         return float(min_dist_sq ** 0.5)
 
-    @numba.njit(cache=True, parallel=True)  # type: ignore[misc]
+    @numba.njit(cache=True, parallel=True)
     def _all_mic_distances_numba(
         frac_coords1: np.ndarray,
         frac_coords2: np.ndarray,
@@ -141,7 +141,7 @@ def mic_distance(
     d_frac_all = d_frac + _SHIFTS_27
     # Convert to Cartesian and compute norms
     d_cart_all = d_frac_all @ lattice_matrix
-    return float(np.min(np.linalg.norm(d_cart_all, axis=1)))  # type: ignore[arg-type]
+    return float(np.min(np.linalg.norm(d_cart_all, axis=1)))
 
 
 def all_mic_distances(

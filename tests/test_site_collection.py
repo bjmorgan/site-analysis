@@ -65,7 +65,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             site_collection.site_by_index(93)
 
-    def test_update_occupation_if_atom_has_not_moved(self):
+    def test_update_occupation(self):
         sites = [Mock(spec=Site)]
         sites[0].index = 12
         sites[0].contains_atoms = []
@@ -73,50 +73,32 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.trajectory = [12]
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         self.assertEqual(sites[0].contains_atoms, [atom.index])
         np.testing.assert_array_equal(sites[0].points, [atom.frac_coords])
         self.assertEqual(atom.in_site, sites[0].index)
 
-    def test_update_occupation_if_atom_has_moved(self):
+    def test_update_occupation_does_not_record_transitions(self):
+        """Transitions are recorded by Trajectory.append_timestep, not here."""
         sites = [Mock(spec=Site), Mock(spec=Site)]
         sites[0].index = 12
-        sites[1].index = 42
-        sites[1].transitions = Counter()
         sites[0].contains_atoms = []
         sites[0].points = []
+        sites[0].transitions = Counter()
+        sites[1].index = 42
+        sites[1].transitions = Counter()
         site_collection = ConcreteSiteCollection(sites=sites)
-        site_collection.site_by_index = Mock(return_value=sites[1])
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.trajectory = [42]
+        atom.most_recent_site = 42
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
-        self.assertEqual(sites[0].contains_atoms, [atom.index])
-        np.testing.assert_array_equal(sites[0].points, [atom.frac_coords])
-        self.assertEqual(atom.in_site, sites[0].index)
-        self.assertEqual(sites[1].transitions, {12: 1})
-  
-    def test_update_occupation_records_transition_from_site_index_zero(self):
-        """Test that transitions from site index 0 are recorded."""
-        sites = [Mock(spec=Site), Mock(spec=Site)]
-        sites[0].index = 0
-        sites[0].transitions = Counter()
-        sites[1].index = 1
-        sites[1].contains_atoms = []
-        sites[1].points = []
-        site_collection = ConcreteSiteCollection(sites=sites)
-        atom = Mock(spec=Atom)
-        atom.index = 4
-        atom.trajectory = [0]  # was in site 0
-        atom.frac_coords = np.array([0.5, 0.5, 0.5])
-        site_collection.update_occupation(site=sites[1], atom=atom)
-        self.assertEqual(sites[0].transitions, {1: 1})
+        self.assertEqual(sites[0].transitions, Counter())
+        self.assertEqual(sites[1].transitions, Counter())
 
-    def test_update_occupation_calls_update_recent_site(self):
-        """update_occupation should call atom.update_recent_site with the site index."""
+    def test_update_occupation_does_not_update_recent_site(self):
+        """The recent-site memory is updated by Trajectory.append_timestep, not here."""
         sites = [Mock(spec=Site)]
         sites[0].index = 5
         sites[0].contains_atoms = []
@@ -124,10 +106,9 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 1
-        atom.trajectory = []
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
-        atom.update_recent_site.assert_called_once_with(5)
+        atom.update_recent_site.assert_not_called()
 
     def test_reset_calls_reset_on_all_sites(self):
         """reset() should call site.reset() for every site in the collection."""

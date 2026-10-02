@@ -329,7 +329,7 @@ class StructureAligner:
         from scipy.optimize import differential_evolution
         
         # Default options for differential evolution
-        options = {
+        options: dict[str, Any] = {
             'tol': tolerance,
             'popsize': 15,
             'maxiter': 1000,
@@ -353,8 +353,8 @@ class StructureAligner:
         # Run optimization
         result = differential_evolution(
             objective_function,
-            bounds=bounds,  # type: ignore[arg-type]
-            **options  # type: ignore[arg-type]
+            bounds=bounds,
+            **options
         )
         
         if not result.success:

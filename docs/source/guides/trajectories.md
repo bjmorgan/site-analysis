@@ -132,6 +132,8 @@ assigned_sites = [s for s in atom.trajectory if s is not None]
 
 A high proportion of `None` entries may indicate that site radii are too small or that a space-filling site type (Voronoi or dynamic Voronoi) would be more appropriate. Voronoi-based sites never produce `None` entries because they partition space completely.
 
+Transitions are recorded between successive assigned sites in each atom's trajectory, skipping `None` entries. For example, an atom whose trajectory is `[5, None, None, 12]` contributes one transition, from site 5 to site 12.
+
 ### Analysis Data
 
 The analysis builds up data about site occupations and transitions:

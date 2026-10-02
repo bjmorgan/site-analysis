@@ -68,8 +68,6 @@ for atom in trajectory.atoms:
         print(f"Atom {atom.index} is in site {site.label or site.index}")
 ```
 
-`analyse_structure()` assigns atoms to sites for a single structure. It does not add a timestep to the trajectory or record transitions.
-
 ### Molecular Dynamics Trajectory Analysis
 
 For analysing a sequence of structures:

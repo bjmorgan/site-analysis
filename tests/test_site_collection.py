@@ -70,6 +70,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites[0].index = 12
         sites[0].contains_atoms = []
         sites[0].points = []
+        sites[0].transitions = Counter()
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
@@ -79,6 +80,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(sites[0].contains_atoms, [atom.index])
         np.testing.assert_array_equal(sites[0].points, [atom.frac_coords])
         self.assertEqual(atom.in_site, sites[0].index)
+        self.assertEqual(sites[0].transitions, Counter())
 
     def test_update_occupation_if_atom_has_moved(self):
         sites = [Mock(spec=Site), Mock(spec=Site)]

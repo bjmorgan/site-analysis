@@ -3,17 +3,17 @@
 ## Problem
 
 Site-to-site transitions are recorded only in
-`SiteCollection.update_occupation`, which takes the previous site from
-`atom.trajectory[-1]`. If the atom was unassigned (`None`) in the previous
-recorded frame, no transition is recorded. A hop A -> (one or more
-unassigned frames) -> B is therefore never counted.
+`SiteCollection.update_occupation`. Before this change, it took the previous
+site from `atom.trajectory[-1]`. If the atom was unassigned (`None`) in the
+previous recorded frame, no transition was recorded, so a hop A -> (one or
+more unassigned frames) -> B was never counted.
 
-This affects any site type that can leave atoms unassigned: spherical sites,
+This affected any site type that can leave atoms unassigned: spherical sites,
 and polyhedral sites that do not fill space. With small spherical sites most
 real hops pass through at least one unassigned frame, so transition counts
-can be substantially undercounted. Hops with longer transit paths are lost
-more often, which also biases transition probabilities. Everything built on
-`site.transitions` inherits this: `Trajectory.transition_counts_by_site()`,
+could be substantially undercounted. Hops with longer transit paths were lost
+more often, which also biased transition probabilities. Everything built on
+`site.transitions` inherited this: `Trajectory.transition_counts_by_site()`,
 `transition_counts_by_label()`, the probability methods,
 `Site.most_frequent_transitions()`, and summaries.
 
@@ -39,8 +39,8 @@ when `analyse_structure` is called without `append_timestep`; there,
 `most_recent_site` is consistent with the other state that
 `update_occupation` already updates on every analysed structure.
 
-Unchanged: occupation updates, `None` entries in atom trajectories, and
-residence times.
+Unchanged: `None` entries in atom trajectories. Occupations and residence
+times are also unchanged, except where sites overlap (see Consequences).
 
 ## Consequences
 
@@ -49,8 +49,15 @@ residence times.
 - A first assignment records nothing.
 - Voronoi and dynamic Voronoi sites behave identically (they never produce
   `None`).
-- Structures analysed with `analyse_structure` but not appended now also
-  record transitions.
+- Transitions are recorded relative to the site assigned in the previously
+  analysed structure, including structures passed to `analyse_structure`
+  without `append_timestep`. (Before this change they were compared with the
+  last appended timestep, so repeated calls could count the same hop more
+  than once.)
+- Where sites overlap, site assignments can change slightly. The priority
+  search (`PriorityAssignmentMixin._get_priority_sites`) checks an anchor
+  site's recorded transitions before distance ranking, so recording more
+  transitions can change which of two overlapping sites is checked first.
 
 ## Tests
 
@@ -82,13 +89,14 @@ A further test with real objects,
 in `tests/test_trajectory.py`, runs the A -> (unassigned) -> B case through
 `Trajectory.trajectory_from_structures`.
 
-Then run the full test suite.
-
 ## Documentation
 
-- `CHANGELOG.md`: a "Fixed" entry under an unreleased section. Transitions
-  through unassigned frames are now counted, so transition counts from
-  spherical or non-space-filling polyhedral analyses will increase.
-- `docs/source/guides/trajectories.md`, "Handling Unassigned Timesteps": one
-  sentence stating that transitions are recorded between consecutive
+- `CHANGELOG.md`, "Unreleased": a "Changed" entry (transitions are recorded
+  relative to the previously analysed structure; call `Trajectory.reset()`
+  after diagnostic `analyse_structure()` calls) and a "Fixed" entry
+  (transitions through unassigned timesteps are now counted; transition
+  counts may increase and derived quantities may change; assignments can
+  change slightly where sites overlap).
+- `docs/source/guides/trajectories.md`, "Handling Unassigned Timesteps": a
+  short paragraph stating that transitions are recorded between consecutive
   assigned sites, so A -> None -> B counts as one A -> B transition.

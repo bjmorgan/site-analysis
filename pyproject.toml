@@ -35,7 +35,8 @@ dev = [
     "mypy>=2.4",            # Type checking (2.4+ reads numpy 2.5 stubs)
     "types-PyYAML",         # Type stubs for PyYAML
     "types-tqdm",           # Type stubs for tqdm
-    "scipy-stubs>=1.18.1",  # Type stubs for SciPy
+    "scipy-stubs>=1.18.1; python_version >= '3.12'",  # Type stubs for SciPy (1.18.1+ needs Python 3.12)
+    "scipy-stubs; python_version < '3.12'",
     "sphinx",               # Documentation generation
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme

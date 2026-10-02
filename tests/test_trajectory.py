@@ -789,5 +789,21 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         self.assertEqual(result.keys, ("A", "B", "C"))
 
 
+class TrajectoryTransitionCountingTestCase(unittest.TestCase):
+
+    def test_transition_recorded_across_unassigned_timestep(self):
+        """An atom moving A -> (between sites) -> B records one A -> B transition."""
+        site_a = SphericalSite(frac_coords=np.array([0.25, 0.25, 0.25]), rcut=0.5)
+        site_b = SphericalSite(frac_coords=np.array([0.75, 0.25, 0.25]), rcut=0.5)
+        trajectory = Trajectory(sites=[site_a, site_b], atoms=[Atom(index=0)])
+        lattice = Lattice.cubic(10.0)
+        structures = [Structure(lattice, ["Li"], [[x, 0.25, 0.25]])
+                      for x in (0.25, 0.5, 0.75)]  # in A, between sites, in B
+        trajectory.trajectory_from_structures(structures)
+        self.assertEqual(trajectory.atoms[0].trajectory,
+                         [site_a.index, None, site_b.index])
+        self.assertEqual(site_a.transitions, {site_b.index: 1})
+
+
 if __name__ == '__main__':
     unittest.main()

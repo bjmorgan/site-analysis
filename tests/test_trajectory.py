@@ -206,6 +206,8 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertIsNone(self.atom2.in_site)
         self.assertEqual(len(self.atom1.trajectory), 0)
         self.assertEqual(len(self.atom2.trajectory), 0)
+        self.assertIsNone(self.atom1.most_recent_site)
+        self.assertIsNone(self.atom2.most_recent_site)
         
         # Check sites are reset
         self.assertEqual(len(self.site1.contains_atoms), 0)
@@ -803,6 +805,19 @@ class TrajectoryTransitionCountingTestCase(unittest.TestCase):
         trajectory.trajectory_from_structures(structures)
         self.assertEqual(trajectory.atoms[0].trajectory,
                          [site_a.index, None, site_b.index])
+        self.assertEqual(site_a.transitions, {site_b.index: 1})
+
+    def test_repeated_analyse_structure_does_not_double_count(self):
+        """Repeated analyse_structure calls after a hop record one transition."""
+        site_a = SphericalSite(frac_coords=np.array([0.25, 0.25, 0.25]), rcut=0.5)
+        site_b = SphericalSite(frac_coords=np.array([0.75, 0.25, 0.25]), rcut=0.5)
+        trajectory = Trajectory(sites=[site_a, site_b], atoms=[Atom(index=0)])
+        lattice = Lattice.cubic(10.0)
+        in_a = Structure(lattice, ["Li"], [[0.25, 0.25, 0.25]])
+        in_b = Structure(lattice, ["Li"], [[0.75, 0.25, 0.25]])
+        trajectory.append_timestep(in_a)
+        trajectory.analyse_structure(in_b)
+        trajectory.analyse_structure(in_b)
         self.assertEqual(site_a.transitions, {site_b.index: 1})
 
 

@@ -1,5 +1,7 @@
 # Counting transitions across unassigned frames
 
+Implemented in PR #71.
+
 ## Problem
 
 Site-to-site transitions are recorded only in
@@ -69,25 +71,21 @@ times are also unchanged, except where sites overlap (see Consequences).
 In `tests/test_site_collection.py`, following the existing style
 (`Mock(spec=Site)` sites, `Mock(spec=Atom)` atoms):
 
-New tests:
+- New: `test_update_occupation_no_transition_without_prior_site` checks that
+  a first assignment (`most_recent_site` is `None`) records no transition.
+- Updated: `test_update_occupation_if_atom_has_moved`,
+  `test_update_occupation_if_atom_has_not_moved`,
+  `test_update_occupation_records_transition_from_site_index_zero` and
+  `test_update_occupation_calls_update_recent_site`, and
+  `test_update_occupation_with_transition` in
+  `tests/test_spherical_site_collection.py`. Before this change these set the
+  previous site through `atom.trajectory` (an empty list for no previous
+  site); they now set it through `most_recent_site` (or `update_recent_site`
+  for a real `Atom`).
 
-| Case | `atom.most_recent_site` | Assigned to | Expected transitions |
-|---|---|---|---|
-| Across unassigned frames | 12 | 42 | site 12: `{42: 1}` |
-| Return to the same site | 12 | 12 | none |
-| No prior site | `None` | 42 | none |
-
-These set only `most_recent_site`, which is all `update_occupation` now
-reads.
-
-Updated tests: `test_update_occupation_if_atom_has_moved`,
-`test_update_occupation_if_atom_has_not_moved`,
-`test_update_occupation_records_transition_from_site_index_zero` and
-`test_update_occupation_calls_update_recent_site` (in
-`tests/test_site_collection.py`), and `test_update_occupation_with_transition`
-(in `tests/test_spherical_site_collection.py`). Before this change these set
-the previous site through `atom.trajectory` (or left it unset); they now set
-it through `most_recent_site` (or `update_recent_site` for a real `Atom`).
+Because the previous site now comes only from `most_recent_site`, the
+unassigned-frame cases need no separate unit tests: A -> None -> B and
+A -> None -> A are the existing "has moved" and "has not moved" cases.
 
 Tests with real objects, in `TrajectoryTransitionCountingTestCase` in
 `tests/test_trajectory.py`:

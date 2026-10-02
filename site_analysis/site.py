@@ -73,8 +73,8 @@ class Site(ABC):
     def reset(self) -> None:
         """Reset the trajectory for this site.
 
-        Returns the contains_atoms and trajectory attributes
-        to empty lists.
+        Returns the contains_atoms, trajectory and points attributes
+        to empty lists, and clears the recorded transitions.
 
         Args:
             None
@@ -85,6 +85,7 @@ class Site(ABC):
         """
         self.contains_atoms = []
         self.trajectory = []
+        self.points = []
         self.transitions = Counter()
  
     @abstractmethod

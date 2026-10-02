@@ -73,7 +73,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.trajectory = [12]
+        atom.most_recent_site = 12
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         self.assertEqual(sites[0].contains_atoms, [atom.index])
@@ -91,7 +91,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection.site_by_index = Mock(return_value=sites[1])
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.trajectory = [42]
+        atom.most_recent_site = 42
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         self.assertEqual(sites[0].contains_atoms, [atom.index])
@@ -110,10 +110,79 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 4
-        atom.trajectory = [0]  # was in site 0
+        atom.most_recent_site = 0  # was in site 0
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[1], atom=atom)
         self.assertEqual(sites[0].transitions, {1: 1})
+
+    def test_update_occupation_records_transition_across_unassigned_frame(self):
+        """A hop A -> None -> B is recorded as one A -> B transition."""
+        sites = [Mock(spec=Site), Mock(spec=Site)]
+        sites[0].index = 12
+        sites[0].transitions = Counter()
+        sites[1].index = 42
+        sites[1].contains_atoms = []
+        sites[1].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 4
+        atom.trajectory = [12, None]
+        atom.most_recent_site = 12
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[1], atom=atom)
+        self.assertEqual(sites[0].transitions, {42: 1})
+
+    def test_update_occupation_records_transition_across_several_unassigned_frames(self):
+        """A hop A -> None -> None -> B is recorded as one A -> B transition."""
+        sites = [Mock(spec=Site), Mock(spec=Site)]
+        sites[0].index = 12
+        sites[0].transitions = Counter()
+        sites[1].index = 42
+        sites[1].contains_atoms = []
+        sites[1].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 4
+        atom.trajectory = [12, None, None]
+        atom.most_recent_site = 12
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[1], atom=atom)
+        self.assertEqual(sites[0].transitions, {42: 1})
+
+    def test_update_occupation_no_transition_on_return_after_unassigned_frame(self):
+        """A -> None -> A records no transition."""
+        sites = [Mock(spec=Site)]
+        sites[0].index = 12
+        sites[0].transitions = Counter()
+        sites[0].contains_atoms = []
+        sites[0].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 4
+        atom.trajectory = [12, None]
+        atom.most_recent_site = 12
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[0], atom=atom)
+        self.assertEqual(sites[0].transitions, Counter())
+
+    def test_update_occupation_no_transition_without_prior_site(self):
+        """A first assignment after unassigned frames records no transition."""
+        sites = [Mock(spec=Site), Mock(spec=Site)]
+        sites[0].index = 12
+        sites[0].transitions = Counter()
+        sites[1].index = 42
+        sites[1].transitions = Counter()
+        sites[1].contains_atoms = []
+        sites[1].points = []
+        site_collection = ConcreteSiteCollection(sites=sites)
+        atom = Mock(spec=Atom)
+        atom.index = 4
+        atom.trajectory = [None]
+        atom.most_recent_site = None
+        atom.frac_coords = np.array([0.5, 0.5, 0.5])
+        site_collection.update_occupation(site=sites[1], atom=atom)
+        self.assertEqual(sites[0].transitions, Counter())
+        self.assertEqual(sites[1].transitions, Counter())
 
     def test_update_occupation_calls_update_recent_site(self):
         """update_occupation should call atom.update_recent_site with the site index."""
@@ -124,7 +193,7 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         atom = Mock(spec=Atom)
         atom.index = 1
-        atom.trajectory = []
+        atom.most_recent_site = None
         atom.frac_coords = np.array([0.5, 0.5, 0.5])
         site_collection.update_occupation(site=sites[0], atom=atom)
         atom.update_recent_site.assert_called_once_with(5)

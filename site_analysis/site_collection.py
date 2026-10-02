@@ -297,9 +297,7 @@ class SiteCollection(ABC):
             4. Assign this atom this site index.
 
         """
-        previous_site_index = None
-        if atom.trajectory:
-            previous_site_index = atom.trajectory[-1]
+        previous_site_index = atom.most_recent_site
         if previous_site_index is not None:
             if previous_site_index != site.index: # this atom has moved
                 previous_site = self.site_by_index(previous_site_index)

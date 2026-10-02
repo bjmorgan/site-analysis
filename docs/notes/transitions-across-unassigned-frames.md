@@ -52,9 +52,10 @@ times are also unchanged, except where sites overlap (see Consequences).
   `analyse_structure` change below applies to them.
 - Transitions are recorded relative to the last site the atom was assigned
   to in any analysed structure (`most_recent_site`), including structures
-  passed to `analyse_structure` without `append_timestep`. (Before this
-  change they were compared with the last appended timestep, so repeated
-  calls could count the same hop more than once.)
+  passed directly to `analyse_structure` rather than through
+  `append_timestep`. (Before this change they were compared with the last
+  appended timestep, so repeated calls could count the same hop more than
+  once.)
 - Where sites overlap, site assignments can change.
   `PriorityAssignmentMixin._get_priority_sites` checks the atom's two most
   recent sites first, then the recorded transition destinations of the
@@ -70,15 +71,14 @@ In `tests/test_site_collection.py`, following the existing style
 
 New tests:
 
-| Case | `atom.trajectory` | `atom.most_recent_site` | Assigned to | Expected transitions |
-|---|---|---|---|---|
-| Across one unassigned frame | `[12, None]` | 12 | 42 | site 12: `{42: 1}` |
-| Across several unassigned frames | `[12, None, None]` | 12 | 42 | site 12: `{42: 1}` |
-| Return to the same site | `[12, None]` | 12 | 12 | none |
-| No prior site | `[None]` | `None` | 42 | none |
+| Case | `atom.most_recent_site` | Assigned to | Expected transitions |
+|---|---|---|---|
+| Across unassigned frames | 12 | 42 | site 12: `{42: 1}` |
+| Return to the same site | 12 | 12 | none |
+| No prior site | `None` | 42 | none |
 
-The first two failed before this change; the last two are guards that also
-passed before it.
+These set only `most_recent_site`, which is all `update_occupation` now
+reads.
 
 Updated tests: `test_update_occupation_if_atom_has_moved`,
 `test_update_occupation_if_atom_has_not_moved`,
@@ -89,16 +89,25 @@ Updated tests: `test_update_occupation_if_atom_has_moved`,
 the previous site through `atom.trajectory` (or left it unset); they now set
 it through `most_recent_site` (or `update_recent_site` for a real `Atom`).
 
-A further test with real objects,
-`TrajectoryTransitionCountingTestCase.test_transition_recorded_across_unassigned_timestep`
-in `tests/test_trajectory.py`, runs the A -> (unassigned) -> B case through
-`Trajectory.trajectory_from_structures`.
+Tests with real objects, in `TrajectoryTransitionCountingTestCase` in
+`tests/test_trajectory.py`:
+
+- `test_transition_recorded_across_unassigned_timestep` runs the
+  A -> (unassigned) -> B case through `Trajectory.trajectory_from_structures`.
+- `test_repeated_analyse_structure_does_not_double_count` checks that two
+  direct `analyse_structure` calls after a hop record one transition. This
+  fails before this change, which counted the hop twice.
+
+`test_reset` in `tests/test_trajectory.py` also checks that `reset()` clears
+`most_recent_site`.
 
 ## Documentation
 
-- `CHANGELOG.md`, "Unreleased": a "Changed" entry for the new reference
-  site for transitions (including the `Trajectory.reset()` advice after
-  direct `analyse_structure()` calls) and a "Fixed" entry for counting
+- `CHANGELOG.md`, "Unreleased": a "Changed" entry for recording transitions
+  relative to `most_recent_site` (including the `Trajectory.reset()` advice
+  after direct `analyse_structure()` calls) and a "Fixed" entry for counting
   transitions through unassigned timesteps.
-- `docs/source/guides/trajectories.md`, "Handling Unassigned Timesteps": a
-  short paragraph on how transitions are counted across `None` entries.
+- `docs/source/guides/trajectories.md`: a paragraph in "Handling Unassigned
+  Timesteps" on how transitions are counted across `None` entries, and a note
+  in "Single Structure Analysis" on calling `reset()` after diagnostic
+  `analyse_structure()` calls.

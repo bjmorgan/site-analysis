@@ -6,7 +6,7 @@ PBC shift updates (with optional numba acceleration).
 
 from __future__ import annotations
 
-from typing import Literal, overload
+from typing import Callable, Literal, overload
 
 import numpy as np
 from site_analysis.distances import frac_to_cart
@@ -186,6 +186,10 @@ def _numpy_update_pbc_shifts(
     uniform = np.maximum(0, np.ceil(-min_coords))
     return True, shifted + uniform, new_shifts
 
+
+update_pbc_shifts: Callable[
+    [np.ndarray, np.ndarray, np.ndarray], tuple[bool, np.ndarray, np.ndarray]
+]
 
 if HAS_NUMBA:
     import numba  # type: ignore

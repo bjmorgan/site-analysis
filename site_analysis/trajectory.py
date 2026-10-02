@@ -347,7 +347,8 @@ class Trajectory:
         This method:
         1. Analyses the structure to assign atoms to sites
         2. Records a transition for each atom assigned to a different site
-           from the last site it was assigned to in an appended timestep
+           from the last site it was assigned to in an appended timestep,
+           and updates each assigned atom's recent-site history
         3. Updates the trajectory information for atoms and sites
         4. Adds the timestep to the list of timesteps if provided
 

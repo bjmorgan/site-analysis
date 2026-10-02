@@ -346,15 +346,22 @@ class Trajectory:
         
         This method:
         1. Analyses the structure to assign atoms to sites
-        2. Updates the trajectory information for atoms and sites
-        3. Adds the timestep to the list of timesteps if provided
-        
+        2. Records a transition for each atom assigned to a different site
+           from the last site it was assigned to in an appended timestep
+        3. Updates the trajectory information for atoms and sites
+        4. Adds the timestep to the list of timesteps if provided
+
         Args:
             structure: A pymatgen Structure object for this timestep.
             t: Optional timestep index to record. If None, no timestep is recorded.
         """
         self.analyse_structure(structure)
         for atom in self.atoms:
+            if atom.in_site is not None:
+                previous_site_index = atom.most_recent_site
+                if previous_site_index is not None and previous_site_index != atom.in_site:
+                    self.site_by_index(previous_site_index).transitions[atom.in_site] += 1
+                atom.update_recent_site(atom.in_site)
             atom.trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)

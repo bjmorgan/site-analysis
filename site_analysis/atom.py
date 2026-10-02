@@ -170,11 +170,11 @@ class Atom:
         
     @property
     def most_recent_site(self) -> int | None:
-        """Return the most recent non-None site assigned to this atom.
+        """Return the last site this atom was assigned to in an appended timestep.
 
         Returns:
-            The site index of the most recently assigned site,
-            or None if no site has been assigned yet.
+            The site index of the most recent site recorded by
+            update_recent_site, or None if no site has been recorded yet.
         """
         return self._recent_sites[0]
 

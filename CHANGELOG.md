@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Transitions are now recorded relative to the last site an atom was assigned to in any analysed structure, including structures passed directly to `Trajectory.analyse_structure()` rather than through `Trajectory.append_timestep()`. Previously they were recorded relative to the site in the last appended timestep, so repeated `analyse_structure()` calls could count the same hop more than once. If `analyse_structure()` has been called directly on a `Trajectory` (for example, for diagnostic checks), call `Trajectory.reset()` before using that object to analyse a trajectory.
+- Transitions are now recorded only for appended timesteps, by `Trajectory.append_timestep()` (and so `Trajectory.trajectory_from_structures()`), between successive assigned sites in each atom's trajectory. `Trajectory.analyse_structure()` and `SiteCollection.update_occupation()` no longer record transitions or update an atom's recent sites. Previously, direct `analyse_structure()` calls between appended timesteps recorded transitions against the last appended timestep, so they could add transitions that do not appear in any atom's trajectory, and repeated calls could count the same hop more than once.
 
 ### Fixed
 

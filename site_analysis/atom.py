@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import itertools
 import json
-from monty.io import zopen # type: ignore
+from monty.io import zopen
 import numpy as np
 from pymatgen.core import Structure
 from typing import Any

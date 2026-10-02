@@ -32,16 +32,16 @@ dev = [
     "pytest",               # Test runner
     "coverage",             # For test coverage reporting
     "pytest-cov",           # Pytest coverage plugin
-    "mypy",                 # Type checking
+    "mypy>=2.4",            # Type checking (2.4+ reads numpy 2.5 stubs)
     "types-PyYAML",         # Type stubs for PyYAML
     "types-tqdm",           # Type stubs for tqdm
-    "scipy-stubs",          # Type stubs for SciPy
+    "scipy-stubs>=1.18.1",  # Type stubs for SciPy
     "sphinx",               # Documentation generation
     "nbsphinx",             # For notebook integration in docs
     "sphinx-rtd-theme",     # Documentation theme
     "myst-parser",          # For markdown in Sphinx
     "matplotlib",           # For plots in the docs
-    "numba",                # For testing numba-accelerated containment
+    "numba>=0.68",          # For testing numba-accelerated containment (0.68+ for type annotations)
     "pymatgen",             # For io.vasp and symmetry in tests/benchmarks
 ]
 

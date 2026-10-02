@@ -8,11 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Transitions are now recorded relative to the site assigned in the previously analysed structure, including structures passed to `Trajectory.analyse_structure()` without `Trajectory.append_timestep()`. If `analyse_structure()` has been used for diagnostic checks, call `Trajectory.reset()` before analysing a trajectory with the same object.
+- Transitions are now recorded relative to the last site the atom was assigned to in any analysed structure, including structures passed to `Trajectory.analyse_structure()` without `Trajectory.append_timestep()`. Previously they were recorded relative to the site in the last appended timestep, so repeated `analyse_structure()` calls could count the same hop more than once. If `analyse_structure()` has been used for diagnostic checks, call `Trajectory.reset()` before analysing a trajectory with the same object.
 
 ### Fixed
 
-- Transitions through unassigned timesteps are now counted. An atom that moves from site A to site B via one or more timesteps in which it is not assigned to any site now records one A to B transition; previously none was recorded. For spherical-site and non-space-filling polyhedral-site analyses, transition counts may increase and derived quantities (e.g. `Trajectory.transition_probabilities_by_site()`, `Site.most_frequent_transitions()`) may change. Where sites overlap, site assignments can also change slightly, because recorded transitions set the order in which candidate sites are checked.
+- Transitions through unassigned timesteps are now counted. An atom that moves from site A to site B via one or more timesteps in which it is not assigned to any site now records one A to B transition; previously none was recorded. For spherical-site and non-space-filling polyhedral-site analyses, transition counts may increase and derived quantities (e.g. `Trajectory.transition_probabilities_by_site()`, `Site.most_frequent_transitions()`) may change. Where sites overlap, site assignments (and so occupations, residence times and individual transition counts) can also change, because recorded transitions affect the order in which candidate sites are checked.
 
 ## [1.8.0] - 2026-03-27
 

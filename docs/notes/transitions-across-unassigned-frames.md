@@ -47,17 +47,20 @@ times are also unchanged, except where sites overlap (see Consequences).
 - A -> (any number of unassigned frames) -> B records one A -> B transition.
 - A -> (unassigned frames) -> A records nothing.
 - A first assignment records nothing.
-- Voronoi and dynamic Voronoi sites behave identically (they never produce
-  `None`).
-- Transitions are recorded relative to the site assigned in the previously
-  analysed structure, including structures passed to `analyse_structure`
-  without `append_timestep`. (Before this change they were compared with the
-  last appended timestep, so repeated calls could count the same hop more
-  than once.)
-- Where sites overlap, site assignments can change slightly. The priority
-  search (`PriorityAssignmentMixin._get_priority_sites`) checks an anchor
-  site's recorded transitions before distance ranking, so recording more
-  transitions can change which of two overlapping sites is checked first.
+- Voronoi and dynamic Voronoi sites are unaffected by counting across
+  unassigned frames (they never produce `None`); only the
+  `analyse_structure` change below applies to them.
+- Transitions are recorded relative to the last site the atom was assigned
+  to in any analysed structure (`most_recent_site`), including structures
+  passed to `analyse_structure` without `append_timestep`. (Before this
+  change they were compared with the last appended timestep, so repeated
+  calls could count the same hop more than once.)
+- Where sites overlap, site assignments can change. After the atom's two
+  most recent sites, the priority search
+  (`PriorityAssignmentMixin._get_priority_sites`) checks an anchor site's
+  recorded transitions before distance (or neighbour) ranking, so recording
+  different transitions can change which of two overlapping sites is
+  checked first.
 
 ## Tests
 
@@ -92,11 +95,11 @@ in `tests/test_trajectory.py`, runs the A -> (unassigned) -> B case through
 ## Documentation
 
 - `CHANGELOG.md`, "Unreleased": a "Changed" entry (transitions are recorded
-  relative to the previously analysed structure; call `Trajectory.reset()`
-  after diagnostic `analyse_structure()` calls) and a "Fixed" entry
-  (transitions through unassigned timesteps are now counted; transition
-  counts may increase and derived quantities may change; assignments can
-  change slightly where sites overlap).
+  relative to the last site the atom was assigned to in any analysed
+  structure; call `Trajectory.reset()` after diagnostic `analyse_structure()`
+  calls) and a "Fixed" entry (transitions through unassigned timesteps are
+  now counted; transition counts may increase and derived quantities may
+  change; assignments can change where sites overlap).
 - `docs/source/guides/trajectories.md`, "Handling Unassigned Timesteps": a
   short paragraph stating that transitions are recorded between consecutive
   assigned sites, so A -> None -> B counts as one A -> B transition.

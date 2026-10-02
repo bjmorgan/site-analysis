@@ -192,9 +192,9 @@ update_pbc_shifts: Callable[
 ]
 
 if HAS_NUMBA:
-    import numba  # type: ignore
+    import numba
 
-    @numba.njit(cache=True)  # type: ignore[misc]
+    @numba.njit(cache=True)
     def _numba_update_pbc_shifts(
         frac_coords: np.ndarray,
         cached_raw_frac: np.ndarray,

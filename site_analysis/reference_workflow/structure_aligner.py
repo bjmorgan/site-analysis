@@ -353,8 +353,8 @@ class StructureAligner:
         # Run optimization
         result = differential_evolution(
             objective_function,
-            bounds=bounds,  # type: ignore[arg-type]
-            **options  # type: ignore[arg-type]
+            bounds=bounds,
+            **options
         )
         
         if not result.success:

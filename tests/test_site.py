@@ -48,10 +48,12 @@ class SiteTestCase(unittest.TestCase):
         site.contains_atoms = ['foo']
         site.trajectory = ['bar']
         site.transitions = Counter([4])
+        site.points = [np.array([0.1, 0.2, 0.3])]
         site.reset()
         self.assertEqual(site.trajectory, [])
         self.assertEqual(site.contains_atoms, [])
         self.assertEqual(site.transitions, {})
+        self.assertEqual(site.points, [])
 
     def test_contains_point_raises_not_implemented_error(self):
         site = ConcreteSite()

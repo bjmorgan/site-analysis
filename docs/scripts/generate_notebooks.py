@@ -22,7 +22,7 @@ def new_notebook():
                 "language": "python",
                 "name": "python3",
             },
-            "language_info": {"name": "python", "version": "3.11.0"},
+            "language_info": {"name": "python", "version": "3.12.0"},
         },
         "cells": [],
     }

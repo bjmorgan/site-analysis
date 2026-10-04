@@ -262,12 +262,12 @@ class PolyhedralSite(Site):
         return string
                   
     def reset(self) -> None:
-        """Reset the trajectory for this site.
+        """Clear the recorded occupation data and cached geometry for this site.
 
-        Resets the contains_atoms and trajectory attributes to empty lists.
-        Vertex coordinates, Delaunay tessellation, and PBC shift caches are
-        unset. The face topology cache is preserved as it depends only on
-        vertex indices, which are immutable.
+        Clears the occupation data as in ``Site.reset``, and unsets the
+        vertex coordinates, Delaunay tessellation, and PBC shift caches. The
+        face topology cache is preserved as it depends only on vertex
+        indices, which are immutable.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None

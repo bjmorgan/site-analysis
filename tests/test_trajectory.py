@@ -563,7 +563,7 @@ class TransitionCountsBySiteTestCase(unittest.TestCase):
     def test_self_transitions_are_preserved_if_present(self):
         """Test that pre-populated self-transition keys are preserved.
 
-        Note: SiteCollection.update_occupation() skips self-transitions,
+        Note: Trajectory.append_timestep() does not record self-transitions,
         so these should not appear in normal trajectory data. This test
         verifies that transition_counts_by_site() faithfully reports whatever is
         present in site.transitions without filtering.

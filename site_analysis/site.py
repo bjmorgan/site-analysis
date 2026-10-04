@@ -41,7 +41,7 @@ class Site(ABC):
         transitions (collections.Counter): Stores observed transitions from this
             site to other sites. Format is {index: count} with ``index`` giving
             the index of each destination site, and ``count`` giving the number
-            of observed transitions to this site.
+            of observed transitions to that destination site.
     """
 
     _newid = 0
@@ -71,10 +71,10 @@ class Site(ABC):
         self.transitions: Counter = Counter()
 
     def reset(self) -> None:
-        """Reset the trajectory for this site.
+        """Clear the recorded occupation data for this site.
 
-        Returns the contains_atoms and trajectory attributes
-        to empty lists.
+        Sets the contains_atoms, trajectory and points attributes to
+        empty lists, and clears the recorded transitions.
 
         Args:
             None
@@ -85,6 +85,7 @@ class Site(ABC):
         """
         self.contains_atoms = []
         self.trajectory = []
+        self.points = []
         self.transitions = Counter()
  
     @abstractmethod
@@ -164,7 +165,7 @@ class Site(ABC):
             None
 
         Returns:
-            None
+            np.ndarray: Fractional coordinates of the site centre.
 
         """ 
         raise NotImplementedError('centre should be implemented '

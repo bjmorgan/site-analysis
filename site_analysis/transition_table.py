@@ -26,6 +26,7 @@ class TransitionTable(Generic[TableKey]):
     - ``.to_dict()`` — square dict-of-dicts
     - ``.reorder(keys)`` — return a new table with reordered rows/columns
     - ``.filter(keys)`` — return a new table with only the specified keys
+    - ``.normalise_rows()`` — return a new table with each row scaled to sum to 1
 
     Args:
         keys: Row and column labels (site indices or site labels).
@@ -171,6 +172,21 @@ class TransitionTable(Generic[TableKey]):
         order = [self._key_to_index[k] for k in new_keys]
         filtered = self._matrix[np.ix_(order, order)]
         return TransitionTable(keys=new_keys, matrix=filtered)
+
+    def normalise_rows(self) -> TransitionTable[TableKey]:
+        """Return a new table with each row scaled to sum to 1.
+
+        Rows that sum to zero stay zero. Keys and their order are unchanged.
+
+        Returns:
+            A new :class:`TransitionTable` of row-normalised float values.
+        """
+        data = self._matrix.astype(float)
+        row_sums = data.sum(axis=1)
+        normalised = np.zeros_like(data)
+        nonzero = row_sums > 0
+        normalised[nonzero] = data[nonzero] / row_sums[nonzero, np.newaxis]
+        return TransitionTable(keys=self._keys, matrix=normalised)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TransitionTable):

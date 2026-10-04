@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `TransitionTable.normalise_rows()` method for converting counts to row-normalised probabilities.
+
 ### Changed
 
 - Minimum Python version bumped from 3.11 to 3.12 (NumPy 2.5 and SciPy 1.18 require Python 3.12).
@@ -15,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 
 - `site_analysis.trajectory.update_occupation()`, an unused module-level function. Use `SiteCollection.update_occupation()` instead.
+- `Trajectory._normalise_counts()`. Use `TransitionTable.normalise_rows()` instead.
 
 ### Fixed
 

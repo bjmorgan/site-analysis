@@ -82,8 +82,8 @@ modules
 
 ## Code Requirements
 
-- Python 3.10 or later
-- Dependencies: pymatgen, numpy, scipy, tqdm
+- Python 3.12 or later
+- Dependencies: numpy, scipy, pymatgen-core, tqdm, monty
 
 ## Development
 

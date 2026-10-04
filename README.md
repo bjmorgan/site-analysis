@@ -101,7 +101,7 @@ pytest
 python -m unittest discover
 ```
 
-The code requires Python 3.11 or above.
+The code requires Python 3.12 or above.
 
 ## Contributing
 

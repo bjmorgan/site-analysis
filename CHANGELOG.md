@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Minimum Python version bumped from 3.11 to 3.12 (NumPy 2.5 and SciPy 1.18 require Python 3.12).
+- Added Python 3.15 to CI test matrix.
 - Transitions are now recorded only by `Trajectory.append_timestep()` (and so `Trajectory.trajectory_from_structures()`), between successive assigned sites in each atom's trajectory. `Trajectory.analyse_structure()` and `SiteCollection.analyse_structure()` now only assign atoms to sites: they no longer record transitions or update the recent-site history that orders the site search. Code that calls `SiteCollection.analyse_structure()` directly in a loop therefore no longer accumulates transition counts, and where sites overlap its assignments can differ. Previously, direct `analyse_structure()` calls between appended timesteps recorded transitions against the last appended timestep, so they could add transitions that do not appear in any atom's trajectory and count the same hop more than once.
 
 ### Removed

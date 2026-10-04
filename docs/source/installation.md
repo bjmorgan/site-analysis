@@ -4,7 +4,7 @@ This guide covers how to install the `site_analysis` package.
 
 ## Requirements
 
-`site_analysis` requires Python 3.10 or later.
+`site_analysis` requires Python 3.12 or later.
 
 ## Installing from PyPI
 

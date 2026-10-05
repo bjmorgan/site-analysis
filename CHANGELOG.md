@@ -10,11 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `TransitionTable.normalise_rows()` method for converting counts to row-normalised probabilities.
 - Spatial commitment (milestoning) for trajectories, with `TrajectoryBuilder.with_commitment()` and the `commitment_radius` argument to `Trajectory`. With commitment on, an atom moves to a new site only once it is in that site and within the commitment radius of its centre, and `Atom.committed_site` gives the site each atom is committed to.
+- Spatial commitment guide in documentation.
 
 ### Changed
 
 - Minimum Python version bumped from 3.11 to 3.12 (NumPy 2.5 and SciPy 1.18 require Python 3.12).
 - Added Python 3.15 to CI test matrix.
+- Dev dependencies require mypy 2.4, scipy-stubs 1.18.1 and numba 0.68 or later, and mypy reports unused `type: ignore` comments.
 - Transitions are now recorded only by `Trajectory.append_timestep()` (and so `Trajectory.trajectory_from_structures()`), between successive assigned sites in each atom's trajectory. `Trajectory.analyse_structure()` and `SiteCollection.analyse_structure()` now only assign atoms to sites: they no longer record transitions or update the recent-site history that orders the site search. Code that calls `SiteCollection.analyse_structure()` directly in a loop therefore no longer accumulates transition counts, and where sites overlap its assignments can differ. Previously, direct `analyse_structure()` calls between appended timesteps recorded transitions against the last appended timestep, so they could add transitions that do not appear in any atom's trajectory and count the same hop more than once.
 
 ### Removed
@@ -27,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `TrajectoryBuilder.with_voronoi_sites()` now accepts a single label for all sites, as `with_spherical_sites()` does; previously each character of a string label was used as the label of one site. A list of labels must have one label per centre, otherwise `ValueError` is raised.
 - `Site.reset()`, and so `Trajectory.reset()`, now also clears `Site.points`. Previously, points recorded before a reset were kept.
 - Transitions through unassigned timesteps are now counted. An atom that moves from site A to site B via one or more timesteps in which it is not assigned to any site now records one A to B transition; previously none was recorded. For spherical-site and non-space-filling polyhedral-site analyses, transition counts may increase and derived quantities (e.g. `Trajectory.transition_probabilities_by_site()`, `Site.most_frequent_transitions()`) may change. Where sites overlap, site assignments (and so occupations, residence times, and transition counts) can also change, because recorded transitions affect the order in which candidate sites are checked.
+- The residence times and transitions tutorial normalises filtered transition counts, so the rows of the tables it shows sum to 1.
 
 ## [1.8.0] - 2026-03-27
 

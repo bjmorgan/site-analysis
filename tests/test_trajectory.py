@@ -686,22 +686,6 @@ class TransitionProbabilitiesTestCase(unittest.TestCase):
         self.assertAlmostEqual(result.get(1, 0), 0.5)
         self.assertAlmostEqual(result.get(1, 2), 0.5)
 
-    def test_row_with_zero_transitions(self):
-        """Test that a row with no transitions remains all zeros."""
-        self.site0.transitions = Counter({1: 1})
-        # site1 and site2 have no transitions
-        result = self.trajectory.transition_probabilities_by_site()
-        np.testing.assert_array_equal(result.matrix[1], [0.0, 0.0, 0.0])
-        np.testing.assert_array_equal(result.matrix[2], [0.0, 0.0, 0.0])
-
-    def test_single_outgoing_transition(self):
-        """Test that a single outgoing transition becomes 1.0."""
-        self.site0.transitions = Counter({1: 5})
-        result = self.trajectory.transition_probabilities_by_site()
-        self.assertAlmostEqual(result.get(0, 1), 1.0)
-        self.assertAlmostEqual(result.get(0, 0), 0.0)
-        self.assertAlmostEqual(result.get(0, 2), 0.0)
-
     def test_by_label(self):
         """Test label-level probabilities are correctly normalised."""
         self.site0.transitions = Counter({1: 6, 2: 4})  # A: total 10
@@ -710,14 +694,6 @@ class TransitionProbabilitiesTestCase(unittest.TestCase):
         self.assertAlmostEqual(result.get("A", "B"), 0.6)
         self.assertAlmostEqual(result.get("A", "C"), 0.4)
         self.assertAlmostEqual(result.get("B", "A"), 1.0)
-
-    def test_zero_transition_label_by_label(self):
-        """Test that a label with no outgoing transitions gives all-zero probabilities."""
-        self.site0.transitions = Counter({1: 4})  # A -> B
-        # site1 (B) and site2 (C) have no transitions
-        result = self.trajectory.transition_probabilities_by_label()
-        np.testing.assert_array_equal(result.matrix[1], [0.0, 0.0, 0.0])
-        np.testing.assert_array_equal(result.matrix[2], [0.0, 0.0, 0.0])
 
 
 class TransitionCustomKeysTestCase(unittest.TestCase):

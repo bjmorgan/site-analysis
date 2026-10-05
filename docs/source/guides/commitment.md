@@ -2,7 +2,7 @@
 
 By default, each atom is assigned to the site it is inside at each timestep. Atoms vibrating near a site boundary can cross back and forth between two sites, recording spurious transitions.
 
-Commitment (spatial milestoning) counts a hop only when an atom reaches the core of its new site. Each site has a core: the part of the site within a commitment radius of its centre. For spherical and Voronoi sites the centre is the fixed position given for the site. For polyhedral and dynamic Voronoi sites it is the mean position of the site's vertex atoms (polyhedral) or reference atoms (dynamic Voronoi) at each timestep, so the core moves with the framework. Each atom has a committed site. When an atom moves into a different site, it commits to that site once it is inside the site's core, and stays committed to its previous site until then.
+Commitment (spatial milestoning) counts a hop only when an atom reaches the core of its new site. Each site has a core: the part of the site within a commitment radius of its centre. For spherical and Voronoi sites the centre is the fixed position given for the site. For polyhedral sites it is the mean position of the vertex atoms, and for dynamic Voronoi sites the mean position of the reference atoms, at each timestep, so the core moves with the framework. Each atom has a committed site. When an atom moves into a different site, it commits to that site once it is inside the site's core, and stays committed to its previous site until then.
 
 ## Turning Commitment On
 

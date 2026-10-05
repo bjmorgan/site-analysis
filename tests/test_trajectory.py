@@ -828,6 +828,12 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
         radii["a"] = 9.0
         self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
 
+    def test_unknown_labels_are_ignored(self):
+        """Radii for labels that no site has are accepted and kept."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius={"a": 0.5, "b": 2.0, "c": 1.0})
+        self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0, "c": 1.0})
+
     def test_changing_returned_radii_has_no_effect(self):
         """Changing the dict returned by commitment_radius does not change it."""
         trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
@@ -848,7 +854,7 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
         for radius in ([1.0, 2.0], "1.0", np.array([1.0]), True,
                        {"a": "0.5", "b": 1.0}):
             with self.subTest(radius=radius):
-                with self.assertRaises(TypeError):
+                with self.assertRaisesRegex(TypeError, "commitment_radius"):
                     Trajectory(sites=self.sites, atoms=self.atoms,
                                commitment_radius=radius)
 
@@ -1052,6 +1058,17 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         Trajectory(sites=[self.site_a, self.site_b], atoms=[atom],
                    commitment_radius=0.5)
         self.assertIsNone(atom.committed_site)
+
+    def test_invalid_radius_leaves_committed_sites_unchanged(self):
+        """A Trajectory that fails validation does not clear its atoms' committed sites."""
+        atom = Atom(index=0)
+        first = Trajectory(sites=[self.site_a, self.site_b], atoms=[atom],
+                           commitment_radius=0.5)
+        first.append_timestep(self.frame("a_core"))
+        with self.assertRaises(ValueError):
+            Trajectory(sites=[self.site_a, self.site_b], atoms=[atom],
+                       commitment_radius=-1.0)
+        self.assertEqual(atom.committed_site, self.site_a.index)
 
     def test_atom_unassigned_at_first_commits_on_first_assignment(self):
         """An atom in no site at first commits to the first site it is assigned to."""

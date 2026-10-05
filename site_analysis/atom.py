@@ -28,8 +28,8 @@ class Atom:
     Attributes:
         index (int): Unique numeric index identifying this atom.
         in_site (int): Site index for the site this atom
-            currently occupies (its committed site when a Trajectory uses
-            commitment).
+            currently occupies (its committed site after
+            Trajectory.append_timestep() when the Trajectory uses commitment).
         trajectory (list): list of site indices occupied at each timestep.
         committed_site (int): Site index of the site this atom is committed
             to when a Trajectory uses commitment, or None.

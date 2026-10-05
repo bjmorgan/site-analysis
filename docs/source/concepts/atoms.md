@@ -60,7 +60,7 @@ However, the package provides several utility functions for creating atoms in di
 
 ## Bulk Analysis of Atom Movements
 
-The `Trajectory` class provides methods to analyze the collective behavior of atoms:
+The `Trajectory` class provides methods to analyse the collective behaviour of atoms:
 
 - **atom_sites**: Returns the current site for each atom
 - **atoms_trajectory**: Returns the site occupation history for all atoms over time
@@ -69,9 +69,9 @@ These methods facilitate analysis of diffusion patterns, correlations between at
 
 ## Atoms vs. Sites Perspective
 
-`site_analysis` allows you to analyze diffusion from two complementary perspectives:
+`site_analysis` allows you to analyse diffusion from two complementary perspectives:
 
 1. **Atom-centric**: Following individual atoms as they move between sites
-2. **Site-centric**: Analyzing which atoms occupy each site over time
+2. **Site-centric**: Analysing which atoms occupy each site over time
 
 The atom-centric view is useful for tracking specific ions and their pathways, while the site-centric view helps identify preferred sites, occupation probabilities, and transition frequencies.

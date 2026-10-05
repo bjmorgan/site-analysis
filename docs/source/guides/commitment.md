@@ -2,7 +2,7 @@
 
 By default, each atom is assigned to the site it is inside at each timestep. Atoms vibrating near a site boundary can cross back and forth between two sites, recording spurious transitions.
 
-Commitment (spatial milestoning) counts a hop only when an atom reaches the core of its new site. Each site has a core: the part of the site within a commitment radius of its centre. For spherical and Voronoi sites the centre is fixed. For polyhedral and dynamic Voronoi sites it is the mean position of the site's vertex or reference atoms at each timestep, so the core moves with the framework. Each atom has a committed site. When an atom moves into a different site, it commits to that site once it is inside the site's core, and stays committed to its previous site until then.
+Commitment (spatial milestoning) counts a hop only when an atom reaches the core of its new site. Each site has a core: the part of the site within a commitment radius of its centre. For spherical and Voronoi sites the centre is the fixed position given for the site. For polyhedral and dynamic Voronoi sites it is the mean position of the site's vertex atoms (polyhedral) or reference atoms (dynamic Voronoi) at each timestep, so the core moves with the framework. Each atom has a committed site. When an atom moves into a different site, it commits to that site once it is inside the site's core, and stays committed to its previous site until then.
 
 ## Turning Commitment On
 
@@ -31,7 +31,7 @@ When constructing a `Trajectory` directly, pass `commitment_radius`:
 trajectory = Trajectory(sites=sites, atoms=atoms, commitment_radius=1.0)
 ```
 
-Every radius must be positive. A dict must give a radius for every site label, and can be used only if every site has a label.
+Every radius must be a positive number. A dict must give a radius for every site label, and can be used only if every site has a label.
 
 ## Effect on the Analysis
 
@@ -39,7 +39,7 @@ With commitment on, `append_timestep()` and `trajectory_from_structures()` use e
 
 - `atom.in_site` and `atom.trajectory` give each atom's committed site.
 - `site.contains_atoms` and `site.trajectory` list the atoms committed to each site.
-- A transition is recorded each time an atom's committed site changes from one site to another, so transitions correspond to the changes in the atom trajectories.
+- A transition is recorded each time an atom's committed site changes from one site to another, so each transition corresponds to a change from one site to another in an atom's trajectory.
 - Residence times and occupations are computed from the site trajectories, so they use the committed sites.
 
 In the first timestep in which an atom is assigned to a site, it commits to that site, even if it is outside the site's core. From then on, its trajectory has no `None` entries: an atom between sites, or inside another site but outside that site's core, keeps its committed site.

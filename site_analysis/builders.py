@@ -766,7 +766,10 @@ class TrajectoryBuilder:
             ValueError: If required parameters are missing, if the
                 reference structure has same-species atom pairs closer
                 than ``min_atom_distance``, if duplicate sites are
-                detected, or if the commitment radius is invalid.
+                detected, or if a commitment radius is not positive or a
+                dict of radii does not cover every site label.
+            TypeError: If site types are mixed, or if a commitment radius is
+                not a number.
         """
         # Validate basic requirements
         if not self._structure:

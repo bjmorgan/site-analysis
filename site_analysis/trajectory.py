@@ -1,10 +1,10 @@
 """Trajectory analysis for tracking site occupations over time.
 
-This module provides the Trajectory class, which is responsible for analyzing
+This module provides the Trajectory class, which is responsible for analysing
 and tracking atom movements through crystallographic sites in a simulation
 trajectory.
 
-The Trajectory class manages the relationship between atoms and sites, analyzes
+The Trajectory class manages the relationship between atoms and sites, analyses
 structures to assign atoms to sites, and records the movement history of atoms
 between sites over time.
 
@@ -84,11 +84,11 @@ class Trajectory:
         """
         # Validate sites is not empty
         if not sites:
-            raise ValueError("Cannot initialize Trajectory with empty sites list")
+            raise ValueError("Cannot initialise Trajectory with empty sites list")
         
         # Validate atoms is not empty
         if not atoms:
-            raise ValueError("Cannot initialize Trajectory with empty atoms list")
+            raise ValueError("Cannot initialise Trajectory with empty atoms list")
         
         # ensure that all sites are of the same type
         if len(set([type(s) for s in sites])) > 1:
@@ -112,8 +112,6 @@ class Trajectory:
         
         self.sites = sites
         self.atoms = atoms
-        for atom in atoms:
-            atom.committed_site = None
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
@@ -122,6 +120,8 @@ class Trajectory:
                                    else commitment_radius)
         self._commitment_radii = self._resolve_commitment_radii(
             sites, self._commitment_radius)
+        for atom in atoms:
+            atom.committed_site = None
 
     @staticmethod
     def _resolve_commitment_radii(

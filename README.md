@@ -126,4 +126,4 @@ If you use `site-analysis` in your research, please cite the paper published in 
 }
 ```
 
-To cite a specific version of the software, please also cite the archived release on [Zenodo](https://doi.org/10.5281/zenodo.20275363).
+To cite the specific version of the software you used, please also cite its release on [Zenodo](https://doi.org/10.5281/zenodo.20275363), where each version has its own DOI.

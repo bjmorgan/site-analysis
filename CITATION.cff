@@ -27,8 +27,6 @@ authors:
 repository-code: "https://github.com/bjmorgan/site-analysis"
 url: "https://site-analysis.readthedocs.io/"
 license: MIT
-version: "1.5.0"
-date-released: "2026-02-28"
 keywords:
   - molecular dynamics
   - solid-state ionics

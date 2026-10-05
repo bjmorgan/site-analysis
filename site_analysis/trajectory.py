@@ -79,8 +79,8 @@ class Trajectory:
                 commitment_radius contains a radius that is not positive,
                 lacks a radius for a site label, or is a dict while some
                 sites have no label.
-            TypeError: If sites contains mixed site types or an unrecognised site type.
-            TypeError: If any radius is not a number.
+            TypeError: If sites contains mixed site types or an unrecognised
+                site type, or if any commitment radius is not a number.
         """
         # Validate sites is not empty
         if not sites:

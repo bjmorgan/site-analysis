@@ -52,6 +52,7 @@ guides/voronoi_sites
 guides/dynamic_voronoi_sites
 guides/polyhedral_sites
 guides/trajectories
+guides/commitment
 guides/residence_times
 guides/transition_tables
 

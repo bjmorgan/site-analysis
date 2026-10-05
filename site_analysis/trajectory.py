@@ -1,10 +1,10 @@
 """Trajectory analysis for tracking site occupations over time.
 
-This module provides the Trajectory class, which is responsible for analyzing
+This module provides the Trajectory class, which is responsible for analysing
 and tracking atom movements through crystallographic sites in a simulation
 trajectory.
 
-The Trajectory class manages the relationship between atoms and sites, analyzes
+The Trajectory class manages the relationship between atoms and sites, analyses
 structures to assign atoms to sites, and records the movement history of atoms
 between sites over time.
 
@@ -30,6 +30,7 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
+from numbers import Real
 from typing import Sequence
 
 import numpy as np
@@ -40,6 +41,7 @@ from pymatgen.core import Structure
 from .transition_table import TransitionTable
 
 from .atom import Atom
+from .distances import mic_distance
 from .dynamic_voronoi_site import DynamicVoronoiSite
 from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -56,27 +58,37 @@ class Trajectory:
 
     def __init__(self,
             sites: Sequence[Site],
-            atoms: list[Atom]) -> None:
-        """Initialize a Trajectory object for site analysis of simulation trajectories.
+            atoms: list[Atom],
+            commitment_radius: float | dict[str, float] | None = None) -> None:
+        """Initialise a Trajectory object for site analysis of simulation trajectories.
         
-        This constructor ensures all sites are of the same type and initializes the
-        appropriate site collection based on the type of sites provided.
+        This constructor ensures all sites are of the same type and initialises the
+        appropriate site collection based on the type of sites provided. Each atom's
+        committed site is cleared, so commitment starts afresh.
         
         Args:
             sites: list of Site objects (must all be of the same type).
             atoms: list of Atom objects to track during the trajectory analysis.
-            
+            commitment_radius: Turns on spatial commitment and sets the
+                commitment radius in Å, either one value for every site or a
+                dict mapping site labels to radii. Default is None
+                (commitment off). See the commitment guide.
+
         Raises:
-            ValueError: If sites or atoms list is empty.
-            TypeError: If sites contains mixed site types or an unrecognised site type.
+            ValueError: If sites or atoms list is empty, or if
+                commitment_radius contains a radius that is not positive,
+                lacks a radius for a site label, or is a dict while some
+                sites have no label.
+            TypeError: If sites contains mixed site types or an unrecognised
+                site type, or if any commitment radius is not a number.
         """
         # Validate sites is not empty
         if not sites:
-            raise ValueError("Cannot initialize Trajectory with empty sites list")
+            raise ValueError("Cannot initialise Trajectory with empty sites list")
         
         # Validate atoms is not empty
         if not atoms:
-            raise ValueError("Cannot initialize Trajectory with empty atoms list")
+            raise ValueError("Cannot initialise Trajectory with empty atoms list")
         
         # ensure that all sites are of the same type
         if len(set([type(s) for s in sites])) > 1:
@@ -103,6 +115,78 @@ class Trajectory:
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
+        self._commitment_radius = (dict(commitment_radius)
+                                   if isinstance(commitment_radius, dict)
+                                   else commitment_radius)
+        self._commitment_radii = self._resolve_commitment_radii(
+            sites, self._commitment_radius)
+        for atom in atoms:
+            atom.committed_site = None
+
+    @staticmethod
+    def _resolve_commitment_radii(
+            sites: Sequence[Site],
+            commitment_radius: float | dict[str, float] | None,
+    ) -> dict[int, float] | None:
+        """Return the commitment radius for each site index.
+
+        Args:
+            sites: The sites in this trajectory.
+            commitment_radius: One radius for every site, a dict mapping
+                site labels to radii, or None.
+
+        Returns:
+            A dict mapping each site index to its commitment radius, or
+            None if commitment_radius is None.
+
+        Raises:
+            ValueError: If any radius is not positive, if a dict lacks a
+                radius for a site label, or if a dict is given while some
+                sites have no label.
+            TypeError: If any radius is not a number.
+        """
+        if commitment_radius is None:
+            return None
+        if isinstance(commitment_radius, dict):
+            values = list(commitment_radius.values())
+        else:
+            values = [commitment_radius]
+        if not all(isinstance(value, Real) and not isinstance(value, bool)
+                   for value in values):
+            raise TypeError(
+                "commitment_radius must be a number or a dict mapping site "
+                f"labels to numbers, got {commitment_radius!r}"
+            )
+        if not all(value > 0 for value in values):
+            raise ValueError(
+                f"commitment radii must be positive, got {commitment_radius}"
+            )
+        if not isinstance(commitment_radius, dict):
+            return {site.index: commitment_radius for site in sites}
+        radii: dict[int, float] = {}
+        missing: set[str] = set()
+        for site in sites:
+            if site.label is None:
+                raise ValueError(
+                    "commitment_radius can only be a dict of radii per "
+                    "label if every site has a label"
+                )
+            if site.label in commitment_radius:
+                radii[site.index] = commitment_radius[site.label]
+            else:
+                missing.add(site.label)
+        if missing:
+            raise ValueError(
+                f"commitment_radius has no radius for site labels {sorted(missing)}"
+            )
+        return radii
+
+    @property
+    def commitment_radius(self) -> float | dict[str, float] | None:
+        """The commitment radius given when this trajectory was created, or None."""
+        if isinstance(self._commitment_radius, dict):
+            return dict(self._commitment_radius)
+        return self._commitment_radius
 
     def atom_by_index(self,
             i: int) -> Atom:
@@ -333,13 +417,19 @@ class Trajectory:
         structure: Structure,
         t: int | None=None) -> None:
         """Append a new timestep to the trajectory.
-        
+
         This method:
 
         1. Analyses the structure to assign atoms to sites
-        2. Records a transition for each atom assigned to a different site
-           from the last site it was assigned to in an appended timestep,
-           and updates each assigned atom's recent-site history
+        2. Records transitions and updates each assigned atom's recent-site
+           history. Without commitment, a transition is recorded for each
+           atom assigned to a different site from the last site it was
+           assigned to in an appended timestep. With commitment, each atom's
+           site is replaced by its committed site, and a transition is
+           recorded when an atom's committed site changes from one site to
+           another. Site occupations are then rebuilt from the committed
+           sites, and each atom's recent-site history follows its assigned
+           site.
         3. Updates the trajectory information for atoms and sites
         4. Adds the timestep to the list of timesteps if provided
 
@@ -348,17 +438,67 @@ class Trajectory:
             t: Optional timestep index to record. If None, no timestep is recorded.
         """
         self.analyse_structure(structure)
+        if self._commitment_radii is None:
+            self._record_transitions()
+        else:
+            self._apply_commitment(self._commitment_radii, structure.lattice.matrix)
+        for atom in self.atoms:
+            atom.trajectory.append(atom.in_site)
+        for site in self.sites:
+            site.trajectory.append(site.contains_atoms)
+        if t is not None:
+            self.timesteps.append(t)
+
+    def _record_transitions(self) -> None:
+        """Record a transition for each atom that has moved to a new site.
+
+        A transition is recorded from the last site an atom was assigned to in
+        an appended timestep to its current site, and the atom's recent-site
+        history is updated.
+        """
         for atom in self.atoms:
             if atom.in_site is not None:
                 previous_site_index = atom.most_recent_site
                 if previous_site_index is not None and previous_site_index != atom.in_site:
                     self.site_by_index(previous_site_index).transitions[atom.in_site] += 1
                 atom.update_recent_site(atom.in_site)
-            atom.trajectory.append(atom.in_site)
-        for site in self.sites:
-            site.trajectory.append(site.contains_atoms)
-        if t is not None:
-            self.timesteps.append(t)
+
+    def _apply_commitment(self,
+            radii: dict[int, float],
+            lattice_matrix: np.ndarray) -> None:
+        """Replace each atom's assigned site with its committed site.
+
+        An atom with no committed site commits to the site it is assigned to, if any.
+        An atom assigned to a different site from its committed site commits
+        to that site when it is within the site's commitment radius of the
+        site centre, and a transition is recorded. Otherwise the atom keeps
+        its committed site. Site occupations are then rebuilt from the
+        committed sites. Each atom's recent-site history follows the site it
+        is assigned to.
+
+        Args:
+            radii: Commitment radius for each site index.
+            lattice_matrix: (3, 3) lattice matrix of the analysed structure.
+        """
+        for atom in self.atoms:
+            assigned = atom.in_site
+            if assigned is not None:
+                atom.update_recent_site(assigned)
+            committed = atom.committed_site
+            if committed is None:
+                committed = assigned
+            elif assigned is not None and assigned != committed:
+                site = self.site_by_index(assigned)
+                distance = mic_distance(atom.frac_coords, site.centre, lattice_matrix)
+                if distance <= radii[assigned]:
+                    self.site_by_index(committed).transitions[assigned] += 1
+                    committed = assigned
+            atom.committed_site = committed
+            atom.in_site = committed
+        self.site_collection.reset_site_occupations()
+        for atom in self.atoms:
+            if atom.in_site is not None:
+                self.site_by_index(atom.in_site).contains_atoms.append(atom.index)
 
     def reset(self) -> None:
         """Reset the trajectory.

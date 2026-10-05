@@ -306,6 +306,21 @@ builder.with_min_atom_distance(1.0)
 builder.with_min_atom_distance(0)
 ```
 
+#### `with_commitment(radius=1.0)`
+Turns on spatial commitment. An atom moves to a new site only once it is in that site and within the commitment radius of its centre, and stays committed to its previous site until then. See the [commitment guide](commitment.md).
+
+**Parameters:**
+- `radius`: Commitment radius in Å, either one value for every site or a dict mapping site labels to radii. Must be positive. Default is 1.0.
+
+**Examples:**
+```python
+# One radius for every site
+builder.with_commitment(radius=0.8)
+
+# A radius per site label
+builder.with_commitment(radius={"tet": 0.6, "oct": 1.0})
+```
+
 #### `with_existing_sites(sites)`
 Uses pre-existing site objects instead of creating new ones.
 

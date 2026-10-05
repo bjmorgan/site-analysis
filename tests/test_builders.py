@@ -1691,5 +1691,57 @@ class TestBuilderValidation(unittest.TestCase):
 		self.assertEqual(len(traj.sites), 384)
 
 
+class TestBuilderCommitment(unittest.TestCase):
+	"""Tests for TrajectoryBuilder.with_commitment()."""
+
+	def setUp(self):
+		self.structure = Structure(Lattice.cubic(10.0), ["Li"], [[0.3, 0.5, 0.5]])
+
+	def _build_trajectory(self, builder, labels=None):
+		return (builder
+			.with_structure(self.structure)
+			.with_mobile_species("Li")
+			.with_spherical_sites(centres=[[0.3, 0.5, 0.5]], radii=1.9, labels=labels)
+			.build())
+
+	def test_commitment_off_by_default(self):
+		"""Without with_commitment(), commitment is off."""
+		trajectory = self._build_trajectory(TrajectoryBuilder())
+		self.assertIsNone(trajectory.commitment_radius)
+
+	def test_with_commitment_default_radius(self):
+		"""with_commitment() uses a radius of 1.0 by default."""
+		trajectory = self._build_trajectory(TrajectoryBuilder().with_commitment())
+		self.assertEqual(trajectory.commitment_radius, 1.0)
+
+	def test_with_commitment_radius(self):
+		"""with_commitment(radius=...) passes the radius to the trajectory."""
+		trajectory = self._build_trajectory(TrajectoryBuilder().with_commitment(radius=0.8))
+		self.assertEqual(trajectory.commitment_radius, 0.8)
+
+	def test_with_commitment_returns_builder(self):
+		"""with_commitment() returns the builder for chaining."""
+		builder = TrajectoryBuilder()
+		self.assertIs(builder.with_commitment(), builder)
+
+	def test_reset_turns_commitment_off(self):
+		"""reset() turns commitment off."""
+		builder = TrajectoryBuilder().with_commitment()
+		builder.reset()
+		trajectory = self._build_trajectory(builder)
+		self.assertIsNone(trajectory.commitment_radius)
+
+	def test_with_commitment_radius_per_label(self):
+		"""with_commitment() accepts a dict of radii per site label."""
+		trajectory = self._build_trajectory(
+			TrajectoryBuilder().with_commitment(radius={"A": 0.8}), labels="A")
+		self.assertEqual(trajectory.commitment_radius, {"A": 0.8})
+
+	def test_invalid_radius_raises_at_build(self):
+		"""An invalid commitment radius raises ValueError when building."""
+		with self.assertRaises(ValueError):
+			self._build_trajectory(TrajectoryBuilder().with_commitment(radius=-1.0))
+
+
 if __name__ == '__main__':
 	unittest.main()

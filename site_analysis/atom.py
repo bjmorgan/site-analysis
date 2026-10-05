@@ -28,8 +28,11 @@ class Atom:
     Attributes:
         index (int): Unique numeric index identifying this atom.
         in_site (int): Site index for the site this atom
-            currently occupies.
+            currently occupies (its committed site after
+            Trajectory.append_timestep() when the Trajectory uses commitment).
         trajectory (list): list of site indices occupied at each timestep.
+        committed_site (int): Site index of the site this atom is committed
+            to when a Trajectory uses commitment, or None.
 
     Note:
         The atom index is used to identify it when parsing structures, so
@@ -53,6 +56,7 @@ class Atom:
         self._frac_coords: np.ndarray | None = None
         self.trajectory: list[int|None] = []
         self._recent_sites: list[int | None] = [None, None]
+        self.committed_site: int | None = None
         self.species_string = species_string
 
     def __str__(self) -> str:
@@ -81,7 +85,8 @@ class Atom:
     def reset(self) -> None:
         """Reset the state of this Atom.
 
-        Clears the `in_site`, `trajectory`, and `_recent_sites` attributes.
+        Clears the `in_site`, `_frac_coords`, `trajectory`,
+        `committed_site` and `_recent_sites` attributes.
 
         Returns:
             None
@@ -91,6 +96,7 @@ class Atom:
         self._frac_coords = None
         self.trajectory = []
         self._recent_sites = [None, None]
+        self.committed_site = None
 
     def assign_coords(self,
             frac_coords: np.ndarray) -> None:

@@ -38,6 +38,16 @@ class AtomTestCase(unittest.TestCase):
         self.assertEqual( atom._frac_coords, None )
         self.assertEqual( atom.trajectory, [] )
 
+    def test_committed_site_is_initially_none(self):
+        atom = Atom(index=1)
+        self.assertIsNone(atom.committed_site)
+
+    def test_reset_clears_committed_site(self):
+        atom = Atom(index=12)
+        atom.committed_site = 3
+        atom.reset()
+        self.assertIsNone(atom.committed_site)
+
     def test___str__(self):
         atom = Atom(index=12)
         self.assertEqual(str(atom), 'Atom: 12')

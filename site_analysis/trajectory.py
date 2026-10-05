@@ -335,6 +335,7 @@ class Trajectory:
         """Append a new timestep to the trajectory.
         
         This method:
+
         1. Analyses the structure to assign atoms to sites
         2. Records a transition for each atom assigned to a different site
            from the last site it was assigned to in an appended timestep,

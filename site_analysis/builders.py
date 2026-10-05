@@ -316,8 +316,8 @@ class TrajectoryBuilder:
             radius: float | dict[str, float] = 1.0) -> TrajectoryBuilder:
         """Turn on spatial commitment for the trajectory.
 
-        With commitment on, an atom moves to a new site only once it is
-        within the commitment radius of that site's centre, and stays
+        With commitment on, an atom moves to a new site only once it is in
+        that site and within the commitment radius of its centre, and stays
         committed to its previous site until then. See the commitment guide.
 
         Args:

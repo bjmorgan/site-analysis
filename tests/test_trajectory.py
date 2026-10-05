@@ -813,6 +813,21 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
                                 commitment_radius={"a": 0.5, "b": 2.0})
         self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
 
+    def test_commitment_radius_is_read_only(self):
+        """commitment_radius cannot be reassigned after construction."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius=0.5)
+        with self.assertRaises(AttributeError):
+            trajectory.commitment_radius = 1.0
+
+    def test_commitment_radius_copies_dict(self):
+        """Changing the dict passed in does not change the stored radii."""
+        radii = {"a": 0.5, "b": 2.0}
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius=radii)
+        radii["a"] = 9.0
+        self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
+
     def test_non_positive_radius_raises(self):
         """Every commitment radius must be positive."""
         for radius in (0.0, -1.0, float("nan"), {"a": 0.5, "b": 0.0}):

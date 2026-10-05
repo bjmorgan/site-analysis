@@ -15,6 +15,7 @@ The `Atom` class maintains several key attributes:
 - **in_site**: Current site index that this atom occupies (or None if not in any site)
 - **frac_coords**: Current fractional coordinates in the crystal structure
 - **trajectory**: List of site indices (or None values) that this atom has occupied over time
+- **committed_site**: Site index of the site this atom is committed to when the trajectory uses commitment (or None)
 
 These properties provide the foundation for analyzing how atoms move through the crystal structure during a simulation.
 
@@ -37,7 +38,7 @@ atom.trajectory = [5, 5, 5, 12, 12, 12, 12, 15, 15, ...]
 
 In this example, the atom started in site 5, moved to site 12 after three timesteps, and then to site 15 after four more timesteps.
 
-If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site.
+If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site. With commitment on, an atom between sites keeps its committed site in both `in_site` and its trajectory; see the [commitment guide](../guides/commitment.md).
 
 ## Creating and Managing Atoms
 

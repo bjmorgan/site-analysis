@@ -112,8 +112,11 @@ class Trajectory:
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
-        self.commitment_radius = commitment_radius
-        self._commitment_radii = self._resolve_commitment_radii(sites, commitment_radius)
+        self._commitment_radius = (dict(commitment_radius)
+                                   if isinstance(commitment_radius, dict)
+                                   else commitment_radius)
+        self._commitment_radii = self._resolve_commitment_radii(
+            sites, self._commitment_radius)
 
     @staticmethod
     def _resolve_commitment_radii(
@@ -165,6 +168,11 @@ class Trajectory:
                 f"commitment_radius has no radius for site labels {sorted(missing)}"
             )
         return radii
+
+    @property
+    def commitment_radius(self) -> float | dict[str, float] | None:
+        """The commitment radius given when this trajectory was created, or None."""
+        return self._commitment_radius
 
     def atom_by_index(self,
             i: int) -> Atom:

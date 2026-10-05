@@ -889,7 +889,7 @@ def create_trajectory_with_voronoi_sites(
     structure: Structure, 
     mobile_species: str | list[str], 
     centres: list[list[float]], 
-    labels: list[str] | None = None
+    labels: str | list[str] | None = None
 ) -> Trajectory:
     """Create a Trajectory with Voronoi sites for site analysis.
     
@@ -903,8 +903,8 @@ def create_trajectory_with_voronoi_sites(
             (e.g., ["Li", "Na"]) identifying the mobile atoms to track.
         centres: List of fractional coordinate triplets defining the centres of 
             Voronoi sites. Each centre should be a list of three floats [x, y, z].
-        labels: Optional list of string labels for the sites. Must have the same 
-            length as centres if provided, or None for no labels.
+        labels: Optional labels for the sites. Can be a single string applied to
+            all sites, a list of strings (one per site), or None for no labels.
             
     Returns:
         Trajectory: Configured trajectory object ready for site analysis.

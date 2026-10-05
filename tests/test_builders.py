@@ -119,6 +119,15 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		with self.assertRaises(ValueError) as context:
 			self.builder.with_voronoi_sites(centres=self.centres, labels=["oct"])
 		self.assertIn("match", str(context.exception).lower())
+
+	def test_build_with_single_voronoi_label(self):
+		"""Sites built with a single Voronoi label all carry that label."""
+		trajectory = (TrajectoryBuilder()
+			.with_structure(self.structure)
+			.with_mobile_species("Li")
+			.with_voronoi_sites(centres=self.centres, labels="oct")
+			.build())
+		self.assertEqual([site.label for site in trajectory.sites], ["oct", "oct"])
 	
 	def test_with_existing_sites_sets_generator(self):
 		"""Test that with_existing_sites sets a site generator function."""

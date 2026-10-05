@@ -60,9 +60,9 @@ class Trajectory:
             sites: Sequence[Site],
             atoms: list[Atom],
             commitment_radius: float | dict[str, float] | None = None) -> None:
-        """Initialize a Trajectory object for site analysis of simulation trajectories.
+        """Initialise a Trajectory object for site analysis of simulation trajectories.
         
-        This constructor ensures all sites are of the same type and initializes the
+        This constructor ensures all sites are of the same type and initialises the
         appropriate site collection based on the type of sites provided. Each atom's
         committed site is cleared, so commitment starts afresh.
         
@@ -427,7 +427,9 @@ class Trajectory:
            assigned to in an appended timestep. With commitment, each atom's
            site is replaced by its committed site, and a transition is
            recorded when an atom's committed site changes from one site to
-           another.
+           another. Site occupations are then rebuilt from the committed
+           sites, and each atom's recent-site history follows its assigned
+           site.
         3. Updates the trajectory information for atoms and sites
         4. Adds the timestep to the list of timesteps if provided
 
@@ -466,7 +468,7 @@ class Trajectory:
             lattice_matrix: np.ndarray) -> None:
         """Replace each atom's assigned site with its committed site.
 
-        An atom with no committed site commits to the site it is assigned to.
+        An atom with no committed site commits to the site it is assigned to, if any.
         An atom assigned to a different site from its committed site commits
         to that site when it is within the site's commitment radius of the
         site centre, and a transition is recorded. Otherwise the atom keeps

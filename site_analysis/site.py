@@ -33,7 +33,8 @@ class Site(ABC):
         label (`str`: optional): Optional string given as a label for this site.
             Default is `None`.
         contains_atoms (list): list of the atoms contained by this site in the
-            structure last processed.
+            structure last processed (the atoms committed to this site when a
+            Trajectory uses commitment).
         trajectory (list(list(int))): Nested list of atoms that have visited this
             site at each timestep.
         points (list): list of fractional coordinates for atoms assigned as

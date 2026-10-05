@@ -17,7 +17,7 @@ The `Atom` class maintains several key attributes:
 - **trajectory**: List of site indices (or None values) that this atom has occupied over time
 - **committed_site**: Site index of the site this atom is committed to when the trajectory uses commitment (or None)
 
-These properties provide the foundation for analyzing how atoms move through the crystal structure during a simulation.
+These properties provide the foundation for analysing how atoms move through the crystal structure during a simulation.
 
 ## Atoms and Site Occupation
 
@@ -26,7 +26,7 @@ The relationship between atoms and sites is bidirectional:
 1. Each atom records which site it currently occupies via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
 
-When analyzing a structure, the appropriate site collection determines which atoms belong to which sites.
+When analysing a structure, the appropriate site collection determines which atoms belong to which sites.
 
 ## Tracking Atom Trajectories
 

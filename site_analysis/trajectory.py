@@ -38,6 +38,7 @@ from tqdm.auto import tqdm
 from pymatgen.core import Structure
 
 from .transition_table import TransitionTable
+from .distances import mic_distance
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -394,13 +395,16 @@ class Trajectory:
         structure: Structure,
         t: int | None=None) -> None:
         """Append a new timestep to the trajectory.
-        
+
         This method:
 
         1. Analyses the structure to assign atoms to sites
-        2. Records a transition for each atom assigned to a different site
-           from the last site it was assigned to in an appended timestep,
-           and updates each assigned atom's recent-site history
+        2. Records transitions and updates each assigned atom's recent-site
+           history. Without commitment, a transition is recorded for each
+           atom assigned to a different site from the last site it was
+           assigned to in an appended timestep. With commitment, each atom's
+           site is replaced by its committed site, and a transition is
+           recorded when the committed site changes.
         3. Updates the trajectory information for atoms and sites
         4. Adds the timestep to the list of timesteps if provided
 
@@ -409,17 +413,68 @@ class Trajectory:
             t: Optional timestep index to record. If None, no timestep is recorded.
         """
         self.analyse_structure(structure)
+        if self._commitment_radii is None:
+            self._record_transitions()
+        else:
+            self._apply_commitment(self._commitment_radii, structure.lattice.matrix)
+        for atom in self.atoms:
+            atom.trajectory.append(atom.in_site)
+        for site in self.sites:
+            site.trajectory.append(site.contains_atoms)
+        if t is not None:
+            self.timesteps.append(t)
+
+    def _record_transitions(self) -> None:
+        """Record a transition for each atom that has moved to a new site.
+
+        A transition is recorded from the last site an atom was assigned to in
+        an appended timestep to its current site, and the atom's recent-site
+        history is updated.
+        """
         for atom in self.atoms:
             if atom.in_site is not None:
                 previous_site_index = atom.most_recent_site
                 if previous_site_index is not None and previous_site_index != atom.in_site:
                     self.site_by_index(previous_site_index).transitions[atom.in_site] += 1
                 atom.update_recent_site(atom.in_site)
-            atom.trajectory.append(atom.in_site)
+
+    def _apply_commitment(self,
+            radii: dict[int, float],
+            lattice_matrix: np.ndarray) -> None:
+        """Replace each atom's assigned site with its committed site.
+
+        An atom with no committed site commits to the site it is assigned to.
+        An atom assigned to a different site from its committed site commits
+        to that site when it is within the site's commitment radius of the
+        site centre, and a transition is recorded. Otherwise the atom keeps
+        its committed site. Site occupations are then rebuilt from the
+        committed sites. Each atom's recent-site history follows the site it
+        is assigned to.
+
+        Args:
+            radii: Commitment radius for each site index.
+            lattice_matrix: (3, 3) lattice matrix of the analysed structure.
+        """
+        for atom in self.atoms:
+            site_index = atom.in_site
+            if site_index is not None:
+                atom.update_recent_site(site_index)
+            committed = atom.committed_site
+            if committed is None:
+                committed = site_index
+            elif site_index is not None and site_index != committed:
+                site = self.site_by_index(site_index)
+                distance = mic_distance(atom.frac_coords, site.centre, lattice_matrix)
+                if distance <= radii[site_index]:
+                    self.site_by_index(committed).transitions[site_index] += 1
+                    committed = site_index
+            atom.committed_site = committed
+            atom.in_site = committed
         for site in self.sites:
-            site.trajectory.append(site.contains_atoms)
-        if t is not None:
-            self.timesteps.append(t)
+            site.contains_atoms = []
+        for atom in self.atoms:
+            if atom.in_site is not None:
+                self.site_by_index(atom.in_site).contains_atoms.append(atom.index)
 
     def reset(self) -> None:
         """Reset the trajectory.

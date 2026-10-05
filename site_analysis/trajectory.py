@@ -73,9 +73,9 @@ class Trajectory:
 
         Raises:
             ValueError: If sites or atoms list is empty, or if
-                commitment_radius contains a non-positive radius, lacks a
-                radius for a site label, or is a dict while some sites have
-                no label.
+                commitment_radius contains a radius that is not positive,
+                lacks a radius for a site label, or is a dict while some
+                sites have no label.
             TypeError: If sites contains mixed site types or an unrecognised site type.
         """
         # Validate sites is not empty
@@ -141,7 +141,7 @@ class Trajectory:
             values = list(commitment_radius.values())
         else:
             values = [commitment_radius]
-        if any(value <= 0 for value in values):
+        if not all(value > 0 for value in values):
             raise ValueError(
                 f"commitment radii must be positive, got {commitment_radius}"
             )

@@ -84,8 +84,8 @@ class Atom:
     def reset(self) -> None:
         """Reset the state of this Atom.
 
-        Clears the `in_site`, `trajectory`, `committed_site` and
-        `_recent_sites` attributes.
+        Clears the `in_site`, `_frac_coords`, `trajectory`,
+        `committed_site` and `_recent_sites` attributes.
 
         Returns:
             None

@@ -815,7 +815,7 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
 
     def test_non_positive_radius_raises(self):
         """Every commitment radius must be positive."""
-        for radius in (0.0, -1.0, {"a": 0.5, "b": 0.0}):
+        for radius in (0.0, -1.0, float("nan"), {"a": 0.5, "b": 0.0}):
             with self.subTest(radius=radius):
                 with self.assertRaises(ValueError):
                     Trajectory(sites=self.sites, atoms=self.atoms,
@@ -833,7 +833,7 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
             SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=1.9, label="a"),
             SphericalSite(frac_coords=np.array([0.7, 0.5, 0.5]), rcut=1.9),
         ]
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "every site has a label"):
             Trajectory(sites=sites, atoms=self.atoms,
                        commitment_radius={"a": 0.5})
 

@@ -30,6 +30,7 @@ Note:
 import warnings
 from collections import Counter
 from collections.abc import Iterable
+from numbers import Real
 from typing import Sequence
 
 import numpy as np
@@ -62,7 +63,8 @@ class Trajectory:
         """Initialize a Trajectory object for site analysis of simulation trajectories.
         
         This constructor ensures all sites are of the same type and initializes the
-        appropriate site collection based on the type of sites provided.
+        appropriate site collection based on the type of sites provided. Each atom's
+        committed site is cleared, so commitment starts afresh.
         
         Args:
             sites: list of Site objects (must all be of the same type).
@@ -78,6 +80,7 @@ class Trajectory:
                 lacks a radius for a site label, or is a dict while some
                 sites have no label.
             TypeError: If sites contains mixed site types or an unrecognised site type.
+            TypeError: If any radius is not a number.
         """
         # Validate sites is not empty
         if not sites:
@@ -109,6 +112,8 @@ class Trajectory:
         
         self.sites = sites
         self.atoms = atoms
+        for atom in atoms:
+            atom.committed_site = None
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
@@ -138,6 +143,7 @@ class Trajectory:
             ValueError: If any radius is not positive, if a dict lacks a
                 radius for a site label, or if a dict is given while some
                 sites have no label.
+            TypeError: If any radius is not a number.
         """
         if commitment_radius is None:
             return None
@@ -145,6 +151,12 @@ class Trajectory:
             values = list(commitment_radius.values())
         else:
             values = [commitment_radius]
+        if not all(isinstance(value, Real) and not isinstance(value, bool)
+                   for value in values):
+            raise TypeError(
+                "commitment_radius must be a number or a dict mapping site "
+                f"labels to numbers, got {commitment_radius!r}"
+            )
         if not all(value > 0 for value in values):
             raise ValueError(
                 f"commitment radii must be positive, got {commitment_radius}"
@@ -172,6 +184,8 @@ class Trajectory:
     @property
     def commitment_radius(self) -> float | dict[str, float] | None:
         """The commitment radius given when this trajectory was created, or None."""
+        if isinstance(self._commitment_radius, dict):
+            return dict(self._commitment_radius)
         return self._commitment_radius
 
     def atom_by_index(self,

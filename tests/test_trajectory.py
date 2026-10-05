@@ -828,6 +828,13 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
         radii["a"] = 9.0
         self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
 
+    def test_changing_returned_radii_has_no_effect(self):
+        """Changing the dict returned by commitment_radius does not change it."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius={"a": 0.5, "b": 2.0})
+        trajectory.commitment_radius["a"] = 9.0
+        self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
+
     def test_non_positive_radius_raises(self):
         """Every commitment radius must be positive."""
         for radius in (0.0, -1.0, float("nan"), {"a": 0.5, "b": 0.0}):
@@ -835,6 +842,21 @@ class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Trajectory(sites=self.sites, atoms=self.atoms,
                                commitment_radius=radius)
+
+    def test_non_numeric_radius_raises(self):
+        """A commitment radius must be a number or a dict of numbers."""
+        for radius in ([1.0, 2.0], "1.0", np.array([1.0]), True,
+                       {"a": "0.5", "b": 1.0}):
+            with self.subTest(radius=radius):
+                with self.assertRaises(TypeError):
+                    Trajectory(sites=self.sites, atoms=self.atoms,
+                               commitment_radius=radius)
+
+    def test_infinite_radius_is_allowed(self):
+        """An infinite commitment radius is accepted."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius=float("inf"))
+        self.assertEqual(trajectory.commitment_radius, float("inf"))
 
     def test_missing_label_raises(self):
         """A dict of radii must cover every site label."""
@@ -1021,6 +1043,51 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         trajectory.reset()
         self.assertIsNone(trajectory.atoms[0].committed_site)
 
+    def test_new_trajectory_clears_committed_sites(self):
+        """Atoms reused in a new Trajectory start with no committed site."""
+        atom = Atom(index=0)
+        first = Trajectory(sites=[self.site_a, self.site_b], atoms=[atom],
+                           commitment_radius=0.5)
+        first.append_timestep(self.frame("a_core"))
+        Trajectory(sites=[self.site_a, self.site_b], atoms=[atom],
+                   commitment_radius=0.5)
+        self.assertIsNone(atom.committed_site)
+
+    def test_atom_unassigned_at_first_commits_on_first_assignment(self):
+        """An atom in no site at first commits to the first site it is assigned to."""
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(
+            [self.frame("gap"), self.frame("b_edge"), self.frame("b_edge")])
+        self.assertEqual(trajectory.atoms[0].trajectory, [None, 1, 1])
+        self.assertEqual(self.site_b.transitions, Counter())
+
+    def test_move_through_one_site_into_another_core(self):
+        """Committed to A, through B outside its core, into C's core records A -> C."""
+        lattice = Lattice.cubic(20.0)
+        sites = [SphericalSite(frac_coords=np.array([x, 0.5, 0.5]), rcut=1.9)
+                 for x in (0.2, 0.4, 0.6)]
+        site_a, site_b, site_c = sites
+        trajectory = Trajectory(sites=sites, atoms=[Atom(index=0)],
+                                commitment_radius=0.5)
+        trajectory.trajectory_from_structures(
+            [Structure(lattice, ["Li"], [[x, 0.5, 0.5]]) for x in (0.2, 0.475, 0.6)])
+        self.assertEqual(trajectory.atoms[0].trajectory,
+                         [site_a.index, site_a.index, site_c.index])
+        self.assertEqual(site_a.transitions, {site_c.index: 1})
+        self.assertEqual(site_b.transitions, Counter())
+
+    def test_core_reached_across_periodic_boundary(self):
+        """The core check uses the minimum-image distance across the cell boundary."""
+        site_a = SphericalSite(frac_coords=np.array([0.97, 0.5, 0.5]), rcut=1.9)
+        site_b = SphericalSite(frac_coords=np.array([0.40, 0.5, 0.5]), rcut=1.9)
+        trajectory = Trajectory(sites=[site_a, site_b], atoms=[Atom(index=0)],
+                                commitment_radius=0.6)
+        trajectory.trajectory_from_structures([
+            Structure(self.lattice, ["Li"], [[0.40, 0.5, 0.5]]),
+            Structure(self.lattice, ["Li"], [[0.02, 0.5, 0.5]]),
+        ])
+        self.assertEqual(trajectory.atoms[0].trajectory, [site_b.index, site_a.index])
+
     def test_without_commitment_atom_follows_geometric_site(self):
         """Without commitment, A -> B outside its core -> A records two transitions."""
         trajectory = self.make_trajectory(commitment_radius=None)
@@ -1062,6 +1129,40 @@ class PolyhedralCommitmentTestCase(unittest.TestCase):
         ])
         self.assertEqual(self.trajectory.atoms[0].trajectory, [0, 0, 1])
         self.assertEqual(self.tet_a.transitions, {1: 1})
+
+
+class DynamicVoronoiCommitmentTestCase(unittest.TestCase):
+    """Tests for commitment with dynamic Voronoi sites."""
+
+    def setUp(self):
+        Site._newid = 0
+        # Site A is defined by four reference atoms around (3, 5, 5) Angstrom
+        # and site B by four around (7, 5, 5). Their centres are the means of
+        # the current reference positions.
+        offsets = [(0.0, -1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0), (0.0, 0.0, 1.0)]
+        self.reference = ([np.add((3.0, 5.0, 5.0), d) for d in offsets]
+                          + [np.add((7.0, 5.0, 5.0), d) for d in offsets])
+        self.lattice = Lattice.cubic(10.0)
+        self.site_a = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        self.site_b = DynamicVoronoiSite(reference_indices=[4, 5, 6, 7])
+        self.trajectory = Trajectory(sites=[self.site_a, self.site_b],
+                                     atoms=[Atom(index=8)],
+                                     commitment_radius=0.2)
+
+    def frame(self, li, shift=(0.0, 0.0, 0.0)):
+        coords = [np.add(r, shift) for r in self.reference] + [np.add(li, shift)]
+        return Structure(self.lattice, ["S"] * 8 + ["Li"], coords,
+                         coords_are_cartesian=True)
+
+    def test_commitment_uses_current_dynamic_centre(self):
+        """The atom commits to B at B's centre after the reference atoms have moved."""
+        self.trajectory.trajectory_from_structures([
+            self.frame((3.0, 5.0, 5.0)),
+            self.frame((7.3, 5.0, 5.0)),
+            self.frame((7.0, 5.0, 5.0), shift=(0.0, 1.0, 0.0)),
+        ])
+        self.assertEqual(self.trajectory.atoms[0].trajectory, [0, 0, 1])
+        self.assertEqual(self.site_a.transitions, {1: 1})
 
 
 if __name__ == '__main__':

@@ -147,7 +147,8 @@ class TransitionTable(Generic[TableKey]):
     def filter(self, keys: Sequence[TableKey]) -> TransitionTable[TableKey]:
         """Return a new table containing only the specified keys.
 
-        Extracts the requested rows and columns without re-normalising.
+        Extracts the requested rows and columns as they are. To re-normalise,
+        call :meth:`normalise_rows` on the result.
         Rows and columns in the result follow the order given in *keys*.
 
         Args:
@@ -176,7 +177,8 @@ class TransitionTable(Generic[TableKey]):
     def normalise_rows(self) -> TransitionTable[TableKey]:
         """Return a new table with each row scaled to sum to 1.
 
-        Rows that sum to zero stay zero. Keys and their order are unchanged.
+        Rows whose sum is not positive are returned as all zeros. Keys and
+        their order are unchanged.
 
         Returns:
             A new :class:`TransitionTable` of row-normalised float values.

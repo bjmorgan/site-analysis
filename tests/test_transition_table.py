@@ -233,6 +233,12 @@ class TransitionTableNormaliseRowsTestCase(unittest.TestCase):
         result = table.normalise_rows()
         np.testing.assert_allclose(result.matrix, [[0.0, 0.0], [0.25, 0.75]])
 
+    def test_float_table(self):
+        """A table of floats is normalised in the same way."""
+        table = TransitionTable(keys=("A", "B"), matrix=np.array([[0.2, 0.6], [0.0, 0.0]]))
+        result = table.normalise_rows()
+        np.testing.assert_allclose(result.matrix, [[0.25, 0.75], [0.0, 0.0]])
+
     def test_preserves_str_keys_and_order(self):
         """String keys and their order are unchanged."""
         table = TransitionTable(keys=("C", "A", "B"), matrix=np.ones((3, 3), dtype=int))

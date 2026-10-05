@@ -27,7 +27,7 @@ Please include the full citation with DOI.
 }
 ```
 
-To cite a specific version of the software, please also cite the archived release on [Zenodo](https://doi.org/10.5281/zenodo.20275363):
+To cite the specific version of the software you used, please also cite its release on [Zenodo](https://doi.org/10.5281/zenodo.20275363), where each version has its own DOI. The DOI below covers all versions:
 
 ```bibtex
 @software{site_analysis,
@@ -35,7 +35,6 @@ To cite a specific version of the software, please also cite the archived releas
   title = {site-analysis: Python module for analysing molecular dynamics simulations of ion transport},
   doi = {10.5281/zenodo.20275363},
   url = {https://doi.org/10.5281/zenodo.20275363},
-  version = {1.5.0},
   year = {2026}
 }
 ```

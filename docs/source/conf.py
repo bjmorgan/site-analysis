@@ -16,6 +16,8 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+from importlib.metadata import version as _package_version
+
 
 # -- Project information -----------------------------------------------------
 
@@ -23,10 +25,10 @@ project = 'site_analysis'
 copyright = '2020, Benjamin J. Morgan'
 author = 'Benjamin J. Morgan'
 
-# The short X.Y version
-version = '0.0'
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = _package_version('site_analysis')
+# The short X.Y version
+version = '.'.join(release.split('.')[:2])
 
 
 # -- General configuration ---------------------------------------------------

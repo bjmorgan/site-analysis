@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `TrajectoryBuilder.with_voronoi_sites()` now accepts a single label for all sites, as `with_spherical_sites()` does; previously each character of a string label was used as the label of one site. A list of labels must have one label per centre, otherwise `ValueError` is raised.
 - `Site.reset()`, and so `Trajectory.reset()`, now also clears `Site.points`. Previously, points recorded before a reset were kept.
 - Transitions through unassigned timesteps are now counted. An atom that moves from site A to site B via one or more timesteps in which it is not assigned to any site now records one A to B transition; previously none was recorded. For spherical-site and non-space-filling polyhedral-site analyses, transition counts may increase and derived quantities (e.g. `Trajectory.transition_probabilities_by_site()`, `Site.most_frequent_transitions()`) may change. Where sites overlap, site assignments (and so occupations, residence times, and transition counts) can also change, because recorded transitions affect the order in which candidate sites are checked.
 

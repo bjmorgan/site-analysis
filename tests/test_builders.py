@@ -107,6 +107,27 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Verify a site generator was set
 		self.assertNotEqual(builder._site_generators, [])
 		self.assertTrue(callable(builder._site_generators[0]))
+
+	def test_with_voronoi_sites_single_label(self):
+		"""A single label is used for every Voronoi site."""
+		builder = self.builder.with_voronoi_sites(centres=self.centres, labels="oct")
+		sites = builder._site_generators[0]()
+		self.assertEqual([site.label for site in sites], ["oct", "oct"])
+
+	def test_with_voronoi_sites_label_count_must_match(self):
+		"""A list of labels must have one label per centre."""
+		with self.assertRaises(ValueError) as context:
+			self.builder.with_voronoi_sites(centres=self.centres, labels=["oct"])
+		self.assertIn("match", str(context.exception).lower())
+
+	def test_build_with_single_voronoi_label(self):
+		"""Sites built with a single Voronoi label all carry that label."""
+		trajectory = (TrajectoryBuilder()
+			.with_structure(self.structure)
+			.with_mobile_species("Li")
+			.with_voronoi_sites(centres=self.centres, labels="oct")
+			.build())
+		self.assertEqual([site.label for site in trajectory.sites], ["oct", "oct"])
 	
 	def test_with_existing_sites_sets_generator(self):
 		"""Test that with_existing_sites sets a site generator function."""

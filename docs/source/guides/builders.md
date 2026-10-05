@@ -153,7 +153,7 @@ Like spherical sites, Voronoi sites use fixed centre positions, so structural di
 
 **Parameters:**
 - `centres`: List of fractional coordinate centres
-- `labels`: Optional list of labels for the sites
+- `labels`: Optional single label (str) to use for all sites, list of labels (one per centre), or None
 
 **Example:**
 ```python

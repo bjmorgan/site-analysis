@@ -4,8 +4,7 @@ These tests run the full trajectory analysis pipeline on real MD data
 and verify that the numba surface normal method produces identical
 results to the Delaunay fallback. They also report timing for both paths.
 
-These tests are skipped if numba is not available or if the test data
-files are not present.
+These tests are skipped if numba is not available.
 """
 
 import time
@@ -16,12 +15,9 @@ from unittest.mock import patch
 from site_analysis._compat import HAS_NUMBA
 
 # Paths to test data
-DATA_DIR = Path(__file__).resolve().parent.parent / "docs" / "source"
-SIMPLE_XDATCAR = DATA_DIR / "examples" / "simple_cubic_li.XDATCAR"
-ARGYRODITE_XDATCAR = DATA_DIR / "tutorials" / "data" / "Li6PS5Cl_0p_XDATCAR.gz"
-
-HAS_SIMPLE_DATA = SIMPLE_XDATCAR.exists()
-HAS_ARGYRODITE_DATA = ARGYRODITE_XDATCAR.exists()
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SIMPLE_XDATCAR = REPO_ROOT / "docs" / "source" / "examples" / "simple_cubic_li.XDATCAR"
+ARGYRODITE_XDATCAR = REPO_ROOT / "tutorials" / "data" / "Li6PS5Cl_0p_XDATCAR.gz"
 
 
 def _run_polyhedral_analysis(structures):
@@ -75,7 +71,6 @@ def _run_polyhedral_analysis(structures):
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba not available")
-@unittest.skipUnless(HAS_SIMPLE_DATA, f"test data not found: {SIMPLE_XDATCAR}")
 class TestSimpleCubicValidation(unittest.TestCase):
     """Validate numba vs Delaunay on simple cubic Li trajectory."""
 
@@ -136,7 +131,6 @@ class TestSimpleCubicValidation(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba not available")
-@unittest.skipUnless(HAS_ARGYRODITE_DATA, f"test data not found: {ARGYRODITE_XDATCAR}")
 class TestArgyroditeValidation(unittest.TestCase):
     """Validate numba vs Delaunay on argyrodite Li6PS5Cl trajectory."""
 

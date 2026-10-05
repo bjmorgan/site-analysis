@@ -383,11 +383,29 @@ class TrajectoryBuilder:
         
     def with_voronoi_sites(self, 
                         centres: list[list[float]], 
-                        labels: list[str] | None = None) -> TrajectoryBuilder:
+                        labels: str | list[str] | None = None) -> TrajectoryBuilder:
         """Define Voronoi sites.
-        
+
         Note: Sites will be generated when build() is called.
+
+        Args:
+            centres: list of fractional coordinate centres for Voronoi sites
+            labels: either a single label (str) to use for all sites, a list of
+                labels (one per centre), or None
+
+        Returns:
+            self: For method chaining
+
+        Raises:
+            ValueError: If a list of labels does not have one label per centre.
         """
+        # Convert single label to list if needed
+        if isinstance(labels, str):
+            labels = [labels] * len(centres)
+
+        if labels is not None and len(centres) != len(labels):
+            raise ValueError("Number of centres must match number of labels")
+
         # Define the site generation function but don't execute it yet
         def create_voronoi_sites() -> Sequence[VoronoiSite]:
             # Create Voronoi sites
@@ -871,7 +889,7 @@ def create_trajectory_with_voronoi_sites(
     structure: Structure, 
     mobile_species: str | list[str], 
     centres: list[list[float]], 
-    labels: list[str] | None = None
+    labels: str | list[str] | None = None
 ) -> Trajectory:
     """Create a Trajectory with Voronoi sites for site analysis.
     
@@ -885,8 +903,8 @@ def create_trajectory_with_voronoi_sites(
             (e.g., ["Li", "Na"]) identifying the mobile atoms to track.
         centres: List of fractional coordinate triplets defining the centres of 
             Voronoi sites. Each centre should be a list of three floats [x, y, z].
-        labels: Optional list of string labels for the sites. Must have the same 
-            length as centres if provided, or None for no labels.
+        labels: Optional labels for the sites. Can be a single string applied to
+            all sites, a list of strings (one per site), or None for no labels.
             
     Returns:
         Trajectory: Configured trajectory object ready for site analysis.

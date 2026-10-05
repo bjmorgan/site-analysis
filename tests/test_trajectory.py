@@ -791,6 +791,53 @@ class TransitionCustomKeysTestCase(unittest.TestCase):
         self.assertEqual(result.keys, ("A", "B", "C"))
 
 
+class TrajectoryCommitmentRadiusTestCase(unittest.TestCase):
+    """Tests for the commitment_radius argument to Trajectory."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.sites = [
+            SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=1.9, label="a"),
+            SphericalSite(frac_coords=np.array([0.7, 0.5, 0.5]), rcut=1.9, label="b"),
+        ]
+        self.atoms = [Atom(index=0)]
+
+    def test_commitment_off_by_default(self):
+        """commitment_radius is None unless given."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms)
+        self.assertIsNone(trajectory.commitment_radius)
+
+    def test_commitment_radius_is_stored(self):
+        """The commitment_radius argument is stored on the trajectory."""
+        trajectory = Trajectory(sites=self.sites, atoms=self.atoms,
+                                commitment_radius={"a": 0.5, "b": 2.0})
+        self.assertEqual(trajectory.commitment_radius, {"a": 0.5, "b": 2.0})
+
+    def test_non_positive_radius_raises(self):
+        """Every commitment radius must be positive."""
+        for radius in (0.0, -1.0, {"a": 0.5, "b": 0.0}):
+            with self.subTest(radius=radius):
+                with self.assertRaises(ValueError):
+                    Trajectory(sites=self.sites, atoms=self.atoms,
+                               commitment_radius=radius)
+
+    def test_missing_label_raises(self):
+        """A dict of radii must cover every site label."""
+        with self.assertRaises(ValueError):
+            Trajectory(sites=self.sites, atoms=self.atoms,
+                       commitment_radius={"a": 0.5})
+
+    def test_dict_with_unlabelled_site_raises(self):
+        """A dict of radii needs every site to have a label."""
+        sites = [
+            SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=1.9, label="a"),
+            SphericalSite(frac_coords=np.array([0.7, 0.5, 0.5]), rcut=1.9),
+        ]
+        with self.assertRaises(ValueError):
+            Trajectory(sites=sites, atoms=self.atoms,
+                       commitment_radius={"a": 0.5})
+
+
 class TrajectoryTransitionCountingTestCase(unittest.TestCase):
     """Tests for transition counting during trajectory analysis."""
 

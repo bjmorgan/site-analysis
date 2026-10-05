@@ -56,7 +56,8 @@ class Trajectory:
 
     def __init__(self,
             sites: Sequence[Site],
-            atoms: list[Atom]) -> None:
+            atoms: list[Atom],
+            commitment_radius: float | dict[str, float] | None = None) -> None:
         """Initialize a Trajectory object for site analysis of simulation trajectories.
         
         This constructor ensures all sites are of the same type and initializes the
@@ -65,9 +66,16 @@ class Trajectory:
         Args:
             sites: list of Site objects (must all be of the same type).
             atoms: list of Atom objects to track during the trajectory analysis.
-            
+            commitment_radius: Turns on spatial commitment and sets the
+                commitment radius in Å, either one value for every site or a
+                dict mapping site labels to radii. Default is None
+                (commitment off). See the commitment guide.
+
         Raises:
-            ValueError: If sites or atoms list is empty.
+            ValueError: If sites or atoms list is empty, or if
+                commitment_radius contains a non-positive radius, lacks a
+                radius for a site label, or is a dict while some sites have
+                no label.
             TypeError: If sites contains mixed site types or an unrecognised site type.
         """
         # Validate sites is not empty
@@ -103,6 +111,59 @@ class Trajectory:
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
         self.site_lookup = {s.index: i for i, s in enumerate(sites)}
+        self.commitment_radius = commitment_radius
+        self._commitment_radii = self._resolve_commitment_radii(sites, commitment_radius)
+
+    @staticmethod
+    def _resolve_commitment_radii(
+            sites: Sequence[Site],
+            commitment_radius: float | dict[str, float] | None,
+    ) -> dict[int, float] | None:
+        """Return the commitment radius for each site index.
+
+        Args:
+            sites: The sites in this trajectory.
+            commitment_radius: One radius for every site, a dict mapping
+                site labels to radii, or None.
+
+        Returns:
+            A dict mapping each site index to its commitment radius, or
+            None if commitment_radius is None.
+
+        Raises:
+            ValueError: If any radius is not positive, if a dict lacks a
+                radius for a site label, or if a dict is given while some
+                sites have no label.
+        """
+        if commitment_radius is None:
+            return None
+        if isinstance(commitment_radius, dict):
+            values = list(commitment_radius.values())
+        else:
+            values = [commitment_radius]
+        if any(value <= 0 for value in values):
+            raise ValueError(
+                f"commitment radii must be positive, got {commitment_radius}"
+            )
+        if not isinstance(commitment_radius, dict):
+            return {site.index: commitment_radius for site in sites}
+        radii: dict[int, float] = {}
+        missing: set[str] = set()
+        for site in sites:
+            if site.label is None:
+                raise ValueError(
+                    "commitment_radius can only be a dict of radii per "
+                    "label if every site has a label"
+                )
+            if site.label in commitment_radius:
+                radii[site.index] = commitment_radius[site.label]
+            else:
+                missing.add(site.label)
+        if missing:
+            raise ValueError(
+                f"commitment_radius has no radius for site labels {sorted(missing)}"
+            )
+        return radii
 
     def atom_by_index(self,
             i: int) -> Atom:

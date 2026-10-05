@@ -133,6 +133,9 @@ class TrajectoryBuilder:
         # Validation options
         self._min_atom_distance: float = 0.5
 
+        # Commitment options
+        self._commitment_radius: float | dict[str, float] | None = None
+
         # Functions to be called during build() to create sites
         self._site_generators: list[Callable] = []
         
@@ -309,7 +312,26 @@ class TrajectoryBuilder:
         self._min_atom_distance = distance
         return self
 
-    def with_spherical_sites(self, 
+    def with_commitment(self,
+            radius: float | dict[str, float] = 1.0) -> TrajectoryBuilder:
+        """Turn on spatial commitment for the trajectory.
+
+        With commitment on, an atom moves to a new site only once it is
+        within the commitment radius of that site's centre, and stays
+        committed to its previous site until then. See the commitment guide.
+
+        Args:
+            radius: Commitment radius in Å, either one value for every site
+                or a dict mapping site labels to radii. Default is 1.0.
+                Radii are validated when ``build()`` is called.
+
+        Returns:
+            self: For method chaining.
+        """
+        self._commitment_radius = radius
+        return self
+
+    def with_spherical_sites(self,
                     centres: list[list[float]], 
                     radii: float | list[float], 
                     labels: str | list[str] | None = None) -> TrajectoryBuilder:
@@ -792,7 +814,8 @@ class TrajectoryBuilder:
                 )
 
         # Create trajectory
-        trajectory = Trajectory(sites=sites, atoms=self._atoms)
+        trajectory = Trajectory(sites=sites, atoms=self._atoms,
+                                commitment_radius=self._commitment_radius)
         
         # Reset the builder state for future use
         self.reset()

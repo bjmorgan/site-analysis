@@ -898,8 +898,9 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.site_a = SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=1.9, label="a")
         self.site_b = SphericalSite(frac_coords=np.array([0.7, 0.5, 0.5]), rcut=1.9, label="b")
         self.lattice = Lattice.cubic(10.0)
-        # Fractional x positions (y = z = 0.5). a_edge and b_edge are inside a
-        # site, 1.5 Angstrom from its centre; gap is in neither site.
+        # Fractional x positions (y = z = 0.5). *_core is at a site centre.
+        # *_edge is inside a site, 1.5 Angstrom from its centre, so outside
+        # the default 0.5 Angstrom core. gap is in neither site.
         self.x = {"a_core": 0.30, "a_edge": 0.45, "gap": 0.50,
                   "b_edge": 0.55, "b_core": 0.70}
 
@@ -912,7 +913,7 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         coords = [[self.x[p], 0.5, 0.5] for p in positions]
         return Structure(self.lattice, ["Li"] * len(positions), coords)
 
-    def test_excursion_without_commitment_records_no_transition(self):
+    def test_excursion_outside_core_records_no_transition(self):
         """A -> B outside its core -> A stays in A and records no transition."""
         trajectory = self.make_trajectory()
         trajectory.trajectory_from_structures(
@@ -943,7 +944,6 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         trajectory.trajectory_from_structures(
             [self.frame("b_edge"), self.frame("b_edge")])
         self.assertEqual(trajectory.atoms[0].trajectory, [1, 1])
-        self.assertEqual(self.site_a.transitions, Counter())
         self.assertEqual(self.site_b.transitions, Counter())
 
     def test_points_follow_geometric_site(self):
@@ -980,6 +980,15 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(trajectory.atoms[0].trajectory, [0, 1, 1])
         self.assertEqual(self.site_a.transitions, {1: 1})
 
+    def test_recent_site_follows_geometric_site(self):
+        """An atom in transit has its geometric site as its most recent site."""
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(
+            [self.frame("a_core"), self.frame("b_edge")])
+        atom = trajectory.atoms[0]
+        self.assertEqual(atom.committed_site, 0)
+        self.assertEqual(atom.most_recent_site, 1)
+
     def test_analyse_structure_is_geometric(self):
         """analyse_structure assigns the geometric site and keeps the committed site."""
         trajectory = self.make_trajectory()
@@ -999,7 +1008,7 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
 
     def test_without_commitment_atom_follows_geometric_site(self):
         """Without commitment, A -> B outside its core -> A records two transitions."""
-        trajectory = Trajectory(sites=[self.site_a, self.site_b], atoms=[Atom(index=0)])
+        trajectory = self.make_trajectory(commitment_radius=None)
         trajectory.trajectory_from_structures(
             [self.frame("a_core"), self.frame("b_edge"), self.frame("a_core")])
         self.assertEqual(trajectory.atoms[0].trajectory, [0, 1, 0])

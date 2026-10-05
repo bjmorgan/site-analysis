@@ -38,9 +38,9 @@ from tqdm.auto import tqdm
 from pymatgen.core import Structure
 
 from .transition_table import TransitionTable
-from .distances import mic_distance
 
 from .atom import Atom
+from .distances import mic_distance
 from .dynamic_voronoi_site import DynamicVoronoiSite
 from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -404,7 +404,8 @@ class Trajectory:
            atom assigned to a different site from the last site it was
            assigned to in an appended timestep. With commitment, each atom's
            site is replaced by its committed site, and a transition is
-           recorded when the committed site changes.
+           recorded when an atom's committed site changes from one site to
+           another.
         3. Updates the trajectory information for atoms and sites
         4. Adds the timestep to the list of timesteps if provided
 
@@ -456,22 +457,21 @@ class Trajectory:
             lattice_matrix: (3, 3) lattice matrix of the analysed structure.
         """
         for atom in self.atoms:
-            site_index = atom.in_site
-            if site_index is not None:
-                atom.update_recent_site(site_index)
+            assigned = atom.in_site
+            if assigned is not None:
+                atom.update_recent_site(assigned)
             committed = atom.committed_site
             if committed is None:
-                committed = site_index
-            elif site_index is not None and site_index != committed:
-                site = self.site_by_index(site_index)
+                committed = assigned
+            elif assigned is not None and assigned != committed:
+                site = self.site_by_index(assigned)
                 distance = mic_distance(atom.frac_coords, site.centre, lattice_matrix)
-                if distance <= radii[site_index]:
-                    self.site_by_index(committed).transitions[site_index] += 1
-                    committed = site_index
+                if distance <= radii[assigned]:
+                    self.site_by_index(committed).transitions[assigned] += 1
+                    committed = assigned
             atom.committed_site = committed
             atom.in_site = committed
-        for site in self.sites:
-            site.contains_atoms = []
+        self.site_collection.reset_site_occupations()
         for atom in self.atoms:
             if atom.in_site is not None:
                 self.site_by_index(atom.in_site).contains_atoms.append(atom.index)

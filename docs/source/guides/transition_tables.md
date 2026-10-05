@@ -58,7 +58,7 @@ The filtered table preserves the order of the keys you provide. Note that filter
 
 ```python
 counts = trajectory.transition_counts_by_label().filter(["type 2", "type 4", "type 5"])
-probs = trajectory._normalise_counts(counts)
+probs = counts.normalise_rows()
 ```
 
 ## Reordering Keys

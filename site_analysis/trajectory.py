@@ -37,7 +37,7 @@ from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
-from .transition_table import TableKey, TransitionTable
+from .transition_table import TransitionTable
 
 from .atom import Atom
 from .dynamic_voronoi_site import DynamicVoronoiSite
@@ -167,16 +167,6 @@ class Trajectory:
         return [s.label for s in self.sites]
 
     @staticmethod
-    def _normalise_counts(counts: TransitionTable[TableKey]) -> TransitionTable[TableKey]:
-        """Row-normalise a counts table into probabilities."""
-        count_data = counts.matrix.astype(float)
-        row_sums = count_data.sum(axis=1)
-        probs = np.zeros_like(count_data)
-        nonzero = row_sums > 0
-        probs[nonzero] = count_data[nonzero] / row_sums[nonzero, np.newaxis]
-        return TransitionTable(keys=counts.keys, matrix=probs)
-
-    @staticmethod
     def _validate_destination(site_index: int, dest: int, valid_indices: set[int]) -> None:
         """Raise ValueError if dest is not in valid_indices."""
         if dest not in valid_indices:
@@ -294,7 +284,7 @@ class Trajectory:
             ValueError: If *keys* does not match the default key set, or
                 if a site has a transition to an unknown site index.
         """
-        return self._normalise_counts(self.transition_counts_by_site(keys=keys))
+        return self.transition_counts_by_site(keys=keys).normalise_rows()
 
     def transition_probabilities_by_label(
         self,
@@ -318,7 +308,7 @@ class Trajectory:
             ValueError: If *keys* does not match the default key set, or
                 if a site has a transition to an unknown site index.
         """
-        return self._normalise_counts(self.transition_counts_by_label(keys=keys))
+        return self.transition_counts_by_label(keys=keys).normalise_rows()
 
     @property
     def atom_sites(self) -> list[int | None]:
@@ -345,6 +335,7 @@ class Trajectory:
         """Append a new timestep to the trajectory.
         
         This method:
+
         1. Analyses the structure to assign atoms to sites
         2. Records a transition for each atom assigned to a different site
            from the last site it was assigned to in an appended timestep,

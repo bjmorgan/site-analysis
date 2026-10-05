@@ -218,6 +218,56 @@ class TransitionTableFilterTestCase(unittest.TestCase):
         ]))
 
 
+class TransitionTableNormaliseRowsTestCase(unittest.TestCase):
+    """Tests for .normalise_rows() method."""
+
+    def test_rows_sum_to_one(self):
+        """Each row is divided by its sum."""
+        table = TransitionTable(keys=("A", "B"), matrix=np.array([[1, 3], [2, 2]]))
+        result = table.normalise_rows()
+        np.testing.assert_allclose(result.matrix, [[0.25, 0.75], [0.5, 0.5]])
+
+    def test_zero_row_stays_zero(self):
+        """A row with no transitions stays all zero."""
+        table = TransitionTable(keys=(0, 1), matrix=np.array([[0, 0], [1, 3]]))
+        result = table.normalise_rows()
+        np.testing.assert_allclose(result.matrix, [[0.0, 0.0], [0.25, 0.75]])
+
+    def test_float_table(self):
+        """A table of floats is normalised in the same way."""
+        table = TransitionTable(keys=("A", "B"), matrix=np.array([[0.2, 0.6], [0.0, 0.0]]))
+        result = table.normalise_rows()
+        np.testing.assert_allclose(result.matrix, [[0.25, 0.75], [0.0, 0.0]])
+
+    def test_preserves_str_keys_and_order(self):
+        """String keys and their order are unchanged."""
+        table = TransitionTable(keys=("C", "A", "B"), matrix=np.ones((3, 3), dtype=int))
+        self.assertEqual(table.normalise_rows().keys, ("C", "A", "B"))
+
+    def test_preserves_int_keys_and_order(self):
+        """Integer keys and their order are unchanged."""
+        table = TransitionTable(keys=(5, 2), matrix=np.ones((2, 2), dtype=int))
+        self.assertEqual(table.normalise_rows().keys, (5, 2))
+
+    def test_returns_float_table(self):
+        """The normalised matrix has a float dtype."""
+        table = TransitionTable(keys=("A", "B"), matrix=np.array([[1, 1], [0, 2]]))
+        self.assertTrue(np.issubdtype(table.normalise_rows().matrix.dtype, np.floating))
+
+    def test_returns_new_table_and_leaves_original_unchanged(self):
+        """normalise_rows returns a new table; the original is unchanged."""
+        matrix = np.array([[1, 3], [2, 2]])
+        table = TransitionTable(keys=("A", "B"), matrix=matrix)
+        result = table.normalise_rows()
+        self.assertIsNot(result, table)
+        np.testing.assert_array_equal(table.matrix, matrix)
+
+    def test_empty_table(self):
+        """An empty table normalises to an empty table."""
+        table = TransitionTable(keys=(), matrix=np.empty((0, 0), dtype=int))
+        self.assertEqual(table.normalise_rows().matrix.shape, (0, 0))
+
+
 class TransitionTableEqualityTestCase(unittest.TestCase):
     """Tests for __eq__."""
 

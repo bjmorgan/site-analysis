@@ -134,7 +134,7 @@ A high proportion of `None` entries may indicate that site radii are too small o
 
 Transitions are recorded between successive assigned sites in each atom's trajectory, skipping `None` entries. For example, an atom whose trajectory is `[5, None, None, 12]` contributes one transition, from site 5 to site 12.
 
-To count a hop only once an atom reaches the core of its new site, see [Commitment](commitment.md).
+To count a hop only once an atom is within a set distance of its new site's centre, see the [commitment guide](commitment.md).
 
 ### Analysis Data
 

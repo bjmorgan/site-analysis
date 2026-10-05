@@ -765,8 +765,8 @@ class TrajectoryBuilder:
         Raises:
             ValueError: If required parameters are missing, if the
                 reference structure has same-species atom pairs closer
-                than ``min_atom_distance``, or if duplicate sites are
-                detected.
+                than ``min_atom_distance``, if duplicate sites are
+                detected, or if the commitment radius is invalid.
         """
         # Validate basic requirements
         if not self._structure:

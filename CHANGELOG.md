@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `TransitionTable.normalise_rows()` method for converting counts to row-normalised probabilities.
-- Spatial commitment (milestoning) for trajectories, with `TrajectoryBuilder.with_commitment()` and the `commitment_radius` argument to `Trajectory`. With commitment on, an atom moves to a new site only once it is within the commitment radius of that site's centre, so atoms crossing back and forth over a site boundary no longer record transitions.
+- Spatial commitment (milestoning) for trajectories, with `TrajectoryBuilder.with_commitment()` and the `commitment_radius` argument to `Trajectory`. With commitment on, an atom moves to a new site only once it is within the commitment radius of that site's centre.
 
 ### Changed
 

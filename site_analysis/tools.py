@@ -27,7 +27,6 @@ import numpy as np
 
 from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
-from site_analysis.distances import all_mic_distances
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 def get_coordination_indices(
@@ -354,15 +353,12 @@ def site_index_mapping(
         raise ValueError(
             f"No atoms match species2_filter {species2_filter} in species2"
         )
-    dr_ij = all_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
-    to_return = []
-    dr_ij_to_return = []
-    for i, dr_i in enumerate(dr_ij):
-        if species1[i] in species1_filter:
-            subset_idx = np.argmin(dr_i[structure2_mask])
-            parent_idx = np.arange(dr_i.size)[structure2_mask][subset_idx]
-            to_return.append(parent_idx)
-            dr_ij_to_return.append(dr_i[parent_idx])
+    candidates = np.flatnonzero(structure2_mask)
+    queries = [i for i, s in enumerate(species1) if s in species1_filter]
+    nearest, distances = PeriodicNeighbourIndex(
+        frac_coords2[candidates], lattice_matrix).query_nearest(frac_coords1[queries])
+    to_return = candidates[nearest].tolist()
+    dr_ij_to_return = distances.tolist()
     if one_to_one_mapping:
         if len(to_return) != len(set(to_return)):
             raise ValueError("One-to-one mapping between structures not found.")

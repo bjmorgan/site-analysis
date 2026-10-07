@@ -210,6 +210,36 @@ class ToolsTestCase(unittest.TestCase):
         np.testing.assert_array_equal(mapping, np.array([0, 1]))
         expected_distance = np.sqrt(3*((0.1*a)**2))
         np.testing.assert_array_almost_equal(distances, np.array([expected_distance, expected_distance]))
+
+    def test_site_index_mapping_across_periodic_boundary(self):
+        """An atom near one face maps to its nearest neighbour across the boundary."""
+        lattice_matrix = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix
+        coords1 = np.array([[0.95, 0.95, 0.95]])
+        coords2 = np.array([[0.5, 0.5, 0.5],
+                            [0.05, 0.05, 0.05]])
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([1]))
+
+    def test_site_index_mapping_with_no_selected_atoms(self):
+        """When no atoms pass species1_filter, empty arrays are returned."""
+        lattice_matrix = np.eye(3) * 5.0
+        coords = np.array([[0.1, 0.1, 0.1]])
+        mapping = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
+                                     species1_filter='Cl')
+        self.assertEqual(mapping.shape, (0,))
+        mapping, distances = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
+                                                species1_filter='Cl',
+                                                return_mapping_distances=True)
+        self.assertEqual((mapping.shape, distances.shape), ((0,), (0,)))
+
+    def test_site_index_mapping_tie_maps_to_lowest_index(self):
+        """An atom equidistant from two atoms maps to the one with the lower index."""
+        lattice_matrix = np.eye(3) * 4.0
+        coords1 = np.array([[0.5, 0.5, 0.5]])
+        coords2 = np.array([[0.75, 0.5, 0.5],
+                            [0.25, 0.5, 0.5]])
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([0]))
         
         
         

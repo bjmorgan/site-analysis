@@ -142,5 +142,68 @@ class TestQueryWithin(unittest.TestCase):
         self.assertEqual((len(query_idx), len(point_idx), len(distances)), (0, 0, 0))
 
 
+class TestQueryNearest(unittest.TestCase):
+    """Tests for PeriodicNeighbourIndex.query_nearest."""
+
+    def test_matches_brute_force(self):
+        """Nearest points and distances match a search over every pair."""
+        rng = np.random.default_rng(3)
+        for name, lattice_matrix in CELLS.items():
+            with self.subTest(cell=name):
+                points, query = random_points(rng)
+                dense = brute_force_distances(query, points, lattice_matrix)
+                point_idx, distances = PeriodicNeighbourIndex(
+                    points, lattice_matrix).query_nearest(query)
+                np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
+                np.testing.assert_array_equal(distances, dense.min(axis=1))
+
+    def test_ties_resolve_to_lowest_index(self):
+        """A query equidistant from several points gets the lowest index."""
+        lattice_matrix = np.eye(3) * 4.0
+        points = shuffled_grid(np.random.default_rng(4))
+        # Each grid-cube centre is equidistant from its eight corners.
+        query = points + 0.125
+        dense = brute_force_distances(query, points, lattice_matrix)
+        n_tied = (dense == dense.min(axis=1, keepdims=True)).sum(axis=1)
+        np.testing.assert_array_equal(n_tied, np.full(len(query), 8))
+        point_idx, _ = PeriodicNeighbourIndex(points, lattice_matrix).query_nearest(query)
+        np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
+
+    def test_queries_far_outside_cell(self):
+        """Query points many cells away find the same nearest points."""
+        rng = np.random.default_rng(5)
+        lattice_matrix = CELLS["triclinic"]
+        points = rng.random((50, 3))
+        query = rng.uniform(-50.0, 50.0, (40, 3))
+        dense = brute_force_distances(query, points, lattice_matrix)
+        point_idx, distances = PeriodicNeighbourIndex(points, lattice_matrix).query_nearest(query)
+        np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
+        np.testing.assert_array_equal(distances, dense.min(axis=1))
+
+    def test_single_point_index(self):
+        """With one indexed point, every query finds it."""
+        lattice_matrix = CELLS["monoclinic"]
+        point = np.array([[0.3, 0.6, 0.9]])
+        query = np.random.default_rng(6).random((10, 3))
+        point_idx, distances = PeriodicNeighbourIndex(point, lattice_matrix).query_nearest(query)
+        np.testing.assert_array_equal(point_idx, np.zeros(10, dtype=np.intp))
+        np.testing.assert_array_equal(
+            distances, paired_mic_distances(query, np.repeat(point, 10, axis=0), lattice_matrix))
+
+    def test_empty_index_raises(self):
+        """An empty index has no nearest point, so raises ValueError."""
+        index = PeriodicNeighbourIndex(np.empty((0, 3)), np.eye(3))
+        with self.assertRaises(ValueError):
+            index.query_nearest(np.zeros((1, 3)))
+
+    def test_empty_queries_return_empty_arrays(self):
+        """No query points give empty arrays of the right types."""
+        index = PeriodicNeighbourIndex(np.zeros((3, 3)), np.eye(3))
+        point_idx, distances = index.query_nearest(np.empty((0, 3)))
+        self.assertEqual((point_idx.shape, distances.shape), ((0,), (0,)))
+        self.assertEqual((point_idx.dtype, distances.dtype),
+                         (np.dtype(np.intp), np.dtype(np.float64)))
+
+
 if __name__ == "__main__":
     unittest.main()

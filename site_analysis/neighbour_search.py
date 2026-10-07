@@ -184,3 +184,38 @@ class PeriodicNeighbourIndex:
         query_idx, point_idx, distances = query_idx[within], point_idx[within], distances[within]
         order = np.lexsort((point_idx, distances, query_idx))
         return query_idx[order], point_idx[order], distances[order]
+
+    def query_nearest(self,
+            query_frac: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Find the nearest indexed point to each query point.
+
+        Ties are broken by the lowest point index.
+
+        Args:
+            query_frac: Fractional coordinates of the query points,
+                shape (M, 3).
+
+        Returns:
+            Tuple of ``(point_idx, distances)``, each of length M. Indices
+            are an ``np.intp`` array and distances a ``float64`` array.
+
+        Raises:
+            ValueError: If ``query_frac`` does not have shape (M, 3), or
+                the index is empty.
+        """
+        query_frac = _as_coords(query_frac, "query_frac")
+        if len(self) == 0:
+            raise ValueError("Cannot find nearest neighbours in an empty index")
+        if query_frac.shape[0] == 0:
+            return np.empty(0, dtype=np.intp), np.empty(0)
+        # The exact distance to the tree's nearest point is an upper bound
+        # on the nearest minimum-image distance.
+        _, first = self._tree.query(self._scaled(query_frac), k=1)
+        upper = paired_mic_distances(
+            query_frac, self._frac_coords[first], self._lattice_matrix)
+        query_idx, point_idx, distances = self._candidates(
+            query_frac, self._search_radius(upper))
+        order = np.lexsort((point_idx, distances, query_idx))
+        _, first_per_query = np.unique(query_idx[order], return_index=True)
+        nearest = order[first_per_query]
+        return point_idx[nearest], distances[nearest]

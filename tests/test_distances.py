@@ -126,97 +126,6 @@ class TestMicDistance(unittest.TestCase):
         self.assertAlmostEqual(result, float(expected), places=10)
 
 
-class TestAllMicDistances(unittest.TestCase):
-    """Tests for batch all-pairs minimum-image distance matrix."""
-
-    def test_single_pair(self):
-        """1x1 distance matrix matches mic_distance."""
-        from site_analysis.distances import all_mic_distances, mic_distance
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.array([[0.1, 0.2, 0.3]])
-        frac2 = np.array([[0.4, 0.5, 0.6]])
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        expected = mic_distance(frac1[0], frac2[0], lattice.matrix)
-        self.assertEqual(result.shape, (1, 1))
-        self.assertAlmostEqual(result[0, 0], expected, places=10)
-
-    def test_shape(self):
-        """Output shape is (N, M) for N and M input points."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
-        frac2 = np.array([[0.7, 0.8, 0.9], [0.1, 0.1, 0.1], [0.3, 0.3, 0.3]])
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        self.assertEqual(result.shape, (2, 3))
-
-    def test_matches_pymatgen_cubic(self):
-        """Full distance matrix matches pymatgen for cubic lattice."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.array([[0.1, 0.2, 0.3], [0.8, 0.9, 0.1]])
-        frac2 = np.array([[0.9, 0.1, 0.5], [0.2, 0.3, 0.4]])
-        expected = lattice.get_all_distances(frac1, frac2)
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(result, expected, atol=1e-10)
-
-    def test_matches_pymatgen_triclinic(self):
-        """Full distance matrix matches pymatgen for triclinic lattice."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
-        rng = np.random.default_rng(42)
-        frac1 = rng.random((5, 3))
-        frac2 = rng.random((8, 3))
-        expected = lattice.get_all_distances(frac1, frac2)
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(result, expected, atol=1e-10)
-
-    def test_pbc_distances_shorter_than_direct(self):
-        """Points near opposite boundaries have short PBC distances."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.array([[0.05, 0.5, 0.5]])
-        frac2 = np.array([[0.95, 0.5, 0.5]])
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        self.assertAlmostEqual(result[0, 0], 1.0, places=10)
-
-    def test_self_distance_diagonal_is_zero(self):
-        """Distance matrix of a set with itself has zeros on the diagonal."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
-        rng = np.random.default_rng(77)
-        coords = rng.random((5, 3))
-        result = all_mic_distances(coords, coords, lattice.matrix)
-        np.testing.assert_allclose(np.diag(result), 0.0, atol=1e-12)
-
-    def test_coords_many_cells_away(self):
-        """Coordinates differing by many unit cells produce correct distances."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
-        frac1 = np.array([[50.3, -100.7, 25.1], [0.1, 0.2, 0.3]])
-        frac2 = np.array([[0.1, 0.2, 0.3], [-50.4, 75.9, -10.8]])
-        expected = lattice.get_all_distances(frac1, frac2)
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(result, expected, atol=1e-10)
-
-    def test_empty_first_array(self):
-        """Empty first array returns correctly shaped empty output."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.empty((0, 3))
-        frac2 = np.array([[0.1, 0.2, 0.3]])
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        self.assertEqual(result.shape, (0, 1))
-
-    def test_empty_second_array(self):
-        """Empty second array returns correctly shaped empty output."""
-        from site_analysis.distances import all_mic_distances
-        lattice = Lattice.cubic(10.0)
-        frac1 = np.array([[0.1, 0.2, 0.3]])
-        frac2 = np.empty((0, 3))
-        result = all_mic_distances(frac1, frac2, lattice.matrix)
-        self.assertEqual(result.shape, (1, 0))
-
-
 class TestPairedMicDistances(unittest.TestCase):
     """Tests for minimum-image distances between paired points."""
 
@@ -291,19 +200,6 @@ class TestNumpyFallback(unittest.TestCase):
                 expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
                 self.assertAlmostEqual(result, expected, places=10)
 
-    def test_all_mic_distances_numpy_fallback_matches_pymatgen(self):
-        """Numpy all_mic_distances fallback produces correct results."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
-        rng = np.random.default_rng(42)
-        frac1 = rng.random((5, 3))
-        frac2 = rng.random((8, 3))
-        expected = lattice.get_all_distances(frac1, frac2)
-        with patch.object(dist_mod, 'HAS_NUMBA', False):
-            result = dist_mod.all_mic_distances(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(result, expected, atol=1e-10)
-
     def test_paired_mic_distances_numpy_fallback_matches_pymatgen(self):
         """Numpy paired_mic_distances fallback produces correct results."""
         from unittest.mock import patch
@@ -333,17 +229,6 @@ class TestNumbaAcceleration(unittest.TestCase):
             expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
             result = _mic_distance_numba(frac1, frac2, lattice.matrix)
             self.assertAlmostEqual(result, expected, places=10)
-
-    def test_all_mic_distances_numba_matches_pymatgen(self):
-        """Numba batch version produces same results as pymatgen."""
-        from site_analysis.distances import _all_mic_distances_numba
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
-        rng = np.random.default_rng(42)
-        frac1 = rng.random((5, 3))
-        frac2 = rng.random((8, 3))
-        expected = lattice.get_all_distances(frac1, frac2)
-        result = _all_mic_distances_numba(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(result, expected, atol=1e-10)
 
     def test_paired_mic_distances_numba_matches_numpy(self):
         """Numba and numpy paired distances agree to within rounding."""

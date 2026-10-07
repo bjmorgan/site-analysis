@@ -28,6 +28,11 @@ _MIN_SINGULAR_VALUE = 1e-8
 _RELATIVE_TOLERANCE = 1e-9
 _ABSOLUTE_TOLERANCE = 1e-12
 
+# Exact distances are computed from unwrapped coordinates, so their
+# rounding error grows with the coordinates' distance from the cell.
+# Searches are also widened by this multiple of that error bound.
+_ROUNDING_SAFETY = 8.0
+
 
 def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
     """Return coordinates as a float64 array of shape (N, 3).
@@ -92,6 +97,7 @@ class PeriodicNeighbourIndex:
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
         if self._sigma_min < _MIN_SINGULAR_VALUE:
             raise ValueError("lattice_matrix must be non-singular, but its rows are coplanar")
+        self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)
 
     def __len__(self) -> int:
@@ -113,27 +119,39 @@ class PeriodicNeighbourIndex:
         # rejects points on the far edge of the box.
         return np.where(scaled >= self._lengths, 0.0, scaled)
 
-    def _search_radius(self, distance: float | np.ndarray) -> float | np.ndarray:
+    def _search_radius(self,
+            distance: float | np.ndarray,
+            query_frac: np.ndarray) -> np.ndarray:
         """Return the tree search radius that covers a Cartesian distance.
+
+        The radius is widened slightly so that rounding cannot drop a
+        neighbour. Rounding errors in the exact distances grow with the
+        magnitude of the fractional coordinates, and so does the widening.
 
         Args:
             distance: Cartesian distance, or one distance per query point.
+            query_frac: Fractional coordinates of the query points,
+                shape (M, 3).
 
         Returns:
-            The radius in scaled coordinates, widened slightly for
-            rounding.
+            The radius in scaled coordinates for each query point,
+            shape (M,).
         """
-        return distance / self._sigma_min * (1.0 + _RELATIVE_TOLERANCE) + _ABSOLUTE_TOLERANCE
+        coord_scale = np.abs(query_frac).max(axis=1) + self._max_abs_coord + 1.0
+        rounding = (_ROUNDING_SAFETY * np.finfo(np.float64).eps
+                    * coord_scale * self._lengths.max())
+        return ((distance + rounding) / self._sigma_min * (1.0 + _RELATIVE_TOLERANCE)
+                + _ABSOLUTE_TOLERANCE)
 
     def _candidates(self,
             query_frac: np.ndarray,
-            radius: float | np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            radius: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Find candidate pairs in the tree and compute their exact distances.
 
         Args:
             query_frac: Fractional coordinates of the query points,
                 shape (M, 3).
-            radius: Tree search radius, or one radius per query point.
+            radius: Tree search radius for each query point, shape (M,).
 
         Returns:
             Tuple of ``(query_idx, point_idx, distances)``, one entry per
@@ -179,7 +197,7 @@ class PeriodicNeighbourIndex:
         if not cutoff >= 0:
             raise ValueError(f"cutoff must be non-negative, got {cutoff}")
         query_idx, point_idx, distances = self._candidates(
-            query_frac, self._search_radius(cutoff))
+            query_frac, self._search_radius(cutoff, query_frac))
         within = distances <= cutoff
         query_idx, point_idx, distances = query_idx[within], point_idx[within], distances[within]
         order = np.lexsort((point_idx, distances, query_idx))
@@ -214,7 +232,7 @@ class PeriodicNeighbourIndex:
         upper = paired_mic_distances(
             query_frac, self._frac_coords[first], self._lattice_matrix)
         query_idx, point_idx, distances = self._candidates(
-            query_frac, self._search_radius(upper))
+            query_frac, self._search_radius(upper, query_frac))
         order = np.lexsort((point_idx, distances, query_idx))
         _, first_per_query = np.unique(query_idx[order], return_index=True)
         nearest = order[first_per_query]

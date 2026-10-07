@@ -113,6 +113,19 @@ class TestQueryWithin(unittest.TestCase):
         np.testing.assert_array_equal(point_idx, np.sort(corners))
         self.assertEqual(len(set(distances.tolist())), 1)
 
+    def test_coincident_points_far_outside_cell(self):
+        """Copies of the points 1000 cells away are found with a zero cutoff."""
+        lattice_matrix = np.eye(3) * 100.0
+        points = np.random.default_rng(7).random((200, 3))
+        query = points + 1000.0
+        dense = brute_force_distances(query, points, lattice_matrix)
+        rows, cols = np.nonzero(dense <= 0.0)
+        self.assertEqual(len(rows), 200)
+        query_idx, point_idx, _ = PeriodicNeighbourIndex(
+            points, lattice_matrix).query_within(query, 0.0)
+        np.testing.assert_array_equal(query_idx, rows)
+        np.testing.assert_array_equal(point_idx, cols)
+
     def test_invalid_cutoff_raises(self):
         """A negative or NaN cutoff raises ValueError."""
         index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
@@ -172,13 +185,28 @@ class TestQueryNearest(unittest.TestCase):
     def test_queries_far_outside_cell(self):
         """Query points many cells away find the same nearest points."""
         rng = np.random.default_rng(5)
-        lattice_matrix = CELLS["triclinic"]
-        points = rng.random((50, 3))
-        query = rng.uniform(-50.0, 50.0, (40, 3))
-        dense = brute_force_distances(query, points, lattice_matrix)
-        point_idx, distances = PeriodicNeighbourIndex(points, lattice_matrix).query_nearest(query)
-        np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
-        np.testing.assert_array_equal(distances, dense.min(axis=1))
+        triclinic_points = rng.random((50, 3))
+        cubic_points = rng.random((200, 3))
+        cases = {
+            "random queries, triclinic": (
+                CELLS["triclinic"], triclinic_points, rng.uniform(-50.0, 50.0, (40, 3))),
+            # Rounding errors in the distances grow with the coordinates,
+            # of both the query points and the indexed points, and with the
+            # longest lattice vector.
+            "copies 1000 cells away, cubic": (
+                np.eye(3) * 100.0, cubic_points, cubic_points + 1000.0),
+            "indexed points 1000 cells away, cubic": (
+                np.eye(3) * 100.0, cubic_points + 1000.0, cubic_points),
+            "copies 100 cells away, 1 x 1 x 1000 cell": (
+                Lattice.orthorhombic(1.0, 1.0, 1000.0).matrix, cubic_points, cubic_points + 100.0),
+        }
+        for name, (lattice_matrix, points, query) in cases.items():
+            with self.subTest(case=name):
+                dense = brute_force_distances(query, points, lattice_matrix)
+                point_idx, distances = PeriodicNeighbourIndex(
+                    points, lattice_matrix).query_nearest(query)
+                np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
+                np.testing.assert_array_equal(distances, dense.min(axis=1))
 
     def test_single_point_index(self):
         """With one indexed point, every query finds it."""

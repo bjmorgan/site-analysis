@@ -416,31 +416,53 @@ class TestStructureAligner(unittest.TestCase):
                 self.assertEqual(args[0], mock_objective)
                 self.assertEqual(args[1], custom_tolerance)
                 
-    def test_create_objective_function(self):
-        """Test that _create_objective_function properly creates an objective function."""
+    def test_objective_function_rmsd(self):
+        """The rmsd objective is the RMSD of nearest same-species distances."""
         aligner = StructureAligner()
+        ref_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+        target_coords = ref_coords + np.array([0.1, 0.0, 0.0])
+        objective_function = aligner._create_objective_function(
+            ref_coords, target_coords, np.eye(3) * 5.0,
+            ["Na", "Na"], ["Na", "Na"], valid_species=["Na"], metric='rmsd')
+        # Translating by the offset superimposes the structures; with no
+        # translation each atom is 0.5 A from its nearest target atom.
+        self.assertAlmostEqual(objective_function(np.array([0.1, 0.0, 0.0])), 0.0, places=10)
+        self.assertAlmostEqual(objective_function(np.zeros(3)), 0.5, places=10)
 
-        frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
-        lattice_matrix = np.eye(3) * 5.0
-        ref_species = ["Na", "Na"]
-        target_species = ["Na", "Na"]
+    def test_objective_function_max_dist(self):
+        """The max_dist objective is the largest nearest same-species distance."""
+        aligner = StructureAligner()
+        ref_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+        target_coords = np.array([[0.1, 0.1, 0.1], [0.3, 0.2, 0.2]])
+        objective_function = aligner._create_objective_function(
+            ref_coords, target_coords, np.eye(3) * 5.0,
+            ["Na", "Na"], ["Na", "Na"], valid_species=["Na"], metric='max_dist')
+        # Nearest distances are 0 A and 0.5 A.
+        self.assertAlmostEqual(objective_function(np.zeros(3)), 0.5, places=10)
 
-        # Mock calculate_species_distances
-        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
-            mock_calc_distances.return_value = ({}, [0.1, 0.2])
+    def test_objective_function_two_species(self):
+        """Each species is matched only to its own species, whatever the atom order."""
+        aligner = StructureAligner()
+        ref_coords = np.array([[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
+        target_coords = np.array([[0.6, 0.6, 0.6], [0.2, 0.1, 0.1]])
+        args = (ref_coords, target_coords, np.eye(3) * 5.0, ["Na", "Cl"], ["Cl", "Na"])
+        rmsd = aligner._create_objective_function(
+            *args, valid_species=["Na", "Cl"], metric='rmsd')
+        max_dist = aligner._create_objective_function(
+            *args, valid_species=["Na", "Cl"], metric='max_dist')
+        # Nearest same-species distances are 0.5 A for Na and 0 A for Cl.
+        self.assertAlmostEqual(rmsd(np.zeros(3)), np.sqrt(0.125), places=10)
+        self.assertAlmostEqual(max_dist(np.zeros(3)), 0.5, places=10)
 
-            objective_function = aligner._create_objective_function(
-                frac_coords, frac_coords.copy(), lattice_matrix,
-                ref_species, target_species,
-                valid_species=["Na"], metric='rmsd')
+    def test_objective_function_without_shared_species_is_infinite(self):
+        """With no species present in both structures, the objective is infinite."""
+        aligner = StructureAligner()
+        coords = np.array([[0.1, 0.1, 0.1]])
+        objective_function = aligner._create_objective_function(
+            coords, coords.copy(), np.eye(3) * 5.0, ["Na"], ["Cl"],
+            valid_species=["Na"], metric='rmsd')
+        self.assertEqual(objective_function(np.zeros(3)), float('inf'))
 
-            self.assertTrue(callable(objective_function))
-
-            result = objective_function(np.array([0.1, 0.1, 0.1]))
-
-            mock_calc_distances.assert_called_once()
-            self.assertIsInstance(result, float)
-            
     def test_run_nelder_mead(self):
         """Test that _run_nelder_mead properly runs the Nelder-Mead algorithm."""
         # Create aligner

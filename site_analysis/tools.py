@@ -28,6 +28,7 @@ import numpy as np
 from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
 from site_analysis.distances import all_mic_distances
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 def get_coordination_indices(
     frac_coords: np.ndarray,
@@ -59,11 +60,12 @@ def get_coordination_indices(
     Returns:
         Dictionary mapping centre atom indices to lists of coordinating atom
         indices. Only includes environments with exactly n_coord coordinating
-        atoms within cutoff.
+        atoms within cutoff. Each list is ordered by distance from the
+        centre, with equal distances in atom-index order.
 
     Raises:
-        ValueError: If no centre atoms are found, or if a list of n_coord
-            has incorrect length.
+        ValueError: If no centre atoms are found, if a list of n_coord
+            has incorrect length, or if ``lattice_matrix`` is singular.
     """
     if len(species) != len(frac_coords):
         raise ValueError(
@@ -90,23 +92,21 @@ def get_coordination_indices(
                             f"number of {centre_species} atoms ({len(centre_atoms)})")
         required_coord = n_coord
 
-    # Compute distance matrix between centre and coordinating atoms
-    if coord_atoms:
-        centre_coords = frac_coords[centre_atoms]
-        coord_coords = frac_coords[coord_atoms]
-        dist_matrix = all_mic_distances(centre_coords, coord_coords, lattice_matrix)
-    else:
-        dist_matrix = np.empty((len(centre_atoms), 0))
+    # Coordinating atoms within the cutoff of each centre, nearest first,
+    # with ties in index order. A negative or NaN cutoff finds none.
+    coordinating: list[list[int]] = [[] for _ in centre_atoms]
+    if coord_atoms and cutoff >= 0:
+        index = PeriodicNeighbourIndex(frac_coords[coord_atoms], lattice_matrix)
+        query_idx, point_idx, _ = index.query_within(frac_coords[centre_atoms], cutoff)
+        coord_indices = np.asarray(coord_atoms)[point_idx]
+        for i, j in zip(query_idx.tolist(), coord_indices.tolist()):
+            if j != centre_atoms[i]:
+                coordinating[i].append(j)
 
     complete_environments: dict[int, list[int]] = {}
-    for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
-        distances = dist_matrix[i]
-        within_cutoff = [(coord_atoms[j], float(distances[j]))
-                         for j in range(len(coord_atoms))
-                         if distances[j] <= cutoff and coord_atoms[j] != centre_idx]
-        if len(within_cutoff) == required:
-            within_cutoff.sort(key=lambda x: x[1])
-            complete_environments[centre_idx] = [idx for idx, _ in within_cutoff]
+    for centre_idx, required, neighbours in zip(centre_atoms, required_coord, coordinating):
+        if len(neighbours) == required:
+            complete_environments[centre_idx] = neighbours
 
     return complete_environments
 

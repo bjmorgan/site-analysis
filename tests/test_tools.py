@@ -524,6 +524,59 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         # Should be sorted by distance: 1.2, 1.5, 1.8
         self.assertEqual(environments[0], [2, 3, 1])
 
+    def test_equidistant_neighbours_in_index_order(self):
+        """Neighbours at equal distances are returned in index order."""
+        frac_coords = np.array([
+            [0.5, 0.5, 0.5],      # Na
+            [0.5, 0.5, 0.625],    # Cl - 1.25 A
+            [0.375, 0.5, 0.5],    # Cl - 1.25 A
+            [0.5, 0.625, 0.5],    # Cl - 1.25 A
+            [0.625, 0.5, 0.5],    # Cl - 1.25 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 10.0,
+            species=["Na", "Cl", "Cl", "Cl", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=2.0,
+            n_coord=4,
+        )
+        self.assertEqual(environments[0], [1, 2, 3, 4])
+
+    def test_centre_not_counted_as_its_own_neighbour(self):
+        """A centre atom of a coordinating species is not its own neighbour."""
+        frac_coords = np.array([
+            [0.0, 0.0, 0.0],    # Na (idx 0)
+            [0.1, 0.0, 0.0],    # Cl - 1.0 A from Na (idx 0)
+            [0.5, 0.5, 0.5],    # Na (idx 2), far from both
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 10.0,
+            species=["Na", "Cl", "Na"],
+            centre_species="Na",
+            coordination_species=["Na", "Cl"],
+            cutoff=2.0,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [1]})
+
+    def test_negative_or_nan_cutoff_finds_no_neighbours(self):
+        """A negative or NaN cutoff finds no coordinating atoms."""
+        for cutoff in (-1.0, float("nan")):
+            with self.subTest(cutoff=cutoff):
+                environments = get_coordination_indices(
+                    frac_coords=self.test_frac_coords,
+                    lattice_matrix=self.test_lattice_matrix,
+                    species=self.test_species,
+                    centre_species="Na",
+                    coordination_species="Cl",
+                    cutoff=cutoff,
+                    n_coord=0,
+                )
+                self.assertEqual(environments, {0: [], 1: [], 2: []})
+
     def test_cutoff_sensitivity(self):
         """Test sensitivity to cutoff distance."""
         # With 1.5 A cutoff, should find exactly 1 neighbour

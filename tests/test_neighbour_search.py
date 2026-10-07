@@ -79,5 +79,68 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
         self.assertEqual(len(index), 1)
 
 
+class TestQueryWithin(unittest.TestCase):
+    """Tests for PeriodicNeighbourIndex.query_within."""
+
+    def test_matches_brute_force(self):
+        """Pairs, distances and order match a search over every pair."""
+        rng = np.random.default_rng(1)
+        for name, lattice_matrix in CELLS.items():
+            points, query = random_points(rng)
+            index = PeriodicNeighbourIndex(points, lattice_matrix)
+            dense = brute_force_distances(query, points, lattice_matrix)
+            half_cell = np.linalg.norm(lattice_matrix, axis=1).min() / 2
+            for cutoff in (0.5, 1.5, 3.0, half_cell):
+                with self.subTest(cell=name, cutoff=cutoff):
+                    query_idx, point_idx, distances = index.query_within(query, cutoff)
+                    rows, cols = np.nonzero(dense <= cutoff)
+                    order = np.lexsort((cols, dense[rows, cols], rows))
+                    np.testing.assert_array_equal(query_idx, rows[order])
+                    np.testing.assert_array_equal(point_idx, cols[order])
+                    np.testing.assert_array_equal(distances, dense[rows, cols][order])
+
+    def test_equidistant_neighbours_in_index_order(self):
+        """Neighbours exactly at the cutoff are kept, in point-index order."""
+        points = shuffled_grid(np.random.default_rng(2))
+        lattice_matrix = np.eye(3) * 4.0
+        index = PeriodicNeighbourIndex(points, lattice_matrix)
+        # The centre of a grid cube is equidistant from its eight corners,
+        # and the cutoff is exactly that distance.
+        query = np.array([[0.125, 0.125, 0.125]])
+        cutoff = brute_force_distances(query, points, lattice_matrix).min()
+        query_idx, point_idx, distances = index.query_within(query, cutoff)
+        corners = np.nonzero(np.all(np.isin(points, [0.0, 0.25]), axis=1))[0]
+        np.testing.assert_array_equal(point_idx, np.sort(corners))
+        self.assertEqual(len(set(distances.tolist())), 1)
+
+    def test_invalid_cutoff_raises(self):
+        """A negative or NaN cutoff raises ValueError."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
+        for cutoff in (-0.1, float("nan")):
+            with self.subTest(cutoff=cutoff):
+                with self.assertRaises(ValueError):
+                    index.query_within(np.zeros((1, 3)), cutoff)
+
+    def test_wrong_query_shape_raises(self):
+        """Query coordinates that are not shaped (M, 3) raise ValueError."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
+        with self.assertRaises(ValueError):
+            index.query_within(np.zeros((1, 2)), 1.0)
+
+    def test_empty_queries_return_empty_arrays(self):
+        """No query points give empty arrays of the right types."""
+        index = PeriodicNeighbourIndex(np.zeros((3, 3)), np.eye(3))
+        query_idx, point_idx, distances = index.query_within(np.empty((0, 3)), 1.0)
+        self.assertEqual((query_idx.shape, point_idx.shape, distances.shape), ((0,), (0,), (0,)))
+        self.assertEqual((query_idx.dtype, point_idx.dtype, distances.dtype),
+                         (np.dtype(np.intp), np.dtype(np.intp), np.dtype(np.float64)))
+
+    def test_empty_index_returns_empty_arrays(self):
+        """An empty index finds no neighbours."""
+        index = PeriodicNeighbourIndex(np.empty((0, 3)), np.eye(3))
+        query_idx, point_idx, distances = index.query_within(np.zeros((2, 3)), 1.0)
+        self.assertEqual((len(query_idx), len(point_idx), len(distances)), (0, 0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,14 +9,24 @@ with memory that scales with the number of points and pairs found.
 
 from __future__ import annotations
 
+import itertools
+from collections.abc import Sequence
+from typing import cast
+
 import numpy as np
 from scipy.spatial import cKDTree
 
+from site_analysis.distances import paired_mic_distances
 
 # The rows of the normalised lattice are unit vectors, so a smallest
 # singular value below this means the lattice vectors are (almost)
 # coplanar.
 _MIN_SINGULAR_VALUE = 1e-8
+
+# Candidate searches are widened slightly so that rounding cannot drop a
+# neighbour. Exact distances then remove any extra candidates.
+_RELATIVE_TOLERANCE = 1e-9
+_ABSOLUTE_TOLERANCE = 1e-12
 
 
 def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
@@ -102,3 +112,75 @@ class PeriodicNeighbourIndex:
         # np.mod returns exactly 1.0 for tiny negative inputs, and cKDTree
         # rejects points on the far edge of the box.
         return np.where(scaled >= self._lengths, 0.0, scaled)
+
+    def _search_radius(self, distance: float | np.ndarray) -> float | np.ndarray:
+        """Return the tree search radius that covers a Cartesian distance.
+
+        Args:
+            distance: Cartesian distance, or one distance per query point.
+
+        Returns:
+            The radius in scaled coordinates, widened slightly for
+            rounding.
+        """
+        return distance / self._sigma_min * (1.0 + _RELATIVE_TOLERANCE) + _ABSOLUTE_TOLERANCE
+
+    def _candidates(self,
+            query_frac: np.ndarray,
+            radius: float | np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Find candidate pairs in the tree and compute their exact distances.
+
+        Args:
+            query_frac: Fractional coordinates of the query points,
+                shape (M, 3).
+            radius: Tree search radius, or one radius per query point.
+
+        Returns:
+            Tuple of ``(query_idx, point_idx, distances)``, one entry per
+            candidate pair, in no particular order.
+        """
+        if query_frac.shape[0] == 0 or len(self) == 0:
+            return np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp), np.empty(0)
+        # For an (M, 3) query, query_ball_point returns M lists of indices.
+        neighbour_lists = cast(Sequence[list[int]], self._tree.query_ball_point(
+            self._scaled(query_frac), radius, return_sorted=False))
+        counts = np.fromiter((len(n) for n in neighbour_lists),
+                             dtype=np.intp, count=len(neighbour_lists))
+        point_idx = np.fromiter(itertools.chain.from_iterable(neighbour_lists),
+                                dtype=np.intp, count=int(counts.sum()))
+        query_idx = np.repeat(np.arange(len(neighbour_lists), dtype=np.intp), counts)
+        distances = paired_mic_distances(
+            query_frac[query_idx], self._frac_coords[point_idx], self._lattice_matrix)
+        return query_idx, point_idx, distances
+
+    def query_within(self,
+            query_frac: np.ndarray,
+            cutoff: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Find the indexed points within a cutoff of each query point.
+
+        Args:
+            query_frac: Fractional coordinates of the query points,
+                shape (M, 3).
+            cutoff: Distance cutoff, in the units of the lattice matrix.
+                Pairs with a minimum-image distance ``<= cutoff``,
+                including those exactly at the cutoff, are returned.
+
+        Returns:
+            Tuple of ``(query_idx, point_idx, distances)``, one entry per
+            pair, sorted by query index, then distance, then point index.
+            Indices are ``np.intp`` arrays and distances a ``float64``
+            array.
+
+        Raises:
+            ValueError: If ``query_frac`` does not have shape (M, 3), or
+                ``cutoff`` is negative or NaN.
+        """
+        query_frac = _as_coords(query_frac, "query_frac")
+        if not cutoff >= 0:
+            raise ValueError(f"cutoff must be non-negative, got {cutoff}")
+        query_idx, point_idx, distances = self._candidates(
+            query_frac, self._search_radius(cutoff))
+        within = distances <= cutoff
+        query_idx, point_idx, distances = query_idx[within], point_idx[within], distances[within]
+        order = np.lexsort((point_idx, distances, query_idx))
+        return query_idx[order], point_idx[order], distances[order]

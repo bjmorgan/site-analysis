@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells of any shape. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point.
+- `site_analysis.distances.paired_mic_distances()`, for minimum-image distances between given pairs of points.
+
 ## [1.9.0] - 2026-10-05
 
 ### Added

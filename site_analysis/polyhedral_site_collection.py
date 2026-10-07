@@ -20,6 +20,8 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
+from collections import Counter, defaultdict
+
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
@@ -175,18 +177,22 @@ def construct_neighbouring_sites(
 
     Returns:
         (dict): Dictionary of `int`: `list` entries.
-            Keys are site indices. Values are lists of ``PolyhedralSite`` objects.
+            Keys are site indices. Values are lists of ``PolyhedralSite``
+            objects, in the order they appear in ``sites``.
 
     """
+    vertex_sets = [set(site.vertex_indices) for site in sites]
+    positions_by_vertex: defaultdict[int, list[int]] = defaultdict(list)
+    for position, vertices in enumerate(vertex_sets):
+        for vertex in vertices:
+            positions_by_vertex[vertex].append(position)
     neighbours: dict[int, list[PolyhedralSite]] = {}
-    for site_i in sites:
-        neighbours[site_i.index] = []
-        for site_j in sites:
-            if site_i is site_j:
-                continue
-            # 3 or more common vertices indicated a shared face.
-            n_shared_vertices = len(set(site_i.vertex_indices) & set(site_j.vertex_indices))
-            if n_shared_vertices >= 3:
-                neighbours[site_i.index].append(site_j)
+    for site_i, vertices in zip(sites, vertex_sets):
+        n_shared_vertices = Counter(
+            position for vertex in vertices for position in positions_by_vertex[vertex])
+        # 3 or more common vertices indicate a shared face.
+        neighbours[site_i.index] = [
+            sites[position] for position in sorted(n_shared_vertices)
+            if n_shared_vertices[position] >= 3 and sites[position] is not site_i]
     return neighbours
  

@@ -90,8 +90,8 @@ class PeriodicNeighbourIndex:
 
         Raises:
             ValueError: If ``frac_coords`` does not have shape (N, 3), or
-                ``lattice_matrix`` does not have shape (3, 3) or is
-                singular or nearly so.
+                ``lattice_matrix`` does not have shape (3, 3), is not
+                finite, or is singular or nearly so.
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
@@ -99,6 +99,8 @@ class PeriodicNeighbourIndex:
             raise ValueError(
                 f"lattice_matrix must have shape (3, 3), got {self._lattice_matrix.shape}"
             )
+        if not np.all(np.isfinite(self._lattice_matrix)):
+            raise ValueError("lattice_matrix must be finite")
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
         if np.any(self._lengths == 0.0):
             raise ValueError("lattice_matrix must be non-singular, but has a zero-length row")

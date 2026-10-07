@@ -73,12 +73,13 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
         self.assertAlmostEqual(distances[0], 1.0)
 
     def test_rejects_invalid_lattice(self):
-        """A lattice matrix that is not (3, 3), or is singular, raises ValueError."""
+        """A lattice matrix that is not (3, 3), not finite, or singular raises ValueError."""
         lattices = {
             "(2, 2)": np.eye(2),
             "(3, 4)": np.eye(3, 4),
             "zero-length vector": np.diag([1.0, 1.0, 0.0]),
             "coplanar vectors": np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]),
+            "non-finite": np.diag([1.0, 1.0, np.nan]),
         }
         for name, lattice_matrix in lattices.items():
             with self.subTest(lattice=name):

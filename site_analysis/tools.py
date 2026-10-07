@@ -441,10 +441,8 @@ def calculate_species_distances(
         if not idx1 or not idx2:
             continue
 
-        coords1 = frac_coords1[idx1]
-        coords2 = frac_coords2[idx2]
-        dist_matrix = all_mic_distances(coords1, coords2, lattice_matrix)
-        min_dists = np.min(dist_matrix, axis=1).tolist()
+        index = PeriodicNeighbourIndex(frac_coords2[idx2], lattice_matrix)
+        min_dists = index.query_nearest(frac_coords1[idx1])[1].tolist()
 
         species_distances[sp] = min_dists
         all_distances.extend(min_dists)

@@ -357,3 +357,40 @@ class TestNumbaAcceleration(unittest.TestCase):
         with patch.object(dist_mod, 'HAS_NUMBA', False):
             numpy_result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
         np.testing.assert_allclose(numba_result, numpy_result, rtol=0, atol=1e-12)
+
+    def test_small_and_large_batches_agree(self):
+        """Small batches, on one thread, and large batches, in parallel, give identical distances."""
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(7)
+        n = 2 * dist_mod._PARALLEL_MIN_PAIRS
+        frac1 = rng.uniform(-2.0, 3.0, (n, 3))
+        frac2 = rng.uniform(-2.0, 3.0, (n, 3))
+        small_n = dist_mod._PARALLEL_MIN_PAIRS - 1
+        large = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
+        small = dist_mod.paired_mic_distances(frac1[:small_n], frac2[:small_n], lattice.matrix)
+        np.testing.assert_array_equal(small, large[:small_n])
+
+    def test_small_batches_use_serial_kernel(self):
+        """Batches below the parallel threshold use the single-threaded kernel."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.cubic(10.0)
+        rng = np.random.default_rng(8)
+        n = dist_mod._PARALLEL_MIN_PAIRS - 1
+        with patch.object(dist_mod, '_paired_mic_distances_parallel',
+                          side_effect=AssertionError("parallel kernel used")):
+            dist_mod.paired_mic_distances(
+                rng.random((n, 3)), rng.random((n, 3)), lattice.matrix)
+
+    def test_large_batches_use_parallel_kernel(self):
+        """Batches at or above the parallel threshold use the parallel kernel."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.cubic(10.0)
+        rng = np.random.default_rng(8)
+        n = dist_mod._PARALLEL_MIN_PAIRS
+        with patch.object(dist_mod, '_paired_mic_distances_serial',
+                          side_effect=AssertionError("serial kernel used")):
+            dist_mod.paired_mic_distances(
+                rng.random((n, 3)), rng.random((n, 3)), lattice.matrix)

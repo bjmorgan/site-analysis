@@ -1627,6 +1627,24 @@ class TestBuilderValidation(unittest.TestCase):
 		traj = builder.build()
 		self.assertGreater(len(traj.sites), 0)
 
+	def test_reports_closest_pair(self):
+		"""The error names the closest same-species pair and its distance."""
+		ref = Structure(
+			Lattice.cubic(10.0), ["O", "Li", "Li", "Li", "Li"],
+			[[0.25, 0.25, 0.25], [0.0, 0.0, 0.0], [0.03, 0.0, 0.0],
+			 [0.5, 0.5, 0.5], [0.51, 0.5, 0.5]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("indices 3 and 4 that are only 0.100 apart", str(ctx.exception))
+
+	def test_pair_at_threshold_passes(self):
+		"""A pair exactly at the minimum distance does not raise."""
+		ref = Structure(
+			Lattice.cubic(8.0), ["Li", "Li"], [[0.0, 0.0, 0.0], [0.0625, 0.0, 0.0]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		builder._validate_reference_atom_distances()
+
 	def test_valid_reference_passes(self):
 		"""A correct reference structure passes validation."""
 		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])  # 48h — no close pairs

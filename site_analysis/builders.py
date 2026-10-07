@@ -700,7 +700,7 @@ class TrajectoryBuilder:
     def _validate_reference_atom_distances(self) -> None:
         """Check that no same-species atom pairs in the reference
         structure are closer than ``_min_atom_distance``."""
-        from site_analysis.distances import all_mic_distances
+        from site_analysis.neighbour_search import PeriodicNeighbourIndex
         from site_analysis.tools import indices_for_species
 
         ref = self._reference_structure
@@ -708,19 +708,21 @@ class TrajectoryBuilder:
         species_list = [s.species_string for s in ref]  # type: ignore[union-attr]
         frac_coords = np.array(ref.frac_coords)  # type: ignore[union-attr]
 
-        for sp in set(species_list):
+        for sp in sorted(set(species_list)):
             indices = indices_for_species(species_list, sp)
             if len(indices) < 2:
                 continue
 
             coords = frac_coords[indices]
-            dists = all_mic_distances(coords, coords, lattice_matrix)
-            np.fill_diagonal(dists, np.inf)
-
-            min_dist = float(np.min(dists))
-            if min_dist < self._min_atom_distance:
-                i_local, j_local = np.unravel_index(
-                    int(np.argmin(dists)), dists.shape)
+            index = PeriodicNeighbourIndex(coords, lattice_matrix)
+            i, j, dists = index.query_within(coords, self._min_atom_distance)
+            close = (i != j) & (dists < self._min_atom_distance)
+            if np.any(close):
+                # The closest pair, with ties broken by the lower indices.
+                i, j, dists = i[close], j[close], dists[close]
+                closest = np.lexsort((j, i, dists))[0]
+                i_local, j_local = i[closest], j[closest]
+                min_dist = float(dists[closest])
                 raise ValueError(
                     f"Reference structure has {sp} atoms at indices "
                     f"{indices[i_local]} and {indices[j_local]} that are "

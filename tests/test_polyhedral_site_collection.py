@@ -678,7 +678,7 @@ class TestGetPrioritySites(unittest.TestCase):
 
     def test_yields_neighbours_after_transitions_without_reference_centres(self):
         """Without reference centres, neighbours are yielded after transitions."""
-        self.assertIsNone(self.collection._distance_ranked_sites)
+        self.assertIsNone(self.collection._distance_ranking)
         self.atom._recent_sites = [self.site1.index, None]
 
         with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
@@ -746,9 +746,9 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
         self.atoms = atoms_from_structure(self.structure, "Li")
         self.atom = self.atoms[0]
 
-    def test_distance_ranked_sites_computed(self):
-        """Distance-ranked sites are computed when reference centres are available."""
-        self.assertIsNotNone(self.collection._distance_ranked_sites)
+    def test_distance_ranking_set_up(self):
+        """Distance ranking is set up when reference centres are available."""
+        self.assertIsNotNone(self.collection._distance_ranking)
         self.assertIsNotNone(self.collection._nearest_site_lookup)
 
     def test_remaining_sites_ordered_by_distance(self):

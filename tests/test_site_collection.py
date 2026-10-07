@@ -296,15 +296,30 @@ class TestInitPriorityRanking(unittest.TestCase):
 
         # From site_a at 0.05: site_c at 0.95 is 0.1 away via PBC, site_b is 0.45
         self.assertEqual(
-            collection._distance_ranked_sites[site_a.index],
+            collection._distance_ranking.ranked_site_indices(site_a.index),
             [site_c.index, site_b.index],
         )
+
+    def test_ranking_uses_site_indices_for_any_anchor(self):
+        """Rankings map between site indices and positions for any anchor site."""
+        indices = [12, 5, 31, 8]
+        x_coords = [0.0, 0.2, 0.45, 0.62]
+        sites = [Mock(spec=Site, index=i, frac_coords=np.array([x, 0.0, 0.0]))
+                 for i, x in zip(indices, x_coords)]
+        for site in sites:
+            site.reset = Mock()
+        collection = ConcretePriorityCollection(sites)
+        centres = np.array([s.frac_coords for s in collection.sites])
+        collection._init_priority_ranking(centres, [s.index for s in collection.sites])
+
+        # From site 31 at 0.45: site 8 is 0.17 away, site 5 is 0.25 and site 12 is 0.45.
+        self.assertEqual(collection._distance_ranking.ranked_site_indices(31), [8, 5, 12])
 
     def test_empty_sites_is_noop(self):
         """Calling _init_priority_ranking with empty centres does nothing."""
         collection = ConcretePriorityCollection([])
         collection._init_priority_ranking(np.empty((0, 3)), [])
-        self.assertIsNone(collection._distance_ranked_sites)
+        self.assertIsNone(collection._distance_ranking)
         self.assertIsNone(collection._nearest_site_lookup)
 
 

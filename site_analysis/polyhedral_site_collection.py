@@ -9,8 +9,7 @@ specific functionality for polyhedral sites, including:
 
 - Maintaining a map of neighbouring polyhedral sites that share faces
 - Optimised atom assignment via the PriorityAssignmentMixin
-- Precomputed distance-ranked site ordering when reference centres are
-  available
+- Distance-ranked site ordering when reference centres are available
 
 The module also includes utility functions:
 

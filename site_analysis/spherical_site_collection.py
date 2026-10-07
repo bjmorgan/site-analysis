@@ -7,8 +7,7 @@ atoms to these sites based on their positions in a crystal structure.
 The SphericalSiteCollection extends the base SiteCollection class with
 specific functionality for spherical sites. Optimised atom assignment is
 provided by the PriorityAssignmentMixin, which leverages recent site
-history, learned transition patterns, and precomputed distance-ranked site
-ordering.
+history, learned transition patterns, and distance-ranked site ordering.
 
 This handles overlapping spherical sites in a consistent way -- if an atom
 is in a region where multiple sites overlap, it will remain assigned to its
@@ -31,7 +30,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         """A collection of SphericalSite objects with optimised atom assignment.
 
         Extends the base SiteCollection class with specific functionality for
-        spherical sites, using precomputed distance-ranked site ordering for
+        spherical sites, using distance-ranked site ordering for
         optimised atom assignment via the PriorityAssignmentMixin.
 
         Args:

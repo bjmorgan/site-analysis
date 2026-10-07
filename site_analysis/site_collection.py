@@ -11,6 +11,8 @@ This module defines:
   to its nearest site centre (Voronoi, dynamic Voronoi).
 - ``_NearestSiteLookup``: precomputed lookup for finding the nearest
   site to a given position.
+- ``_DistanceRanking``: site centres for ranking sites by distance from
+  an anchor site.
 """
 
 from __future__ import annotations
@@ -50,6 +52,36 @@ class _NearestSiteLookup(NamedTuple):
         return self.site_indices[int(np.argmin(dists))]
 
 
+class _DistanceRanking(NamedTuple):
+    """Site centres for ranking sites by distance from an anchor site.
+
+    Each ranking is computed when requested. Uses minimum-image
+    convention in fractional space, which is only geometrically exact for
+    orthogonal cells.
+    """
+    centres: np.ndarray
+    site_indices: np.ndarray
+    positions: dict[int, int]
+
+    def ranked_site_indices(self, anchor_index: int) -> list[int]:
+        """Return every other site index, nearest to the anchor site first.
+
+        Args:
+            anchor_index: Index of the site to rank from.
+
+        Returns:
+            Indices of all sites except the anchor, ordered by the
+            distance between their centres and the anchor's centre.
+        """
+        i = self.positions[anchor_index]
+        diffs = self.centres - self.centres[i]
+        diffs -= np.round(diffs)
+        dists = np.linalg.norm(diffs, axis=1)
+        order = np.argsort(dists)
+        ranked: list[int] = self.site_indices[order[order != i]].tolist()
+        return ranked
+
+
 SiteT = TypeVar('SiteT', bound=Site)
 
 
@@ -58,7 +90,7 @@ class PriorityAssignmentMixin(Generic[SiteT]):
 
     Provides ``_get_priority_sites(atom)``, a generator that yields sites
     in an optimised order based on recent site history, learned transitions,
-    and precomputed distance ranking.
+    and distance ranking.
 
     Subclasses call ``_init_priority_ranking(centres, site_indices)`` from
     their ``__init__`` to enable distance-ranked ordering. If not called,
@@ -84,11 +116,11 @@ class PriorityAssignmentMixin(Generic[SiteT]):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._distance_ranked_sites: dict[int, list[int]] | None = None
+        self._distance_ranking: _DistanceRanking | None = None
         self._nearest_site_lookup: _NearestSiteLookup | None = None
 
     def _init_priority_ranking(self, centres: np.ndarray, site_indices: list[int]) -> None:
-        """Precompute distance-ranked site ordering from the given centres.
+        """Set up distance-ranked site ordering from the given centres.
 
         Does nothing if ``centres`` is empty (zero sites).
 
@@ -98,14 +130,11 @@ class PriorityAssignmentMixin(Generic[SiteT]):
         """
         if len(centres) == 0:
             return
-        ranked: dict[int, list[int]] = {}
-        for i, idx in enumerate(site_indices):
-            diffs = centres - centres[i]
-            diffs -= np.round(diffs)
-            dists = np.linalg.norm(diffs, axis=1)
-            order = np.argsort(dists)
-            ranked[idx] = [site_indices[j] for j in order if j != i]
-        self._distance_ranked_sites = ranked
+        self._distance_ranking = _DistanceRanking(
+            centres=centres,
+            site_indices=np.asarray(site_indices),
+            positions={idx: i for i, idx in enumerate(site_indices)},
+        )
         self._nearest_site_lookup = _NearestSiteLookup(
             centres=centres, site_indices=site_indices
         )
@@ -164,8 +193,8 @@ class PriorityAssignmentMixin(Generic[SiteT]):
                     checked_indices.add(dest_index)
 
             # Remaining sites
-            if self._distance_ranked_sites is not None:
-                for index in self._distance_ranked_sites[anchor_index]:
+            if self._distance_ranking is not None:
+                for index in self._distance_ranking.ranked_site_indices(anchor_index):
                     if index not in checked_indices:
                         yield self.site_by_index(index)
                         checked_indices.add(index)

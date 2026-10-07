@@ -102,6 +102,47 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		self.assertIn(atom1.index, site1.contains_atoms)
 		self.assertIn(atom2.index, site2.contains_atoms)
 		
+	def test_assigns_atom_to_nearest_centre_across_boundary(self):
+		"""An atom near one face is assigned to the nearest centre across the boundary."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1._centre_coords = np.array([0.1, 0.1, 0.1])
+		site2._centre_coords = np.array([0.5, 0.5, 0.5])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.95, 0.95, 0.95])
+		collection.assign_site_occupations([atom], Lattice.cubic(10.0).matrix)
+		self.assertEqual(site1.contains_atoms, [0])
+		self.assertEqual(site2.contains_atoms, [])
+
+	def test_equidistant_atom_assigned_to_first_site(self):
+		"""An atom equidistant from two centres is assigned to the first."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1._centre_coords = np.array([0.25, 0.5, 0.5])
+		site2._centre_coords = np.array([0.75, 0.5, 0.5])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.5, 0.5, 0.5])
+		collection.assign_site_occupations([atom], Lattice.cubic(10.0).matrix)
+		self.assertEqual(site1.contains_atoms, [0])
+		self.assertEqual(site2.contains_atoms, [])
+
+	def test_nearest_centre_uses_the_lattice(self):
+		"""Distances to centres are Cartesian, so the shape of the lattice matters."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		# Nearer site1 in fractional coordinates, but nearer site2 in
+		# Cartesian coordinates (1.2 A against 4.0 A).
+		site1._centre_coords = np.array([0.5, 0.5, 0.3])
+		site2._centre_coords = np.array([0.2, 0.5, 0.5])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.5, 0.5, 0.5])
+		collection.assign_site_occupations([atom], Lattice.orthorhombic(4.0, 4.0, 20.0).matrix)
+		self.assertEqual(site1.contains_atoms, [])
+		self.assertEqual(site2.contains_atoms, [0])
+
 	def test_empty_atoms_list(self):
 		"""Test that assign_site_occupations correctly handles empty atom lists."""
 		# Create sites with pre-populated contains_atoms

@@ -10,10 +10,10 @@ logic than other site collections:
 
 For atom assignment, the collection:
 
-1. Calculates distances from each site centre to each atom
-2. Assigns each atom to the site with the nearest centre
-3. Uses minimum-image convention distances to correctly handle periodic
-   boundaries
+1. Finds the nearest site centre to each atom with a periodic neighbour
+   search, using minimum-image distances
+2. Assigns each atom to the site with the nearest centre, or to the first
+   such site when several centres are equally close
 
 Unlike other site types where individual sites can determine containment,
 Voronoi site assignment is a global operation that depends on the relative
@@ -28,7 +28,7 @@ from site_analysis.site_collection import SiteCollection
 from site_analysis.atom import Atom
 from site_analysis.site import Site
 from site_analysis.voronoi_site import VoronoiSite
-from site_analysis.distances import all_mic_distances
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 class VoronoiSiteCollection(SiteCollection):
 
@@ -79,7 +79,8 @@ class VoronoiSiteCollection(SiteCollection):
         """Assign atoms to Voronoi sites based on closest site centres.
 
         Uses minimum-image convention distances to assign each atom to the
-        nearest site centre.
+        nearest site centre. An atom equally close to several centres is
+        assigned to the first of those sites.
 
 
         Args:
@@ -92,8 +93,8 @@ class VoronoiSiteCollection(SiteCollection):
             return
         site_coords = np.array([s.frac_coords for s in self.sites])
         atom_coords = np.array([a.frac_coords for a in atoms])
-        dist_matrix = all_mic_distances(site_coords, atom_coords, lattice_matrix)
-        site_list_indices = np.argmin(dist_matrix, axis=0)
+        site_list_indices, _ = PeriodicNeighbourIndex(
+            site_coords, lattice_matrix).query_nearest(atom_coords)
         for atom, site_list_index in zip(atoms, site_list_indices):
             site = self.sites[site_list_index]
             self.update_occupation(site, atom)

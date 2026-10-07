@@ -14,10 +14,10 @@ For atom assignment, the collection:
 
 1. First updates each site's centre by calculating the mean position of its
    reference atoms, with special handling for periodic boundary conditions
-2. Calculates distances from each (dynamically determined) site centre to each atom
-3. Assigns each atom to the site with the nearest centre
-4. Uses minimum-image convention distances to correctly handle periodic
-   boundaries
+2. Finds the nearest (dynamically determined) site centre to each atom with
+   a periodic neighbour search, using minimum-image distances
+3. Assigns each atom to the site with the nearest centre, or to the first
+   such site when several centres are equally close
 
 This collection is particularly useful for tracking sites in frameworks
 that deform during simulation, as the site centres adapt to the changing
@@ -36,7 +36,7 @@ from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
-from site_analysis.distances import all_mic_distances
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 
 @dataclass
@@ -225,7 +225,8 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         """Assign atoms to sites based on Voronoi tessellation.
 
         Uses minimum-image convention distances to assign each atom
-        to the nearest site centre.
+        to the nearest site centre. An atom equally close to several
+        centres is assigned to the first of those sites.
 
         Args:
             atoms: List of atoms to be assigned to sites.
@@ -237,8 +238,8 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             return
         site_coords = np.array([site.centre for site in self.sites])
         atom_coords = np.array([atom.frac_coords for atom in atoms])
-        dist_matrix = all_mic_distances(site_coords, atom_coords, lattice_matrix)
-        site_list_indices = np.argmin(dist_matrix, axis=0)
+        site_list_indices, _ = PeriodicNeighbourIndex(
+            site_coords, lattice_matrix).query_nearest(atom_coords)
         for atom, site_list_index in zip(atoms, site_list_indices):
             site = self.sites[site_list_index]
             self.update_occupation(site, atom)

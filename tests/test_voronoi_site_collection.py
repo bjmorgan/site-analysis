@@ -74,29 +74,38 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 			self.assertIs(args[0], self.atoms)
 			np.testing.assert_array_equal(args[1], self.structure.lattice.matrix)
 	
-	def test_assign_site_occupations_distance_matrix(self):
-		"""Test that assign_site_occupations uses distance matrix correctly."""
-		self.collection.reset_site_occupations()
-		distance_matrix = np.array([
-			[1.0, 5.0],  # site1 is closer to atom1
-			[5.0, 1.0]   # site2 is closer to atom2
-		])
+	def test_assigns_atoms_to_nearest_site(self):
+		"""Each atom is assigned to the site with the nearest centre, across boundaries."""
+		atom3 = Atom(index=2)
+		atom3._frac_coords = np.array([0.95, 0.95, 0.95])  # nearest site1 through the boundary
+		self.collection.assign_site_occupations(
+			[self.atom1, self.atom2, atom3], self.lattice.matrix)
+		self.assertEqual(self.site1.contains_atoms, [0, 2])
+		self.assertEqual(self.site2.contains_atoms, [1])
 
-		with patch('site_analysis.voronoi_site_collection.all_mic_distances',
-				   return_value=distance_matrix) as mock_distances, \
-			 patch.object(self.collection, 'update_occupation') as mock_update:
-
-			self.collection.assign_site_occupations(
-				self.atoms, self.structure.lattice.matrix)
-
-			mock_distances.assert_called_once()
-			args = mock_distances.call_args[0]
-			np.testing.assert_array_equal(args[0], np.array([s.frac_coords for s in self.collection.sites]))
-			np.testing.assert_array_equal(args[1], np.array([a.frac_coords for a in self.atoms]))
-			np.testing.assert_array_equal(args[2], self.structure.lattice.matrix)
-			mock_update.assert_any_call(self.site1, self.atom1)
-			mock_update.assert_any_call(self.site2, self.atom2)
-			self.assertEqual(mock_update.call_count, 2)
+	def test_equidistant_atom_assigned_to_first_site(self):
+		"""An atom equidistant from two sites is assigned to the first."""
+		site_a = VoronoiSite(frac_coords=np.array([0.25, 0.5, 0.5]))
+		site_b = VoronoiSite(frac_coords=np.array([0.75, 0.5, 0.5]))
+		collection = VoronoiSiteCollection(sites=[site_a, site_b])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.5, 0.5, 0.5])
+		collection.assign_site_occupations([atom], self.lattice.matrix)
+		self.assertEqual(site_a.contains_atoms, [0])
+		self.assertEqual(site_b.contains_atoms, [])
+	
+	def test_nearest_site_uses_the_lattice(self):
+		"""Distances to sites are Cartesian, so the shape of the lattice matters."""
+		# Nearer site_a in fractional coordinates, but nearer site_b in
+		# Cartesian coordinates (1.2 A against 4.0 A).
+		site_a = VoronoiSite(frac_coords=np.array([0.5, 0.5, 0.3]))
+		site_b = VoronoiSite(frac_coords=np.array([0.2, 0.5, 0.5]))
+		collection = VoronoiSiteCollection(sites=[site_a, site_b])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.5, 0.5, 0.5])
+		collection.assign_site_occupations([atom], Lattice.orthorhombic(4.0, 4.0, 20.0).matrix)
+		self.assertEqual(site_a.contains_atoms, [])
+		self.assertEqual(site_b.contains_atoms, [0])
 	
 	def test_empty_atoms_list(self):
 		"""Test behaviour with empty atoms list."""

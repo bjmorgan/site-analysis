@@ -217,6 +217,63 @@ class TestAllMicDistances(unittest.TestCase):
         self.assertEqual(result.shape, (1, 0))
 
 
+class TestPairedMicDistances(unittest.TestCase):
+    """Tests for minimum-image distances between paired points."""
+
+    def test_matches_pymatgen_cubic(self):
+        """Distances match pymatgen for a cubic lattice, across boundaries."""
+        from site_analysis.distances import paired_mic_distances
+        lattice = Lattice.cubic(10.0)
+        frac1 = np.array([[0.1, 0.2, 0.3], [0.05, 0.5, 0.5]])
+        frac2 = np.array([[0.9, 0.1, 0.5], [0.95, 0.5, 0.5]])
+        expected = [lattice.get_distance_and_image(a, b)[0] for a, b in zip(frac1, frac2)]
+        result = paired_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_matches_pymatgen_triclinic(self):
+        """Distances match pymatgen for a triclinic lattice."""
+        from site_analysis.distances import paired_mic_distances
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.random((20, 3))
+        frac2 = rng.random((20, 3))
+        expected = [lattice.get_distance_and_image(a, b)[0] for a, b in zip(frac1, frac2)]
+        result = paired_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_coords_many_cells_away(self):
+        """Coordinates differing by many unit cells produce correct distances."""
+        from site_analysis.distances import paired_mic_distances
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        frac1 = np.array([[50.3, -100.7, 25.1], [0.1, 0.2, 0.3]])
+        frac2 = np.array([[0.1, 0.2, 0.3], [-50.4, 75.9, -10.8]])
+        expected = [lattice.get_distance_and_image(a, b)[0] for a, b in zip(frac1, frac2)]
+        result = paired_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_empty_input_returns_empty(self):
+        """Empty inputs give an empty array of distances."""
+        from site_analysis.distances import paired_mic_distances
+        lattice = Lattice.cubic(10.0)
+        result = paired_mic_distances(np.empty((0, 3)), np.empty((0, 3)), lattice.matrix)
+        self.assertEqual(result.shape, (0,))
+
+    def test_wrong_shapes_raise_value_error(self):
+        """Coordinates not both shaped (K, 3), or a lattice not (3, 3), raise ValueError."""
+        from site_analysis.distances import paired_mic_distances
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        cases = [
+            (np.zeros((2, 3)), np.zeros((3, 3)), lattice_matrix),
+            (np.zeros((2, 2)), np.zeros((2, 2)), lattice_matrix),
+            (np.zeros(3), np.zeros(3), lattice_matrix),
+            (np.zeros((2, 3)), np.zeros((2, 3)), np.eye(2)),
+        ]
+        for frac1, frac2, lattice in cases:
+            with self.subTest(frac1_shape=frac1.shape, lattice_shape=lattice.shape):
+                with self.assertRaises(ValueError):
+                    paired_mic_distances(frac1, frac2, lattice)
+
+
 class TestNumpyFallback(unittest.TestCase):
     """Tests that numpy fallback paths are correct regardless of numba."""
 
@@ -247,6 +304,19 @@ class TestNumpyFallback(unittest.TestCase):
             result = dist_mod.all_mic_distances(frac1, frac2, lattice.matrix)
         np.testing.assert_allclose(result, expected, atol=1e-10)
 
+    def test_paired_mic_distances_numpy_fallback_matches_pymatgen(self):
+        """Numpy paired_mic_distances fallback produces correct results."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.random((20, 3))
+        frac2 = rng.random((20, 3))
+        expected = [lattice.get_distance_and_image(a, b)[0] for a, b in zip(frac1, frac2)]
+        with patch.object(dist_mod, 'HAS_NUMBA', False):
+            result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(result, expected, atol=1e-10)
+
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
 class TestNumbaAcceleration(unittest.TestCase):
@@ -274,3 +344,16 @@ class TestNumbaAcceleration(unittest.TestCase):
         expected = lattice.get_all_distances(frac1, frac2)
         result = _all_mic_distances_numba(frac1, frac2, lattice.matrix)
         np.testing.assert_allclose(result, expected, atol=1e-10)
+
+    def test_paired_mic_distances_numba_matches_numpy(self):
+        """Numba and numpy paired distances agree to within rounding."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        rng = np.random.default_rng(42)
+        frac1 = rng.uniform(-2.0, 3.0, (200, 3))
+        frac2 = rng.uniform(-2.0, 3.0, (200, 3))
+        numba_result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
+        with patch.object(dist_mod, 'HAS_NUMBA', False):
+            numpy_result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
+        np.testing.assert_allclose(numba_result, numpy_result, rtol=0, atol=1e-12)

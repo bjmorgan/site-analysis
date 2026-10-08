@@ -221,16 +221,21 @@ class ToolsTestCase(unittest.TestCase):
         np.testing.assert_array_equal(mapping, np.array([1]))
 
     def test_site_index_mapping_with_no_selected_atoms(self):
-        """When no atoms pass species1_filter, empty arrays are returned."""
+        """When no atoms pass species1_filter, empty arrays are returned.
+
+        The mapping has an integer dtype, so that it can be used as indices.
+        """
         lattice_matrix = np.eye(3) * 5.0
         coords = np.array([[0.1, 0.1, 0.1]])
         mapping = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
                                      species1_filter='Cl')
         self.assertEqual(mapping.shape, (0,))
+        self.assertTrue(np.issubdtype(mapping.dtype, np.integer))
         mapping, distances = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
                                                 species1_filter='Cl',
                                                 return_mapping_distances=True)
         self.assertEqual((mapping.shape, distances.shape), ((0,), (0,)))
+        self.assertTrue(np.issubdtype(mapping.dtype, np.integer))
 
     def test_site_index_mapping_tie_maps_to_lowest_index(self):
         """An atom equidistant from two atoms maps to the one with the lower index."""

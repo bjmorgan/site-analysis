@@ -367,15 +367,14 @@ def site_index_mapping(
     queries = [i for i, s in enumerate(species1) if s in species1_filter]
     nearest, distances = PeriodicNeighbourIndex(
         frac_coords2[candidates], lattice_matrix).query_nearest(frac_coords1[queries])
-    to_return = candidates[nearest].tolist()
-    dr_ij_to_return = distances.tolist()
+    mapping: np.ndarray = candidates[nearest]
     if one_to_one_mapping:
-        if len(to_return) != len(set(to_return)):
+        if len(mapping) != len(set(mapping.tolist())):
             raise ValueError("One-to-one mapping between structures not found.")
     if return_mapping_distances:
-        return np.array(to_return), np.array(dr_ij_to_return)
+        return mapping, distances
     else:
-        return np.array(to_return)
+        return mapping
         
 def indices_for_species(
     all_species: list[str],

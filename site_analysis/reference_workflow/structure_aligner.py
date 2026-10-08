@@ -63,8 +63,8 @@ class StructureAligner:
             measures.
 
         Raises:
-            ValueError: If structures have incompatible compositions or
-                if optimisation fails.
+            ValueError: If structures have incompatible compositions, if
+                ``species`` is empty, or if optimisation fails.
         """
         # Extract arrays from Structure at the public boundary
         ref_frac_coords = reference.frac_coords
@@ -188,6 +188,8 @@ class StructureAligner:
             species_to_use = sorted(ref_counts.keys())
         else:
             species_to_use = species
+        if not species_to_use:
+            raise ValueError("No species to align on")
 
         for sp in species_to_use:
             ref_count = sum(1 for s in ref_species if s == sp)

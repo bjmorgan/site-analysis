@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `get_nearest_neighbour_indices()` no longer raises when `n_coord` equals the number of atoms matching `vertex_species`. Previously, it raised a `ValueError` from numpy.
 - `TrajectoryBuilder.with_min_atom_distance()` now raises `ValueError` for NaN. Previously, NaN silently turned off the close-pair check.
 - `site_index_mapping()` now returns integer indices when nothing matches `species1_filter`. Previously, it returned an empty float array, which could not be used as indices.
+- `StructureAligner.align()` now raises `ValueError` when `species` is empty. Previously, the optimisation ran without any atoms to compare and failed with an unrelated error.
 
 ## [1.9.0] - 2026-10-05
 

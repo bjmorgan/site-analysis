@@ -385,6 +385,14 @@ class TestStructureAligner(unittest.TestCase):
             aligner._validate_structures(species_a, species_c, ["Na"])
         self.assertIn("Different number of Na atoms", str(context.exception))
         
+    def test_empty_species_raises(self):
+        """An empty species list is rejected before optimisation."""
+        structure = Structure(Lattice.cubic(5.0), ["Na", "Cl"],
+                              [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        with self.assertRaises(ValueError) as context:
+            StructureAligner().align(structure, structure.copy(), species=[])
+        self.assertIn("No species to align on", str(context.exception))
+
     def test_tolerance_passed_to_minimizer(self):
         """Test that the tolerance parameter is correctly passed to the minimizer."""
         # Create mock structures that support iteration and array extraction

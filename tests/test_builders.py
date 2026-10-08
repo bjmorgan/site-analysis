@@ -1645,6 +1645,16 @@ class TestBuilderValidation(unittest.TestCase):
 			builder._validate_reference_atom_distances()
 		self.assertIn("indices 3 and 4 that are only 0.100 apart", str(ctx.exception))
 
+	def test_reports_first_species_in_sorted_order(self):
+		"""With close pairs in two species, the error names the first in sorted order."""
+		ref = Structure(
+			Lattice.cubic(10.0), ["Na", "Na", "Cl", "Cl"],
+			[[0.0, 0.0, 0.0], [0.01, 0.0, 0.0], [0.5, 0.5, 0.5], [0.51, 0.5, 0.5]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("has Cl atoms", str(ctx.exception))
+
 	def test_pair_at_threshold_passes(self):
 		"""A pair exactly at the minimum distance does not raise."""
 		ref = Structure(

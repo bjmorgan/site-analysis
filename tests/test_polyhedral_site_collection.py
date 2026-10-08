@@ -92,6 +92,11 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         # Test initialisation with mixed site types
         with self.assertRaises(TypeError):
             PolyhedralSiteCollection(sites=mixed_sites)
+
+    def test_init_accepts_a_generator_of_sites(self):
+        """A collection built from a generator holds every site."""
+        collection = PolyhedralSiteCollection(s for s in [self.site1, self.site2, self.site3])
+        self.assertEqual(collection.sites, [self.site1, self.site2, self.site3])
     
     def test_analyse_structure(self):
         """Test that analyse_structure notifies sites and updates occupations."""

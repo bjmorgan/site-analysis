@@ -61,6 +61,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             None
 
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, PolyhedralSite):
                 raise TypeError(f"Expected PolyhedralSite, got {type(s).__name__}")

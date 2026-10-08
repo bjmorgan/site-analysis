@@ -43,6 +43,7 @@ class VoronoiSiteCollection(SiteCollection):
             None
 
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, VoronoiSite):
                 raise TypeError

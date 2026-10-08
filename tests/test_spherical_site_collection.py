@@ -70,6 +70,11 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             SphericalSiteCollection(sites=mixed_sites)
 
+    def test_init_accepts_a_generator_of_sites(self):
+        """A collection built from a generator holds every site."""
+        collection = SphericalSiteCollection(s for s in [self.site1, self.site2])
+        self.assertEqual(collection.sites, [self.site1, self.site2])
+
     def test_analyse_structure(self):
         """Test that analyse_structure calls assign_coords and assign_site_occupations."""
         # Patch the methods we want to verify

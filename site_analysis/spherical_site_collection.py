@@ -40,6 +40,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
             sites (list): List of ``SphericalSite`` objects.
 
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, SphericalSite):
                 raise TypeError(f"Expected SphericalSite, got {type(s).__name__}")

@@ -141,6 +141,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         Raises:
             TypeError: If any of the sites is not a DynamicVoronoiSite.
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, DynamicVoronoiSite):
                 raise TypeError("All sites must be DynamicVoronoiSite instances")

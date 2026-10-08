@@ -64,7 +64,8 @@ def get_coordination_indices(
 
     Raises:
         ValueError: If no centre atoms are found, if a list of n_coord
-            has incorrect length, or if ``lattice_matrix`` is singular.
+            has incorrect length, if ``lattice_matrix`` is singular or not
+            finite, or if the coordinates used are not finite.
     """
     if len(species) != len(frac_coords):
         raise ValueError(

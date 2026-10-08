@@ -47,11 +47,14 @@ def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
         The coordinates as a contiguous float64 array.
 
     Raises:
-        ValueError: If ``coords`` does not have shape (N, 3).
+        ValueError: If ``coords`` does not have shape (N, 3) or is not
+            finite.
     """
     array = np.ascontiguousarray(coords, dtype=np.float64)
     if array.ndim != 2 or array.shape[1] != 3:
         raise ValueError(f"{name} must have shape (N, 3), got {array.shape}")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} must be finite")
     return array
 
 
@@ -89,9 +92,9 @@ class PeriodicNeighbourIndex:
                 vectors (pymatgen convention: ``lattice.matrix``).
 
         Raises:
-            ValueError: If ``frac_coords`` does not have shape (N, 3), or
-                ``lattice_matrix`` does not have shape (3, 3), is not
-                finite, or is singular or nearly so.
+            ValueError: If ``frac_coords`` does not have shape (N, 3) or is
+                not finite, or ``lattice_matrix`` does not have shape
+                (3, 3), is not finite, or is singular or nearly so.
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
@@ -99,7 +102,7 @@ class PeriodicNeighbourIndex:
             raise ValueError(
                 f"lattice_matrix must have shape (3, 3), got {self._lattice_matrix.shape}"
             )
-        if not np.all(np.isfinite(self._lattice_matrix)):
+        if not np.isfinite(self._lattice_matrix).all():
             raise ValueError("lattice_matrix must be finite")
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
         if np.any(self._lengths == 0.0):
@@ -202,8 +205,8 @@ class PeriodicNeighbourIndex:
             array.
 
         Raises:
-            ValueError: If ``query_frac`` does not have shape (M, 3), or
-                ``cutoff`` is negative or NaN.
+            ValueError: If ``query_frac`` does not have shape (M, 3) or is
+                not finite, or ``cutoff`` is negative or NaN.
         """
         query_frac = _as_coords(query_frac, "query_frac")
         if not cutoff >= 0:
@@ -230,8 +233,8 @@ class PeriodicNeighbourIndex:
             are an ``np.intp`` array and distances a ``float64`` array.
 
         Raises:
-            ValueError: If ``query_frac`` does not have shape (M, 3), or
-                the index is empty.
+            ValueError: If ``query_frac`` does not have shape (M, 3) or is
+                not finite, or the index is empty.
             RuntimeError: If some query point has no candidate. The tree's
                 nearest point is always a candidate, so this would mean a
                 bug in the search.

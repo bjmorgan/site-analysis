@@ -72,6 +72,13 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
         _, distances = index.query_nearest(np.array([[0.1, 0.1, 0.2]]))
         self.assertAlmostEqual(distances[0], 1.0)
 
+    def test_rejects_non_finite_coords(self):
+        """Coordinates that are NaN or infinite raise ValueError."""
+        for value in (np.nan, np.inf):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "frac_coords must be finite"):
+                    PeriodicNeighbourIndex(np.array([[0.1, value, 0.2]]), np.eye(3))
+
     def test_rejects_invalid_lattice(self):
         """A lattice matrix that is not (3, 3), not finite, or singular raises ValueError."""
         lattices = {
@@ -174,6 +181,14 @@ class TestQueryWithin(unittest.TestCase):
         with self.assertRaises(ValueError):
             index.query_within(np.zeros((1, 2)), 1.0)
 
+    def test_non_finite_query_raises(self):
+        """Query coordinates that are NaN or infinite raise ValueError."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
+        for value in (np.nan, np.inf):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "query_frac must be finite"):
+                    index.query_within(np.array([[value, 0.0, 0.0]]), 1.0)
+
     def test_empty_queries_return_empty_arrays(self):
         """No query points give empty arrays of the right types."""
         index = PeriodicNeighbourIndex(np.zeros((3, 3)), np.eye(3))
@@ -273,6 +288,14 @@ class TestQueryNearest(unittest.TestCase):
         index = PeriodicNeighbourIndex(np.empty((0, 3)), np.eye(3))
         with self.assertRaises(ValueError):
             index.query_nearest(np.zeros((1, 3)))
+
+    def test_non_finite_query_raises(self):
+        """Query coordinates that are NaN or infinite raise ValueError."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
+        for value in (np.nan, np.inf):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "query_frac must be finite"):
+                    index.query_nearest(np.array([[value, 0.0, 0.0]]))
 
     def test_empty_queries_return_empty_arrays(self):
         """No query points give empty arrays of the right types."""

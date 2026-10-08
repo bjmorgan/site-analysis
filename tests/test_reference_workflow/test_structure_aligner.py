@@ -456,8 +456,10 @@ class TestStructureAligner(unittest.TestCase):
         """Each species is matched only to its own species, whatever the atom order."""
         aligner = StructureAligner()
         ref_coords = np.array([[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
-        target_coords = np.array([[0.6, 0.6, 0.6], [0.2, 0.1, 0.1]])
-        args = (ref_coords, target_coords, np.eye(3) * 5.0, ["Na", "Cl"], ["Cl", "Na"])
+        # The target Cl at index 2 is on top of the reference Na, so matching
+        # across species would give smaller values.
+        target_coords = np.array([[0.6, 0.6, 0.6], [0.2, 0.1, 0.1], [0.1, 0.1, 0.1]])
+        args = (ref_coords, target_coords, np.eye(3) * 5.0, ["Na", "Cl"], ["Cl", "Na", "Cl"])
         rmsd = aligner._create_objective_function(
             *args, valid_species=["Na", "Cl"], metric='rmsd')
         max_dist = aligner._create_objective_function(

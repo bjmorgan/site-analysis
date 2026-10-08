@@ -6,6 +6,7 @@ from reference structures to target structures while handling various edge cases
 
 import unittest
 import numpy as np
+from pymatgen.core import Lattice
 
 from site_analysis.reference_workflow.index_mapper import IndexMapper
 
@@ -248,6 +249,19 @@ class TestIndexMapper(unittest.TestCase):
         )
         expected_with_filter = [[1]]  # B atom at index 1
         self.assertEqual(mapped_with_filter, expected_with_filter)
+
+    def test_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # Target atoms 0 and 1 are 1.28 A and 1.20 A from the reference atom.
+        # With the lattice transposed, target atom 0 would be nearer.
+        mapper = IndexMapper()
+        mapped_coordinating = mapper.map_coordinating_atoms(
+            ref_frac_coords=np.array([[0.5, 0.5, 0.5]]),
+            target_frac_coords=np.array([[0.5, 0.82, 0.5], [0.8, 0.8, 0.5]]),
+            lattice_matrix=Lattice.hexagonal(4.0, 6.0).matrix,
+            ref_coordinating=[[0]],
+        )
+        self.assertEqual(mapped_coordinating, [[1]])
 
     def test_complex_coordination_environment(self):
         """Test mapping complex coordination (e.g., octahedral).

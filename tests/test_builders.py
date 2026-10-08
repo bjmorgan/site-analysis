@@ -1645,6 +1645,20 @@ class TestBuilderValidation(unittest.TestCase):
 		builder = TrajectoryBuilder().with_reference_structure(ref)
 		builder._validate_reference_atom_distances()
 
+	def test_hexagonal_cell(self):
+		"""Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+		# The Li atoms are 1.20 A apart. With the lattice transposed they
+		# would be 1.28 A apart, beyond the threshold.
+		ref = Structure(
+			Lattice.hexagonal(4.0, 6.0), ["Li", "Li"],
+			[[0.5, 0.5, 0.5], [0.8, 0.8, 0.5]])
+		builder = (TrajectoryBuilder()
+			.with_reference_structure(ref)
+			.with_min_atom_distance(1.25))
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("only 1.200 apart", str(ctx.exception))
+
 	def test_valid_reference_passes(self):
 		"""A correct reference structure passes validation."""
 		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])  # 48h — no close pairs

@@ -440,6 +440,18 @@ class TestStructureAligner(unittest.TestCase):
         # Nearest distances are 0 A and 0.5 A.
         self.assertAlmostEqual(objective_function(np.zeros(3)), 0.5, places=10)
 
+    def test_objective_function_in_a_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # The target atoms are 1.28 A and 1.20 A from the reference atom.
+        # With the lattice transposed, the nearest would be the first, at 1.11 A.
+        aligner = StructureAligner()
+        objective_function = aligner._create_objective_function(
+            np.array([[0.5, 0.5, 0.5]]),
+            np.array([[0.5, 0.82, 0.5], [0.8, 0.8, 0.5]]),
+            Lattice.hexagonal(4.0, 6.0).matrix,
+            ["Na"], ["Na", "Na"], valid_species=["Na"], metric='rmsd')
+        self.assertAlmostEqual(objective_function(np.zeros(3)), 1.2, places=10)
+
     def test_objective_function_two_species(self):
         """Each species is matched only to its own species, whatever the atom order."""
         aligner = StructureAligner()

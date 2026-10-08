@@ -143,6 +143,21 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		self.assertEqual(site1.contains_atoms, [])
 		self.assertEqual(site2.contains_atoms, [0])
 
+	def test_nearest_centre_in_a_hexagonal_cell(self):
+		"""Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		# The atom is 1.28 A from site1 and 1.20 A from site2. With the
+		# lattice transposed, site1 would be nearer.
+		site1._centre_coords = np.array([0.5, 0.82, 0.5])
+		site2._centre_coords = np.array([0.8, 0.8, 0.5])
+		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
+		atom = Atom(index=0)
+		atom._frac_coords = np.array([0.5, 0.5, 0.5])
+		collection.assign_site_occupations([atom], Lattice.hexagonal(4.0, 6.0).matrix)
+		self.assertEqual(site1.contains_atoms, [])
+		self.assertEqual(site2.contains_atoms, [0])
+
 	def test_empty_atoms_list(self):
 		"""Test that assign_site_occupations correctly handles empty atom lists."""
 		# Create sites with pre-populated contains_atoms

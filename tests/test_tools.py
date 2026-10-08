@@ -240,9 +240,20 @@ class ToolsTestCase(unittest.TestCase):
                             [0.25, 0.5, 0.5]])
         mapping = site_index_mapping(coords1, coords2, lattice_matrix, ['Na'], ['Na', 'Na'])
         np.testing.assert_array_equal(mapping, np.array([0]))
-        
-        
-        
+
+    def test_site_index_mapping_in_a_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # The atoms in coords2 are 1.28 A and 1.20 A from the atom in coords1.
+        # With the lattice transposed, the first would be nearer.
+        coords1 = np.array([[0.5, 0.5, 0.5]])
+        coords2 = np.array([[0.5, 0.82, 0.5],
+                            [0.8, 0.8, 0.5]])
+        mapping = site_index_mapping(coords1, coords2, Lattice.hexagonal(4.0, 6.0).matrix,
+                                     ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([1]))
+
+
+
 class GetCoordinationIndicesTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -592,6 +603,26 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         )
         self.assertEqual(environments, {0: [1]})
 
+    def test_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # With the lattice transposed, the Cl at index 1 would be within the
+        # cutoff (1.11 A) and the Cl at index 2 would not (1.28 A).
+        frac_coords = np.array([
+            [0.5, 0.5, 0.5],    # Na
+            [0.5, 0.82, 0.5],   # Cl - 1.28 A
+            [0.8, 0.8, 0.5],    # Cl - 1.20 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=Lattice.hexagonal(4.0, 6.0).matrix,
+            species=["Na", "Cl", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=1.25,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [2]})
+
     def test_negative_or_nan_cutoff_finds_no_neighbours(self):
         """A negative or NaN cutoff finds no coordinating atoms."""
         for cutoff in (-1.0, float("nan")):
@@ -874,6 +905,20 @@ class CalculateSpeciesDistancesArrayTestCase(unittest.TestCase):
             frac_coords1, frac_coords2, lattice_matrix, ["Li"], ["Li"])
 
         self.assertIsInstance(all_dists, list)
+
+    def test_calculate_species_distances_in_a_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # The atoms in frac_coords2 are 1.28 A and 1.20 A from the atom in
+        # frac_coords1. With the lattice transposed, the nearest would be
+        # the first, at 1.11 A.
+        frac_coords1 = np.array([[0.5, 0.5, 0.5]])
+        frac_coords2 = np.array([[0.5, 0.82, 0.5], [0.8, 0.8, 0.5]])
+
+        result, _ = calculate_species_distances(
+            frac_coords1, frac_coords2, Lattice.hexagonal(4.0, 6.0).matrix,
+            ["Li"], ["Li", "Li"])
+
+        self.assertAlmostEqual(result["Li"][0], 1.2, places=10)
 
 
 class ToolsValidationTestCase(unittest.TestCase):

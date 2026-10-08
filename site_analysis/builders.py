@@ -467,12 +467,13 @@ class TrajectoryBuilder:
                   assumes this indicates PBC wrapping and shifts coordinates
                   accordingly. WARNING: Gives incorrect results when sites
                   legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). The unwrapping can be slightly
-                  cheaper, but the polyhedral site search then falls back to
-                  the neighbours of an atom's most recent site, then list
-                  order, instead of ranking sites by distance, which can make
-                  assignment slower. Only use after verifying it works
-                  correctly for your structures.
+                  in a 2x2x2 FCC supercell). It is no faster: after the first
+                  frame, both settings update the unwrapping in the same way.
+                  The polyhedral site search also falls back to the neighbours
+                  of an atom's most recent site, then list order, instead of
+                  ranking sites by distance, which can make assignment slower.
+                  Only use after verifying it works correctly for your
+                  structures.
 
         Returns:
             self: For method chaining
@@ -597,8 +598,9 @@ class TrajectoryBuilder:
                   assumes this indicates PBC wrapping and shifts coordinates
                   accordingly. WARNING: Gives incorrect results when sites
                   legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). May offer performance benefits for
-                  some setups. Only use after verifying it works correctly for your
+                  in a 2x2x2 FCC supercell). It is no faster: after the first
+                  frame, both settings update the unwrapping in the same way.
+                  Only use after verifying it works correctly for your
                   structures.
 
         Returns:

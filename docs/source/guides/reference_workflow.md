@@ -170,7 +170,7 @@ The `use_reference_centers` parameter controls which of two methods is used:
 
 **Default choice (recommended)**: Use reference centre unwrapping for all analyses. This method handles small supercells correctly and is robust across different system types.
 
-**Advanced usage only**: The spread-based method may provide modest performance improvements in some large systems, although for polyhedral sites the site search fallback can make assignment slower. It should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
+**Advanced usage only**: The spread-based method is no faster, since after the first frame both methods update the unwrapping in the same way, and for polyhedral sites the site search fallback can make assignment slower. It should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
 
 For detailed explanations of both methods, their trade-offs, and guidance on when to use each approach, see {doc}`../concepts/pbc_handling`.
 

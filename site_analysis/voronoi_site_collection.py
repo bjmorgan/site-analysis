@@ -28,14 +28,13 @@ import numpy as np
 from pymatgen.core import Structure
 from site_analysis.site_collection import SiteCollection
 from site_analysis.atom import Atom
-from site_analysis.site import Site
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 class VoronoiSiteCollection(SiteCollection):
 
     def __init__(self,
-            sites: Iterable[Site]) -> None:
+            sites: Iterable[VoronoiSite]) -> None:
         """Create a VoronoiSiteCollection instance.
 
         Args:

@@ -363,6 +363,15 @@ class TestReach(unittest.TestCase):
         self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
         self.assertEqual(self.atom.in_site, self.large.index)
 
+    def test_site_with_infinite_radius_is_offered_from_anywhere(self):
+        """A site with an infinite radius is found for an atom far from every centre."""
+        unbounded = SphericalSite(frac_coords=np.array([0.6, 0.5, 0.5]), rcut=np.inf)
+        collection = SphericalSiteCollection([self.small, unbounded])
+        # 7.1 A from small's centre and 7.7 A from unbounded's.
+        self.atom._frac_coords = np.array([0.3, 0.0, 0.0])
+        collection.assign_site_occupations([self.atom], self.lattice_matrix)
+        self.assertEqual(self.atom.in_site, unbounded.index)
+
 
 class TestNonFiniteAtomCoordinates(unittest.TestCase):
     """Tests for assigning atoms whose coordinates are not finite."""

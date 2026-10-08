@@ -25,7 +25,6 @@ from collections.abc import Iterable
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
-from .site import Site
 from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
@@ -52,7 +51,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     """
 
     def __init__(self,
-            sites: Iterable[Site]) -> None:
+            sites: Iterable[PolyhedralSite]) -> None:
         """Create a PolyhedralSiteCollection instance.
 
         Args:
@@ -189,8 +188,12 @@ def _collect_reference_centres(
     for s in sites:
         if s.reference_center is None:
             continue
-        centre = np.asarray(s.reference_center, dtype=np.float64)
-        if centre.shape != (3,) or not np.isfinite(centre).all():
+        try:
+            centre = np.asarray(s.reference_center, dtype=np.float64)
+            valid = centre.shape == (3,) and bool(np.isfinite(centre).all())
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
             raise ValueError(
                 f"reference centre of site {s.index} must be three finite numbers, "
                 f"got {s.reference_center}")

@@ -97,6 +97,16 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         """A collection built from a generator holds every site."""
         collection = PolyhedralSiteCollection(s for s in [self.site1, self.site2, self.site3])
         self.assertEqual(collection.sites, [self.site1, self.site2, self.site3])
+
+    def test_init_rejects_a_non_finite_reference_centre(self):
+        """A site with a NaN reference centre is rejected, naming the site."""
+        Site._newid = 10
+        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                reference_center=np.array([0.1, 0.2, 0.3])),
+                 PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                                reference_center=np.array([np.nan, 0.5, 0.6]))]
+        with self.assertRaisesRegex(ValueError, "reference centre of site 11"):
+            PolyhedralSiteCollection(sites)
     
     def test_analyse_structure(self):
         """Test that analyse_structure notifies sites and updates occupations."""
@@ -497,17 +507,24 @@ class TestCollectReferenceCentres(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
             _collect_reference_centres(sites)
 
-    def test_raises_for_a_wrongly_shaped_reference_centre(self):
+    def test_raises_for_a_reference_centre_that_is_not_three_numbers(self):
         """A reference centre that is not three numbers raises ValueError naming the site index."""
-        Site._newid = 10
-        sites = [
-            PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                           reference_center=np.array([0.1, 0.2, 0.3])),
-            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                           reference_center=np.array([0.4, 0.5])),
-        ]
-        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
-            _collect_reference_centres(sites)
+        values = {
+            "two numbers": np.array([0.4, 0.5]),
+            "text": "abc",
+            "ragged": [[0.1, 0.2], [0.3]],
+            "complex": [1 + 1j, 0.0, 0.0],
+        }
+        for name, value in values.items():
+            with self.subTest(name):
+                Site._newid = 10
+                sites = [
+                    PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                   reference_center=np.array([0.1, 0.2, 0.3])),
+                    PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=value),
+                ]
+                with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
+                    _collect_reference_centres(sites)
 
     def test_raises_for_a_non_finite_reference_centre_after_a_site_without_one(self):
         """A NaN reference centre raises even when an earlier site has no reference centre."""
@@ -636,38 +653,22 @@ class TestGetPrioritySites(unittest.TestCase):
 
         self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
 
-    def test_yields_neighbours_after_transitions_without_reference_centres(self):
-        """Without reference centres, neighbours are yielded after transitions."""
-        self.assertIsNone(self.collection._site_centres)
+    def test_neighbours_follow_transitions_without_repeats(self):
+        """Without reference centres, the most recent site's neighbours follow its
+        transitions, then the remaining sites in list order, each site once."""
+        site4 = PolyhedralSite(vertex_indices=[12, 13, 14, 15])
+        collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3, site4])
+        self.assertIsNone(collection._site_centres)
         self.atom._recent_sites = [self.site1.index, None]
 
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-                mock_transitions.return_value = [self.site2.index]
-                mock_neighbours.return_value = [self.site3]
+        with patch.object(self.site1, 'most_frequent_transitions', return_value=[site4.index]):
+            with patch.object(collection, 'neighbouring_sites',
+                              return_value=[site4, self.site3]) as mock_neighbours:
+                priority_sites = list(collection._get_priority_sites(self.atom, self.lattice.matrix))
 
-                priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-                self.assertEqual(priority_sites[0], self.site1)
-                self.assertEqual(priority_sites[1], self.site2)
-                self.assertEqual(priority_sites[2], self.site3)
-                mock_neighbours.assert_called_once_with(self.site1.index)
-
-    def test_yields_no_duplicates_with_neighbours_and_transitions(self):
-        """No duplicates when a neighbour also appears as a transition."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-                mock_transitions.return_value = [self.site2.index]
-                mock_neighbours.return_value = [self.site2, self.site3]
-
-                priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-                self.assertEqual(len(priority_sites), 3)
-                site_indices = [s.index for s in priority_sites]
-                self.assertEqual(len(site_indices), len(set(site_indices)))
-                self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
+        # Without the neighbour step, site2 would come before site3.
+        self.assertEqual(priority_sites, [self.site1, site4, self.site3, self.site2])
+        mock_neighbours.assert_called_once_with(self.site1.index)
 
     def test_yields_remaining_sites_in_list_order_after_neighbours(self):
         """Without reference centres, every site not yet yielded follows in list order."""

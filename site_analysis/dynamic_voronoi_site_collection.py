@@ -33,7 +33,6 @@ from dataclasses import dataclass, field
 import numpy as np
 from pymatgen.core import Structure
 from site_analysis.site_collection import SiteCollection
-from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
@@ -130,7 +129,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
     """
     
     def __init__(self,
-                 sites: Iterable[Site]) -> None:
+                 sites: Iterable[DynamicVoronoiSite]) -> None:
         """Create a DynamicVoronoiSiteCollection instance.
         
         Args:

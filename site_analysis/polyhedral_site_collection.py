@@ -20,6 +20,7 @@ The module also includes utility functions:
 """
 
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
@@ -51,11 +52,12 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     """
 
     def __init__(self,
-            sites: list[Site]) -> None:
+            sites: Iterable[Site]) -> None:
         """Create a PolyhedralSiteCollection instance.
 
         Args:
-            sites (list(PolyhedralSite)): List of PolyhedralSite objects.
+            sites (iterable(PolyhedralSite)): PolyhedralSite objects, such as
+                a list or a generator.
 
         Returns:
             None

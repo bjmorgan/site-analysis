@@ -509,6 +509,17 @@ class TestCollectReferenceCentres(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
             _collect_reference_centres(sites)
 
+    def test_raises_for_a_non_finite_reference_centre_after_a_site_without_one(self):
+        """A NaN reference centre raises even when an earlier site has no reference centre."""
+        Site._newid = 10
+        sites = [
+            PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                           reference_center=np.array([np.nan, 0.5, 0.6])),
+        ]
+        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
+            _collect_reference_centres(sites)
+
 
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     """Test interaction between assign_site_occupations and _get_priority_sites."""

@@ -27,6 +27,7 @@ positions of the reference atoms.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -129,11 +130,12 @@ class DynamicVoronoiSiteCollection(SiteCollection):
     """
     
     def __init__(self,
-                 sites: list[Site]) -> None:
+                 sites: Iterable[Site]) -> None:
         """Create a DynamicVoronoiSiteCollection instance.
         
         Args:
-            sites (list[DynamicVoronoiSite]): list of DynamicVoronoiSite objects.
+            sites (Iterable[DynamicVoronoiSite]): DynamicVoronoiSite objects,
+                such as a list or a generator.
             
         Returns:
             None

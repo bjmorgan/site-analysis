@@ -15,7 +15,7 @@ This module defines:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Generator, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar, TYPE_CHECKING
 
 import numpy as np
@@ -266,11 +266,12 @@ class SiteCollection(ABC):
 
     """
 
-    def __init__(self, sites: Sequence[Site]) -> None:
+    def __init__(self, sites: Iterable[Site]) -> None:
         """Create a SiteCollection object.
         
         Args:
-            sites (list): List of ``Site`` objects.
+            sites (iterable): ``Site`` objects, such as a list or a
+                generator.
             
         Raises:
             ValueError: If there are duplicate site indices.

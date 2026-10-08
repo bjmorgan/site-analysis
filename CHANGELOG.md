@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `SphericalSite.rcut` and `SphericalSite.frac_coords` are now read-only, and a `SphericalSite` keeps its own copy of the centre, which cannot be changed in place. Code that assigns to `rcut` or `frac_coords`, or changes `frac_coords` in place, must now create a new `SphericalSite` instead. `SphericalSite` raises `ValueError` for a negative or NaN radius, or a centre that is not three finite numbers.
 - `construct_neighbouring_sites` compares only sites that share a vertex, so for typical structures it takes time linear in the number of sites, instead of comparing every pair of sites.
 - Site collections keep their own copy of the list of sites they are given, so changing that list afterwards no longer changes the collection.
+- `Trajectory.sites` is now the site collection's own list of sites, rather than the list passed in.
 
 ### Removed
 
@@ -32,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `TrajectoryBuilder.with_min_atom_distance()` now raises `ValueError` for NaN. Previously, NaN silently turned off the close-pair check.
 - `site_index_mapping()` now returns integer indices when nothing matches `species1_filter`. Previously, it returned an empty float array, which could not be used as indices.
 - `StructureAligner.align()` now raises `ValueError` when `species` is empty. Previously, the optimisation ran without any atoms to compare and failed with an unrelated error.
+- Site collections built from a generator or other iterator now hold all the sites. Previously, they silently held none.
 
 ## [1.9.0] - 2026-10-05
 

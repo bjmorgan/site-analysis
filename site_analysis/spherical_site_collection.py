@@ -18,6 +18,8 @@ its recent sites or a learned transition destination goes to the containing
 site with the nearest centre.
 """
 
+from collections.abc import Iterable
+
 import numpy as np
 from pymatgen.core import Structure
 from site_analysis.atom import Atom
@@ -28,7 +30,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
 
 
     def __init__(self,
-        sites: list[SphericalSite]) -> None:
+        sites: Iterable[SphericalSite]) -> None:
         """A collection of SphericalSite objects with optimised atom assignment.
 
         Extends the base SiteCollection class with specific functionality for
@@ -36,7 +38,8 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         optimised atom assignment via the PriorityAssignmentMixin.
 
         Args:
-            sites (list): List of ``SphericalSite`` objects.
+            sites (iterable): ``SphericalSite`` objects, such as a list or
+                a generator.
 
         Attributes:
             sites (list): List of ``SphericalSite`` objects.

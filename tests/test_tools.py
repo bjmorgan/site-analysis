@@ -1046,7 +1046,21 @@ class ToolsValidationTestCase(unittest.TestCase):
         )
         self.assertEqual(result, [[0, 2], [0, 2]])
 
-              
+
+class GetNearestNeighbourIndicesTestCase(unittest.TestCase):
+
+    def test_returns_the_nearest_vertex_atoms(self):
+        """The n_coord atoms nearest to the reference site are returned, in index order."""
+        lattice = Lattice.cubic(10.0)
+        # Distances from the reference site are 3 A, 1 A and 2 A, in index order.
+        structure = Structure(lattice, ["O", "O", "O"],
+                              [[0.8, 0.5, 0.5], [0.6, 0.5, 0.5], [0.7, 0.5, 0.5]])
+        ref_structure = Structure(lattice, ["Li"], [[0.5, 0.5, 0.5]])
+        result = get_nearest_neighbour_indices(structure, ref_structure,
+                                               vertex_species=["O"], n_coord=2)
+        self.assertEqual(result, [[1, 2]])
+
+
 if __name__ == '__main__':
     unittest.main()
     

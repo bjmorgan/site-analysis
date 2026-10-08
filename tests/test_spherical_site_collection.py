@@ -450,6 +450,12 @@ class TestReach(unittest.TestCase):
         self.assertEqual(
             list(self.collection._get_priority_sites(self.atom, self.lattice_matrix)), [])
 
+    def test_non_finite_atom_coordinates_raise(self):
+        """An atom with non-finite coordinates raises ValueError once it reaches the ranking."""
+        self.atom._frac_coords = np.array([np.nan, 0.5, 0.5])
+        with self.assertRaises(ValueError):
+            self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
+
     def test_atom_found_in_large_site_beyond_smaller_radii(self):
         """The reach is the largest radius, so a large site beyond small ones is found."""
         # 1 A from small's centre, outside it, 2 A from large's, inside it,

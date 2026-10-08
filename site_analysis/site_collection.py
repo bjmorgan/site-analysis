@@ -99,9 +99,9 @@ class _SiteCentreIndex:
             Lists of site indices.
 
         Raises:
-            ValueError: If the lattice matrix is singular or non-finite.
-                As this is a generator, the error is raised when the first
-                list is requested.
+            ValueError: If the lattice matrix is singular or non-finite, or
+                ``frac_coords`` is non-finite. As this is a generator, the
+                error is raised when the first list is requested.
         """
         neighbour_index = self._index_for(lattice_matrix)
         query = np.reshape(frac_coords, (1, 3))

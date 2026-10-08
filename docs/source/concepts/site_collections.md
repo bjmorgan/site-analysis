@@ -20,11 +20,11 @@ Spherical and polyhedral sites can overlap or leave gaps between them. These col
 
 If the atom has no recent sites (e.g. at the first timestep), the search starts with the distance ranking.
 
-Polyhedral sites are ranked by their reference centres. For polyhedral sites without reference centres, the remaining sites are instead checked starting with the neighbours of the most recent site, then in list order.
+Polyhedral sites are ranked by their reference centres. If any polyhedral site has no reference centre, the remaining sites are instead checked starting with the neighbours of the most recent site, then in list order.
 
 For spherical sites, the distance ranking stops at the largest site radius, since no site whose centre is further from the atom can contain it.
 
-Where sites overlap, the first containing site in this order claims the atom: an atom stays in a recent site if one contains it, otherwise goes to a learned transition destination that contains it, and otherwise goes to the containing site whose centre is nearest the atom.
+Where sites overlap, the first containing site in this order claims the atom: an atom stays in a recent site if one contains it, otherwise goes to a learned transition destination that contains it, and otherwise goes to the containing site whose centre is nearest the atom (when sites are ranked by distance).
 
 This ordering means atoms that remain in or near their current site are resolved in a single check, and common transitions are tested early. In practice, this eliminates the majority of containment checks compared to a naive sequential scan.
 

@@ -13,17 +13,19 @@ This module defines:
   site to a given position.
 - ``_DistanceRanking``: site centres for ranking sites by distance from
   an anchor site.
+- ``_SiteCentreIndex``: site centres, ranked by distance from a point.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
-from typing import Generic, NamedTuple, Sequence, TypeVar, TYPE_CHECKING
+from collections.abc import Generator, Iterator, Sequence
+from typing import Generic, NamedTuple, TypeVar, TYPE_CHECKING
 
 import numpy as np
 from .atom import Atom
 from .site import Site
+from .neighbour_search import PeriodicNeighbourIndex
 
 
 class _NearestSiteLookup(NamedTuple):
@@ -80,6 +82,86 @@ class _DistanceRanking(NamedTuple):
         order = np.argsort(dists)
         ranked: list[int] = self.site_indices[order[order != i]].tolist()
         return ranked
+
+
+class _SiteCentreIndex:
+    """Site centres, ranked by Cartesian minimum-image distance from a point.
+
+    Holds a ``PeriodicNeighbourIndex`` over the centres, built on first
+    use and rebuilt whenever the lattice changes.
+    """
+
+    def __init__(self,
+            centres: np.ndarray,
+            site_indices: Sequence[int]) -> None:
+        """Create a _SiteCentreIndex.
+
+        Args:
+            centres: Fractional coordinates of the site centres, shape
+                (N, 3), with N at least 1.
+            site_indices: The site index of each centre.
+        """
+        self._centres = np.array(centres, dtype=np.float64)
+        self._site_indices = np.asarray(site_indices)
+        # The lattice the index was built for, set when it is built.
+        self._lattice_matrix = np.zeros((3, 3))
+        self._index: PeriodicNeighbourIndex | None = None
+        self._nearby_radius = 0.0
+
+    def _index_for(self, lattice_matrix: np.ndarray) -> PeriodicNeighbourIndex:
+        """Return the neighbour index for a lattice, building it if needed.
+
+        Args:
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Returns:
+            The neighbour index over the centres in this lattice.
+        """
+        if self._index is None or not np.array_equal(lattice_matrix, self._lattice_matrix):
+            self._index = PeriodicNeighbourIndex(self._centres, lattice_matrix)
+            self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64)
+            # The edge of a cube holding one site's share of the cell volume.
+            volume = abs(np.linalg.det(self._lattice_matrix))
+            self._nearby_radius = (volume / len(self._centres)) ** (1 / 3)
+        return self._index
+
+    def ranked_site_indices(self,
+            frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> Iterator[list[int]]:
+        """Yield site indices in order of distance from a point.
+
+        Joined, the lists hold every site once, ordered by the Cartesian
+        minimum-image distance of its centre from the point, with equal
+        distances in the order of the centres. The first list holds the
+        sites near the point. The rest are ranked only if the caller asks
+        for another list.
+
+        Args:
+            frac_coords: Fractional coordinates of the point, shape (3,).
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Yields:
+            Lists of site indices.
+
+        Raises:
+            ValueError: If the lattice matrix is singular or non-finite.
+                As this is a generator, the error is raised when the first
+                list is requested.
+        """
+        neighbour_index = self._index_for(lattice_matrix)
+        query = np.reshape(frac_coords, (1, 3))
+        _, nearby, _ = neighbour_index.query_within(query, self._nearby_radius)
+        yield self._site_indices[nearby].tolist()
+        if len(nearby) < len(self._site_indices):
+            _, ranked, _ = neighbour_index.query_within(query, np.inf)
+            # Leave out the nearby sites by position, so that each site is
+            # yielded once even if the two queries round a distance near the
+            # nearby radius differently.
+            remaining = np.ones(len(self._site_indices), dtype=bool)
+            remaining[nearby] = False
+            yield self._site_indices[ranked[remaining[ranked]]].tolist()
 
 
 SiteT = TypeVar('SiteT', bound=Site)

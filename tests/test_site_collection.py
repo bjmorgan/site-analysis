@@ -1,8 +1,11 @@
+import itertools
 import unittest
-from site_analysis.site_collection import SiteCollection, PriorityAssignmentMixin
+from site_analysis.site_collection import (
+    SiteCollection, PriorityAssignmentMixin, _SiteCentreIndex,
+)
 from site_analysis.site import Site
 from site_analysis.atom import Atom
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from unittest.mock import patch, Mock, MagicMock
 import numpy as np
 from collections import Counter
@@ -275,6 +278,82 @@ class ConcretePriorityCollection(PriorityAssignmentMixin, SiteCollection):
 
     def analyse_structure(self, atoms, structure):
         raise NotImplementedError
+
+
+def _brute_force_ranking(centres, point, lattice_matrix):
+    """Positions of the centres, nearest to the point first.
+
+    Distances are minimum-image Cartesian distances over 27 periodic
+    images. Equal distances keep the order of the centres.
+    """
+    shifts = np.array(list(itertools.product([-1, 0, 1], repeat=3)))
+    diffs = centres - point
+    diffs -= np.round(diffs)
+    cartesian = (diffs[:, np.newaxis, :] + shifts) @ lattice_matrix
+    distances = np.linalg.norm(cartesian, axis=2).min(axis=1)
+    return np.argsort(distances, kind="stable")
+
+
+def _joined_ranking(site_centres, point, lattice_matrix):
+    """All site indices from ranked_site_indices, as one list."""
+    return [index
+            for ranked in site_centres.ranked_site_indices(point, lattice_matrix)
+            for index in ranked]
+
+
+class TestSiteCentreIndex(unittest.TestCase):
+    """Tests for _SiteCentreIndex.ranked_site_indices."""
+
+    def test_ranks_every_site_by_minimum_image_distance(self):
+        """Joined, the lists hold every site once, nearest to the point first."""
+        rng = np.random.default_rng(0)
+        lattice_matrix = Lattice.from_parameters(9.0, 10.0, 11.0, 75, 100, 110).matrix
+        centres = rng.random((30, 3))
+        site_indices = list(range(100, 160, 2))
+        site_centres = _SiteCentreIndex(centres, site_indices)
+        for point in rng.uniform(-0.5, 1.5, (20, 3)):
+            expected = [site_indices[position]
+                        for position in _brute_force_ranking(centres, point, lattice_matrix)]
+            self.assertEqual(_joined_ranking(site_centres, point, lattice_matrix), expected)
+
+    def test_first_list_holds_only_nearby_sites(self):
+        """The first list leaves distant sites for later lists."""
+        grid = np.arange(4) / 4
+        centres = np.array([[x, y, z] for x in grid for y in grid for z in grid])
+        site_centres = _SiteCentreIndex(centres, list(range(64)))
+        first = next(site_centres.ranked_site_indices(np.array([0.5, 0.5, 0.5]), np.eye(3) * 8.0))
+        self.assertLess(len(first), 64)
+        # The site at the point itself comes first.
+        self.assertEqual(first[0], 42)
+
+    def test_ranking_is_cartesian_in_a_skewed_cell(self):
+        """Sites are ranked by Cartesian, not fractional, distance."""
+        lattice_matrix = Lattice.from_parameters(10.0, 10.0, 10.0, 90, 90, 30).matrix
+        # (0.3, 0, 0) is 3.0 A from the origin. (0.3, -0.3, 0) is further
+        # in fractional units but only 1.55 A away.
+        centres = np.array([[0.3, 0.0, 0.0], [0.3, -0.3, 0.0]])
+        site_centres = _SiteCentreIndex(centres, [0, 1])
+        self.assertEqual(_joined_ranking(site_centres, np.zeros(3), lattice_matrix), [1, 0])
+
+    def test_equal_distances_rank_lower_position_first(self):
+        """Sites at equal distances are ranked in the order of their centres."""
+        # From the point, the first and third centres are both 2 A away and
+        # the second is 4 A away.
+        centres = np.array([[0.75, 0.5, 0.5], [0.0, 0.5, 0.5], [0.25, 0.5, 0.5]])
+        site_centres = _SiteCentreIndex(centres, [7, 9, 3])
+        self.assertEqual(
+            _joined_ranking(site_centres, np.array([0.5, 0.5, 0.5]), np.eye(3) * 8.0),
+            [7, 3, 9])
+
+    def test_ranking_follows_lattice_changes(self):
+        """Changing the lattice, even in place, changes the ranking."""
+        centres = np.array([[0.2, 0.0, 0.0], [0.0, 0.3, 0.0]])
+        site_centres = _SiteCentreIndex(centres, [0, 1])
+        lattice_matrix = np.eye(3) * 10.0
+        # 2 A and 3 A away in a 10 A cubic cell; 4 A and 3 A away once a is doubled.
+        self.assertEqual(_joined_ranking(site_centres, np.zeros(3), lattice_matrix), [0, 1])
+        lattice_matrix[0, 0] = 20.0
+        self.assertEqual(_joined_ranking(site_centres, np.zeros(3), lattice_matrix), [1, 0])
 
 
 class TestInitPriorityRanking(unittest.TestCase):

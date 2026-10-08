@@ -251,10 +251,18 @@ def _paired_mic_distances(
     d_frac = frac_coords1 - frac_coords2
     d_frac -= np.round(d_frac)
     min_dist_sq = np.full(d_frac.shape[0], np.inf)
+    # Element-wise products and sums in the numba kernel's order, rather
+    # than a matrix product: BLAS can round differently for batches of
+    # different sizes, and a pair's distance must not depend on its batch.
+    # This also gives the same distances as numba.
     for shift in _SHIFTS_27:
-        d_cart = (d_frac + shift) @ lattice_matrix
-        np.minimum(min_dist_sq, np.einsum("ij,ij->i", d_cart, d_cart),
-                   out=min_dist_sq)
+        d0 = d_frac[:, 0] + shift[0]
+        d1 = d_frac[:, 1] + shift[1]
+        d2 = d_frac[:, 2] + shift[2]
+        cx = d0 * lattice_matrix[0, 0] + d1 * lattice_matrix[1, 0] + d2 * lattice_matrix[2, 0]
+        cy = d0 * lattice_matrix[0, 1] + d1 * lattice_matrix[1, 1] + d2 * lattice_matrix[2, 1]
+        cz = d0 * lattice_matrix[0, 2] + d1 * lattice_matrix[1, 2] + d2 * lattice_matrix[2, 2]
+        np.minimum(min_dist_sq, cx * cx + cy * cy + cz * cz, out=min_dist_sq)
     return np.asarray(np.sqrt(min_dist_sq))
 
 

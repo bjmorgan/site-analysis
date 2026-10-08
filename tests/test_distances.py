@@ -224,6 +224,23 @@ class TestNumpyFallback(unittest.TestCase):
             result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
         np.testing.assert_allclose(result, expected, atol=1e-10)
 
+    def test_paired_mic_distances_numpy_fallback_does_not_depend_on_batch(self):
+        """Without numba, a pair's distance is the same in batches of any size."""
+        from unittest.mock import patch
+        import site_analysis.distances as dist_mod
+        lattice = Lattice.from_parameters(6.0, 6.0, 6.0, 60, 60, 60)
+        rng = np.random.default_rng(43)
+        frac1 = rng.uniform(-2.0, 3.0, (1000, 3))
+        frac2 = rng.uniform(-2.0, 3.0, (1000, 3))
+        with patch.object(dist_mod, 'HAS_NUMBA', False):
+            whole = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
+            for size in (1, 7):
+                with self.subTest(batch_size=size):
+                    batches = [dist_mod.paired_mic_distances(
+                        frac1[i:i + size], frac2[i:i + size], lattice.matrix)
+                        for i in range(0, len(frac1), size)]
+                    np.testing.assert_array_equal(np.concatenate(batches), whole)
+
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
 class TestNumbaAcceleration(unittest.TestCase):
@@ -242,7 +259,7 @@ class TestNumbaAcceleration(unittest.TestCase):
             self.assertAlmostEqual(result, expected, places=10)
 
     def test_paired_mic_distances_numba_matches_numpy(self):
-        """Numba and numpy paired distances agree to within rounding."""
+        """Numba and numpy paired distances are identical, so results do not depend on numba."""
         from unittest.mock import patch
         import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
@@ -252,7 +269,7 @@ class TestNumbaAcceleration(unittest.TestCase):
         numba_result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
         with patch.object(dist_mod, 'HAS_NUMBA', False):
             numpy_result = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
-        np.testing.assert_allclose(numba_result, numpy_result, rtol=0, atol=1e-12)
+        np.testing.assert_array_equal(numba_result, numpy_result)
 
     def test_small_and_large_batches_agree(self):
         """Small batches, on one thread, and large batches, in parallel, give identical distances."""

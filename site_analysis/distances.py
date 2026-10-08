@@ -1,9 +1,8 @@
 """Minimum-image distance and coordinate conversion functions for periodic systems.
 
 Provides distance calculations and fractional-to-Cartesian coordinate
-conversion operating on numpy arrays and a lattice matrix, with no
-pymatgen dependency. Optional numba acceleration for single-pair and
-batch distances.
+conversion operating on numpy arrays and a lattice matrix. Optional
+numba acceleration for single-pair and batch distances.
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ if HAS_NUMBA:
         frac2: np.ndarray,
         lattice_matrix: np.ndarray,
     ) -> float:
-        """JIT-compiled minimum-image distance checking all 27 images.
+        """JIT-compiled minimum-image distance over 27 periodic images.
 
         Args:
             frac1: Fractional coordinates of point 1, shape (3,).
@@ -44,7 +43,9 @@ if HAS_NUMBA:
         d0_base = frac1[0] - frac2[0]
         d1_base = frac1[1] - frac2[1]
         d2_base = frac1[2] - frac2[2]
-        # Reduce to nearest integer so 27-image search covers all cases
+        # Wrap to the image nearest in fractional coordinates. The 27 images
+        # searched are those within one cell of it, which is exact when the
+        # true distance is below the cell's smallest perpendicular width (#84).
         d0_base -= round(d0_base)
         d1_base -= round(d1_base)
         d2_base -= round(d2_base)
@@ -109,6 +110,49 @@ if HAS_NUMBA:
                 result[i, j] = min_dist_sq ** 0.5
         return result
 
+    @numba.njit(cache=True, parallel=True)
+    def _paired_mic_distances_numba(
+        frac_coords1: np.ndarray,
+        frac_coords2: np.ndarray,
+        lattice_matrix: np.ndarray,
+    ) -> np.ndarray:
+        """JIT-compiled minimum-image distances between paired points.
+
+        Args:
+            frac_coords1: Fractional coordinates, shape (K, 3).
+            frac_coords2: Fractional coordinates, shape (K, 3).
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors (pymatgen convention).
+
+        Returns:
+            (K,) array of minimum-image distances between
+            ``frac_coords1[k]`` and ``frac_coords2[k]``.
+        """
+        n = frac_coords1.shape[0]
+        result = np.empty(n)
+        for p in numba.prange(n):
+            d0_base = frac_coords1[p, 0] - frac_coords2[p, 0]
+            d1_base = frac_coords1[p, 1] - frac_coords2[p, 1]
+            d2_base = frac_coords1[p, 2] - frac_coords2[p, 2]
+            d0_base -= round(d0_base)
+            d1_base -= round(d1_base)
+            d2_base -= round(d2_base)
+            min_dist_sq = np.inf
+            for si in range(-1, 2):
+                for sj in range(-1, 2):
+                    for sk in range(-1, 2):
+                        d0 = d0_base + si
+                        d1 = d1_base + sj
+                        d2 = d2_base + sk
+                        cx = d0 * lattice_matrix[0, 0] + d1 * lattice_matrix[1, 0] + d2 * lattice_matrix[2, 0]
+                        cy = d0 * lattice_matrix[0, 1] + d1 * lattice_matrix[1, 1] + d2 * lattice_matrix[2, 1]
+                        cz = d0 * lattice_matrix[0, 2] + d1 * lattice_matrix[1, 2] + d2 * lattice_matrix[2, 2]
+                        dist_sq = cx * cx + cy * cy + cz * cz
+                        if dist_sq < min_dist_sq:
+                            min_dist_sq = dist_sq
+            result[p] = min_dist_sq ** 0.5
+        return result
+
 
 def mic_distance(
     frac1: np.ndarray,
@@ -117,7 +161,12 @@ def mic_distance(
 ) -> float:
     """Minimum-image distance between two points in a periodic cell.
 
-    Checks all 27 periodic images to find the true minimum distance.
+    Checks the 27 periodic images nearest in fractional coordinates.
+    This gives the true minimum distance whenever that distance is
+    shorter than the cell's smallest perpendicular width (the smallest
+    distance between opposite faces), and always in orthogonal cells. In
+    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
+    longer distances can be overestimated.
     Uses numba JIT compilation when available for improved performance
     on repeated single-pair calls.
 
@@ -151,9 +200,14 @@ def all_mic_distances(
 ) -> np.ndarray:
     """Minimum-image distance matrix between two sets of points.
 
-    Checks all 27 periodic images per pair to find true minimum
-    distances, which is necessary for triclinic cells. Uses numba
-    JIT compilation with parallel execution when available.
+    Checks the 27 periodic images of each pair nearest in fractional
+    coordinates, which is needed for triclinic cells. This gives the true
+    minimum distance whenever that distance is shorter than the cell's
+    smallest perpendicular width (the smallest distance between opposite
+    faces), and always in orthogonal cells. In thin or strongly skewed
+    cells, such as a 1x10x1 hexagonal supercell, longer distances can be
+    overestimated.
+    Uses numba JIT compilation with parallel execution when available.
 
     Note:
         Behaviour is undefined for non-finite inputs (NaN, inf).
@@ -186,6 +240,67 @@ def all_mic_distances(
         np.matmul(d_shifted, lattice_matrix, out=d_cart)
         np.einsum("ijk,ijk->ij", d_cart, d_cart, out=dist_sq)
         np.minimum(min_dist_sq, dist_sq, out=min_dist_sq)
+    return np.asarray(np.sqrt(min_dist_sq))
+
+
+def paired_mic_distances(
+    frac_coords1: np.ndarray,
+    frac_coords2: np.ndarray,
+    lattice_matrix: np.ndarray,
+) -> np.ndarray:
+    """Minimum-image distances between corresponding pairs of points.
+
+    Checks the 27 periodic images of each pair nearest in fractional
+    coordinates. This gives the true minimum distance whenever that
+    distance is shorter than the cell's smallest perpendicular width (the
+    smallest distance between opposite faces), and always in orthogonal
+    cells. In thin or strongly skewed cells, such as a 1x10x1 hexagonal
+    supercell, longer distances can be overestimated.
+    Uses numba JIT compilation with parallel execution when available.
+
+    Note:
+        Behaviour is undefined for non-finite inputs (NaN, inf).
+
+    Args:
+        frac_coords1: Fractional coordinates, shape (K, 3).
+        frac_coords2: Fractional coordinates, shape (K, 3).
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors (pymatgen convention: ``lattice.matrix``).
+
+    Returns:
+        (K,) array of minimum-image distances between
+        ``frac_coords1[k]`` and ``frac_coords2[k]``, in the same units as
+        the lattice matrix.
+
+    Raises:
+        ValueError: If the coordinate arrays do not both have shape
+            (K, 3), or ``lattice_matrix`` does not have shape (3, 3).
+    """
+    frac_coords1 = np.ascontiguousarray(frac_coords1, dtype=np.float64)
+    frac_coords2 = np.ascontiguousarray(frac_coords2, dtype=np.float64)
+    lattice_matrix = np.ascontiguousarray(lattice_matrix, dtype=np.float64)
+    if (frac_coords1.ndim != 2 or frac_coords1.shape[1] != 3
+            or frac_coords1.shape != frac_coords2.shape):
+        raise ValueError(
+            f"frac_coords1 and frac_coords2 must both have shape (K, 3), "
+            f"got {frac_coords1.shape} and {frac_coords2.shape}"
+        )
+    if lattice_matrix.shape != (3, 3):
+        raise ValueError(
+            f"lattice_matrix must have shape (3, 3), got {lattice_matrix.shape}"
+        )
+    if frac_coords1.shape[0] == 0:
+        return np.zeros(0)
+    if HAS_NUMBA:
+        return np.asarray(_paired_mic_distances_numba(
+            frac_coords1, frac_coords2, lattice_matrix))
+    d_frac = frac_coords1 - frac_coords2
+    d_frac -= np.round(d_frac)
+    min_dist_sq = np.full(d_frac.shape[0], np.inf)
+    for shift in _SHIFTS_27:
+        d_cart = (d_frac + shift) @ lattice_matrix
+        np.minimum(min_dist_sq, np.einsum("ij,ij->i", d_cart, d_cart),
+                   out=min_dist_sq)
     return np.asarray(np.sqrt(min_dist_sq))
 
 

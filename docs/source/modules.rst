@@ -9,8 +9,10 @@ Submodules
 
    modules/atom
    modules/builders
+   modules/distances
    modules/dynamic_voronoi_site
    modules/dynamic_voronoi_site_collection
+   modules/neighbour_search
    modules/pbc_utils
    modules/polyhedral_site
    modules/polyhedral_site_collection

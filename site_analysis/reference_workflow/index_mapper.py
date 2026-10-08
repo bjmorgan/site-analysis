@@ -72,7 +72,8 @@ class IndexMapper:
                 atoms: if ``species_filter`` is given without
                 ``target_species``, or matches no target atoms; if there
                 are no target atoms to map to; if ``lattice_matrix`` is
-                singular or not finite; if the coordinates used are not
+                not a finite, non-singular (3, 3) matrix; if the
+                coordinates used do not have shape (N, 3) or are not
                 finite; or if a 1:1 mapping cannot be achieved, because
                 several reference atoms map to the same target atom.
         """

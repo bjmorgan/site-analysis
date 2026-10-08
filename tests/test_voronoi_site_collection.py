@@ -109,16 +109,16 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 
 	def test_nearest_site_in_a_hexagonal_cell(self):
 		"""Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
-		# The atom is 1.28 A from site_b and 1.20 A from site_a. With the
-		# lattice transposed, site_b would be nearer.
-		site_b = VoronoiSite(frac_coords=np.array([0.5, 0.82, 0.5]))
-		site_a = VoronoiSite(frac_coords=np.array([0.8, 0.8, 0.5]))
-		collection = VoronoiSiteCollection(sites=[site_b, site_a])
+		# The atom is 1.20 A from near_site and 1.28 A from far_site. With
+		# the lattice transposed, far_site would be nearer.
+		far_site = VoronoiSite(frac_coords=np.array([0.5, 0.82, 0.5]))
+		near_site = VoronoiSite(frac_coords=np.array([0.8, 0.8, 0.5]))
+		collection = VoronoiSiteCollection(sites=[far_site, near_site])
 		atom = Atom(index=0)
 		atom._frac_coords = np.array([0.5, 0.5, 0.5])
 		collection.assign_site_occupations([atom], Lattice.hexagonal(4.0, 6.0).matrix)
-		self.assertEqual(site_a.contains_atoms, [0])
-		self.assertEqual(site_b.contains_atoms, [])
+		self.assertEqual(near_site.contains_atoms, [0])
+		self.assertEqual(far_site.contains_atoms, [])
 
 	def test_empty_atoms_list(self):
 		"""Test behaviour with empty atoms list."""

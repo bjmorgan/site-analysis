@@ -235,8 +235,9 @@ class DynamicVoronoiSiteCollection(SiteCollection):
 
         Raises:
             ValueError: When ``atoms`` is not empty: if the collection has
-                no sites, if ``lattice_matrix`` is singular or not finite,
-                or if the atom coordinates or site centres are not finite.
+                no sites, if ``lattice_matrix`` is not a finite,
+                non-singular (3, 3) matrix, or if the atom coordinates or
+                site centres are not finite.
         """
         self.reset_site_occupations()
         if not atoms:

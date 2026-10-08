@@ -63,9 +63,13 @@ def get_coordination_indices(
         centre, with equal distances in atom-index order.
 
     Raises:
-        ValueError: If no centre atoms are found, if a list of n_coord
-            has incorrect length, if ``lattice_matrix`` is singular or not
-            finite, or if the coordinates used are not finite.
+        ValueError: If ``species`` does not have one entry per row of
+            ``frac_coords``, if no centre atoms are found, or if a list of
+            n_coord has incorrect length. Also, when there are
+            coordinating atoms and ``cutoff`` is non-negative: if
+            ``lattice_matrix`` is not a finite, non-singular (3, 3)
+            matrix, or if the coordinates used do not have shape (N, 3)
+            or are not finite.
     """
     if len(species) != len(frac_coords):
         raise ValueError(
@@ -330,8 +334,9 @@ def site_index_mapping(
     Raises:
         ValueError: If ``species1`` or ``species2`` does not have one
             entry per row of its coordinate array, if no atoms match
-            ``species2_filter``, if ``lattice_matrix`` is singular or not
-            finite, if the coordinates used are not finite, or if
+            ``species2_filter``, if ``lattice_matrix`` is not a finite,
+            non-singular (3, 3) matrix, if the coordinates used do not
+            have shape (N, 3) or are not finite, or if
             ``one_to_one_mapping`` is ``True`` and the mapping is not
             one-to-one.
     """
@@ -421,10 +426,11 @@ def calculate_species_distances(
 
     Raises:
         ValueError: If ``species1`` or ``species2`` does not have one
-            entry per row of its coordinate array, or, when some
-            selected species has atoms in both structures, if
-            ``lattice_matrix`` is singular or not finite or the
-            coordinates used are not finite.
+            entry per row of its coordinate array. Also, when some
+            selected species has atoms in both structures: if
+            ``lattice_matrix`` is not a finite, non-singular (3, 3)
+            matrix, or if the coordinates used do not have shape (N, 3)
+            or are not finite.
     """
     if len(species1) != len(frac_coords1):
         raise ValueError(

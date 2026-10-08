@@ -9,12 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells, including non-orthogonal ones. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point. Like the existing distance functions, it uses the 27 periodic images nearest in fractional coordinates, which give the true minimum-image distance whenever it is shorter than the cell's smallest perpendicular width (#84).
-- `site_analysis.distances.paired_mic_distances()`, for minimum-image distances between given pairs of points.
+- `site_analysis.distances.paired_mic_distances()`, for minimum-image distances between given pairs of points. It raises `ValueError` for non-finite input.
 
 ### Changed
 
 - Finding coordination environments (`get_coordination_indices()`), checking reference structures, structure alignment, mapping atoms between structures (`IndexMapper`, `site_index_mapping()`), calculating species distances (`calculate_species_distances()`), and Voronoi and dynamic Voronoi site assignment now use `PeriodicNeighbourIndex` instead of computing every pairwise distance. Their memory use now scales with the number of atoms rather than its square, and they are much faster for large systems. Results are unchanged.
-- When they search for neighbours, each of these now raises `ValueError` for non-finite coordinates, coordinates not shaped (N, 3), or a lattice matrix that is singular, non-finite or not shaped (3, 3). Previously such input could give meaningless results without an error. `paired_mic_distances()` also raises `ValueError` for non-finite input.
+- When they search for neighbours, each of these now raises `ValueError` for non-finite coordinates, coordinates not shaped (N, 3), or a lattice matrix that is singular, non-finite or not shaped (3, 3). Previously such input could give meaningless results without an error.
 
 ### Removed
 

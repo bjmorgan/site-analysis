@@ -164,13 +164,13 @@ The `use_reference_centers` parameter controls which of two methods is used:
 
 - **Reference centre unwrapping** (`use_reference_centers=True`, default): Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images. This method works correctly even in small supercells where sites may legitimately span more than 50% of unit cell dimensions.
 
-- **Spread-based detection** (`use_reference_centers=False`): Identifies wrapped sites based on the spatial distribution of reference atoms. This method should only be used when you are confident that all sites have spans well below 0.5 times the simulation cell dimensions in all directions, and is inappropriate for relatively small simulation cells.
+- **Spread-based detection** (`use_reference_centers=False`): Identifies wrapped sites based on the spatial distribution of reference atoms. This method should only be used when you are confident that all sites have spans well below 0.5 times the simulation cell dimensions in all directions, and is inappropriate for relatively small simulation cells. For polyhedral sites, it also makes the site search fall back to the neighbours of an atom's most recent site, then list order, instead of ranking sites by distance.
 
 #### When to Use Each Method
 
 **Default choice (recommended)**: Use reference centre unwrapping for all analyses. This method handles small supercells correctly and is robust across different system types.
 
-**Advanced usage only**: The spread-based method may provide modest performance improvements in some large systems, but should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
+**Advanced usage only**: The spread-based method is no faster, since after the first frame both methods update the unwrapping in the same way, and for polyhedral sites the site search fallback can make assignment slower. It should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
 
 For detailed explanations of both methods, their trade-offs, and guidance on when to use each approach, see {doc}`../concepts/pbc_handling`.
 

@@ -9,8 +9,7 @@ specific functionality for polyhedral sites, including:
 
 - Maintaining a map of neighbouring polyhedral sites that share faces
 - Optimised atom assignment via the PriorityAssignmentMixin
-- Precomputed distance-ranked site ordering when reference centres are
-  available
+- Distance-ranked site ordering when reference centres are available
 
 The module also includes utility functions:
 
@@ -20,10 +19,12 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
+from collections import Counter, defaultdict
+from collections.abc import Iterable
+
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
-from .site import Site
 from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
@@ -36,6 +37,13 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     polyhedral sites, including maintaining a map of neighbouring polyhedral
     sites that share faces and implementing optimised atom assignment based
     on spatial relationships and learned transition patterns.
+
+    After an atom's recent sites and learned transitions, the remaining
+    sites are searched in order of the distance of their reference centres
+    from the atom. If any site lacks a reference centre (for example, sites
+    built with ``use_reference_centers=False``), the search instead falls
+    back to the neighbours of the atom's most recent site, then list order,
+    for the whole collection.
     
     Attributes:
         sites (list): List of ``PolyhedralSite`` objects.
@@ -43,16 +51,23 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     """
 
     def __init__(self,
-            sites: list[Site]) -> None:
+            sites: Iterable[PolyhedralSite]) -> None:
         """Create a PolyhedralSiteCollection instance.
 
         Args:
-            sites (list(PolyhedralSite)): List of PolyhedralSite objects.
+            sites (iterable(PolyhedralSite)): PolyhedralSite objects, such as
+                a list or a generator.
 
         Returns:
             None
 
+        Raises:
+            TypeError: If any site is not a ``PolyhedralSite``.
+            ValueError: If a site's reference centre is not three finite
+                numbers.
+
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, PolyhedralSite):
                 raise TypeError(f"Expected PolyhedralSite, got {type(s).__name__}")
@@ -83,7 +98,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, lattice_matrix)
 
-    def assign_site_occupations(self, atoms, lattice_matrix) -> None:
+    def assign_site_occupations(self,
+            atoms: list[Atom],
+            lattice_matrix: np.ndarray) -> None:
         """Assign atoms to polyhedral sites based on their positions.
 
         This method implements an optimised assignment logic using a priority-based
@@ -92,8 +109,17 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         Args:
             atoms: List of Atom objects to be assigned to sites.
             lattice_matrix: (3, 3) lattice matrix where rows are lattice
-                vectors. Not currently used for polyhedral containment
-                checks, but accepted for interface consistency.
+                vectors. Used to rank candidate sites by the distance of
+                their reference centres from each atom; the containment
+                checks themselves do not use it.
+
+        Raises:
+            ValueError: When every site has a reference centre and an
+                atom's search reaches the distance ranking (the atom is
+                not in its recent sites or learned transition
+                destinations): if ``lattice_matrix`` is not a finite,
+                non-singular (3, 3) matrix, or if the atom's coordinates
+                are not finite.
         """
         self.reset_site_occupations()
         for atom in atoms:
@@ -101,7 +127,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
-            for site in self._get_priority_sites(atom):
+            for site in self._get_priority_sites(atom, lattice_matrix):
                 if site.contains_atom(atom, pbc_images=pbc_images):
                     self.update_occupation(site, atom)
                     break
@@ -153,13 +179,29 @@ def _collect_reference_centres(
         - centres is an (N, 3) array of fractional coordinates, or None
           if any site lacks a reference centre.
         - site_indices is a list of site indices.
+
+    Raises:
+        ValueError: If a site has a reference centre that is not three
+            finite numbers, even if another site lacks one.
     """
     centres = []
     for s in sites:
         if s.reference_center is None:
-            return None, [s.index for s in sites]
-        centres.append(s.reference_center)
-    return np.array(centres), [s.index for s in sites]
+            continue
+        try:
+            centre = np.asarray(s.reference_center, dtype=np.float64)
+            valid = centre.shape == (3,) and bool(np.isfinite(centre).all())
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise ValueError(
+                f"reference centre of site {s.index} must be three finite numbers, "
+                f"got {s.reference_center}")
+        centres.append(centre)
+    site_indices = [s.index for s in sites]
+    if len(centres) < len(sites):
+        return None, site_indices
+    return np.array(centres), site_indices
 
 
 def construct_neighbouring_sites(
@@ -175,18 +217,22 @@ def construct_neighbouring_sites(
 
     Returns:
         (dict): Dictionary of `int`: `list` entries.
-            Keys are site indices. Values are lists of ``PolyhedralSite`` objects.
+            Keys are site indices. Values are lists of ``PolyhedralSite``
+            objects, in the order they appear in ``sites``.
 
     """
+    vertex_sets = [set(site.vertex_indices) for site in sites]
+    positions_by_vertex: defaultdict[int, list[int]] = defaultdict(list)
+    for position, vertices in enumerate(vertex_sets):
+        for vertex in vertices:
+            positions_by_vertex[vertex].append(position)
     neighbours: dict[int, list[PolyhedralSite]] = {}
-    for site_i in sites:
-        neighbours[site_i.index] = []
-        for site_j in sites:
-            if site_i is site_j:
-                continue
-            # 3 or more common vertices indicated a shared face.
-            n_shared_vertices = len(set(site_i.vertex_indices) & set(site_j.vertex_indices))
-            if n_shared_vertices >= 3:
-                neighbours[site_i.index].append(site_j)
+    for site_i, vertices in zip(sites, vertex_sets):
+        n_shared_vertices = Counter(
+            position for vertex in vertices for position in positions_by_vertex[vertex])
+        # 3 or more common vertices indicate a shared face.
+        neighbours[site_i.index] = [
+            sites[position] for position in sorted(n_shared_vertices)
+            if n_shared_vertices[position] >= 3 and sites[position] is not site_i]
     return neighbours
  

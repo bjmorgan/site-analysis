@@ -337,7 +337,9 @@ class TrajectoryBuilder:
                     labels: str | list[str] | None = None) -> TrajectoryBuilder:
         """Define spherical sites.
         
-        Note: Sites will be generated when build() is called.
+        Note: Sites will be generated when build() is called, which raises
+        ``ValueError`` if a centre is not three finite numbers or a radius
+        is negative or NaN.
         
         Args:
             centres: list of fractional coordinate centres for spherical sites
@@ -465,8 +467,12 @@ class TrajectoryBuilder:
                   assumes this indicates PBC wrapping and shifts coordinates
                   accordingly. WARNING: Gives incorrect results when sites
                   legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). May offer performance benefits for
-                  some setups. Only use after verifying it works correctly for your
+                  in a 2x2x2 FCC supercell). It is no faster: after the first
+                  frame, both settings update the unwrapping in the same way.
+                  The polyhedral site search also falls back to the neighbours
+                  of an atom's most recent site, then list order, instead of
+                  ranking sites by distance, which can make assignment slower.
+                  Only use after verifying it works correctly for your
                   structures.
 
         Returns:
@@ -592,8 +598,9 @@ class TrajectoryBuilder:
                   assumes this indicates PBC wrapping and shifts coordinates
                   accordingly. WARNING: Gives incorrect results when sites
                   legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). May offer performance benefits for
-                  some setups. Only use after verifying it works correctly for your
+                  in a 2x2x2 FCC supercell). It is no faster: after the first
+                  frame, both settings update the unwrapping in the same way.
+                  Only use after verifying it works correctly for your
                   structures.
 
         Returns:
@@ -788,7 +795,9 @@ class TrajectoryBuilder:
                 than ``min_atom_distance``, if duplicate sites are
                 detected, or if a commitment radius is not positive, or a
                 dict of radii does not cover every site label or is given
-                while some sites have no label.
+                while some sites have no label, or if a spherical site's
+                centre is not three finite numbers or its radius is
+                negative or NaN.
             TypeError: If site types are mixed, or if a commitment radius is
                 not a number.
         """

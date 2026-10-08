@@ -116,7 +116,9 @@ class Site(ABC):
         return self.contains_point(atom.frac_coords)
 
     def as_dict(self) -> dict:
-        """Json-serializable dict representation of this Site.
+        """Dictionary of this site's attributes, which may contain numpy arrays.
+
+        For example, the recorded ``points`` are numpy arrays.
 
         Args:
             None

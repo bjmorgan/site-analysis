@@ -196,7 +196,7 @@ This approach gives you full control over:
 
 ## Handling Overlapping Sites
 
-When sites overlap, the assignment algorithm uses a priority-based approach: it checks the atom's most recently occupied sites first, then sites ordered by learned transition frequency and distance from the current site. The first containing site found claims the atom. This means atoms tend to remain in their current sites even when they're in overlapping regions, reducing spurious transitions. See the [site collections](../concepts/site_collections.md) page for details on the priority ordering.
+When sites overlap, the assignment algorithm uses a priority-based approach: it checks the atom's most recently occupied sites first, then sites ordered by learned transition frequency, then the remaining sites in order of distance from the atom. The first containing site found claims the atom. This means atoms tend to remain in their current sites even when they're in overlapping regions, reducing spurious transitions. See the [site collections](../concepts/site_collections.md) page for details on the priority ordering.
 
 **Note**: Overlapping sites can be deliberately used to minimize spurious "transitions" caused by large amplitude thermal vibrations that don't represent true diffusive motion.
 

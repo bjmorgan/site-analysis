@@ -7,6 +7,7 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.spherical_site_collection import SphericalSiteCollection
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
+from site_analysis.distances import mic_distance
 from site_analysis.site import Site
 
 
@@ -51,7 +52,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
     def test_initialization(self):
         """Test that SphericalSiteCollection initializes correctly."""
         self.assertEqual(self.collection.sites, self.sites)
-        self.assertIsNotNone(self.collection._distance_ranked_sites)
 
     def test_init_with_empty_sites_list(self):
         """Test that __init__ works with empty sites list."""
@@ -69,6 +69,11 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         # Test initialisation with mixed site types
         with self.assertRaises(TypeError):
             SphericalSiteCollection(sites=mixed_sites)
+
+    def test_init_accepts_a_generator_of_sites(self):
+        """A collection built from a generator holds every site."""
+        collection = SphericalSiteCollection(s for s in [self.site1, self.site2])
+        self.assertEqual(collection.sites, [self.site1, self.site2])
 
     def test_analyse_structure(self):
         """Test that analyse_structure calls assign_coords and assign_site_occupations."""
@@ -186,13 +191,16 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 
         collection = SphericalSiteCollection([site1, site2, site3])
         lattice = Lattice.cubic(10.0)
-        structure = Structure(lattice, ["Li", "Li"], [[0.05, 0.05, 0.05], [0.15, 0.05, 0.05]])
+        structure = Structure(lattice, ["Li", "Li"], [[0.06, 0.05, 0.05], [0.15, 0.05, 0.05]])
 
         # Create atoms with some trajectory history
         atom1 = Atom(index=0)
         atom1.trajectory = [site1.index]
         atom1._recent_sites = [site1.index, None]
-        atom1._frac_coords = np.array([0.05, 0.05, 0.05])  # Should stay in site1
+        # Inside both site1 and site2, and nearer site2's centre (0.81 A
+        # against 0.93 A), so it goes to site1 only because that is its
+        # recent site.
+        atom1._frac_coords = np.array([0.06, 0.05, 0.05])
 
         atom2 = Atom(index=1)
         atom2.trajectory = [site1.index]
@@ -209,114 +217,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(atom2.in_site, site2.index)           # Correct assignment
         self.assertEqual(site1.contains_atoms, [atom1.index])  # Site updated
         self.assertEqual(site2.contains_atoms, [atom2.index])  # Site updated
-
-
-class TestGetPrioritySites(unittest.TestCase):
-    """Test _get_priority_sites generator behavior for SphericalSiteCollection."""
-
-    def setUp(self):
-        Site._newid = 0
-        self.lattice = Lattice.cubic(10.0)
-
-        self.site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.5, label="site1")
-        self.site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.5, label="site2")
-        self.site3 = SphericalSite(frac_coords=np.array([0.8, 0.8, 0.8]), rcut=1.5, label="site3")
-        self.collection = SphericalSiteCollection([self.site1, self.site2, self.site3])
-
-        self.atom = Atom(index=0)
-        self.atom._frac_coords = np.array([0.2, 0.2, 0.2])
-
-    def test_yields_most_recent_site_first(self):
-        """Test that generator yields most recent site as first site."""
-        self.atom._recent_sites = [self.site2.index, None]
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
-        self.assertEqual(priority_sites[0], self.site2)
-
-    def test_yields_both_recent_sites(self):
-        """Test that generator yields both recent distinct sites."""
-        self.atom._recent_sites = [self.site2.index, self.site1.index]
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
-        self.assertEqual(priority_sites[0], self.site2)
-        self.assertEqual(priority_sites[1], self.site1)
-
-    def test_yields_all_sites_when_no_valid_trajectory(self):
-        """Test that generator yields all sites when no valid site history exists."""
-        self.atom.trajectory = [None, None]
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
-        self.assertEqual(len(priority_sites), 3)
-        # All sites yielded, starting from nearest
-        self.assertEqual(priority_sites[0], self.site1)  # nearest to atom at [0.2,0.2,0.2]
-
-    def test_yields_transition_destinations_after_most_recent(self):
-        """Test that generator yields transition destinations after most recent site."""
-        self.atom._recent_sites = [self.site1.index, None]
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-            priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom)]
-            self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_yields_no_duplicates_when_all_sites_are_transitions(self):
-        """Test that generator doesn't yield duplicates when all sites appear as transitions."""
-        self.atom._recent_sites = [self.site1.index, None]
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [site.index for site in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-            self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_no_history_uses_nearest_site_first(self):
-        """Test that nearest site is yielded first when atom has no history."""
-        # atom at [0.2, 0.2, 0.2] -- nearest site is site1 at [0.1, 0.1, 0.1]
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
-        self.assertEqual(len(priority_sites), 3)
-        self.assertEqual(priority_sites[0], self.site1)
-
-    def test_yields_remaining_sites_distance_ranked(self):
-        """Test that remaining sites are yielded in distance-ranked order."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-            # site1 at [0.1,0.1,0.1], site2 at [0.5,0.5,0.5], site3 at [0.8,0.8,0.8]
-            # From site1 with minimum-image convention:
-            #   site3 is 0.3*sqrt(3) away via PBC, site2 is 0.4*sqrt(3) away
-            self.assertEqual(priority_sites[0], self.site1)
-            self.assertEqual(priority_sites[1], self.site3)
-            self.assertEqual(priority_sites[2], self.site2)
-
-    def test_yields_transitions_then_distance_ranked(self):
-        """Test that transitions come before distance-ranked remaining sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index]
-
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-            # site1 (recent), site3 (transition), site2 (distance-ranked remaining)
-            self.assertEqual(priority_sites[0], self.site1)
-            self.assertEqual(priority_sites[1], self.site3)
-            self.assertEqual(priority_sites[2], self.site2)
-
-    def test_yields_no_duplicates_with_transitions(self):
-        """Test that generator doesn't yield duplicates when transition overlaps with distance ranking."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site2.index]
-
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-            # Should be exactly 3 sites, no duplicates
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [site.index for site in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-
-            # site2 appears as transition, then site3 from distance ranking
-            self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
 
 
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
@@ -337,9 +237,10 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
 
     def test_calls_generator_for_each_atom(self):
         """Test that _get_priority_sites is called once per atom."""
+        lattice_matrix = self.structure.lattice.matrix
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
-            self.collection._get_priority_sites.assert_called_once_with(self.atom)
+            self.collection.assign_site_occupations(self.atoms, lattice_matrix)
+            self.collection._get_priority_sites.assert_called_once_with(self.atom, lattice_matrix)
 
     def test_calls_generator_for_multiple_atoms(self):
         """Test that _get_priority_sites is called for each atom."""
@@ -409,6 +310,146 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
             self.collection.assign_site_occupations(self.atoms, self.structure.lattice.matrix)
             self.assertIsNone(self.atom.in_site)
+
+
+class TestOverlappingSites(unittest.TestCase):
+    """Tests for assigning atoms where spherical sites overlap."""
+
+    def test_atom_leaving_its_site_goes_to_nearest_containing_site(self):
+        """An atom that leaves its recent site for an overlap goes to the nearer centre."""
+        Site._newid = 0
+        previous = SphericalSite(frac_coords=np.array([0.1, 0.5, 0.5]), rcut=1.0)
+        far = SphericalSite(frac_coords=np.array([0.45, 0.5, 0.5]), rcut=2.5)
+        near = SphericalSite(frac_coords=np.array([0.55, 0.5, 0.5]), rcut=2.5)
+        collection = SphericalSiteCollection([previous, far, near])
+        atom = Atom(index=0)
+        atom._recent_sites = [previous.index, None]
+        # Inside both overlapping sites: 0.8 A from far's centre and 0.2 A
+        # from near's. Ranked from the previous site's centre instead, far
+        # would be checked first.
+        atom._frac_coords = np.array([0.53, 0.5, 0.5])
+
+        collection.assign_site_occupations([atom], np.eye(3) * 10.0)
+
+        self.assertEqual(atom.in_site, near.index)
+
+
+class TestReach(unittest.TestCase):
+    """Tests for limiting the site search to the largest site radius."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.lattice_matrix = np.eye(3) * 10.0
+        self.small = SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=0.5)
+        self.large = SphericalSite(frac_coords=np.array([0.6, 0.5, 0.5]), rcut=3.0)
+        self.far_small = SphericalSite(frac_coords=np.array([0.9, 0.5, 0.5]), rcut=0.5)
+        # The large site is neither first nor last, so its radius is not
+        # picked out by position.
+        self.collection = SphericalSiteCollection([self.small, self.large, self.far_small])
+        self.atom = Atom(index=0)
+
+    def test_sites_beyond_the_largest_radius_are_not_offered(self):
+        """An atom further than the largest radius from every centre is offered no sites."""
+        # 7.1 A from small's centre, 7.7 A from large's and 8.1 A from far_small's.
+        self.atom._frac_coords = np.array([0.3, 0.0, 0.0])
+        self.assertEqual(
+            list(self.collection._get_priority_sites(self.atom, self.lattice_matrix)), [])
+
+    def test_atom_found_in_large_site_beyond_smaller_radii(self):
+        """The reach is the largest radius, so a large site beyond small ones is found."""
+        # 1 A from small's centre, outside it, 2 A from large's, inside it,
+        # and 5 A from far_small's.
+        self.atom._frac_coords = np.array([0.4, 0.5, 0.5])
+        self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
+        self.assertEqual(self.atom.in_site, self.large.index)
+
+    def test_site_with_infinite_radius_is_offered_from_anywhere(self):
+        """A site with an infinite radius is found for an atom far from every centre."""
+        unbounded = SphericalSite(frac_coords=np.array([0.6, 0.5, 0.5]), rcut=np.inf)
+        collection = SphericalSiteCollection([self.small, unbounded])
+        # 7.1 A from small's centre and 7.7 A from unbounded's.
+        self.atom._frac_coords = np.array([0.3, 0.0, 0.0])
+        collection.assign_site_occupations([self.atom], self.lattice_matrix)
+        self.assertEqual(self.atom.in_site, unbounded.index)
+
+
+class TestNonFiniteAtomCoordinates(unittest.TestCase):
+    """Tests for assigning atoms whose coordinates are not finite."""
+
+    def test_non_finite_atom_coordinates_raise(self):
+        """An atom with non-finite coordinates raises ValueError once it reaches the ranking."""
+        Site._newid = 0
+        collection = SphericalSiteCollection(
+            [SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)])
+        atom = Atom(index=0)
+        atom._frac_coords = np.array([np.nan, 0.5, 0.5])
+        with self.assertRaises(ValueError):
+            collection.assign_site_occupations([atom], np.eye(3) * 10.0)
+
+
+def _nearest_containing_site(sites, point, lattice_matrix):
+    """Return the index of the containing site with the nearest centre, or None.
+
+    Checks every site. Of containing sites at equal distances, the first in
+    the list is returned.
+    """
+    nearest_index, nearest_distance = None, np.inf
+    for site in sites:
+        distance = mic_distance(site.frac_coords, point, lattice_matrix)
+        if distance <= site.rcut and distance < nearest_distance:
+            nearest_index, nearest_distance = site.index, distance
+    return nearest_index
+
+
+class TestMatchesBruteForce(unittest.TestCase):
+    """Assignments match checking every site."""
+
+    def test_atoms_without_history_go_to_the_nearest_containing_site(self):
+        """Atoms with no recent site go to the containing site with the nearest centre."""
+        rng = np.random.default_rng(3)
+        lattice_matrix = Lattice.from_parameters(8.0, 9.0, 10.0, 75, 100, 110).matrix
+        # Site indices differ from list positions.
+        Site._newid = 100
+        sites = [SphericalSite(frac_coords=centre, rcut=rcut)
+                 for centre, rcut in zip(rng.random((40, 3)), rng.uniform(0.5, 2.5, 40))]
+        collection = SphericalSiteCollection(sites)
+        atoms = [Atom(index=i) for i in range(60)]
+        # Some atoms are outside the cell, to test wrapping.
+        for atom, point in zip(atoms, rng.uniform(-0.2, 1.2, (60, 3))):
+            atom._frac_coords = point
+
+        collection.assign_site_occupations(atoms, lattice_matrix)
+
+        self.assertEqual(
+            [atom.in_site for atom in atoms],
+            [_nearest_containing_site(sites, atom.frac_coords, lattice_matrix) for atom in atoms])
+
+
+class TestReachTolerance(unittest.TestCase):
+    """Tests for widening the reach so that rounding cannot leave out a site."""
+
+    def test_atom_at_the_radius_is_assigned_without_numba(self):
+        """An atom exactly at the site radius is assigned when numba is not used."""
+        # Without numba, the containment test and the reach query compute
+        # the same distance in different numpy code, which can round
+        # differently. These coordinates are a case that once put the atom
+        # one ulp beyond the radius in the reach query, so that it was found
+        # only because the reach is widened. The reach query's arithmetic
+        # has since changed and this case now rounds alike, so the tolerance
+        # itself is tested directly in test_site_collection.py.
+        centre = np.array([0.12428327649956394, 0.6706244146936303, 0.6471895115742501])
+        point = np.array([1.4898346963218356, 0.1318870907354004, -0.1345752421468751])
+        lattice_matrix = np.array([[10.76328146769828, 0.0, -3.6633263423816893],
+                                   [-2.1357799113482145, 6.384391996928692, 3.732980239510001],
+                                   [0.0, 0.0, 5.409735239361947]])
+        with patch("site_analysis.distances.HAS_NUMBA", False):
+            rcut = mic_distance(centre, point, lattice_matrix)
+            site = SphericalSite(frac_coords=centre, rcut=rcut)
+            collection = SphericalSiteCollection([site])
+            atom = Atom(index=0)
+            atom._frac_coords = point
+            collection.assign_site_occupations([atom], lattice_matrix)
+        self.assertEqual(atom.in_site, site.index)
 
 
 if __name__ == '__main__':

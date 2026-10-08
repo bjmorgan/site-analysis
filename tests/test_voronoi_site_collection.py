@@ -60,6 +60,11 @@ class VoronoiSiteCollectionTestCase(unittest.TestCase):
 		
 		with self.assertRaises(TypeError):
 			VoronoiSiteCollection(sites=[self.site1, non_voronoi_site])
+
+	def test_init_accepts_a_generator_of_sites(self):
+		"""A collection built from a generator holds every site."""
+		collection = VoronoiSiteCollection(s for s in [self.site1, self.site2])
+		self.assertEqual(collection.sites, [self.site1, self.site2])
 	
 	def test_analyse_structure(self):
 		"""Test that analyse_structure assigns coordinates and calls assign_site_occupations."""

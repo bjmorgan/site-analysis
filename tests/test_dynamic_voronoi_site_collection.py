@@ -49,6 +49,13 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		# Check that initialization raises TypeError
 		with self.assertRaises(TypeError):
 			DynamicVoronoiSiteCollection(sites=sites)
+
+	def test_init_accepts_a_generator_of_sites(self):
+		"""A collection built from a generator holds every site."""
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		collection = DynamicVoronoiSiteCollection(s for s in [site1, site2])
+		self.assertEqual(collection.sites, [site1, site2])
 			
 	def test_analyse_structure(self):
 		"""Test that analyse_structure computes centres and assigns occupations."""

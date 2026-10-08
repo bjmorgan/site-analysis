@@ -41,7 +41,7 @@ The radius parameter for spherical sites presents a fundamental trade-off. When 
 
 To mitigate this issue, one might be tempted to increase the site radii to ensure fuller coverage of space. However, this introduces a new problem: overlapping sites. When spheres overlap, a mobile ion might simultaneously satisfy the containment criteria for multiple sites, creating ambiguity in site assignment.
 
-The `site_analysis` package addresses this ambiguity through a priority-based assignment algorithm: each atom's recently occupied sites are checked first, followed by sites ordered by learned transition frequency and distance. The first containing site found claims the atom. This means an atom in an overlapping region will tend to remain in its current site, reducing spurious transitions from small oscillations.
+The `site_analysis` package addresses this ambiguity through a priority-based assignment algorithm: each atom's recently occupied sites are checked first, followed by learned transition destinations, and then the remaining sites in order of distance from the atom. The first containing site found claims the atom. This means an atom in an overlapping region will tend to remain in its current site, reducing spurious transitions from small oscillations.
 
 For details on how the priority ordering works, see the [site collections](site_collections.md) page. While effective for maintaining assignment consistency, this approach does not resolve the fundamental spatial coverage issues with spherical sites, making other site definitions generally preferable for detailed mechanistic analysis.
 

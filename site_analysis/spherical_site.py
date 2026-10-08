@@ -13,6 +13,23 @@ from site_analysis.distances import mic_distance
 import numpy as np
 
 
+def _read_only(array: np.ndarray) -> np.ndarray:
+    """Return a read-only float64 copy of an array.
+
+    The copy is returned as a view of a non-writeable array, so its
+    ``writeable`` flag cannot be set back to True.
+
+    Args:
+        array: The array to copy.
+
+    Returns:
+        A read-only float64 copy of ``array``.
+    """
+    frozen = np.array(array, dtype=np.float64)
+    frozen.flags.writeable = False
+    return frozen.view()
+
+
 class SphericalSite(Site):
     """A site defined by a spherical volume in real space.
     
@@ -28,10 +45,6 @@ class SphericalSite(Site):
     atom positions in the structure, making them suitable for applications where
     consistent site volumes are needed regardless of structural distortions.
     
-    Attributes:
-        frac_coords (np.ndarray): Fractional coordinates of the sphere centre.
-        rcut (float): Cutoff radius in Angstroms.
-        
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
             (index, label, contains_atoms, trajectory, points, transitions, average_occupation).
@@ -56,10 +69,41 @@ class SphericalSite(Site):
         
         Returns:
             None
+
+        Raises:
+            ValueError: If ``frac_coords`` is not three finite numbers, or
+                ``rcut`` is negative or NaN.
         """
+        centre = np.array(frac_coords, dtype=np.float64)
+        if centre.shape != (3,) or not np.all(np.isfinite(centre)):
+            raise ValueError(f"frac_coords must be three finite numbers, got {frac_coords}")
+        if not rcut >= 0:
+            raise ValueError(f"rcut must be non-negative, got {rcut}")
         super(SphericalSite, self).__init__(label=label)
-        self.frac_coords = frac_coords
-        self.rcut = rcut
+        self._frac_coords = _read_only(centre)
+        self._rcut = float(rcut)
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore a copied or unpickled site, keeping its centre read-only.
+
+        Copying or unpickling an array makes it writeable, so the centre
+        is made read-only again.
+
+        Args:
+            state: The attributes of the site.
+        """
+        self.__dict__.update(state)
+        self._frac_coords = _read_only(self._frac_coords)
+
+    @property
+    def frac_coords(self) -> np.ndarray:
+        """Fractional coordinates of the sphere centre (read-only)."""
+        return self._frac_coords
+
+    @property
+    def rcut(self) -> float:
+        """Cutoff radius in Angstroms (read-only)."""
+        return self._rcut
         
     def __repr__(self) -> str:
         """Return a string representation of this spherical site.
@@ -88,15 +132,16 @@ class SphericalSite(Site):
     def as_dict(self) -> dict:
         """Returns a dictionary representation of this SphericalSite.
         
-        Creates a JSON-serializable dictionary containing all the attributes
-        needed to reconstruct this SphericalSite object.
+        Creates a dictionary containing all the attributes needed to
+        reconstruct this SphericalSite object. The centre (a copy) and any
+        recorded points are numpy arrays.
         
         Returns:
             dict: Dictionary containing the SphericalSite's attributes, including
                 attributes from the parent Site class plus 'frac_coords' and 'rcut'.
         """
         d = super(SphericalSite, self).as_dict()
-        d['frac_coords'] = self.frac_coords
+        d['frac_coords'] = self.frac_coords.copy()
         d['rcut'] = self.rcut
         return d
 

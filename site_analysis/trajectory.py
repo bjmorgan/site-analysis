@@ -110,11 +110,11 @@ class Trajectory:
             raise TypeError(f"Site type {site_type} not recognised for Trajectory initialisation")
         self.site_collection = collection_class(sites)
         
-        self.sites = sites
+        self.sites = self.site_collection.sites
         self.atoms = atoms
         self.timesteps: list[int] = []
         self.atom_lookup = {a.index: i for i, a in enumerate(atoms)}
-        self.site_lookup = {s.index: i for i, s in enumerate(sites)}
+        self.site_lookup = {s.index: i for i, s in enumerate(self.sites)}
         self._commitment_radius = (dict(commitment_radius)
                                    if isinstance(commitment_radius, dict)
                                    else commitment_radius)

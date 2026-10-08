@@ -27,12 +27,12 @@ positions of the reference atoms.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import numpy as np
 from pymatgen.core import Structure
 from site_analysis.site_collection import SiteCollection
-from site_analysis.site import Site
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
@@ -129,11 +129,12 @@ class DynamicVoronoiSiteCollection(SiteCollection):
     """
     
     def __init__(self,
-                 sites: list[Site]) -> None:
+                 sites: Iterable[DynamicVoronoiSite]) -> None:
         """Create a DynamicVoronoiSiteCollection instance.
         
         Args:
-            sites (list[DynamicVoronoiSite]): list of DynamicVoronoiSite objects.
+            sites (Iterable[DynamicVoronoiSite]): DynamicVoronoiSite objects,
+                such as a list or a generator.
             
         Returns:
             None
@@ -141,6 +142,7 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         Raises:
             TypeError: If any of the sites is not a DynamicVoronoiSite.
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, DynamicVoronoiSite):
                 raise TypeError("All sites must be DynamicVoronoiSite instances")

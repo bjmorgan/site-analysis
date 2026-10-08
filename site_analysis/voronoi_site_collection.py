@@ -22,27 +22,30 @@ tessellation logic using distance calculations rather than explicit
 geometric construction of the Voronoi cells.
 """
 
+from collections.abc import Iterable
+
 import numpy as np
 from pymatgen.core import Structure
 from site_analysis.site_collection import SiteCollection
 from site_analysis.atom import Atom
-from site_analysis.site import Site
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 class VoronoiSiteCollection(SiteCollection):
 
     def __init__(self,
-            sites: list[Site]) -> None:
+            sites: Iterable[VoronoiSite]) -> None:
         """Create a VoronoiSiteCollection instance.
 
         Args:
-            sites (list(VoronoiSite)): list of VoronoiSite objects.
+            sites (iterable(VoronoiSite)): VoronoiSite objects, such as a
+                list or a generator.
 
         Returns:
             None
 
         """
+        sites = list(sites)
         for s in sites:
             if not isinstance(s, VoronoiSite):
                 raise TypeError

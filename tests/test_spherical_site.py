@@ -1,3 +1,5 @@
+import copy
+import pickle
 import unittest
 import numpy as np
 from site_analysis.spherical_site import SphericalSite
@@ -29,6 +31,77 @@ class SphericalSiteInitTestCase(unittest.TestCase):
         np.testing.assert_array_equal(spherical_site.frac_coords, frac_coords)
         self.assertEqual(spherical_site.rcut, rcut)
         self.assertEqual(spherical_site.label, label)
+
+    def test_radius_and_centre_are_read_only(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        with self.assertRaises(AttributeError):
+            site.rcut = 2.0
+        with self.assertRaises(AttributeError):
+            site.frac_coords = np.zeros(3)
+        with self.assertRaises(ValueError):
+            site.frac_coords += 0.5
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_centre_cannot_be_made_writeable(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        with self.assertRaises(ValueError):
+            site.frac_coords.flags.writeable = True
+
+    def test_copies_keep_centre_read_only(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        for name, clone in [("deepcopy", copy.deepcopy(site)),
+                            ("pickle", pickle.loads(pickle.dumps(site)))]:
+            with self.subTest(name):
+                np.testing.assert_array_equal(clone.frac_coords, [0.1, 0.2, 0.3])
+                self.assertEqual(clone.rcut, 1.0)
+                with self.assertRaises(ValueError):
+                    clone.frac_coords[0] = 0.9
+                with self.assertRaises(ValueError):
+                    clone.frac_coords += 0.5
+                with self.assertRaises(ValueError):
+                    clone.frac_coords.flags.writeable = True
+                np.testing.assert_array_equal(clone.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_init_stores_centre_as_floats(self):
+        site = SphericalSite(frac_coords=[0, 1, 0], rcut=1)
+        self.assertEqual(site.frac_coords.dtype, np.float64)
+        self.assertIsInstance(site.rcut, float)
+
+    def test_as_dict_copies_centre(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        site.as_dict()['frac_coords'][0] = 0.9
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_init_rejects_centre_that_is_not_three_finite_numbers(self):
+        for frac_coords in ([0.1, 0.2], [[0.1, 0.2, 0.3]], [np.nan, 0.2, 0.3]):
+            with self.subTest(frac_coords=frac_coords):
+                with self.assertRaisesRegex(ValueError, "frac_coords must be three finite numbers"):
+                    SphericalSite(frac_coords=frac_coords, rcut=1.0)
+
+    def test_init_copies_centre(self):
+        frac_coords = np.array([0.1, 0.2, 0.3])
+        site = SphericalSite(frac_coords=frac_coords, rcut=1.0)
+        frac_coords[0] = 0.9
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_init_rejects_negative_or_nan_radius(self):
+        for rcut in (-1.0, float("nan")):
+            with self.subTest(rcut=rcut):
+                with self.assertRaisesRegex(ValueError, "rcut must be non-negative"):
+                    SphericalSite(frac_coords=np.zeros(3), rcut=rcut)
+
+    def test_zero_radius_contains_only_its_centre(self):
+        """A site with radius 0 is accepted and contains only a point exactly at its centre."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=0.0)
+        lattice_matrix = np.eye(3) * 10.0
+        self.assertTrue(site.contains_point(np.array([0.5, 0.5, 0.5]), lattice_matrix=lattice_matrix))
+        self.assertFalse(site.contains_point(np.array([0.5, 0.5, 0.5001]), lattice_matrix=lattice_matrix))
+
+    def test_infinite_radius_contains_every_point(self):
+        """A site with an infinite radius is accepted and contains every point."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=float('inf'))
+        lattice_matrix = np.eye(3) * 10.0
+        self.assertTrue(site.contains_point(np.array([0.0, 0.0, 0.0]), lattice_matrix=lattice_matrix))
 
 
 class SphericalSiteTestCase(unittest.TestCase):

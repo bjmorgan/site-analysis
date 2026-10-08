@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import numpy as np
 from pymatgen.core import Lattice, Structure
@@ -91,6 +92,21 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         # Test initialisation with mixed site types
         with self.assertRaises(TypeError):
             PolyhedralSiteCollection(sites=mixed_sites)
+
+    def test_init_accepts_a_generator_of_sites(self):
+        """A collection built from a generator holds every site."""
+        collection = PolyhedralSiteCollection(s for s in [self.site1, self.site2, self.site3])
+        self.assertEqual(collection.sites, [self.site1, self.site2, self.site3])
+
+    def test_init_rejects_a_non_finite_reference_centre(self):
+        """A site with a NaN reference centre is rejected, naming the site."""
+        Site._newid = 10
+        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                reference_center=np.array([0.1, 0.2, 0.3])),
+                 PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                                reference_center=np.array([np.nan, 0.5, 0.6]))]
+        with self.assertRaisesRegex(ValueError, "reference centre of site 11"):
+            PolyhedralSiteCollection(sites)
     
     def test_analyse_structure(self):
         """Test that analyse_structure notifies sites and updates occupations."""
@@ -382,6 +398,23 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         self.assertIn(self.site1, site4_neighbours)
         self.assertIn(self.site3, site4_neighbours)
     
+    def test_construct_neighbouring_sites_in_site_order(self):
+        """Neighbours are listed in the order the sites were given."""
+        # The first neighbour does not contain vertex 0, the site's first vertex.
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        first = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 5])
+        neighbours = construct_neighbouring_sites([site, first, second])
+        self.assertEqual(neighbours[site.index], [first, second])
+
+    def test_construct_neighbouring_sites_counts_each_vertex_once(self):
+        """A vertex repeated within a site counts once towards a shared face."""
+        site1 = PolyhedralSite(vertex_indices=[0, 0, 0, 1])
+        site2 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        neighbours = construct_neighbouring_sites([site1, site2])
+        self.assertEqual(neighbours[site1.index], [])
+        self.assertEqual(neighbours[site2.index], [])
+
     def test_construct_neighbouring_sites_no_neighbours(self):
         """Test construct_neighbouring_sites with sites that have no neighbours."""
         # Create isolated sites that don't share vertices
@@ -462,41 +495,47 @@ class TestCollectReferenceCentres(unittest.TestCase):
         np.testing.assert_array_equal(centres[1], [0.4, 0.5, 0.6])
         self.assertEqual(site_indices, [site_a.index, site_b.index])
 
+    def test_raises_for_a_non_finite_reference_centre(self):
+        """A reference centre with a NaN raises ValueError naming the site index."""
+        Site._newid = 10
+        sites = [
+            PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                           reference_center=np.array([0.1, 0.2, 0.3])),
+            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                           reference_center=np.array([np.nan, 0.5, 0.6])),
+        ]
+        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
+            _collect_reference_centres(sites)
 
-class TestNearestSiteLookup(unittest.TestCase):
-    """Tests for _NearestSiteLookup.nearest_site_index."""
+    def test_raises_for_a_reference_centre_that_is_not_three_numbers(self):
+        """A reference centre that is not three numbers raises ValueError naming the site index."""
+        values = {
+            "two numbers": np.array([0.4, 0.5]),
+            "text": "abc",
+            "ragged": [[0.1, 0.2], [0.3]],
+            "complex": [1 + 1j, 0.0, 0.0],
+        }
+        for name, value in values.items():
+            with self.subTest(name):
+                Site._newid = 10
+                sites = [
+                    PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                   reference_center=np.array([0.1, 0.2, 0.3])),
+                    PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=value),
+                ]
+                with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
+                    _collect_reference_centres(sites)
 
-    def test_lookup_none_without_reference_centres(self):
-        """Collection has no nearest-site lookup when sites lack reference centres."""
-        Site._newid = 0
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        collection = PolyhedralSiteCollection([site])
-        self.assertIsNone(collection._nearest_site_lookup)
-
-    def test_returns_nearest_site(self):
-        """Returns the site index nearest to the given coordinates."""
-        Site._newid = 0
-        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.1, 0.1, 0.1]))
-        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.5, 0.5, 0.5]))
-        collection = PolyhedralSiteCollection([site_a, site_b])
-        result = collection._nearest_site_lookup.nearest_site_index(
-            np.array([0.12, 0.12, 0.12]))
-        self.assertEqual(result, site_a.index)
-
-    def test_uses_minimum_image_convention(self):
-        """Uses PBC so a point near 0.0 is close to a site at 0.95."""
-        Site._newid = 0
-        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.5, 0.5, 0.5]))
-        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.95, 0.95, 0.95]))
-        collection = PolyhedralSiteCollection([site_a, site_b])
-        # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
-        result = collection._nearest_site_lookup.nearest_site_index(
-            np.array([0.02, 0.02, 0.02]))
-        self.assertEqual(result, site_b.index)
+    def test_raises_for_a_non_finite_reference_centre_after_a_site_without_one(self):
+        """A NaN reference centre raises even when an earlier site has no reference centre."""
+        Site._newid = 10
+        sites = [
+            PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
+                           reference_center=np.array([np.nan, 0.5, 0.6])),
+        ]
+        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
+            _collect_reference_centres(sites)
 
 
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
@@ -515,9 +554,10 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     
     def test_calls_generator_for_each_atom(self):
         """Test that _get_priority_sites is called once per atom."""
+        lattice_matrix = self.lattice.matrix
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(self.atoms, self.lattice.matrix)
-            self.collection._get_priority_sites.assert_called_once_with(self.atom)
+            self.collection.assign_site_occupations(self.atoms, lattice_matrix)
+            self.collection._get_priority_sites.assert_called_once_with(self.atom, lattice_matrix)
     
     def test_calls_generator_for_multiple_atoms(self):
         """Test that _get_priority_sites is called for each atom."""
@@ -607,173 +647,145 @@ class TestGetPrioritySites(unittest.TestCase):
         self.atoms = atoms_from_structure(self.structure, "Li")
         self.atom = self.atoms[0]
 
-    def test_yields_most_recent_site_first(self):
-        """Most recent site is yielded first."""
-        self.atom._recent_sites = [self.site2.index, None]
-
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-        self.assertEqual(priority_sites[0], self.site2)
-
-    def test_yields_two_recent_distinct_sites(self):
-        """Two most recent distinct sites are yielded before transitions."""
-        self.atom._recent_sites = [self.site2.index, self.site1.index]
-
-        with patch.object(self.site2, 'most_frequent_transitions', return_value=[]):
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-        self.assertEqual(priority_sites[0], self.site2)
-        self.assertEqual(priority_sites[1], self.site1)
-
     def test_yields_all_sites_when_no_recent_sites(self):
-        """All sites yielded in arbitrary order when no site history exists."""
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        """All sites yielded in list order when no site history exists."""
+        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
-        self.assertEqual(len(priority_sites), 3)
-        self.assertIn(self.site1, priority_sites)
-        self.assertIn(self.site2, priority_sites)
-        self.assertIn(self.site3, priority_sites)
+        self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
 
-    def test_yields_transition_destinations_after_recent_sites(self):
-        """Transition destinations are yielded after recent sites."""
+    def test_neighbours_follow_transitions_without_repeats(self):
+        """Without reference centres, the most recent site's neighbours follow its
+        transitions, then the remaining sites in list order, each site once."""
+        site4 = PolyhedralSite(vertex_indices=[12, 13, 14, 15])
+        collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3, site4])
+        self.assertIsNone(collection._site_centres)
         self.atom._recent_sites = [self.site1.index, None]
 
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
+        with patch.object(self.site1, 'most_frequent_transitions', return_value=[site4.index]):
+            with patch.object(collection, 'neighbouring_sites',
+                              return_value=[site4, self.site3]) as mock_neighbours:
+                priority_sites = list(collection._get_priority_sites(self.atom, self.lattice.matrix))
 
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
+        # Without the neighbour step, site2 would come before site3.
+        self.assertEqual(priority_sites, [self.site1, site4, self.site3, self.site2])
+        mock_neighbours.assert_called_once_with(self.site1.index)
 
-            self.assertEqual(indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_yields_no_duplicates_when_all_sites_are_transitions(self):
-        """No duplicate sites when transitions cover all remaining sites."""
+    def test_yields_remaining_sites_in_list_order_after_neighbours(self):
+        """Without reference centres, every site not yet yielded follows in list order."""
         self.atom._recent_sites = [self.site1.index, None]
 
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
+        with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [s.index for s in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-            self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_yields_neighbours_after_transitions_without_reference_centres(self):
-        """Without reference centres, neighbours are yielded after transitions."""
-        self.assertIsNone(self.collection._distance_ranked_sites)
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-                mock_transitions.return_value = [self.site2.index]
-                mock_neighbours.return_value = [self.site3]
-
-                priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-                self.assertEqual(priority_sites[0], self.site1)
-                self.assertEqual(priority_sites[1], self.site2)
-                self.assertEqual(priority_sites[2], self.site3)
-                mock_neighbours.assert_called_once_with(self.site1.index)
-
-    def test_yields_no_duplicates_with_neighbours_and_transitions(self):
-        """No duplicates when a neighbour also appears as a transition."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-                mock_transitions.return_value = [self.site2.index]
-                mock_neighbours.return_value = [self.site2, self.site3]
-
-                priority_sites = list(self.collection._get_priority_sites(self.atom))
-
-                self.assertEqual(len(priority_sites), 3)
-                site_indices = [s.index for s in priority_sites]
-                self.assertEqual(len(site_indices), len(set(site_indices)))
-                self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
+        self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
 
     def test_skips_neighbour_checking_when_no_recent_sites(self):
         """Neighbour checking is skipped when atom has no recent sites."""
         with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
             self.assertEqual(len(priority_sites), 3)
             mock_neighbours.assert_not_called()
 
 
-class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
-    """Test _get_priority_sites with distance-ranked fallback."""
+class TestDistanceRankingNeedsReferenceCentres(unittest.TestCase):
+    """Sites are ranked by distance only when every site has a reference centre."""
+
+    def setUp(self):
+        # Site indices 50, 51 and 52, which differ from list positions.
+        Site._newid = 50
+        self.lattice_matrix = np.eye(3) * 2.0
+        # On the third site's centre: 0.4 A from the second and 0.8 A from
+        # the first, so distance order is the reverse of list order.
+        self.atom = Atom(index=0)
+        self.atom._frac_coords = np.array([0.5, 0.1, 0.1])
+
+    def search_order(self, reference_centres):
+        """Return the site indices in search order.
+
+        Args:
+            reference_centres: One reference centre, or None, per site.
+        """
+        sites = [PolyhedralSite(vertex_indices=[4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3],
+                                reference_center=centre)
+                 for i, centre in enumerate(reference_centres)]
+        collection = PolyhedralSiteCollection(sites)
+        return [s.index for s in collection._get_priority_sites(self.atom, self.lattice_matrix)]
+
+    def test_ranked_by_distance_when_every_site_has_a_reference_centre(self):
+        """Sites are ranked by distance from the atom when every site has a reference centre."""
+        centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), np.array([0.5, 0.1, 0.1])]
+        self.assertEqual(self.search_order(centres), [52, 51, 50])
+
+    def test_list_order_when_any_site_lacks_a_reference_centre(self):
+        """Sites are searched in list order when any site lacks a reference centre."""
+        centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), None]
+        self.assertEqual(self.search_order(centres), [50, 51, 52])
+
+
+def _tetrahedral_tiling(n):
+    """Split a cell into an n x n x n grid of cubes, and each cube into six tetrahedra.
+
+    Each cube is split into the six tetrahedra that share its main diagonal,
+    so the tetrahedra fill the cell without gaps or overlaps.
+
+    Args:
+        n: Number of cubes along each cell vector.
+
+    Returns:
+        Tuple of the fractional coordinates of the grid points, shape
+        (n ** 3, 3), and, for each tetrahedron, a tuple of its vertex indices
+        and its centre, the mean of its vertices before they are wrapped into
+        the cell.
+    """
+    points = np.array(list(itertools.product(range(n), repeat=3))) / n
+    tetrahedra = []
+    for corner in itertools.product(range(n), repeat=3):
+        for axes in itertools.permutations(range(3)):
+            # Walk from the corner to the opposite corner, one axis at a time.
+            vertices = [np.array(corner)]
+            for axis in axes:
+                step = vertices[-1].copy()
+                step[axis] += 1
+                vertices.append(step)
+            vertex_indices = [int(np.ravel_multi_index(tuple(v % n), (n, n, n))) for v in vertices]
+            centre = (np.mean(vertices, axis=0) / n) % 1.0
+            tetrahedra.append((vertex_indices, centre))
+    return points, tetrahedra
+
+
+class TestTilingLeavesNoAtomUnassigned(unittest.TestCase):
+    """Sites that fill a triclinic cell between them leave no atom unassigned."""
 
     def setUp(self):
         Site._newid = 0
-        self.lattice = Lattice.cubic(2.0)
-        self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
-
-        # Sites with reference centres so distance ranking is computed.
-        # Centres chosen to give unambiguous ordering without PBC wrapping:
-        # site1 at origin, site2 at 0.2, site3 at 0.4.
-        self.site1 = PolyhedralSite(
-            vertex_indices=[0, 1, 2, 3],
-            reference_center=np.array([0.1, 0.1, 0.1]),
-        )
-        self.site2 = PolyhedralSite(
-            vertex_indices=[4, 5, 6, 7],
-            reference_center=np.array([0.3, 0.1, 0.1]),
-        )
-        self.site3 = PolyhedralSite(
-            vertex_indices=[8, 9, 10, 11],
-            reference_center=np.array([0.5, 0.1, 0.1]),
-        )
-        self.collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3])
-
+        rng = np.random.default_rng(0)
+        points, self.tetrahedra = _tetrahedral_tiling(3)
+        lithium = rng.random((200, 3))
+        lattice = Lattice.from_parameters(9.0, 10.0, 11.0, 80, 95, 105)
+        self.structure = Structure(lattice, ["O"] * len(points) + ["Li"] * len(lithium),
+                                   np.vstack([points, lithium]))
         self.atoms = atoms_from_structure(self.structure, "Li")
-        self.atom = self.atoms[0]
 
-    def test_distance_ranked_sites_computed(self):
-        """Distance-ranked sites are computed when reference centres are available."""
-        self.assertIsNotNone(self.collection._distance_ranked_sites)
-        self.assertIsNotNone(self.collection._nearest_site_lookup)
+    def unassigned_atoms(self, collection):
+        """Return the indices of the atoms that the collection leaves unassigned."""
+        collection.analyse_structure(self.atoms, self.structure)
+        return [atom.index for atom in self.atoms if atom.in_site is None]
 
-    def test_remaining_sites_ordered_by_distance(self):
-        """After recent and transitions, remaining sites are distance-ranked."""
-        self.atom._recent_sites = [self.site1.index, None]
+    def test_every_atom_is_assigned_with_reference_centres(self):
+        """Atoms with no recent site are all assigned when sites are ranked by distance."""
+        sites = [PolyhedralSite(vertex_indices=vertex_indices, reference_center=centre)
+                 for vertex_indices, centre in self.tetrahedra]
+        self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
 
-        with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
-
-        # site1 first (recent), then site2 (closer to site1), then site3
-        self.assertEqual(indices[0], self.site1.index)
-        self.assertEqual(indices[1], self.site2.index)
-        self.assertEqual(indices[2], self.site3.index)
-
-    def test_no_history_uses_nearest_site(self):
-        """With no history, yields nearest site to atom position first."""
-        # atom at [0.1, 0.1, 0.1] -- nearest to site1 at [0.1, 0.1, 0.1]
-        indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
-
-        self.assertEqual(indices[0], self.site1.index)
-
-    def test_no_history_distance_ranked_outward(self):
-        """With no history, sites are ranked by distance from nearest."""
-        # atom at [0.1, 0.1, 0.1] -- nearest to site1
-        indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
-
-        self.assertEqual(indices, [self.site1.index, self.site2.index, self.site3.index])
-
-    def test_no_duplicates_with_distance_ranking(self):
-        """No duplicates when transitions overlap with distance-ranked sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_trans:
-            mock_trans.return_value = [self.site3.index]
-
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
-
-        self.assertEqual(len(indices), 3)
-        self.assertEqual(len(indices), len(set(indices)))
-        # site1 (recent), site3 (transition), site2 (distance-ranked remaining)
-        self.assertEqual(indices, [self.site1.index, self.site3.index, self.site2.index])
-    
+    def test_every_atom_is_assigned_without_reference_centres(self):
+        """Atoms with a recent site are all assigned when sites have no reference centres."""
+        sites = [PolyhedralSite(vertex_indices=vertex_indices)
+                 for vertex_indices, _ in self.tetrahedra]
+        rng = np.random.default_rng(1)
+        for atom in self.atoms:
+            atom._recent_sites = [sites[rng.integers(len(sites))].index, None]
+        self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
 
 
 if __name__ == '__main__':

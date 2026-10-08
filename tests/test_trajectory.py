@@ -116,7 +116,13 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertEqual(self.trajectory.atom_lookup[1], 1)  # atom with index 1 is at position 1
         self.assertEqual(self.trajectory.site_lookup[self.site1.index], 0)
         self.assertEqual(self.trajectory.site_lookup[self.site2.index], 1)
-    
+
+    def test_sites_are_the_site_collection_sites(self):
+        """Changing the caller's list of sites afterwards does not change the trajectory's sites."""
+        self.sites.append(SphericalSite(frac_coords=np.array([0.9, 0.9, 0.9]), rcut=0.3))
+        self.assertEqual(self.trajectory.sites, [self.site1, self.site2])
+        self.assertIs(self.trajectory.sites, self.trajectory.site_collection.sites)
+
     def test_atom_by_index(self):
         """Test retrieving an atom by index."""
         self.assertIs(self.trajectory.atom_by_index(0), self.atom1)

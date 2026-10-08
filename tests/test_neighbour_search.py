@@ -36,6 +36,7 @@ def random_points(rng):
     points[10] = [-1e-18, 0.5, 0.5]  # wraps to exactly 1.0
     points[11] = [np.nextafter(1.0, 0.0), 0.2, 0.3]
     points[12] = [0.0, 0.0, 0.0]
+    points[13] = points[3]  # a duplicate indexed point, at query point 3
     return points, query
 
 
@@ -101,7 +102,7 @@ class TestQueryWithin(unittest.TestCase):
             index = PeriodicNeighbourIndex(points, lattice_matrix)
             dense = brute_force_distances(query, points, lattice_matrix)
             half_cell = np.linalg.norm(lattice_matrix, axis=1).min() / 2
-            for cutoff in (0.5, 1.5, 3.0, half_cell):
+            for cutoff in (0.5, 1.5, 3.0, half_cell, np.inf):
                 with self.subTest(cell=name, cutoff=cutoff):
                     query_idx, point_idx, distances = index.query_within(query, cutoff)
                     rows, cols = np.nonzero(dense <= cutoff)
@@ -124,6 +125,27 @@ class TestQueryWithin(unittest.TestCase):
         np.testing.assert_array_equal(point_idx, np.sort(corners))
         self.assertEqual(len(set(distances.tolist())), 1)
 
+    def test_pairs_exactly_at_cutoff_on_search_edge(self):
+        """Pairs exactly at the cutoff are found where the search is tightest.
+
+        Each pair is separated along the direction in which the Cartesian
+        distance is smallest relative to the tree's scaled distance, so in
+        a non-orthogonal cell it lies exactly on the edge of the candidate
+        search.
+        """
+        rng = np.random.default_rng(9)
+        for name, lattice_matrix in CELLS.items():
+            with self.subTest(cell=name):
+                lengths = np.linalg.norm(lattice_matrix, axis=1)
+                left, _, _ = np.linalg.svd(lattice_matrix / lengths[:, np.newaxis])
+                points = rng.random((20, 3))
+                query = points + rng.uniform(0.5, 2.0, (20, 1)) * left[:, -1] / lengths
+                cutoffs = paired_mic_distances(query, points, lattice_matrix)
+                index = PeriodicNeighbourIndex(points, lattice_matrix)
+                missed = [i for i, cutoff in enumerate(cutoffs)
+                          if i not in index.query_within(query[i:i + 1], cutoff)[1]]
+                self.assertEqual(missed, [])
+
     def test_coincident_points_far_outside_cell(self):
         """Copies of the points 1000 cells away are found with a zero cutoff."""
         lattice_matrix = np.eye(3) * 100.0
@@ -144,15 +166,6 @@ class TestQueryWithin(unittest.TestCase):
             with self.subTest(cutoff=cutoff):
                 with self.assertRaises(ValueError):
                     index.query_within(np.zeros((1, 3)), cutoff)
-
-    def test_infinite_cutoff_returns_every_pair(self):
-        """An infinite cutoff returns every point for every query point."""
-        rng = np.random.default_rng(8)
-        index = PeriodicNeighbourIndex(rng.random((7, 3)), CELLS["triclinic"])
-        query_idx, point_idx, _ = index.query_within(rng.random((3, 3)), np.inf)
-        self.assertEqual(len(query_idx), 21)
-        self.assertEqual(sorted(zip(query_idx.tolist(), point_idx.tolist())),
-                         [(q, p) for q in range(3) for p in range(7)])
 
     def test_wrong_query_shape_raises(self):
         """Query coordinates that are not shaped (M, 3) raise ValueError."""

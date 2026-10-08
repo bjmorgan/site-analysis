@@ -1,9 +1,8 @@
 """Minimum-image distance and coordinate conversion functions for periodic systems.
 
 Provides distance calculations and fractional-to-Cartesian coordinate
-conversion operating on numpy arrays and a lattice matrix, with no
-pymatgen dependency. Optional numba acceleration for single-pair and
-batch distances.
+conversion operating on numpy arrays and a lattice matrix. Optional
+numba acceleration for single-pair and batch distances.
 """
 
 from __future__ import annotations
@@ -44,9 +43,9 @@ if HAS_NUMBA:
         d0_base = frac1[0] - frac2[0]
         d1_base = frac1[1] - frac2[1]
         d2_base = frac1[2] - frac2[2]
-        # Wrap to the nearest image. The 27 images searched are those within
-        # one cell of it, which is exact when the true distance is below the
-        # cell's smallest perpendicular width (#84).
+        # Wrap to the image nearest in fractional coordinates. The 27 images
+        # searched are those within one cell of it, which is exact when the
+        # true distance is below the cell's smallest perpendicular width (#84).
         d0_base -= round(d0_base)
         d1_base -= round(d1_base)
         d2_base -= round(d2_base)
@@ -167,7 +166,7 @@ def mic_distance(
     shorter than the cell's smallest perpendicular width (the smallest
     distance between opposite faces), and always in orthogonal cells. In
     thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
-    longer distances can be overestimated (see #84).
+    longer distances can be overestimated.
     Uses numba JIT compilation when available for improved performance
     on repeated single-pair calls.
 
@@ -207,7 +206,7 @@ def all_mic_distances(
     smallest perpendicular width (the smallest distance between opposite
     faces), and always in orthogonal cells. In thin or strongly skewed
     cells, such as a 1x10x1 hexagonal supercell, longer distances can be
-    overestimated (see #84).
+    overestimated.
     Uses numba JIT compilation with parallel execution when available.
 
     Note:
@@ -256,7 +255,7 @@ def paired_mic_distances(
     distance is shorter than the cell's smallest perpendicular width (the
     smallest distance between opposite faces), and always in orthogonal
     cells. In thin or strongly skewed cells, such as a 1x10x1 hexagonal
-    supercell, longer distances can be overestimated (see #84).
+    supercell, longer distances can be overestimated.
     Uses numba JIT compilation with parallel execution when available.
 
     Note:

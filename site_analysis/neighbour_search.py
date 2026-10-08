@@ -71,7 +71,7 @@ class PeriodicNeighbourIndex:
     the true minimum-image distances whenever they are shorter than the
     cell's smallest perpendicular width, and always in orthogonal cells.
     In thin or strongly skewed cells, longer distances can be
-    overestimated (see #84).
+    overestimated.
 
     An index is fixed to the lattice it was built with. Build a new index
     if the lattice changes.

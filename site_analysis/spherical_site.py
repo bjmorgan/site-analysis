@@ -28,11 +28,6 @@ class SphericalSite(Site):
     atom positions in the structure, making them suitable for applications where
     consistent site volumes are needed regardless of structural distortions.
     
-    Attributes:
-        frac_coords (np.ndarray): Fractional coordinates of the sphere centre
-            (read-only).
-        rcut (float): Cutoff radius in Angstroms (read-only).
-        
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
             (index, label, contains_atoms, trajectory, points, transitions, average_occupation).
@@ -59,22 +54,27 @@ class SphericalSite(Site):
             None
 
         Raises:
-            ValueError: If ``rcut`` is negative or NaN.
+            ValueError: If ``frac_coords`` is not three finite numbers, or
+                ``rcut`` is negative or NaN.
         """
+        centre = np.array(frac_coords, dtype=np.float64)
+        if centre.shape != (3,) or not np.all(np.isfinite(centre)):
+            raise ValueError(f"frac_coords must be three finite numbers, got {frac_coords}")
         if not rcut >= 0:
             raise ValueError(f"rcut must be non-negative, got {rcut}")
         super(SphericalSite, self).__init__(label=label)
-        self._frac_coords = np.array(frac_coords, dtype=np.float64)
-        self._rcut = rcut
+        centre.flags.writeable = False
+        self._frac_coords = centre
+        self._rcut = float(rcut)
 
     @property
     def frac_coords(self) -> np.ndarray:
-        """Fractional coordinates of the sphere centre."""
+        """Fractional coordinates of the sphere centre (read-only)."""
         return self._frac_coords
 
     @property
     def rcut(self) -> float:
-        """Cutoff radius in Angstroms."""
+        """Cutoff radius in Angstroms (read-only)."""
         return self._rcut
         
     def __repr__(self) -> str:
@@ -112,7 +112,7 @@ class SphericalSite(Site):
                 attributes from the parent Site class plus 'frac_coords' and 'rcut'.
         """
         d = super(SphericalSite, self).as_dict()
-        d['frac_coords'] = self.frac_coords
+        d['frac_coords'] = self.frac_coords.copy()
         d['rcut'] = self.rcut
         return d
 

@@ -36,6 +36,24 @@ class SphericalSiteInitTestCase(unittest.TestCase):
             site.rcut = 2.0
         with self.assertRaises(AttributeError):
             site.frac_coords = np.zeros(3)
+        with self.assertRaises(ValueError):
+            site.frac_coords += 0.5
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_init_stores_centre_as_floats(self):
+        site = SphericalSite(frac_coords=[0, 1, 0], rcut=1)
+        self.assertEqual(site.frac_coords.dtype, np.float64)
+
+    def test_as_dict_copies_centre(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        site.as_dict()['frac_coords'][0] = 0.9
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_init_rejects_centre_that_is_not_three_finite_numbers(self):
+        for frac_coords in ([0.1, 0.2], [[0.1, 0.2, 0.3]], [np.nan, 0.2, 0.3]):
+            with self.subTest(frac_coords=frac_coords):
+                with self.assertRaisesRegex(ValueError, "frac_coords must be three finite numbers"):
+                    SphericalSite(frac_coords=frac_coords, rcut=1.0)
 
     def test_init_copies_centre(self):
         frac_coords = np.array([0.1, 0.2, 0.3])

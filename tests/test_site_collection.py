@@ -470,6 +470,25 @@ class TestGetPrioritySitesWithSiteCentres(unittest.TestCase):
         self.assertEqual(self.priority_indices(), [5, 3, 7, 0])
 
 
+class TestGetPrioritySitesBeyondNearbyRadius(unittest.TestCase):
+    """Tests for sites further from the atom than the nearby radius."""
+
+    def test_site_beyond_nearby_radius_is_yielded(self):
+        """A site further from the atom than the nearby radius is still yielded."""
+        # Two sites in a 10 A cubic cell, with site indices that differ
+        # from their positions in the list. The nearby radius is
+        # (1000 / 2) ** (1 / 3) = 7.94 A, and the second centre is 8.66 A
+        # from the atom, so it is only in the second list of the ranking.
+        sites = [Mock(spec=Site, index=i, frac_coords=np.array(centre))
+                 for i, centre in [(4, [0.0, 0.0, 0.0]), (9, [0.5, 0.5, 0.5])]]
+        collection = ConcretePriorityCollection(sites)
+        collection._init_priority_ranking(np.array([s.frac_coords for s in sites]), [4, 9])
+        atom = Atom(index=0)
+        atom._frac_coords = np.zeros(3)
+        order = [site.index for site in collection._get_priority_sites(atom, np.eye(3) * 10.0)]
+        self.assertEqual(order, [4, 9])
+
+
 if __name__ == '__main__':
     unittest.main()
 

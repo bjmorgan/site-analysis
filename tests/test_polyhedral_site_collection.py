@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import numpy as np
 from pymatgen.core import Lattice, Structure
@@ -674,6 +675,15 @@ class TestGetPrioritySites(unittest.TestCase):
                 self.assertEqual(len(site_indices), len(set(site_indices)))
                 self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
 
+    def test_yields_remaining_sites_in_list_order_after_neighbours(self):
+        """Without reference centres, every site not yet yielded follows in list order."""
+        self.atom._recent_sites = [self.site1.index, None]
+
+        with patch.object(self.collection, 'neighbouring_sites', return_value=[]):
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
+
+        self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
+
     def test_skips_neighbour_checking_when_no_recent_sites(self):
         """Neighbour checking is skipped when atom has no recent sites."""
         with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
@@ -687,15 +697,16 @@ class TestDistanceRankingNeedsReferenceCentres(unittest.TestCase):
     """Sites are ranked by distance only when every site has a reference centre."""
 
     def setUp(self):
-        Site._newid = 0
+        # Site indices 50, 51 and 52, which differ from list positions.
+        Site._newid = 50
         self.lattice_matrix = np.eye(3) * 2.0
         # On the third site's centre: 0.4 A from the second and 0.8 A from
         # the first, so distance order is the reverse of list order.
         self.atom = Atom(index=0)
         self.atom._frac_coords = np.array([0.5, 0.1, 0.1])
 
-    def list_and_search_order(self, reference_centres):
-        """Return the site indices in list order and in search order.
+    def search_order(self, reference_centres):
+        """Return the site indices in search order.
 
         Args:
             reference_centres: One reference centre, or None, per site.
@@ -704,21 +715,82 @@ class TestDistanceRankingNeedsReferenceCentres(unittest.TestCase):
                                 reference_center=centre)
                  for i, centre in enumerate(reference_centres)]
         collection = PolyhedralSiteCollection(sites)
-        indices = [s.index for s in sites]
-        order = [s.index for s in collection._get_priority_sites(self.atom, self.lattice_matrix)]
-        return indices, order
+        return [s.index for s in collection._get_priority_sites(self.atom, self.lattice_matrix)]
 
     def test_ranked_by_distance_when_every_site_has_a_reference_centre(self):
         """Sites are ranked by distance from the atom when every site has a reference centre."""
         centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), np.array([0.5, 0.1, 0.1])]
-        indices, order = self.list_and_search_order(centres)
-        self.assertEqual(order, indices[::-1])
+        self.assertEqual(self.search_order(centres), [52, 51, 50])
 
     def test_list_order_when_any_site_lacks_a_reference_centre(self):
         """Sites are searched in list order when any site lacks a reference centre."""
         centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), None]
-        indices, order = self.list_and_search_order(centres)
-        self.assertEqual(order, indices)
+        self.assertEqual(self.search_order(centres), [50, 51, 52])
+
+
+def _tetrahedral_tiling(n):
+    """Split a cell into an n x n x n grid of cubes, and each cube into six tetrahedra.
+
+    Each cube is split into the six tetrahedra that share its main diagonal,
+    so the tetrahedra fill the cell without gaps or overlaps.
+
+    Args:
+        n: Number of cubes along each cell vector.
+
+    Returns:
+        Tuple of the fractional coordinates of the grid points, shape
+        (n ** 3, 3), and, for each tetrahedron, a tuple of its vertex indices
+        and its centre, the mean of its vertices before they are wrapped into
+        the cell.
+    """
+    points = np.array(list(itertools.product(range(n), repeat=3))) / n
+    tetrahedra = []
+    for corner in itertools.product(range(n), repeat=3):
+        for axes in itertools.permutations(range(3)):
+            # Walk from the corner to the opposite corner, one axis at a time.
+            vertices = [np.array(corner)]
+            for axis in axes:
+                step = vertices[-1].copy()
+                step[axis] += 1
+                vertices.append(step)
+            vertex_indices = [int(np.ravel_multi_index(tuple(v % n), (n, n, n))) for v in vertices]
+            centre = (np.mean(vertices, axis=0) / n) % 1.0
+            tetrahedra.append((vertex_indices, centre))
+    return points, tetrahedra
+
+
+class TestTilingLeavesNoAtomUnassigned(unittest.TestCase):
+    """Sites that fill a triclinic cell between them leave no atom unassigned."""
+
+    def setUp(self):
+        Site._newid = 0
+        rng = np.random.default_rng(0)
+        points, self.tetrahedra = _tetrahedral_tiling(3)
+        lithium = rng.random((200, 3))
+        lattice = Lattice.from_parameters(9.0, 10.0, 11.0, 80, 95, 105)
+        self.structure = Structure(lattice, ["O"] * len(points) + ["Li"] * len(lithium),
+                                   np.vstack([points, lithium]))
+        self.atoms = atoms_from_structure(self.structure, "Li")
+
+    def unassigned_atoms(self, collection):
+        """Return the indices of the atoms that the collection leaves unassigned."""
+        collection.analyse_structure(self.atoms, self.structure)
+        return [atom.index for atom in self.atoms if atom.in_site is None]
+
+    def test_every_atom_is_assigned_with_reference_centres(self):
+        """Atoms with no recent site are all assigned when sites are ranked by distance."""
+        sites = [PolyhedralSite(vertex_indices=vertex_indices, reference_center=centre)
+                 for vertex_indices, centre in self.tetrahedra]
+        self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
+
+    def test_every_atom_is_assigned_without_reference_centres(self):
+        """Atoms with a recent site are all assigned when sites have no reference centres."""
+        sites = [PolyhedralSite(vertex_indices=vertex_indices)
+                 for vertex_indices, _ in self.tetrahedra]
+        rng = np.random.default_rng(1)
+        for atom in self.atoms:
+            atom._recent_sites = [sites[rng.integers(len(sites))].index, None]
+        self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
 
 
 if __name__ == '__main__':

@@ -203,11 +203,11 @@ def all_mic_distances(
 
     Checks the 27 periodic images of each pair nearest in fractional
     coordinates, which is needed for triclinic cells. This gives the true
-    minimum distance whenever that distance is
-    shorter than the cell's smallest perpendicular width (the smallest
-    distance between opposite faces), and always in orthogonal cells. In
-    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
-    longer distances can be overestimated (see #84).
+    minimum distance whenever that distance is shorter than the cell's
+    smallest perpendicular width (the smallest distance between opposite
+    faces), and always in orthogonal cells. In thin or strongly skewed
+    cells, such as a 1x10x1 hexagonal supercell, longer distances can be
+    overestimated (see #84).
     Uses numba JIT compilation with parallel execution when available.
 
     Note:
@@ -253,11 +253,10 @@ def paired_mic_distances(
 
     Checks the 27 periodic images of each pair nearest in fractional
     coordinates. This gives the true minimum distance whenever that
-    distance is
-    shorter than the cell's smallest perpendicular width (the smallest
-    distance between opposite faces), and always in orthogonal cells. In
-    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
-    longer distances can be overestimated (see #84).
+    distance is shorter than the cell's smallest perpendicular width (the
+    smallest distance between opposite faces), and always in orthogonal
+    cells. In thin or strongly skewed cells, such as a 1x10x1 hexagonal
+    supercell, longer distances can be overestimated (see #84).
     Uses numba JIT compilation with parallel execution when available.
 
     Note:

@@ -145,6 +145,15 @@ class TestQueryWithin(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     index.query_within(np.zeros((1, 3)), cutoff)
 
+    def test_infinite_cutoff_returns_every_pair(self):
+        """An infinite cutoff returns every point for every query point."""
+        rng = np.random.default_rng(8)
+        index = PeriodicNeighbourIndex(rng.random((7, 3)), CELLS["triclinic"])
+        query_idx, point_idx, _ = index.query_within(rng.random((3, 3)), np.inf)
+        self.assertEqual(len(query_idx), 21)
+        self.assertEqual(sorted(zip(query_idx.tolist(), point_idx.tolist())),
+                         [(q, p) for q in range(3) for p in range(7)])
+
     def test_wrong_query_shape_raises(self):
         """Query coordinates that are not shaped (M, 3) raise ValueError."""
         index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))

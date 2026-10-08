@@ -1,3 +1,5 @@
+import copy
+import pickle
 import unittest
 import numpy as np
 from site_analysis.spherical_site import SphericalSite
@@ -39,6 +41,24 @@ class SphericalSiteInitTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             site.frac_coords += 0.5
         np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
+    def test_centre_cannot_be_made_writeable(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        with self.assertRaises(ValueError):
+            site.frac_coords.flags.writeable = True
+
+    def test_copies_keep_centre_read_only(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        for name, clone in [("deepcopy", copy.deepcopy(site)),
+                            ("pickle", pickle.loads(pickle.dumps(site)))]:
+            with self.subTest(name):
+                np.testing.assert_array_equal(clone.frac_coords, [0.1, 0.2, 0.3])
+                self.assertEqual(clone.rcut, 1.0)
+                with self.assertRaises(ValueError):
+                    clone.frac_coords[0] = 0.9
+                with self.assertRaises(ValueError):
+                    clone.frac_coords += 0.5
+                np.testing.assert_array_equal(clone.frac_coords, [0.1, 0.2, 0.3])
 
     def test_init_stores_centre_as_floats(self):
         site = SphericalSite(frac_coords=[0, 1, 0], rcut=1)

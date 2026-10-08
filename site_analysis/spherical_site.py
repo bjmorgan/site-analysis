@@ -13,6 +13,23 @@ from site_analysis.distances import mic_distance
 import numpy as np
 
 
+def _read_only(array: np.ndarray) -> np.ndarray:
+    """Return a read-only float64 copy of an array.
+
+    The copy is returned as a view of a non-writeable array, so its
+    ``writeable`` flag cannot be set back to True.
+
+    Args:
+        array: The array to copy.
+
+    Returns:
+        A read-only float64 copy of ``array``.
+    """
+    frozen = np.array(array, dtype=np.float64)
+    frozen.flags.writeable = False
+    return frozen.view()
+
+
 class SphericalSite(Site):
     """A site defined by a spherical volume in real space.
     
@@ -63,9 +80,20 @@ class SphericalSite(Site):
         if not rcut >= 0:
             raise ValueError(f"rcut must be non-negative, got {rcut}")
         super(SphericalSite, self).__init__(label=label)
-        centre.flags.writeable = False
-        self._frac_coords = centre
+        self._frac_coords = _read_only(centre)
         self._rcut = float(rcut)
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore a copied or unpickled site, keeping its centre read-only.
+
+        Copying or unpickling an array makes it writeable, so the centre
+        is made read-only again.
+
+        Args:
+            state: The attributes of the site.
+        """
+        self.__dict__.update(state)
+        self._frac_coords = _read_only(self._frac_coords)
 
     @property
     def frac_coords(self) -> np.ndarray:

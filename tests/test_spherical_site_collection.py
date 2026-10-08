@@ -51,7 +51,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
     def test_initialization(self):
         """Test that SphericalSiteCollection initializes correctly."""
         self.assertEqual(self.collection.sites, self.sites)
-        self.assertIsNotNone(self.collection._site_centres)
 
     def test_init_with_empty_sites_list(self):
         """Test that __init__ works with empty sites list."""
@@ -209,109 +208,6 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(atom2.in_site, site2.index)           # Correct assignment
         self.assertEqual(site1.contains_atoms, [atom1.index])  # Site updated
         self.assertEqual(site2.contains_atoms, [atom2.index])  # Site updated
-
-
-class TestGetPrioritySites(unittest.TestCase):
-    """Test _get_priority_sites generator behavior for SphericalSiteCollection."""
-
-    def setUp(self):
-        Site._newid = 0
-        self.lattice = Lattice.cubic(10.0)
-
-        # The radii cover the whole cell, so every site is within reach of the atom.
-        self.site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=9.0, label="site1")
-        self.site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=9.0, label="site2")
-        self.site3 = SphericalSite(frac_coords=np.array([0.8, 0.8, 0.8]), rcut=9.0, label="site3")
-        self.collection = SphericalSiteCollection([self.site1, self.site2, self.site3])
-
-        self.atom = Atom(index=0)
-        self.atom._frac_coords = np.array([0.2, 0.2, 0.2])
-
-    def test_yields_most_recent_site_first(self):
-        """Test that generator yields most recent site as first site."""
-        self.atom._recent_sites = [self.site2.index, None]
-        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-        self.assertEqual(priority_sites[0], self.site2)
-
-    def test_yields_both_recent_sites(self):
-        """Test that generator yields both recent distinct sites."""
-        self.atom._recent_sites = [self.site2.index, self.site1.index]
-        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-        self.assertEqual(priority_sites[0], self.site2)
-        self.assertEqual(priority_sites[1], self.site1)
-
-    def test_yields_transition_destinations_after_most_recent(self):
-        """Test that generator yields transition destinations after most recent site."""
-        self.atom._recent_sites = [self.site1.index, None]
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-            priority_site_indices = [site.index for site in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
-            self.assertEqual(priority_site_indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_yields_no_duplicates_when_all_sites_are_transitions(self):
-        """Test that generator doesn't yield duplicates when all sites appear as transitions."""
-        self.atom._recent_sites = [self.site1.index, None]
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [site.index for site in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-            self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_no_history_ranked_by_distance_from_atom(self):
-        """Test that an atom with no history gets every site, nearest to it first."""
-        # From the atom at [0.2,0.2,0.2]: site1 is 0.1*sqrt(3) away, site2
-        # 0.3*sqrt(3) and site3 0.4*sqrt(3) via PBC. Ranked from site1's
-        # centre instead, site3 would come before site2.
-        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-        self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
-
-    def test_yields_remaining_sites_distance_ranked(self):
-        """Test that remaining sites are ranked by distance from the atom."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-            # site1 at [0.1,0.1,0.1], site2 at [0.5,0.5,0.5], site3 at [0.8,0.8,0.8]
-            # From the atom at [0.2,0.2,0.2] with minimum-image convention:
-            #   site2 is 0.3*sqrt(3) away, site3 is 0.4*sqrt(3) away via PBC
-            # (from site1's centre, site3 would be nearer)
-            self.assertEqual(priority_sites[0], self.site1)
-            self.assertEqual(priority_sites[1], self.site2)
-            self.assertEqual(priority_sites[2], self.site3)
-
-    def test_yields_transitions_then_distance_ranked(self):
-        """Test that transitions come before distance-ranked remaining sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index]
-
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-            # site1 (recent), site3 (transition), site2 (distance-ranked remaining)
-            self.assertEqual(priority_sites[0], self.site1)
-            self.assertEqual(priority_sites[1], self.site3)
-            self.assertEqual(priority_sites[2], self.site2)
-
-    def test_yields_no_duplicates_with_transitions(self):
-        """Test that generator doesn't yield duplicates when transition overlaps with distance ranking."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site2.index]
-
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-            # Should be exactly 3 sites, no duplicates
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [site.index for site in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-
-            # site2 appears as transition, then site3 from distance ranking
-            self.assertEqual(site_indices, [self.site1.index, self.site2.index, self.site3.index])
 
 
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):

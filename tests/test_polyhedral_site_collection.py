@@ -683,72 +683,42 @@ class TestGetPrioritySites(unittest.TestCase):
             mock_neighbours.assert_not_called()
 
 
-class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
-    """Test _get_priority_sites with distance-ranked fallback."""
+class TestDistanceRankingNeedsReferenceCentres(unittest.TestCase):
+    """Sites are ranked by distance only when every site has a reference centre."""
 
     def setUp(self):
         Site._newid = 0
-        self.lattice = Lattice.cubic(2.0)
-        self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
+        self.lattice_matrix = np.eye(3) * 2.0
+        # On the third site's centre: 0.4 A from the second and 0.8 A from
+        # the first, so distance order is the reverse of list order.
+        self.atom = Atom(index=0)
+        self.atom._frac_coords = np.array([0.5, 0.1, 0.1])
 
-        # Sites with reference centres so distance ranking is computed.
-        # Centres along x at 0.1, 0.3 and 0.5 give an unambiguous ordering
-        # without PBC wrapping.
-        self.site1 = PolyhedralSite(
-            vertex_indices=[0, 1, 2, 3],
-            reference_center=np.array([0.1, 0.1, 0.1]),
-        )
-        self.site2 = PolyhedralSite(
-            vertex_indices=[4, 5, 6, 7],
-            reference_center=np.array([0.3, 0.1, 0.1]),
-        )
-        self.site3 = PolyhedralSite(
-            vertex_indices=[8, 9, 10, 11],
-            reference_center=np.array([0.5, 0.1, 0.1]),
-        )
-        self.collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3])
+    def list_and_search_order(self, reference_centres):
+        """Return the site indices in list order and in search order.
 
-        self.atoms = atoms_from_structure(self.structure, "Li")
-        self.atom = self.atoms[0]
+        Args:
+            reference_centres: One reference centre, or None, per site.
+        """
+        sites = [PolyhedralSite(vertex_indices=[4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3],
+                                reference_center=centre)
+                 for i, centre in enumerate(reference_centres)]
+        collection = PolyhedralSiteCollection(sites)
+        indices = [s.index for s in sites]
+        order = [s.index for s in collection._get_priority_sites(self.atom, self.lattice_matrix)]
+        return indices, order
 
-    def test_site_centres_set_up(self):
-        """Site centres are set up when reference centres are available."""
-        self.assertIsNotNone(self.collection._site_centres)
+    def test_ranked_by_distance_when_every_site_has_a_reference_centre(self):
+        """Sites are ranked by distance from the atom when every site has a reference centre."""
+        centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), np.array([0.5, 0.1, 0.1])]
+        indices, order = self.list_and_search_order(centres)
+        self.assertEqual(order, indices[::-1])
 
-    def test_remaining_sites_ordered_by_distance(self):
-        """After recent and transitions, remaining sites are distance-ranked."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
-
-        # site1 first (recent), then site2 (closer to the atom, which sits on
-        # site1's centre), then site3
-        self.assertEqual(indices[0], self.site1.index)
-        self.assertEqual(indices[1], self.site2.index)
-        self.assertEqual(indices[2], self.site3.index)
-
-    def test_no_history_distance_ranked_outward(self):
-        """With no history, sites are ranked by distance from the atom."""
-        # atom at [0.1, 0.1, 0.1] -- nearest to site1
-        indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
-
-        self.assertEqual(indices, [self.site1.index, self.site2.index, self.site3.index])
-
-    def test_no_duplicates_with_distance_ranking(self):
-        """No duplicates when transitions overlap with distance-ranked sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_trans:
-            mock_trans.return_value = [self.site3.index]
-
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
-
-        self.assertEqual(len(indices), 3)
-        self.assertEqual(len(indices), len(set(indices)))
-        # site1 (recent), site3 (transition), site2 (distance-ranked remaining)
-        self.assertEqual(indices, [self.site1.index, self.site3.index, self.site2.index])
-    
+    def test_list_order_when_any_site_lacks_a_reference_centre(self):
+        """Sites are searched in list order when any site lacks a reference centre."""
+        centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), None]
+        indices, order = self.list_and_search_order(centres)
+        self.assertEqual(order, indices)
 
 
 if __name__ == '__main__':

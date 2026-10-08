@@ -418,6 +418,11 @@ class TestGetPrioritySitesWithSiteCentres(unittest.TestCase):
         return [site.index
                 for site in self.collection._get_priority_sites(self.atom, self.lattice_matrix)]
 
+    def test_recent_sites_come_first_most_recent_first(self):
+        """Both recent sites come first, most recent first, before the ranking."""
+        self.atom._recent_sites = [3, 5]
+        self.assertEqual(self.priority_indices(), [3, 5, 7, 0])
+
     def test_remaining_sites_ranked_by_distance_from_atom(self):
         """After the recent site, sites are ranked by distance from the atom."""
         self.atom._recent_sites = [5, None]
@@ -437,6 +442,20 @@ class TestGetPrioritySitesWithSiteCentres(unittest.TestCase):
         # would come before site 3; with that site's transitions, site 3
         # would come second.
         self.assertEqual(self.priority_indices(), [7, 0, 3, 5])
+
+    def test_transitions_keep_frequency_order(self):
+        """Learned transitions come in frequency order, not distance order."""
+        self.atom._recent_sites = [5, None]
+        # Site 3 is further from the atom than site 0 but the more frequent
+        # destination, so it comes first.
+        self.sites[0].most_frequent_transitions.return_value = [3, 0]
+        self.assertEqual(self.priority_indices(), [5, 3, 0, 7])
+
+    def test_transition_back_to_previous_site_not_repeated(self):
+        """A transition back to the previous recent site is not yielded twice."""
+        self.atom._recent_sites = [3, 5]
+        self.sites[1].most_frequent_transitions.return_value = [5, 0]
+        self.assertEqual(self.priority_indices(), [3, 5, 0, 7])
 
     def test_distance_ranking_stops_at_reach(self):
         """With a reach, the ranking holds only the sites within it of the atom."""

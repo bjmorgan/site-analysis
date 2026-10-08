@@ -20,6 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `site_analysis.distances.all_mic_distances()`, which computed the full matrix of minimum-image distances between two sets of points. Use `PeriodicNeighbourIndex` to find neighbours, or `paired_mic_distances()` for distances between given pairs of points.
 
+### Fixed
+
+- `tools.get_nearest_neighbour_indices()` no longer raises when `n_coord` equals the number of atoms matching `vertex_species`.
+- `TrajectoryBuilder.with_min_atom_distance()` now raises `ValueError` for NaN. Previously, NaN silently turned off the close-pair check.
+- `site_index_mapping()` now returns integer indices when nothing matches `species1_filter`. Previously it returned an empty float array, which could not be used as indices.
+
 ## [1.9.0] - 2026-10-05
 
 ### Added

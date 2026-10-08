@@ -48,7 +48,7 @@ jobs:
 
       - name: Check that numba is absent
         run: |
-          python -c "from site_analysis._compat import HAS_NUMBA; assert not HAS_NUMBA"
+          python -c "from site_analysis._compat import HAS_NUMBA; assert not HAS_NUMBA, 'numba is still importable'"
 
       - name: Run tests
         run: |

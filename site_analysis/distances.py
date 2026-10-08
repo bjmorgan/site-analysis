@@ -20,8 +20,9 @@ _SHIFTS_27 = np.array(
 _SHIFTS_27.flags.writeable = False
 
 # Below this many pairs, paired distances are computed on one thread,
-# because starting parallel threads costs more than it saves. Measured on
-# a 10-core machine; the break-even point grows with the number of threads.
+# because dispatching work to numba's thread pool costs more than it saves.
+# Measured on a 10-core machine; the break-even point grows with the number
+# of threads.
 _PARALLEL_MIN_PAIRS = 4096
 
 
@@ -82,8 +83,8 @@ if HAS_NUMBA:
     ) -> np.ndarray:
         """JIT-compiled minimum-image distances between paired points, on one thread.
 
-        Avoids the cost of starting parallel threads, which dominates for
-        small batches.
+        Avoids the cost of dispatching work to numba's thread pool, which
+        dominates for small batches.
 
         Args:
             frac_coords1: Fractional coordinates, shape (K, 3).

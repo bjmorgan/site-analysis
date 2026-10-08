@@ -41,7 +41,9 @@ The reference centre for each site is the fractional coordinates of the central 
 
 ### Performance Considerations
 
-Both methods have similar performance. PBC image shifts are cached after the first frame and updated incrementally on subsequent frames, so the initial unwrapping cost is amortised over the trajectory. The reference centre method is the default when using the {class}`~site_analysis.builders.TrajectoryBuilder` or {class}`~site_analysis.reference_workflow.ReferenceBasedSites` workflows, due to its correctness in small simulation cells.
+Both methods unwrap vertices at similar cost. PBC image shifts are cached after the first frame and updated incrementally on subsequent frames, so the initial unwrapping cost is amortised over the trajectory. The reference centre method is the default when using the {class}`~site_analysis.builders.TrajectoryBuilder` or {class}`~site_analysis.reference_workflow.ReferenceBasedSites` workflows, due to its correctness in small simulation cells.
+
+The choice also affects the site search for polyhedral sites. The reference centres are used to rank candidate sites by distance from each atom; without them, the search falls back to the neighbours of the atom's most recent site, then list order, which can make assignment slower.
 
 ## Controlling PBC Handling in Your Code
 

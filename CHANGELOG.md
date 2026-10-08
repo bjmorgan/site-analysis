@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `SphericalSite.rcut` and `SphericalSite.frac_coords` are now read-only, and a `SphericalSite` keeps its own copy of the centre, which cannot be changed in place. Code that assigns to `rcut` or `frac_coords`, or changes `frac_coords` in place, must now create a new `SphericalSite` instead. `SphericalSite` raises `ValueError` for a negative or NaN radius, or a centre that is not three finite numbers.
 - `construct_neighbouring_sites` compares only sites that share a vertex, so for typical structures it takes time linear in the number of sites, instead of comparing every pair of sites.
 - Site collections keep their own copy of the list of sites they are given, so changing that list afterwards no longer changes the collection.
+- `PolyhedralSiteCollection` raises `ValueError` for a site whose reference centre is not three finite numbers. Previously, such a centre was accepted.
 - `Trajectory.sites` is now the site collection's own list of sites, rather than the list passed in.
 
 ### Removed

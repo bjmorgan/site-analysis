@@ -62,6 +62,11 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         Returns:
             None
 
+        Raises:
+            TypeError: If any site is not a ``PolyhedralSite``.
+            ValueError: If a site's reference centre is not three finite
+                numbers.
+
         """
         sites = list(sites)
         for s in sites:

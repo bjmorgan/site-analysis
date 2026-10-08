@@ -93,8 +93,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         Args:
             atoms: List of Atom objects to be assigned to sites.
             lattice_matrix: (3, 3) lattice matrix where rows are lattice
-                vectors. Not currently used for polyhedral containment
-                checks, but accepted for interface consistency.
+                vectors. Used to rank candidate sites by the distance of
+                their reference centres from each atom; the containment
+                checks themselves do not use it.
         """
         self.reset_site_occupations()
         for atom in atoms:
@@ -102,7 +103,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
-            for site in self._get_priority_sites(atom):
+            for site in self._get_priority_sites(atom, lattice_matrix):
                 if site.contains_atom(atom, pbc_images=pbc_images):
                     self.update_occupation(site, atom)
                     break

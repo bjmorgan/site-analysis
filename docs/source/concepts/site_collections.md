@@ -15,10 +15,14 @@ Each site collection type implements a different strategy for assigning atoms to
 Spherical and polyhedral sites can overlap or leave gaps between them. These collections check sites one at a time and assign the atom to the first containing site found. To avoid unnecessary containment checks, a priority heuristic determines the order in which sites are tested:
 
 1. **Recent history**: the atom's most recently occupied site(s) are checked first
-2. **Learned transitions**: sites that atoms have previously transitioned to from the anchor site, ordered by frequency
-3. **Distance ranking**: remaining sites ordered by distance from the anchor site centre
+2. **Learned transitions**: sites that atoms have previously transitioned to from the atom's most recent site, ordered by frequency
+3. **Distance ranking**: remaining sites ordered by the distance of their centres from the atom
 
-If no trajectory history exists (e.g. the first timestep), the nearest site centre is used as the starting anchor instead.
+If the atom has no recent sites (e.g. at the first timestep), the search starts with the distance ranking.
+
+Polyhedral sites are ranked by their reference centres. For polyhedral sites without reference centres, the remaining sites are instead checked starting with the neighbours of the most recent site, then in list order.
+
+Where sites overlap, the first containing site in this order claims the atom: an atom stays in a recent site if one contains it, otherwise goes to a learned transition destination that contains it, and otherwise goes to the containing site whose centre is nearest the atom.
 
 This ordering means atoms that remain in or near their current site are resolved in a single check, and common transitions are tested early. In practice, this eliminates the majority of containment checks compared to a naive sequential scan.
 

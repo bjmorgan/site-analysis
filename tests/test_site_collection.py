@@ -359,47 +359,57 @@ class TestSiteCentreIndex(unittest.TestCase):
 class TestInitPriorityRanking(unittest.TestCase):
     """Tests for PriorityAssignmentMixin._init_priority_ranking."""
 
-    def test_minimum_image_convention(self):
-        """Distance ranking uses PBC so a site near 0.0 is close to one near 1.0."""
-        site_a = Mock(spec=Site, index=0, frac_coords=np.array([0.05, 0.0, 0.0]))
-        site_b = Mock(spec=Site, index=1, frac_coords=np.array([0.5, 0.0, 0.0]))
-        site_c = Mock(spec=Site, index=2, frac_coords=np.array([0.95, 0.0, 0.0]))
-        site_a.reset = Mock()
-        site_b.reset = Mock()
-        site_c.reset = Mock()
-
-        collection = ConcretePriorityCollection([site_a, site_b, site_c])
-        centres = np.array([s.frac_coords for s in collection.sites])
-        site_indices = [s.index for s in collection.sites]
-        collection._init_priority_ranking(centres, site_indices)
-
-        # From site_a at 0.05: site_c at 0.95 is 0.1 away via PBC, site_b is 0.45
-        self.assertEqual(
-            collection._distance_ranking.ranked_site_indices(site_a.index),
-            [site_c.index, site_b.index],
-        )
-
-    def test_ranking_uses_site_indices_for_any_anchor(self):
-        """Rankings map between site indices and positions for any anchor site."""
-        indices = [12, 5, 31, 8]
-        x_coords = [0.0, 0.2, 0.45, 0.62]
-        sites = [Mock(spec=Site, index=i, frac_coords=np.array([x, 0.0, 0.0]))
-                 for i, x in zip(indices, x_coords)]
-        for site in sites:
-            site.reset = Mock()
-        collection = ConcretePriorityCollection(sites)
-        centres = np.array([s.frac_coords for s in collection.sites])
-        collection._init_priority_ranking(centres, [s.index for s in collection.sites])
-
-        # From site 31 at 0.45: site 8 is 0.17 away, site 5 is 0.25 and site 12 is 0.45.
-        self.assertEqual(collection._distance_ranking.ranked_site_indices(31), [8, 5, 12])
-
     def test_empty_sites_is_noop(self):
         """Calling _init_priority_ranking with empty centres does nothing."""
         collection = ConcretePriorityCollection([])
         collection._init_priority_ranking(np.empty((0, 3)), [])
-        self.assertIsNone(collection._distance_ranking)
-        self.assertIsNone(collection._nearest_site_lookup)
+        self.assertIsNone(collection._site_centres)
+
+
+class TestGetPrioritySitesWithSiteCentres(unittest.TestCase):
+    """Tests for the site search order when site centres are set up."""
+
+    def setUp(self):
+        # Four sites along x in a 10 A cubic cell, at x = 1, 3, 5 and 7.5 A,
+        # with site indices that differ from their positions in the list.
+        self.sites = [Mock(spec=Site, index=i, frac_coords=np.array([x, 0.0, 0.0]))
+                      for i, x in zip([5, 3, 0, 7], [0.1, 0.3, 0.5, 0.75])]
+        for site in self.sites:
+            site.most_frequent_transitions.return_value = []
+        self.collection = ConcretePriorityCollection(self.sites)
+        self.centres = np.array([s.frac_coords for s in self.sites])
+        self.site_indices = [s.index for s in self.sites]
+        self.collection._init_priority_ranking(self.centres, self.site_indices)
+        self.lattice_matrix = np.eye(3) * 10.0
+        # 0.7 A from site 7, 1.8 A from site 0, 3.8 A from site 3 and
+        # 4.2 A from site 5.
+        self.atom = Atom(index=0)
+        self.atom._frac_coords = np.array([0.68, 0.0, 0.0])
+
+    def priority_indices(self):
+        """Site indices in the order _get_priority_sites yields them."""
+        return [site.index
+                for site in self.collection._get_priority_sites(self.atom, self.lattice_matrix)]
+
+    def test_remaining_sites_ranked_by_distance_from_atom(self):
+        """After the recent site, sites are ranked by distance from the atom."""
+        self.atom._recent_sites = [5, None]
+        # Ranked from site 5's centre instead, site 3 would come second.
+        self.assertEqual(self.priority_indices(), [5, 7, 0, 3])
+
+    def test_transitions_come_before_distance_ranking(self):
+        """Learned transitions from the recent site come before the ranking."""
+        self.atom._recent_sites = [5, None]
+        self.sites[0].most_frequent_transitions.return_value = [0]
+        self.assertEqual(self.priority_indices(), [5, 0, 7, 3])
+
+    def test_atom_without_history_gets_distance_order(self):
+        """An atom with no recent site gets distance order, without transitions."""
+        self.sites[3].most_frequent_transitions.return_value = [3]
+        # Ranked from the nearest site's centre (site 7's) instead, site 5
+        # would come before site 3; with that site's transitions, site 3
+        # would come second.
+        self.assertEqual(self.priority_indices(), [7, 0, 3, 5])
 
 
 if __name__ == '__main__':

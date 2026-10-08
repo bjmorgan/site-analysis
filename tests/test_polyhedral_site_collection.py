@@ -480,42 +480,6 @@ class TestCollectReferenceCentres(unittest.TestCase):
         self.assertEqual(site_indices, [site_a.index, site_b.index])
 
 
-class TestNearestSiteLookup(unittest.TestCase):
-    """Tests for _NearestSiteLookup.nearest_site_index."""
-
-    def test_lookup_none_without_reference_centres(self):
-        """Collection has no nearest-site lookup when sites lack reference centres."""
-        Site._newid = 0
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        collection = PolyhedralSiteCollection([site])
-        self.assertIsNone(collection._nearest_site_lookup)
-
-    def test_returns_nearest_site(self):
-        """Returns the site index nearest to the given coordinates."""
-        Site._newid = 0
-        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.1, 0.1, 0.1]))
-        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.5, 0.5, 0.5]))
-        collection = PolyhedralSiteCollection([site_a, site_b])
-        result = collection._nearest_site_lookup.nearest_site_index(
-            np.array([0.12, 0.12, 0.12]))
-        self.assertEqual(result, site_a.index)
-
-    def test_uses_minimum_image_convention(self):
-        """Uses PBC so a point near 0.0 is close to a site at 0.95."""
-        Site._newid = 0
-        site_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.5, 0.5, 0.5]))
-        site_b = PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([0.95, 0.95, 0.95]))
-        collection = PolyhedralSiteCollection([site_a, site_b])
-        # Point at [0.02, 0.02, 0.02] is 0.05*sqrt(3) from site_b via PBC
-        result = collection._nearest_site_lookup.nearest_site_index(
-            np.array([0.02, 0.02, 0.02]))
-        self.assertEqual(result, site_b.index)
-
-
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     """Test interaction between assign_site_occupations and _get_priority_sites."""
 
@@ -532,9 +496,10 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
     
     def test_calls_generator_for_each_atom(self):
         """Test that _get_priority_sites is called once per atom."""
+        lattice_matrix = self.lattice.matrix
         with patch.object(self.collection, '_get_priority_sites', return_value=[]):
-            self.collection.assign_site_occupations(self.atoms, self.lattice.matrix)
-            self.collection._get_priority_sites.assert_called_once_with(self.atom)
+            self.collection.assign_site_occupations(self.atoms, lattice_matrix)
+            self.collection._get_priority_sites.assert_called_once_with(self.atom, lattice_matrix)
     
     def test_calls_generator_for_multiple_atoms(self):
         """Test that _get_priority_sites is called for each atom."""
@@ -628,7 +593,7 @@ class TestGetPrioritySites(unittest.TestCase):
         """Most recent site is yielded first."""
         self.atom._recent_sites = [self.site2.index, None]
 
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
         self.assertEqual(priority_sites[0], self.site2)
 
@@ -637,14 +602,14 @@ class TestGetPrioritySites(unittest.TestCase):
         self.atom._recent_sites = [self.site2.index, self.site1.index]
 
         with patch.object(self.site2, 'most_frequent_transitions', return_value=[]):
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
         self.assertEqual(priority_sites[0], self.site2)
         self.assertEqual(priority_sites[1], self.site1)
 
     def test_yields_all_sites_when_no_recent_sites(self):
         """All sites yielded in arbitrary order when no site history exists."""
-        priority_sites = list(self.collection._get_priority_sites(self.atom))
+        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
         self.assertEqual(len(priority_sites), 3)
         self.assertIn(self.site1, priority_sites)
@@ -658,7 +623,7 @@ class TestGetPrioritySites(unittest.TestCase):
         with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
             mock_transitions.return_value = [self.site3.index, self.site2.index]
 
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
+            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
 
             self.assertEqual(indices, [self.site1.index, self.site3.index, self.site2.index])
 
@@ -669,7 +634,7 @@ class TestGetPrioritySites(unittest.TestCase):
         with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
             mock_transitions.return_value = [self.site3.index, self.site2.index]
 
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
             self.assertEqual(len(priority_sites), 3)
             site_indices = [s.index for s in priority_sites]
@@ -678,7 +643,7 @@ class TestGetPrioritySites(unittest.TestCase):
 
     def test_yields_neighbours_after_transitions_without_reference_centres(self):
         """Without reference centres, neighbours are yielded after transitions."""
-        self.assertIsNone(self.collection._distance_ranking)
+        self.assertIsNone(self.collection._site_centres)
         self.atom._recent_sites = [self.site1.index, None]
 
         with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
@@ -686,7 +651,7 @@ class TestGetPrioritySites(unittest.TestCase):
                 mock_transitions.return_value = [self.site2.index]
                 mock_neighbours.return_value = [self.site3]
 
-                priority_sites = list(self.collection._get_priority_sites(self.atom))
+                priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
                 self.assertEqual(priority_sites[0], self.site1)
                 self.assertEqual(priority_sites[1], self.site2)
@@ -702,7 +667,7 @@ class TestGetPrioritySites(unittest.TestCase):
                 mock_transitions.return_value = [self.site2.index]
                 mock_neighbours.return_value = [self.site2, self.site3]
 
-                priority_sites = list(self.collection._get_priority_sites(self.atom))
+                priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
                 self.assertEqual(len(priority_sites), 3)
                 site_indices = [s.index for s in priority_sites]
@@ -712,7 +677,7 @@ class TestGetPrioritySites(unittest.TestCase):
     def test_skips_neighbour_checking_when_no_recent_sites(self):
         """Neighbour checking is skipped when atom has no recent sites."""
         with patch.object(self.collection, 'neighbouring_sites') as mock_neighbours:
-            priority_sites = list(self.collection._get_priority_sites(self.atom))
+            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
             self.assertEqual(len(priority_sites), 3)
             mock_neighbours.assert_not_called()
@@ -727,8 +692,8 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
         self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
 
         # Sites with reference centres so distance ranking is computed.
-        # Centres chosen to give unambiguous ordering without PBC wrapping:
-        # site1 at origin, site2 at 0.2, site3 at 0.4.
+        # Centres along x at 0.1, 0.3 and 0.5 give an unambiguous ordering
+        # without PBC wrapping.
         self.site1 = PolyhedralSite(
             vertex_indices=[0, 1, 2, 3],
             reference_center=np.array([0.1, 0.1, 0.1]),
@@ -746,34 +711,27 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
         self.atoms = atoms_from_structure(self.structure, "Li")
         self.atom = self.atoms[0]
 
-    def test_distance_ranking_set_up(self):
-        """Distance ranking is set up when reference centres are available."""
-        self.assertIsNotNone(self.collection._distance_ranking)
-        self.assertIsNotNone(self.collection._nearest_site_lookup)
+    def test_site_centres_set_up(self):
+        """Site centres are set up when reference centres are available."""
+        self.assertIsNotNone(self.collection._site_centres)
 
     def test_remaining_sites_ordered_by_distance(self):
         """After recent and transitions, remaining sites are distance-ranked."""
         self.atom._recent_sites = [self.site1.index, None]
 
         with patch.object(self.site1, 'most_frequent_transitions', return_value=[]):
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
+            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
 
-        # site1 first (recent), then site2 (closer to site1), then site3
+        # site1 first (recent), then site2 (closer to the atom, which sits on
+        # site1's centre), then site3
         self.assertEqual(indices[0], self.site1.index)
         self.assertEqual(indices[1], self.site2.index)
         self.assertEqual(indices[2], self.site3.index)
 
-    def test_no_history_uses_nearest_site(self):
-        """With no history, yields nearest site to atom position first."""
-        # atom at [0.1, 0.1, 0.1] -- nearest to site1 at [0.1, 0.1, 0.1]
-        indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
-
-        self.assertEqual(indices[0], self.site1.index)
-
     def test_no_history_distance_ranked_outward(self):
-        """With no history, sites are ranked by distance from nearest."""
+        """With no history, sites are ranked by distance from the atom."""
         # atom at [0.1, 0.1, 0.1] -- nearest to site1
-        indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
+        indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
 
         self.assertEqual(indices, [self.site1.index, self.site2.index, self.site3.index])
 
@@ -784,7 +742,7 @@ class TestGetPrioritySitesWithDistanceRanking(unittest.TestCase):
         with patch.object(self.site1, 'most_frequent_transitions') as mock_trans:
             mock_trans.return_value = [self.site3.index]
 
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom)]
+            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
 
         self.assertEqual(len(indices), 3)
         self.assertEqual(len(indices), len(set(indices)))

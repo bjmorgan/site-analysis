@@ -85,7 +85,7 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
             atom.in_site = None
 
             # Check sites in priority order until found
-            for site in self._get_priority_sites(atom):
+            for site in self._get_priority_sites(atom, lattice_matrix):
                 if site.contains_atom(atom, lattice_matrix=lattice_matrix):
                     self.update_occupation(site, atom)
                     break

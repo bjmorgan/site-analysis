@@ -30,6 +30,12 @@ class SphericalSiteInitTestCase(unittest.TestCase):
         self.assertEqual(spherical_site.rcut, rcut)
         self.assertEqual(spherical_site.label, label)
 
+    def test_init_rejects_negative_or_nan_radius(self):
+        for rcut in (-1.0, float("nan")):
+            with self.subTest(rcut=rcut):
+                with self.assertRaisesRegex(ValueError, "rcut must be non-negative"):
+                    SphericalSite(frac_coords=np.zeros(3), rcut=rcut)
+
 
 class SphericalSiteTestCase(unittest.TestCase):
     def setUp(self):

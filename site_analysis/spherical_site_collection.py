@@ -33,6 +33,9 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         spherical sites, using distance-ranked site ordering for
         optimised atom assignment via the PriorityAssignmentMixin.
 
+        The collection records each site's centre and the largest radius
+        when it is created, so sites must not be changed afterwards.
+
         Args:
             sites (list): List of ``SphericalSite`` objects.
 
@@ -47,7 +50,8 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         self.sites: list[SphericalSite]
         centres = np.array([s.frac_coords for s in self.sites])
         site_indices = [s.index for s in self.sites]
-        self._init_priority_ranking(centres, site_indices)
+        self._init_priority_ranking(
+            centres, site_indices, reach=max((s.rcut for s in self.sites), default=None))
 
     def analyse_structure(self,
             atoms: list[Atom],

@@ -280,18 +280,21 @@ class ConcretePriorityCollection(PriorityAssignmentMixin, SiteCollection):
         raise NotImplementedError
 
 
-def _brute_force_ranking(centres, point, lattice_matrix):
-    """Positions of the centres, nearest to the point first.
-
-    Distances are minimum-image Cartesian distances over 27 periodic
-    images. Equal distances keep the order of the centres.
-    """
+def _brute_force_distances(centres, point, lattice_matrix):
+    """Minimum-image Cartesian distances from the point to each centre, over 27 images."""
     shifts = np.array(list(itertools.product([-1, 0, 1], repeat=3)))
     diffs = centres - point
     diffs -= np.round(diffs)
     cartesian = (diffs[:, np.newaxis, :] + shifts) @ lattice_matrix
-    distances = np.linalg.norm(cartesian, axis=2).min(axis=1)
-    return np.argsort(distances, kind="stable")
+    return np.linalg.norm(cartesian, axis=2).min(axis=1)
+
+
+def _brute_force_ranking(centres, point, lattice_matrix):
+    """Positions of the centres, nearest to the point first.
+
+    Equal distances keep the order of the centres.
+    """
+    return np.argsort(_brute_force_distances(centres, point, lattice_matrix), kind="stable")
 
 
 def _joined_ranking(site_centres, point, lattice_matrix):
@@ -355,6 +358,30 @@ class TestSiteCentreIndex(unittest.TestCase):
         lattice_matrix[0, 0] = 20.0
         self.assertEqual(_joined_ranking(site_centres, np.zeros(3), lattice_matrix), [1, 0])
 
+    def test_reach_limits_ranking_to_sites_within_reach(self):
+        """With a reach, one list holds the sites within it, including one exactly at it."""
+        # 2 A, 1 A, 2.002 A and 5.7 A from the origin.
+        centres = np.array([[0.0, 0.25, 0.0], [0.125, 0.0, 0.0],
+                            [0.0, 0.0, 0.25025], [0.5, 0.5, 0.0]])
+        site_centres = _SiteCentreIndex(centres, [0, 1, 2, 3], reach=2.0)
+        self.assertEqual(
+            list(site_centres.ranked_site_indices(np.zeros(3), np.eye(3) * 8.0)), [[1, 0]])
+
+    def test_reach_ranking_matches_brute_force(self):
+        """With a reach, the list is the brute-force ranking cut at the reach."""
+        rng = np.random.default_rng(1)
+        lattice_matrix = Lattice.from_parameters(9.0, 10.0, 11.0, 75, 100, 110).matrix
+        centres = rng.random((30, 3))
+        site_indices = list(range(100, 160, 2))
+        site_centres = _SiteCentreIndex(centres, site_indices, reach=4.0)
+        for point in rng.uniform(-0.5, 1.5, (20, 3)):
+            distances = _brute_force_distances(centres, point, lattice_matrix)
+            expected = [site_indices[position]
+                        for position in np.argsort(distances, kind="stable")
+                        if distances[position] <= 4.0]
+            self.assertEqual(
+                list(site_centres.ranked_site_indices(point, lattice_matrix)), [expected])
+
 
 class TestInitPriorityRanking(unittest.TestCase):
     """Tests for PriorityAssignmentMixin._init_priority_ranking."""
@@ -410,6 +437,18 @@ class TestGetPrioritySitesWithSiteCentres(unittest.TestCase):
         # would come before site 3; with that site's transitions, site 3
         # would come second.
         self.assertEqual(self.priority_indices(), [7, 0, 3, 5])
+
+    def test_distance_ranking_stops_at_reach(self):
+        """With a reach, the ranking holds only the sites within it of the atom."""
+        self.collection._init_priority_ranking(self.centres, self.site_indices, reach=2.0)
+        self.assertEqual(self.priority_indices(), [7, 0])
+
+    def test_recent_sites_and_transitions_yielded_beyond_reach(self):
+        """Recent sites and learned transitions are yielded even when out of reach."""
+        self.collection._init_priority_ranking(self.centres, self.site_indices, reach=2.0)
+        self.atom._recent_sites = [5, None]
+        self.sites[0].most_frequent_transitions.return_value = [3]
+        self.assertEqual(self.priority_indices(), [5, 3, 7, 0])
 
 
 if __name__ == '__main__':

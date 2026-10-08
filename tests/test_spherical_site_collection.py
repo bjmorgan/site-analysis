@@ -218,9 +218,10 @@ class TestGetPrioritySites(unittest.TestCase):
         Site._newid = 0
         self.lattice = Lattice.cubic(10.0)
 
-        self.site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.5, label="site1")
-        self.site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.5, label="site2")
-        self.site3 = SphericalSite(frac_coords=np.array([0.8, 0.8, 0.8]), rcut=1.5, label="site3")
+        # The radii cover the whole cell, so every site is within reach of the atom.
+        self.site1 = SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=9.0, label="site1")
+        self.site2 = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=9.0, label="site2")
+        self.site3 = SphericalSite(frac_coords=np.array([0.8, 0.8, 0.8]), rcut=9.0, label="site3")
         self.collection = SphericalSiteCollection([self.site1, self.site2, self.site3])
 
         self.atom = Atom(index=0)
@@ -426,6 +427,36 @@ class TestOverlappingSites(unittest.TestCase):
         collection.assign_site_occupations([atom], np.eye(3) * 10.0)
 
         self.assertEqual(atom.in_site, near.index)
+
+
+class TestReach(unittest.TestCase):
+    """Tests for limiting the site search to the largest site radius."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.lattice_matrix = np.eye(3) * 10.0
+        self.small = SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=0.5)
+        self.large = SphericalSite(frac_coords=np.array([0.6, 0.5, 0.5]), rcut=3.0)
+        self.far_small = SphericalSite(frac_coords=np.array([0.9, 0.5, 0.5]), rcut=0.5)
+        # The large site is neither first nor last, so its radius is not
+        # picked out by position.
+        self.collection = SphericalSiteCollection([self.small, self.large, self.far_small])
+        self.atom = Atom(index=0)
+
+    def test_sites_beyond_the_largest_radius_are_not_offered(self):
+        """An atom further than the largest radius from every centre is offered no sites."""
+        # 7.1 A from small's centre, 7.7 A from large's and 8.1 A from far_small's.
+        self.atom._frac_coords = np.array([0.3, 0.0, 0.0])
+        self.assertEqual(
+            list(self.collection._get_priority_sites(self.atom, self.lattice_matrix)), [])
+
+    def test_atom_found_in_large_site_beyond_smaller_radii(self):
+        """The reach is the largest radius, so a large site beyond small ones is found."""
+        # 1 A from small's centre, outside it, 2 A from large's, inside it,
+        # and 5 A from far_small's.
+        self.atom._frac_coords = np.array([0.4, 0.5, 0.5])
+        self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
+        self.assertEqual(self.atom.in_site, self.large.index)
 
 
 if __name__ == '__main__':

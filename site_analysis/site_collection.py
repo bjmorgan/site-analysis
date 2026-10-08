@@ -23,26 +23,37 @@ from .atom import Atom
 from .site import Site
 from .neighbour_search import PeriodicNeighbourIndex
 
+# Sites within this relative margin beyond the reach are also ranked, so
+# that rounding cannot leave out a site whose containment test would
+# accept the point.
+_REACH_TOLERANCE = 1e-9
+
 
 class _SiteCentreIndex:
     """Site centres, ranked by Cartesian minimum-image distance from a point.
 
     Holds a ``PeriodicNeighbourIndex`` over the centres, built on first
-    use and rebuilt whenever the lattice changes.
+    use and rebuilt whenever the lattice changes. With a reach, only the
+    sites whose centres are within the reach of the point are ranked.
     """
 
     def __init__(self,
             centres: np.ndarray,
-            site_indices: Sequence[int]) -> None:
+            site_indices: Sequence[int],
+            reach: float | None = None) -> None:
         """Create a _SiteCentreIndex.
 
         Args:
             centres: Fractional coordinates of the site centres, shape
                 (N, 3), with N at least 1.
             site_indices: The site index of each centre.
+            reach: If given, the largest distance from its centre at which
+                any site can contain a point. Only the sites whose centres
+                are within the reach of the point are then ranked.
         """
         self._centres = np.array(centres, dtype=np.float64)
         self._site_indices = np.asarray(site_indices)
+        self._reach = reach
         # The lattice the index was built for, set when it is built.
         self._lattice_matrix = np.zeros((3, 3))
         self._index: PeriodicNeighbourIndex | None = None
@@ -71,11 +82,13 @@ class _SiteCentreIndex:
             lattice_matrix: np.ndarray) -> Iterator[list[int]]:
         """Yield site indices in order of distance from a point.
 
-        Joined, the lists hold every site once, ordered by the Cartesian
-        minimum-image distance of its centre from the point, with equal
-        distances in the order of the centres. The first list holds the
-        sites near the point. The rest are ranked only if the caller asks
-        for another list.
+        Sites are ordered by the Cartesian minimum-image distance of their
+        centres from the point, with equal distances in the order of the
+        centres. Without a reach, the lists joined together hold every
+        site once: the first list holds the sites near the point, and the
+        rest are ranked only if the caller asks for another list. With a
+        reach, a single list holds the sites whose centres are within the
+        reach of the point.
 
         Args:
             frac_coords: Fractional coordinates of the point, shape (3,).
@@ -92,6 +105,11 @@ class _SiteCentreIndex:
         """
         neighbour_index = self._index_for(lattice_matrix)
         query = np.reshape(frac_coords, (1, 3))
+        if self._reach is not None:
+            _, within, _ = neighbour_index.query_within(
+                query, self._reach * (1.0 + _REACH_TOLERANCE))
+            yield self._site_indices[within].tolist()
+            return
         _, nearby, _ = neighbour_index.query_within(query, self._nearby_radius)
         yield self._site_indices[nearby].tolist()
         if len(nearby) < len(self._site_indices):
@@ -115,10 +133,11 @@ class PriorityAssignmentMixin(Generic[SiteT]):
     learned transitions, and distance from the atom.
 
     Subclasses call ``_init_priority_ranking(centres, site_indices)`` from
-    their ``__init__`` to enable distance-ranked ordering. If not called,
-    the generator falls back to ``neighbouring_sites`` then arbitrary
-    order (used by ``PolyhedralSiteCollection`` when reference centres
-    are unavailable).
+    their ``__init__`` to enable distance-ranked ordering, passing a
+    ``reach`` if no site can contain a point beyond some distance from its
+    centre (as for spherical sites). If not called, the generator falls
+    back to ``neighbouring_sites`` then arbitrary order (used by
+    ``PolyhedralSiteCollection`` when reference centres are unavailable).
 
     Expects to be mixed with ``SiteCollection`` which provides
     ``site_by_index``, ``neighbouring_sites``, and ``sites``.
@@ -135,7 +154,10 @@ class PriorityAssignmentMixin(Generic[SiteT]):
         super().__init__(*args, **kwargs)
         self._site_centres: _SiteCentreIndex | None = None
 
-    def _init_priority_ranking(self, centres: np.ndarray, site_indices: list[int]) -> None:
+    def _init_priority_ranking(self,
+            centres: np.ndarray,
+            site_indices: list[int],
+            reach: float | None = None) -> None:
         """Set up distance-ranked site ordering from the given centres.
 
         Does nothing if ``centres`` is empty (zero sites).
@@ -143,10 +165,13 @@ class PriorityAssignmentMixin(Generic[SiteT]):
         Args:
             centres: (N, 3) array of fractional coordinates for each site.
             site_indices: Corresponding site indices.
+            reach: If given, no site contains a point further than this
+                from its centre, so sites further than this from an atom
+                are left out of the distance ranking.
         """
         if len(centres) == 0:
             return
-        self._site_centres = _SiteCentreIndex(centres, site_indices)
+        self._site_centres = _SiteCentreIndex(centres, site_indices, reach)
 
     def _get_priority_sites(self,
             atom: Atom,
@@ -159,8 +184,9 @@ class PriorityAssignmentMixin(Generic[SiteT]):
             2. Learned transition destinations from the most recent site
                in frequency order
             3. Remaining sites by the distance of their centres from the
-               atom (if site centres are available), otherwise neighbours
-               of the most recent site then arbitrary order
+               atom (if site centres are available; only those within
+               reach, if a reach was given), otherwise neighbours of the
+               most recent site then arbitrary order
 
         An atom with no recent site starts at step 3. Without site centres
         it gets all sites in arbitrary order.

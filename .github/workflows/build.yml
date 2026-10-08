@@ -46,6 +46,10 @@ jobs:
           pip install -e ".[dev]"
           pip uninstall -y numba
 
+      - name: Check that numba is absent
+        run: |
+          python -c "from site_analysis._compat import HAS_NUMBA; assert not HAS_NUMBA"
+
       - name: Run tests
         run: |
           pytest

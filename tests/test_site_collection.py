@@ -39,6 +39,13 @@ class SiteCollectionTestCase(unittest.TestCase):
         sites.append(Mock(spec=Site, index=1))
         self.assertEqual(site_collection.sites, [site])
 
+    def test_site_collection_finds_every_site_given_as_an_iterator(self):
+        """Sites given as an iterator can all be found by index."""
+        sites = [Mock(spec=Site, index=12), Mock(spec=Site, index=42)]
+        site_collection = ConcreteSiteCollection(sites=iter(sites))
+        self.assertEqual(
+            [site_collection.site_by_index(12), site_collection.site_by_index(42)], sites)
+
     def test_assign_site_occupations_raises_not_implemented_error(self):
         sites = [Mock(spec=Site, index=0),
                  Mock(spec=Site, index=1)]
@@ -406,6 +413,13 @@ class TestSiteCentreIndex(unittest.TestCase):
         site_centres = _SiteCentreIndex(centres, [0, 1, 2, 3], reach=2.0)
         self.assertEqual(
             list(site_centres.ranked_site_indices(np.zeros(3), np.eye(3) * 8.0)), [[1, 0]])
+
+    def test_reach_includes_sites_just_beyond_it_within_the_tolerance(self):
+        """A site just beyond the reach, within the rounding tolerance, is ranked."""
+        # 2 A from the origin, just beyond the reach.
+        site_centres = _SiteCentreIndex(np.array([[0.25, 0.0, 0.0]]), [5], reach=2.0 * (1 - 1e-12))
+        self.assertEqual(
+            list(site_centres.ranked_site_indices(np.zeros(3), np.eye(3) * 8.0)), [[5]])
 
     def test_reach_ranking_matches_brute_force(self):
         """With a reach, the list is the brute-force ranking cut at the reach."""

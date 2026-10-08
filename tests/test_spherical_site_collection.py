@@ -411,9 +411,11 @@ class TestReachTolerance(unittest.TestCase):
         # Without numba, the containment test and the reach query compute
         # the same distance by different numpy operations, which usually
         # round alike. These specific coordinates are a case where they do
-        # not: the reach query's distance is one ulp larger than the
-        # containment test's, which is the radius, so the atom is found
-        # only because the reach is widened.
+        # not, on the machine where they were found: the reach query's
+        # distance is one ulp larger than the containment test's, which is
+        # the radius, so the atom is found only because the reach is
+        # widened. The rounding may differ on other platforms, so the
+        # tolerance is also tested directly in test_site_collection.py.
         centre = np.array([0.12428327649956394, 0.6706244146936303, 0.6471895115742501])
         point = np.array([1.4898346963218356, 0.1318870907354004, -0.1345752421468751])
         lattice_matrix = np.array([[10.76328146769828, 0.0, -3.6633263423816893],

@@ -63,7 +63,10 @@ class VoronoiSite(Site):
         return string
 
     def as_dict(self) -> dict:
-        """Json-serializable dict representation of this VoronoiSite.
+        """Dictionary of this site's attributes, which may contain numpy arrays.
+
+        For example, ``frac_coords`` and the recorded ``points`` are numpy
+        arrays.
 
         Args:
             None

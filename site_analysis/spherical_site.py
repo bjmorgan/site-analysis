@@ -133,8 +133,8 @@ class SphericalSite(Site):
         """Returns a dictionary representation of this SphericalSite.
         
         Creates a dictionary containing all the attributes needed to
-        reconstruct this SphericalSite object. The centre is a copy, as a
-        numpy array, so the dictionary is not directly JSON-serialisable.
+        reconstruct this SphericalSite object. The centre (a copy) and any
+        recorded points are numpy arrays.
         
         Returns:
             dict: Dictionary containing the SphericalSite's attributes, including

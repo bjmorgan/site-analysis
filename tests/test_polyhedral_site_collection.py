@@ -591,13 +591,10 @@ class TestGetPrioritySites(unittest.TestCase):
         self.atom = self.atoms[0]
 
     def test_yields_all_sites_when_no_recent_sites(self):
-        """All sites yielded in arbitrary order when no site history exists."""
+        """All sites yielded in list order when no site history exists."""
         priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
 
-        self.assertEqual(len(priority_sites), 3)
-        self.assertIn(self.site1, priority_sites)
-        self.assertIn(self.site2, priority_sites)
-        self.assertIn(self.site3, priority_sites)
+        self.assertEqual(priority_sites, [self.site1, self.site2, self.site3])
 
     def test_yields_neighbours_after_transitions_without_reference_centres(self):
         """Without reference centres, neighbours are yielded after transitions."""

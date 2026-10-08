@@ -27,7 +27,7 @@ import numpy as np
 
 from typing import cast
 from pymatgen.core import Structure, Site, PeriodicSite
-from site_analysis.distances import all_mic_distances
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 def get_coordination_indices(
     frac_coords: np.ndarray,
@@ -59,11 +59,17 @@ def get_coordination_indices(
     Returns:
         Dictionary mapping centre atom indices to lists of coordinating atom
         indices. Only includes environments with exactly n_coord coordinating
-        atoms within cutoff.
+        atoms within cutoff. Each list is ordered by distance from the
+        centre, with equal distances in atom-index order.
 
     Raises:
-        ValueError: If no centre atoms are found, or if a list of n_coord
-            has incorrect length.
+        ValueError: If ``species`` does not have one entry per row of
+            ``frac_coords``, if no centre atoms are found, or if a list of
+            n_coord has incorrect length. Also, when there are
+            coordinating atoms and ``cutoff`` is non-negative: if
+            ``lattice_matrix`` is not a finite, non-singular (3, 3)
+            matrix, or if the coordinates used do not have shape (N, 3)
+            or are not finite.
     """
     if len(species) != len(frac_coords):
         raise ValueError(
@@ -90,23 +96,21 @@ def get_coordination_indices(
                             f"number of {centre_species} atoms ({len(centre_atoms)})")
         required_coord = n_coord
 
-    # Compute distance matrix between centre and coordinating atoms
-    if coord_atoms:
-        centre_coords = frac_coords[centre_atoms]
-        coord_coords = frac_coords[coord_atoms]
-        dist_matrix = all_mic_distances(centre_coords, coord_coords, lattice_matrix)
-    else:
-        dist_matrix = np.empty((len(centre_atoms), 0))
+    # Coordinating atoms within the cutoff of each centre, nearest first,
+    # with ties in index order. A negative or NaN cutoff finds none.
+    coordinating: list[list[int]] = [[] for _ in centre_atoms]
+    if coord_atoms and cutoff >= 0:
+        index = PeriodicNeighbourIndex(frac_coords[coord_atoms], lattice_matrix)
+        query_idx, point_idx, _ = index.query_within(frac_coords[centre_atoms], cutoff)
+        coord_indices = np.asarray(coord_atoms)[point_idx]
+        for i, j in zip(query_idx.tolist(), coord_indices.tolist()):
+            if j != centre_atoms[i]:
+                coordinating[i].append(j)
 
     complete_environments: dict[int, list[int]] = {}
-    for i, (centre_idx, required) in enumerate(zip(centre_atoms, required_coord)):
-        distances = dist_matrix[i]
-        within_cutoff = [(coord_atoms[j], float(distances[j]))
-                         for j in range(len(coord_atoms))
-                         if distances[j] <= cutoff and coord_atoms[j] != centre_idx]
-        if len(within_cutoff) == required:
-            within_cutoff.sort(key=lambda x: x[1])
-            complete_environments[centre_idx] = [idx for idx, _ in within_cutoff]
+    for centre_idx, required, neighbours in zip(centre_atoms, required_coord, coordinating):
+        if len(neighbours) == required:
+            complete_environments[centre_idx] = neighbours
 
     return complete_environments
 
@@ -164,8 +168,8 @@ def get_nearest_neighbour_indices(
     dr_ij = lattice.get_all_distances(struc1_coords, struc2_coords).T
     nn_indices = []
     for dr_i in dr_ij:
-        idx = np.argpartition(dr_i, n_coord)
-        nn_indices.append( sorted([ vertex_indices[i] for i in idx[:n_coord] ]) )
+        idx = np.argpartition(dr_i, n_coord - 1)[:n_coord]
+        nn_indices.append( sorted([ vertex_indices[i] for i in idx ]) )
     return nn_indices
 
 def get_vertex_indices(
@@ -328,8 +332,13 @@ def site_index_mapping(
         (mapping, distances).
 
     Raises:
-        ValueError: If ``one_to_one_mapping`` is ``True`` and the
-            mapping is not one-to-one.
+        ValueError: If ``species1`` or ``species2`` does not have one
+            entry per row of its coordinate array, if no atoms match
+            ``species2_filter``, if ``lattice_matrix`` is not a finite,
+            non-singular (3, 3) matrix, if the coordinates used do not
+            have shape (N, 3) or are not finite, or if
+            ``one_to_one_mapping`` is ``True`` and the mapping is not
+            one-to-one.
     """
     if len(species1) != len(frac_coords1):
         raise ValueError(
@@ -354,22 +363,18 @@ def site_index_mapping(
         raise ValueError(
             f"No atoms match species2_filter {species2_filter} in species2"
         )
-    dr_ij = all_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
-    to_return = []
-    dr_ij_to_return = []
-    for i, dr_i in enumerate(dr_ij):
-        if species1[i] in species1_filter:
-            subset_idx = np.argmin(dr_i[structure2_mask])
-            parent_idx = np.arange(dr_i.size)[structure2_mask][subset_idx]
-            to_return.append(parent_idx)
-            dr_ij_to_return.append(dr_i[parent_idx])
+    candidates = np.flatnonzero(structure2_mask)
+    queries = [i for i, s in enumerate(species1) if s in species1_filter]
+    nearest, distances = PeriodicNeighbourIndex(
+        frac_coords2[candidates], lattice_matrix).query_nearest(frac_coords1[queries])
+    mapping: np.ndarray = candidates[nearest]
     if one_to_one_mapping:
-        if len(to_return) != len(set(to_return)):
+        if len(mapping) != len(set(mapping.tolist())):
             raise ValueError("One-to-one mapping between structures not found.")
     if return_mapping_distances:
-        return np.array(to_return), np.array(dr_ij_to_return)
+        return mapping, distances
     else:
-        return np.array(to_return)
+        return mapping
         
 def indices_for_species(
     all_species: list[str],
@@ -417,6 +422,14 @@ def calculate_species_distances(
         A tuple of (species_distances, all_distances) where
         species_distances maps species to lists of minimum distances,
         and all_distances is a flat list of all minimum distances.
+
+    Raises:
+        ValueError: If ``species1`` or ``species2`` does not have one
+            entry per row of its coordinate array. Also, when some
+            selected species has atoms in both structures: if
+            ``lattice_matrix`` is not a finite, non-singular (3, 3)
+            matrix, or if the coordinates used do not have shape (N, 3)
+            or are not finite.
     """
     if len(species1) != len(frac_coords1):
         raise ValueError(
@@ -441,10 +454,8 @@ def calculate_species_distances(
         if not idx1 or not idx2:
             continue
 
-        coords1 = frac_coords1[idx1]
-        coords2 = frac_coords2[idx2]
-        dist_matrix = all_mic_distances(coords1, coords2, lattice_matrix)
-        min_dists = np.min(dist_matrix, axis=1).tolist()
+        index = PeriodicNeighbourIndex(frac_coords2[idx2], lattice_matrix)
+        min_dists = index.query_nearest(frac_coords1[idx1])[1].tolist()
 
         species_distances[sp] = min_dists
         all_distances.extend(min_dists)

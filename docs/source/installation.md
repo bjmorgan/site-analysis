@@ -18,13 +18,13 @@ This will automatically install all required dependencies.
 
 ## Optional Dependencies
 
-For faster polyhedral site analysis, you can install with [numba](https://numba.pydata.org/) acceleration:
+For faster polyhedral site analysis and distance calculations, you can install with [numba](https://numba.pydata.org/) acceleration:
 
 ```bash
 pip install site-analysis[fast]
 ```
 
-This enables JIT-compiled containment testing, which typically gives a ~7x speedup when analysing polyhedral sites.
+This enables JIT-compiled containment testing, which typically gives a ~7x speedup when analysing polyhedral sites. It also speeds up the minimum-image distance calculations used throughout the package.
 
 ## Installing from Source
 

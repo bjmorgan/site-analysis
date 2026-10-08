@@ -20,6 +20,7 @@ sites in one structure based on a template from another structure.
 import numpy as np
 from pymatgen.core import Structure
 from typing import Any, Callable
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 from site_analysis.tools import calculate_species_distances
 
 class StructureAligner:
@@ -62,8 +63,8 @@ class StructureAligner:
             measures.
 
         Raises:
-            ValueError: If structures have incompatible compositions or
-                if optimisation fails.
+            ValueError: If structures have incompatible compositions, if
+                ``species`` is empty, or if optimisation fails.
         """
         # Extract arrays from Structure at the public boundary
         ref_frac_coords = reference.frac_coords
@@ -125,20 +126,28 @@ class StructureAligner:
             Objective function that takes a translation vector and returns
             the distance metric value.
         """
+        # The target does not move, so its neighbour indices are built once.
+        ref_species_array = np.asarray(ref_species)
+        target_species_array = np.asarray(target_species)
+        searches: list[tuple[np.ndarray, PeriodicNeighbourIndex]] = []
+        for sp in valid_species:
+            ref_idx = np.flatnonzero(ref_species_array == sp)
+            target_idx = np.flatnonzero(target_species_array == sp)
+            if len(ref_idx) and len(target_idx):
+                searches.append((ref_frac_coords[ref_idx], PeriodicNeighbourIndex(
+                    target_frac_coords[target_idx], lattice_matrix)))
+
         def objective_function(
             translation_vector: np.ndarray) -> float:
-            translation_vector = translation_vector % 1.0
-            translated_coords = (ref_frac_coords + translation_vector) % 1.0
-
-            _, all_distances = calculate_species_distances(
-                translated_coords, target_frac_coords, lattice_matrix,
-                ref_species, target_species, species=valid_species)
-
-            if not all_distances:
+            if not searches:
                 return float('inf')
+            translation_vector = translation_vector % 1.0
+            all_distances = np.concatenate([
+                index.query_nearest((ref_coords + translation_vector) % 1.0)[1]
+                for ref_coords, index in searches])
 
             if metric == 'rmsd':
-                return float(np.sqrt(np.mean(np.array(all_distances)**2)))
+                return float(np.sqrt(np.mean(all_distances**2)))
             elif metric == 'max_dist':
                 return float(np.max(all_distances))
             else:
@@ -179,6 +188,8 @@ class StructureAligner:
             species_to_use = sorted(ref_counts.keys())
         else:
             species_to_use = species
+        if not species_to_use:
+            raise ValueError("No species to align on")
 
         for sp in species_to_use:
             ref_count = sum(1 for s in ref_species if s == sp)

@@ -20,7 +20,7 @@ of site definitions between different structures or timesteps in a simulation.
 
 import numpy as np
 
-from site_analysis.distances import all_mic_distances
+from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 
 class IndexMapper:
@@ -63,10 +63,19 @@ class IndexMapper:
         Returns:
             List of coordinating atom index lists mapped to the target structure.
             Maintains the same structure as input but with updated indices.
+            Each reference atom maps to its closest target atom; where several
+            are equally close, to the one with the lowest index.
 
         Raises:
-            ValueError: If 1:1 mapping cannot be achieved (e.g., missing atoms,
-                ambiguous distances, or insufficient target atoms in target structure).
+            ValueError: If ``target_species`` does not have one entry per
+                target atom. Also, when ``ref_coordinating`` contains any
+                atoms: if ``species_filter`` is given without
+                ``target_species``, or matches no target atoms; if there
+                are no target atoms to map to; if ``lattice_matrix`` is
+                not a finite, non-singular (3, 3) matrix; if the
+                coordinates used do not have shape (N, 3) or are not
+                finite; or if a 1:1 mapping cannot be achieved, because
+                several reference atoms map to the same target atom.
         """
         if target_species is not None and len(target_species) != len(target_frac_coords):
             raise ValueError(
@@ -159,11 +168,9 @@ class IndexMapper:
         target_indices = np.where(target_mask)[0]
         filtered_target_coords = target_frac_coords[target_indices]
 
-        # Calculate distances between reference and target atoms (with PBC)
-        dr_ij = all_mic_distances(ref_coords, filtered_target_coords, lattice_matrix)
-
-        # Find closest target atom for each reference atom
-        closest_indices = np.argmin(dr_ij, axis=1)
+        # Find the closest target atom for each reference atom (with PBC)
+        closest_indices, _ = PeriodicNeighbourIndex(
+            filtered_target_coords, lattice_matrix).query_nearest(ref_coords)
         mapped_indices = target_indices[closest_indices]
 
         # Check for 1:1 mapping violations

@@ -210,9 +210,55 @@ class ToolsTestCase(unittest.TestCase):
         np.testing.assert_array_equal(mapping, np.array([0, 1]))
         expected_distance = np.sqrt(3*((0.1*a)**2))
         np.testing.assert_array_almost_equal(distances, np.array([expected_distance, expected_distance]))
-        
-        
-        
+
+    def test_site_index_mapping_across_periodic_boundary(self):
+        """An atom near one face maps to its nearest neighbour across the boundary."""
+        lattice_matrix = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix
+        coords1 = np.array([[0.95, 0.95, 0.95]])
+        coords2 = np.array([[0.5, 0.5, 0.5],
+                            [0.05, 0.05, 0.05]])
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([1]))
+
+    def test_site_index_mapping_with_no_selected_atoms(self):
+        """When no atoms pass species1_filter, empty arrays are returned.
+
+        The mapping has an integer dtype, so that it can be used as indices.
+        """
+        lattice_matrix = np.eye(3) * 5.0
+        coords = np.array([[0.1, 0.1, 0.1]])
+        mapping = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
+                                     species1_filter='Cl')
+        self.assertEqual(mapping.shape, (0,))
+        self.assertTrue(np.issubdtype(mapping.dtype, np.integer))
+        mapping, distances = site_index_mapping(coords, coords, lattice_matrix, ['Na'], ['Na'],
+                                                species1_filter='Cl',
+                                                return_mapping_distances=True)
+        self.assertEqual((mapping.shape, distances.shape), ((0,), (0,)))
+        self.assertTrue(np.issubdtype(mapping.dtype, np.integer))
+
+    def test_site_index_mapping_tie_maps_to_lowest_index(self):
+        """An atom equidistant from two atoms maps to the one with the lower index."""
+        lattice_matrix = np.eye(3) * 4.0
+        coords1 = np.array([[0.5, 0.5, 0.5]])
+        coords2 = np.array([[0.75, 0.5, 0.5],
+                            [0.25, 0.5, 0.5]])
+        mapping = site_index_mapping(coords1, coords2, lattice_matrix, ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([0]))
+
+    def test_site_index_mapping_in_a_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # The atoms in coords2 are 1.28 A and 1.20 A from the atom in coords1.
+        # With the lattice transposed, the first would be nearer.
+        coords1 = np.array([[0.5, 0.5, 0.5]])
+        coords2 = np.array([[0.5, 0.82, 0.5],
+                            [0.8, 0.8, 0.5]])
+        mapping = site_index_mapping(coords1, coords2, Lattice.hexagonal(4.0, 6.0).matrix,
+                                     ['Na'], ['Na', 'Na'])
+        np.testing.assert_array_equal(mapping, np.array([1]))
+
+
+
 class GetCoordinationIndicesTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -524,6 +570,96 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         # Should be sorted by distance: 1.2, 1.5, 1.8
         self.assertEqual(environments[0], [2, 3, 1])
 
+    def test_equidistant_neighbours_in_index_order(self):
+        """Neighbours at equal distances are returned in index order."""
+        frac_coords = np.array([
+            [0.5, 0.5, 0.5],      # Na
+            [0.5, 0.5, 0.625],    # Cl - 1.25 A
+            [0.375, 0.5, 0.5],    # Cl - 1.25 A
+            [0.5, 0.625, 0.5],    # Cl - 1.25 A
+            [0.625, 0.5, 0.5],    # Cl - 1.25 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 10.0,
+            species=["Na", "Cl", "Cl", "Cl", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=2.0,
+            n_coord=4,
+        )
+        self.assertEqual(environments[0], [1, 2, 3, 4])
+
+    def test_neighbour_exactly_at_cutoff_is_included(self):
+        """A coordinating atom exactly at the cutoff distance is included."""
+        frac_coords = np.array([
+            [0.0, 0.0, 0.0],    # Na
+            [0.25, 0.0, 0.0],   # Cl - exactly 2.0 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 8.0,
+            species=["Na", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=2.0,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [1]})
+
+    def test_centre_not_counted_as_its_own_neighbour(self):
+        """A centre atom of a coordinating species is not its own neighbour."""
+        frac_coords = np.array([
+            [0.0, 0.0, 0.0],    # Na (idx 0)
+            [0.1, 0.0, 0.0],    # Cl - 1.0 A from Na (idx 0)
+            [0.5, 0.5, 0.5],    # Na (idx 2), far from both
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 10.0,
+            species=["Na", "Cl", "Na"],
+            centre_species="Na",
+            coordination_species=["Na", "Cl"],
+            cutoff=2.0,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [1]})
+
+    def test_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # With the lattice transposed, the Cl at index 1 would be within the
+        # cutoff (1.11 A) and the Cl at index 2 would not (1.28 A).
+        frac_coords = np.array([
+            [0.5, 0.5, 0.5],    # Na
+            [0.5, 0.82, 0.5],   # Cl - 1.28 A
+            [0.8, 0.8, 0.5],    # Cl - 1.20 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=Lattice.hexagonal(4.0, 6.0).matrix,
+            species=["Na", "Cl", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=1.25,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [2]})
+
+    def test_negative_or_nan_cutoff_finds_no_neighbours(self):
+        """A negative or NaN cutoff finds no coordinating atoms."""
+        for cutoff in (-1.0, float("nan")):
+            with self.subTest(cutoff=cutoff):
+                environments = get_coordination_indices(
+                    frac_coords=self.test_frac_coords,
+                    lattice_matrix=self.test_lattice_matrix,
+                    species=self.test_species,
+                    centre_species="Na",
+                    coordination_species="Cl",
+                    cutoff=cutoff,
+                    n_coord=0,
+                )
+                self.assertEqual(environments, {0: [], 1: [], 2: []})
+
     def test_cutoff_sensitivity(self):
         """Test sensitivity to cutoff distance."""
         # With 1.5 A cutoff, should find exactly 1 neighbour
@@ -792,6 +928,20 @@ class CalculateSpeciesDistancesArrayTestCase(unittest.TestCase):
 
         self.assertIsInstance(all_dists, list)
 
+    def test_calculate_species_distances_in_a_hexagonal_cell(self):
+        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+        # The atoms in frac_coords2 are 1.28 A and 1.20 A from the atom in
+        # frac_coords1. With the lattice transposed, the nearest would be
+        # the first, at 1.11 A.
+        frac_coords1 = np.array([[0.5, 0.5, 0.5]])
+        frac_coords2 = np.array([[0.5, 0.82, 0.5], [0.8, 0.8, 0.5]])
+
+        result, _ = calculate_species_distances(
+            frac_coords1, frac_coords2, Lattice.hexagonal(4.0, 6.0).matrix,
+            ["Li"], ["Li", "Li"])
+
+        self.assertAlmostEqual(result["Li"][0], 1.2, places=10)
+
 
 class ToolsValidationTestCase(unittest.TestCase):
     
@@ -886,7 +1036,31 @@ class ToolsValidationTestCase(unittest.TestCase):
         
         self.assertIn("Requested 3 neighbors but only 2 matching atoms found", str(context.exception))
 
-              
+    def test_n_coord_equal_to_matching_atoms_returns_all(self):
+        """Requesting as many neighbours as there are matching atoms returns all of them."""
+        result = get_nearest_neighbour_indices(
+            self.structure,
+            self.ref_structure,
+            vertex_species=["Na"],  # Na atoms are at indices 0 and 2
+            n_coord=2
+        )
+        self.assertEqual(result, [[0, 2], [0, 2]])
+
+
+class GetNearestNeighbourIndicesTestCase(unittest.TestCase):
+
+    def test_returns_the_nearest_vertex_atoms(self):
+        """The n_coord atoms nearest to the reference site are returned, in index order."""
+        lattice = Lattice.cubic(10.0)
+        # Distances from the reference site are 3 A, 1 A and 2 A, in index order.
+        structure = Structure(lattice, ["O", "O", "O"],
+                              [[0.8, 0.5, 0.5], [0.6, 0.5, 0.5], [0.7, 0.5, 0.5]])
+        ref_structure = Structure(lattice, ["Li"], [[0.5, 0.5, 0.5]])
+        result = get_nearest_neighbour_indices(structure, ref_structure,
+                                               vertex_species=["O"], n_coord=2)
+        self.assertEqual(result, [[1, 2]])
+
+
 if __name__ == '__main__':
     unittest.main()
     

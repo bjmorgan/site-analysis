@@ -1610,6 +1610,13 @@ class TestBuilderValidation(unittest.TestCase):
 		traj = builder.build()
 		self.assertGreater(len(traj.sites), 0)
 
+	def test_negative_or_nan_min_atom_distance_raises_valueerror(self):
+		"""A negative or NaN minimum atom distance is rejected."""
+		for distance in (-1.0, float("nan")):
+			with self.subTest(distance=distance):
+				with self.assertRaises(ValueError):
+					TrajectoryBuilder().with_min_atom_distance(distance)
+
 	def test_custom_threshold(self):
 		"""Custom threshold below the close pair distance allows build."""
 		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
@@ -1626,6 +1633,48 @@ class TestBuilderValidation(unittest.TestCase):
 
 		traj = builder.build()
 		self.assertGreater(len(traj.sites), 0)
+
+	def test_reports_closest_pair(self):
+		"""The error names the closest same-species pair and its distance."""
+		ref = Structure(
+			Lattice.cubic(10.0), ["O", "Li", "Li", "Li", "Li"],
+			[[0.25, 0.25, 0.25], [0.0, 0.0, 0.0], [0.03, 0.0, 0.0],
+			 [0.5, 0.5, 0.5], [0.51, 0.5, 0.5]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("indices 3 and 4 that are only 0.100 apart", str(ctx.exception))
+
+	def test_reports_first_species_in_sorted_order(self):
+		"""With close pairs in two species, the error names the first in sorted order."""
+		ref = Structure(
+			Lattice.cubic(10.0), ["Na", "Na", "Cl", "Cl"],
+			[[0.0, 0.0, 0.0], [0.01, 0.0, 0.0], [0.5, 0.5, 0.5], [0.51, 0.5, 0.5]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("has Cl atoms", str(ctx.exception))
+
+	def test_pair_at_threshold_passes(self):
+		"""A pair exactly at the minimum distance does not raise."""
+		ref = Structure(
+			Lattice.cubic(8.0), ["Li", "Li"], [[0.0, 0.0, 0.0], [0.0625, 0.0, 0.0]])
+		builder = TrajectoryBuilder().with_reference_structure(ref)
+		builder._validate_reference_atom_distances()
+
+	def test_hexagonal_cell(self):
+		"""Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
+		# The Li atoms are 1.20 A apart. With the lattice transposed they
+		# would be 1.28 A apart, beyond the threshold.
+		ref = Structure(
+			Lattice.hexagonal(4.0, 6.0), ["Li", "Li"],
+			[[0.5, 0.5, 0.5], [0.8, 0.8, 0.5]])
+		builder = (TrajectoryBuilder()
+			.with_reference_structure(ref)
+			.with_min_atom_distance(1.25))
+		with self.assertRaises(ValueError) as ctx:
+			builder._validate_reference_atom_distances()
+		self.assertIn("only 1.200 apart", str(ctx.exception))
 
 	def test_valid_reference_passes(self):
 		"""A correct reference structure passes validation."""

@@ -33,9 +33,6 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
         spherical sites, using distance-ranked site ordering for
         optimised atom assignment via the PriorityAssignmentMixin.
 
-        The collection records each site's centre and the largest radius
-        when it is created, so sites must not be changed afterwards.
-
         Args:
             sites (list): List of ``SphericalSite`` objects.
 

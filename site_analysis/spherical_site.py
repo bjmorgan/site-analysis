@@ -29,12 +29,9 @@ class SphericalSite(Site):
     consistent site volumes are needed regardless of structural distortions.
     
     Attributes:
-        frac_coords (np.ndarray): Fractional coordinates of the sphere centre.
-        rcut (float): Cutoff radius in Angstroms.
-
-    A ``SphericalSiteCollection`` records each site's centre and radius
-    when it is created, so do not change ``frac_coords`` or ``rcut`` of a
-    site that belongs to a collection.
+        frac_coords (np.ndarray): Fractional coordinates of the sphere centre
+            (read-only).
+        rcut (float): Cutoff radius in Angstroms (read-only).
         
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
@@ -67,8 +64,18 @@ class SphericalSite(Site):
         if not rcut >= 0:
             raise ValueError(f"rcut must be non-negative, got {rcut}")
         super(SphericalSite, self).__init__(label=label)
-        self.frac_coords = frac_coords
-        self.rcut = rcut
+        self._frac_coords = np.array(frac_coords, dtype=np.float64)
+        self._rcut = rcut
+
+    @property
+    def frac_coords(self) -> np.ndarray:
+        """Fractional coordinates of the sphere centre."""
+        return self._frac_coords
+
+    @property
+    def rcut(self) -> float:
+        """Cutoff radius in Angstroms."""
+        return self._rcut
         
     def __repr__(self) -> str:
         """Return a string representation of this spherical site.

@@ -30,6 +30,19 @@ class SphericalSiteInitTestCase(unittest.TestCase):
         self.assertEqual(spherical_site.rcut, rcut)
         self.assertEqual(spherical_site.label, label)
 
+    def test_radius_and_centre_are_read_only(self):
+        site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)
+        with self.assertRaises(AttributeError):
+            site.rcut = 2.0
+        with self.assertRaises(AttributeError):
+            site.frac_coords = np.zeros(3)
+
+    def test_init_copies_centre(self):
+        frac_coords = np.array([0.1, 0.2, 0.3])
+        site = SphericalSite(frac_coords=frac_coords, rcut=1.0)
+        frac_coords[0] = 0.9
+        np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
+
     def test_init_rejects_negative_or_nan_radius(self):
         for rcut in (-1.0, float("nan")):
             with self.subTest(rcut=rcut):

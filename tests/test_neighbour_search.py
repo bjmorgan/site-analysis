@@ -133,13 +133,16 @@ class TestQueryWithin(unittest.TestCase):
         np.testing.assert_array_equal(point_idx, np.sort(corners))
         self.assertEqual(len(set(distances.tolist())), 1)
 
-    def test_pairs_exactly_at_cutoff_on_search_edge(self):
-        """Pairs exactly at the cutoff are found where the search is tightest.
+    def test_pairs_on_search_edge(self):
+        """Pairs on the edge of the candidate search are found.
 
         Each pair is separated along the direction in which the Cartesian
         distance is smallest relative to the tree's scaled distance, so in
-        a non-orthogonal cell it lies exactly on the edge of the candidate
-        search.
+        a non-orthogonal cell the search radius only just covers it. Each
+        cutoff is the pair's distance plus a relative 1e-12: without numba,
+        the same distance can round differently in batches of different
+        sizes, so an exact cutoff could exclude the pair at the final
+        comparison rather than in the search.
         """
         rng = np.random.default_rng(9)
         for name, lattice_matrix in CELLS.items():
@@ -148,7 +151,7 @@ class TestQueryWithin(unittest.TestCase):
                 left, _, _ = np.linalg.svd(lattice_matrix / lengths[:, np.newaxis])
                 points = rng.random((20, 3))
                 query = points + rng.uniform(0.5, 2.0, (20, 1)) * left[:, -1] / lengths
-                cutoffs = paired_mic_distances(query, points, lattice_matrix)
+                cutoffs = paired_mic_distances(query, points, lattice_matrix) * (1 + 1e-12)
                 index = PeriodicNeighbourIndex(points, lattice_matrix)
                 missed = [i for i, cutoff in enumerate(cutoffs)
                           if i not in index.query_within(query[i:i + 1], cutoff)[1]]

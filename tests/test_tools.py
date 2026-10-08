@@ -1014,6 +1014,16 @@ class ToolsValidationTestCase(unittest.TestCase):
         
         self.assertIn("Requested 3 neighbors but only 2 matching atoms found", str(context.exception))
 
+    def test_n_coord_equal_to_matching_atoms_returns_all(self):
+        """Requesting as many neighbours as there are matching atoms returns all of them."""
+        result = get_nearest_neighbour_indices(
+            self.structure,
+            self.ref_structure,
+            vertex_species=["Na"],  # Na atoms are at indices 0 and 2
+            n_coord=2
+        )
+        self.assertEqual(result, [[0, 2], [0, 2]])
+
               
 if __name__ == '__main__':
     unittest.main()

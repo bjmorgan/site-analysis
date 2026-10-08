@@ -164,8 +164,8 @@ def get_nearest_neighbour_indices(
     dr_ij = lattice.get_all_distances(struc1_coords, struc2_coords).T
     nn_indices = []
     for dr_i in dr_ij:
-        idx = np.argpartition(dr_i, n_coord)
-        nn_indices.append( sorted([ vertex_indices[i] for i in idx[:n_coord] ]) )
+        idx = np.argpartition(dr_i, n_coord - 1)[:n_coord]
+        nn_indices.append( sorted([ vertex_indices[i] for i in idx ]) )
     return nn_indices
 
 def get_vertex_indices(

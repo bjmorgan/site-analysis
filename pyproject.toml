@@ -42,7 +42,7 @@ dev = [
     "myst-parser",          # For markdown in Sphinx
     "matplotlib",           # For plots in the docs
     "numba>=0.68",          # For testing numba-accelerated containment
-    "pymatgen",             # For io.vasp and symmetry in tests/benchmarks
+    "pymatgen",             # For io.vasp and symmetry in tests
 ]
 
 [project.urls]

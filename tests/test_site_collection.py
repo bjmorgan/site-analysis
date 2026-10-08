@@ -31,6 +31,14 @@ class SiteCollectionTestCase(unittest.TestCase):
         site_collection = ConcreteSiteCollection(sites=sites)
         self.assertEqual(site_collection.sites, sites)
 
+    def test_site_collection_keeps_its_own_list_of_sites(self):
+        """Appending to the caller's list afterwards does not change the collection."""
+        site = Mock(spec=Site, index=0)
+        sites = [site]
+        site_collection = ConcreteSiteCollection(sites=sites)
+        sites.append(Mock(spec=Site, index=1))
+        self.assertEqual(site_collection.sites, [site])
+
     def test_assign_site_occupations_raises_not_implemented_error(self):
         sites = [Mock(spec=Site, index=0),
                  Mock(spec=Site, index=1)]
@@ -305,7 +313,39 @@ def _joined_ranking(site_centres, point, lattice_matrix):
 
 
 class TestSiteCentreIndex(unittest.TestCase):
-    """Tests for _SiteCentreIndex.ranked_site_indices."""
+    """Tests for _SiteCentreIndex."""
+
+    def test_rejects_centres_not_shaped_n_by_3(self):
+        """Centres must be shaped (N, 3), with N at least 1."""
+        for centres in (np.zeros((0, 3)), np.zeros((2, 2)), np.zeros(3)):
+            with self.subTest(shape=centres.shape):
+                with self.assertRaisesRegex(ValueError, r"centres must have shape \(N, 3\)"):
+                    _SiteCentreIndex(centres, list(range(len(centres))))
+
+    def test_rejects_non_finite_centres(self):
+        """Centres must be finite."""
+        with self.assertRaisesRegex(ValueError, "centres must be finite"):
+            _SiteCentreIndex(np.array([[0.1, np.nan, 0.2]]), [0])
+
+    def test_rejects_site_indices_not_one_per_centre(self):
+        """There must be one site index per centre."""
+        with self.assertRaisesRegex(ValueError, "one site index per centre"):
+            _SiteCentreIndex(np.zeros((2, 3)), [0])
+
+    def test_rejects_negative_or_nan_reach(self):
+        """A reach, if given, must be non-negative."""
+        for reach in (-1.0, np.nan):
+            with self.subTest(reach=reach):
+                with self.assertRaisesRegex(ValueError, "reach must be non-negative"):
+                    _SiteCentreIndex(np.zeros((1, 3)), [0], reach=reach)
+
+    def test_keeps_its_own_copy_of_the_site_indices(self):
+        """Changing the caller's site indices afterwards does not change the ranking."""
+        # An array, which np.asarray would share rather than copy.
+        site_indices = np.array([7, 9])
+        site_centres = _SiteCentreIndex(np.array([[0.1, 0.0, 0.0], [0.3, 0.0, 0.0]]), site_indices)
+        site_indices[0] = 99
+        self.assertEqual(_joined_ranking(site_centres, np.zeros(3), np.eye(3) * 10.0), [7, 9])
 
     def test_ranks_every_site_by_minimum_image_distance(self):
         """Joined, the lists hold every site once, nearest to the point first."""

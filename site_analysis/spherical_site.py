@@ -132,8 +132,9 @@ class SphericalSite(Site):
     def as_dict(self) -> dict:
         """Returns a dictionary representation of this SphericalSite.
         
-        Creates a JSON-serializable dictionary containing all the attributes
-        needed to reconstruct this SphericalSite object.
+        Creates a dictionary containing all the attributes needed to
+        reconstruct this SphericalSite object. The centre is a copy, as a
+        numpy array, so the dictionary is not directly JSON-serialisable.
         
         Returns:
             dict: Dictionary containing the SphericalSite's attributes, including

@@ -50,9 +50,25 @@ class _SiteCentreIndex:
             reach: If given, the largest distance from its centre at which
                 any site can contain a point. Only the sites whose centres
                 are within the reach of the point are then ranked.
+
+        Raises:
+            ValueError: If ``centres`` is not shaped (N, 3) with N at least
+                1, or is not finite, or ``site_indices`` does not have one
+                entry per centre, or ``reach`` is negative or NaN.
         """
         self._centres = np.array(centres, dtype=np.float64)
-        self._site_indices = np.asarray(site_indices)
+        if self._centres.ndim != 2 or self._centres.shape[1] != 3 or len(self._centres) == 0:
+            raise ValueError(
+                f"centres must have shape (N, 3) with N at least 1, got {self._centres.shape}")
+        if not np.isfinite(self._centres).all():
+            raise ValueError("centres must be finite")
+        self._site_indices = np.array(site_indices)
+        if self._site_indices.shape != (len(self._centres),):
+            raise ValueError(
+                f"need one site index per centre, got shape {self._site_indices.shape} "
+                f"for {len(self._centres)} centres")
+        if reach is not None and not reach >= 0:
+            raise ValueError(f"reach must be non-negative, got {reach}")
         self._reach = reach
         # The lattice the index was built for, set when it is built.
         self._lattice_matrix = np.zeros((3, 3))
@@ -136,7 +152,7 @@ class PriorityAssignmentMixin(Generic[SiteT]):
     their ``__init__`` to enable distance-ranked ordering, passing a
     ``reach`` if no site can contain a point beyond some distance from its
     centre (as for spherical sites). If not called, the generator falls
-    back to ``neighbouring_sites`` then arbitrary order (used by
+    back to ``neighbouring_sites`` then list order (used by
     ``PolyhedralSiteCollection`` when reference centres are unavailable).
 
     Expects to be mixed with ``SiteCollection`` which provides
@@ -186,10 +202,10 @@ class PriorityAssignmentMixin(Generic[SiteT]):
             3. Remaining sites by the distance of their centres from the
                atom (if site centres are available; only those within
                reach, if a reach was given), otherwise neighbours of the
-               most recent site then arbitrary order
+               most recent site then list order
 
         An atom with no recent site starts at step 3. Without site centres
-        it gets all sites in arbitrary order.
+        it gets all sites in list order.
 
         Each site is yielded at most once.
 
@@ -258,7 +274,9 @@ class SiteCollection(ABC):
             ValueError: If there are duplicate site indices.
         
         """
-        self.sites = sites
+        # A copy, so the collection does not share the caller's list. Typed
+        # as a Sequence so that subclasses can narrow the type of site.
+        self.sites: Sequence[Site] = list(sites)
         
         # Create lookup dictionary for efficient site access by index
         self._site_lookup: dict[int, Site] = {}

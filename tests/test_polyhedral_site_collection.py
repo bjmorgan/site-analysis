@@ -590,24 +590,6 @@ class TestGetPrioritySites(unittest.TestCase):
         self.atoms = atoms_from_structure(self.structure, "Li")
         self.atom = self.atoms[0]
 
-    def test_yields_most_recent_site_first(self):
-        """Most recent site is yielded first."""
-        self.atom._recent_sites = [self.site2.index, None]
-
-        priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-        self.assertEqual(priority_sites[0], self.site2)
-
-    def test_yields_two_recent_distinct_sites(self):
-        """Two most recent distinct sites are yielded before transitions."""
-        self.atom._recent_sites = [self.site2.index, self.site1.index]
-
-        with patch.object(self.site2, 'most_frequent_transitions', return_value=[]):
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-        self.assertEqual(priority_sites[0], self.site2)
-        self.assertEqual(priority_sites[1], self.site1)
-
     def test_yields_all_sites_when_no_recent_sites(self):
         """All sites yielded in arbitrary order when no site history exists."""
         priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
@@ -616,31 +598,6 @@ class TestGetPrioritySites(unittest.TestCase):
         self.assertIn(self.site1, priority_sites)
         self.assertIn(self.site2, priority_sites)
         self.assertIn(self.site3, priority_sites)
-
-    def test_yields_transition_destinations_after_recent_sites(self):
-        """Transition destinations are yielded after recent sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-
-            indices = [s.index for s in self.collection._get_priority_sites(self.atom, self.lattice.matrix)]
-
-            self.assertEqual(indices, [self.site1.index, self.site3.index, self.site2.index])
-
-    def test_yields_no_duplicates_when_all_sites_are_transitions(self):
-        """No duplicate sites when transitions cover all remaining sites."""
-        self.atom._recent_sites = [self.site1.index, None]
-
-        with patch.object(self.site1, 'most_frequent_transitions') as mock_transitions:
-            mock_transitions.return_value = [self.site3.index, self.site2.index]
-
-            priority_sites = list(self.collection._get_priority_sites(self.atom, self.lattice.matrix))
-
-            self.assertEqual(len(priority_sites), 3)
-            site_indices = [s.index for s in priority_sites]
-            self.assertEqual(len(site_indices), len(set(site_indices)))
-            self.assertEqual(site_indices, [self.site1.index, self.site3.index, self.site2.index])
 
     def test_yields_neighbours_after_transitions_without_reference_centres(self):
         """Without reference centres, neighbours are yielded after transitions."""

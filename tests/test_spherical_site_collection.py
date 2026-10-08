@@ -186,13 +186,16 @@ class SphericalSiteCollectionTestCase(unittest.TestCase):
 
         collection = SphericalSiteCollection([site1, site2, site3])
         lattice = Lattice.cubic(10.0)
-        structure = Structure(lattice, ["Li", "Li"], [[0.05, 0.05, 0.05], [0.15, 0.05, 0.05]])
+        structure = Structure(lattice, ["Li", "Li"], [[0.06, 0.05, 0.05], [0.15, 0.05, 0.05]])
 
         # Create atoms with some trajectory history
         atom1 = Atom(index=0)
         atom1.trajectory = [site1.index]
         atom1._recent_sites = [site1.index, None]
-        atom1._frac_coords = np.array([0.05, 0.05, 0.05])  # Should stay in site1
+        # Inside both site1 and site2, and nearer site2's centre (0.81 A
+        # against 0.93 A), so it goes to site1 only because that is its
+        # recent site.
+        atom1._frac_coords = np.array([0.06, 0.05, 0.05])
 
         atom2 = Atom(index=1)
         atom2.trajectory = [site1.index]

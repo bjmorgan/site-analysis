@@ -37,6 +37,13 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     polyhedral sites, including maintaining a map of neighbouring polyhedral
     sites that share faces and implementing optimised atom assignment based
     on spatial relationships and learned transition patterns.
+
+    After an atom's recent sites and learned transitions, the remaining
+    sites are searched in order of the distance of their reference centres
+    from the atom. If any site lacks a reference centre (for example, sites
+    built with ``use_reference_centers=False``), the search instead falls
+    back to the neighbours of the atom's most recent site, then list order,
+    for the whole collection.
     
     Attributes:
         sites (list): List of ``PolyhedralSite`` objects.
@@ -84,7 +91,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, lattice_matrix)
 
-    def assign_site_occupations(self, atoms, lattice_matrix) -> None:
+    def assign_site_occupations(self,
+            atoms: list[Atom],
+            lattice_matrix: np.ndarray) -> None:
         """Assign atoms to polyhedral sites based on their positions.
 
         This method implements an optimised assignment logic using a priority-based

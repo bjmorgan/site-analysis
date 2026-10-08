@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Where overlapping sites both contain an atom, and neither is one of its recent sites or a learned transition destination from its most recent site, the atom now goes to the one whose centre is nearest to it, so assignments can differ from earlier versions. This includes atoms at the first timestep, which have no recent sites. Re-analysing the Li6PS5Cl tutorial trajectory (a cubic cell) with overlapping spherical sites of radius 1.5 Å changes 4.4% of assignments; more may change in cells that are not cubic, where the old ranking was further from the true distances. Assignments to sites that do not overlap are unchanged.
 - Spherical site collections no longer check sites whose centres are further from an atom than the largest site radius, once its recent sites and learned transitions have been checked. Results are unchanged, and assignment is much faster when many atoms are outside every site. Sites must not be changed after the collection is created.
 - `SphericalSite` now raises `ValueError` for a negative or NaN radius.
+- `construct_neighbouring_sites` takes time linear in the number of sites, instead of comparing every pair of sites.
 
 ### Removed
 

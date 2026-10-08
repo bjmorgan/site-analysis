@@ -67,8 +67,14 @@ class IndexMapper:
             are equally close, to the one with the lowest index.
 
         Raises:
-            ValueError: If 1:1 mapping cannot be achieved (e.g., missing atoms,
-                or insufficient target atoms in target structure).
+            ValueError: If ``target_species`` does not have one entry per
+                target atom. Also, when ``ref_coordinating`` contains any
+                atoms: if ``species_filter`` is given without
+                ``target_species``, or matches no target atoms; if there
+                are no target atoms to map to; if ``lattice_matrix`` is
+                singular or not finite; if the coordinates used are not
+                finite; or if a 1:1 mapping cannot be achieved, because
+                several reference atoms map to the same target atom.
         """
         if target_species is not None and len(target_species) != len(target_frac_coords):
             raise ValueError(

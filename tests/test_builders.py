@@ -1610,6 +1610,13 @@ class TestBuilderValidation(unittest.TestCase):
 		traj = builder.build()
 		self.assertGreater(len(traj.sites), 0)
 
+	def test_negative_or_nan_min_atom_distance_raises_valueerror(self):
+		"""A negative or NaN minimum atom distance is rejected."""
+		for distance in (-1.0, float("nan")):
+			with self.subTest(distance=distance):
+				with self.assertRaises(ValueError):
+					TrajectoryBuilder().with_min_atom_distance(distance)
+
 	def test_custom_threshold(self):
 		"""Custom threshold below the close pair distance allows build."""
 		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])

@@ -585,6 +585,23 @@ class GetCoordinationIndicesTestCase(unittest.TestCase):
         )
         self.assertEqual(environments[0], [1, 2, 3, 4])
 
+    def test_neighbour_exactly_at_cutoff_is_included(self):
+        """A coordinating atom exactly at the cutoff distance is included."""
+        frac_coords = np.array([
+            [0.0, 0.0, 0.0],    # Na
+            [0.25, 0.0, 0.0],   # Cl - exactly 2.0 A
+        ])
+        environments = get_coordination_indices(
+            frac_coords=frac_coords,
+            lattice_matrix=np.eye(3) * 8.0,
+            species=["Na", "Cl"],
+            centre_species="Na",
+            coordination_species="Cl",
+            cutoff=2.0,
+            n_coord=1,
+        )
+        self.assertEqual(environments, {0: [1]})
+
     def test_centre_not_counted_as_its_own_neighbour(self):
         """A centre atom of a coordinating species is not its own neighbour."""
         frac_coords = np.array([

@@ -7,8 +7,8 @@ This module defines:
   common functionality for managing site occupations.
 - ``PriorityAssignmentMixin``: mixin providing priority-based site
   assignment ordering. Used by collection types that check sites one at
-  a time (polyhedral, spherical) but not by those that use global
-  distance-matrix assignment (Voronoi, dynamic Voronoi).
+  a time (polyhedral, spherical) but not by those that assign each atom
+  to its nearest site centre (Voronoi, dynamic Voronoi).
 - ``_NearestSiteLookup``: precomputed lookup for finding the nearest
   site to a given position.
 """

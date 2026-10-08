@@ -328,8 +328,12 @@ def site_index_mapping(
         (mapping, distances).
 
     Raises:
-        ValueError: If ``one_to_one_mapping`` is ``True`` and the
-            mapping is not one-to-one.
+        ValueError: If ``species1`` or ``species2`` does not have one
+            entry per row of its coordinate array, if no atoms match
+            ``species2_filter``, if ``lattice_matrix`` is singular or not
+            finite, if the coordinates used are not finite, or if
+            ``one_to_one_mapping`` is ``True`` and the mapping is not
+            one-to-one.
     """
     if len(species1) != len(frac_coords1):
         raise ValueError(
@@ -414,6 +418,13 @@ def calculate_species_distances(
         A tuple of (species_distances, all_distances) where
         species_distances maps species to lists of minimum distances,
         and all_distances is a flat list of all minimum distances.
+
+    Raises:
+        ValueError: If ``species1`` or ``species2`` does not have one
+            entry per row of its coordinate array, or, when some
+            selected species has atoms in both structures, if
+            ``lattice_matrix`` is singular or not finite or the
+            coordinates used are not finite.
     """
     if len(species1) != len(frac_coords1):
         raise ValueError(

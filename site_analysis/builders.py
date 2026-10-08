@@ -303,9 +303,9 @@ class TrajectoryBuilder:
             self: For method chaining.
 
         Raises:
-            ValueError: If distance is negative.
+            ValueError: If distance is negative or NaN.
         """
-        if distance < 0:
+        if not distance >= 0:
             raise ValueError(
                 f"min_atom_distance must be non-negative, got {distance}"
             )

@@ -263,6 +263,18 @@ class TestIndexMapper(unittest.TestCase):
         )
         self.assertEqual(mapped_coordinating, [[1]])
 
+    def test_equidistant_targets_map_to_lower_index(self):
+        """A reference atom equally close to two target atoms maps to the lower target index."""
+        # Both target atoms are exactly 2.0 A from the reference atom.
+        mapper = IndexMapper()
+        mapped_coordinating = mapper.map_coordinating_atoms(
+            ref_frac_coords=np.array([[0.5, 0.5, 0.5]]),
+            target_frac_coords=np.array([[0.75, 0.5, 0.5], [0.25, 0.5, 0.5]]),
+            lattice_matrix=_cubic_matrix(8.0),
+            ref_coordinating=[[0]],
+        )
+        self.assertEqual(mapped_coordinating, [[0]])
+
     def test_complex_coordination_environment(self):
         """Test mapping complex coordination (e.g., octahedral).
 

@@ -64,7 +64,7 @@ jupyter notebook
 pip install site-analysis
 ```
 
-For faster polyhedral site analysis, install with numba acceleration:
+For faster polyhedral site analysis and distance calculations, install with numba acceleration:
 
 ```bash
 pip install site-analysis[fast]

@@ -232,6 +232,11 @@ class DynamicVoronoiSiteCollection(SiteCollection):
             atoms: List of atoms to be assigned to sites.
             lattice_matrix: (3, 3) lattice matrix where rows are lattice
                 vectors.
+
+        Raises:
+            ValueError: When ``atoms`` is not empty: if the collection has
+                no sites, if ``lattice_matrix`` is singular or not finite,
+                or if the atom coordinates or site centres are not finite.
         """
         self.reset_site_occupations()
         if not atoms:
@@ -240,6 +245,6 @@ class DynamicVoronoiSiteCollection(SiteCollection):
         atom_coords = np.array([atom.frac_coords for atom in atoms])
         site_list_indices, _ = PeriodicNeighbourIndex(
             site_coords, lattice_matrix).query_nearest(atom_coords)
-        for atom, site_list_index in zip(atoms, site_list_indices):
+        for atom, site_list_index in zip(atoms, site_list_indices, strict=True):
             site = self.sites[site_list_index]
             self.update_occupation(site, atom)

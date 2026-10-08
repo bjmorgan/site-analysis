@@ -1,6 +1,7 @@
 """Tests for the periodic KD-tree neighbour search."""
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from pymatgen.core import Lattice
@@ -59,6 +60,16 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
             with self.subTest(shape=coords.shape):
                 with self.assertRaisesRegex(ValueError, "frac_coords must have shape"):
                     PeriodicNeighbourIndex(coords, np.eye(3))
+
+    def test_copies_its_inputs(self):
+        """Changing the caller's arrays afterwards does not change the index."""
+        frac_coords = np.array([[0.1, 0.1, 0.1]])
+        lattice_matrix = np.eye(3) * 10.0
+        index = PeriodicNeighbourIndex(frac_coords, lattice_matrix)
+        frac_coords[0] = [0.6, 0.6, 0.6]
+        lattice_matrix[2, 2] = 1.0
+        _, distances = index.query_nearest(np.array([[0.1, 0.1, 0.2]]))
+        self.assertAlmostEqual(distances[0], 1.0)
 
     def test_rejects_invalid_lattice(self):
         """A lattice matrix that is not (3, 3), or is singular, raises ValueError."""
@@ -217,6 +228,14 @@ class TestQueryNearest(unittest.TestCase):
         np.testing.assert_array_equal(point_idx, np.zeros(10, dtype=np.intp))
         np.testing.assert_array_equal(
             distances, paired_mic_distances(query, np.repeat(point, 10, axis=0), lattice_matrix))
+
+    def test_query_point_without_candidate_raises(self):
+        """A query point with no candidate raises instead of being dropped."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
+        no_candidates = (np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp), np.empty(0))
+        with patch.object(index, "_candidates", return_value=no_candidates):
+            with self.assertRaises(RuntimeError):
+                index.query_nearest(np.zeros((1, 3)))
 
     def test_empty_index_raises(self):
         """An empty index has no nearest point, so raises ValueError."""

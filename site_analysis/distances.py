@@ -160,7 +160,11 @@ def mic_distance(
 ) -> float:
     """Minimum-image distance between two points in a periodic cell.
 
-    Checks all 27 periodic images to find the true minimum distance.
+    Checks the 27 periodic images nearest in fractional coordinates.
+    This gives the true minimum distance whenever that distance is
+    shorter than the cell's smallest perpendicular width (the smallest
+    distance between opposite faces); in strongly skewed cells, longer
+    distances can be overestimated.
     Uses numba JIT compilation when available for improved performance
     on repeated single-pair calls.
 
@@ -194,9 +198,12 @@ def all_mic_distances(
 ) -> np.ndarray:
     """Minimum-image distance matrix between two sets of points.
 
-    Checks all 27 periodic images per pair to find true minimum
-    distances, which is necessary for triclinic cells. Uses numba
-    JIT compilation with parallel execution when available.
+    Checks the 27 periodic images of each pair nearest in fractional
+    coordinates, which is needed for triclinic cells. This gives the true minimum distance whenever that distance is
+    shorter than the cell's smallest perpendicular width (the smallest
+    distance between opposite faces); in strongly skewed cells, longer
+    distances can be overestimated.
+    Uses numba JIT compilation with parallel execution when available.
 
     Note:
         Behaviour is undefined for non-finite inputs (NaN, inf).
@@ -239,8 +246,12 @@ def paired_mic_distances(
 ) -> np.ndarray:
     """Minimum-image distances between corresponding pairs of points.
 
-    Checks all 27 periodic images of each pair. Uses numba JIT
-    compilation with parallel execution when available.
+    Checks the 27 periodic images of each pair nearest in fractional
+    coordinates. This gives the true minimum distance whenever that distance is
+    shorter than the cell's smallest perpendicular width (the smallest
+    distance between opposite faces); in strongly skewed cells, longer
+    distances can be overestimated.
+    Uses numba JIT compilation with parallel execution when available.
 
     Note:
         Behaviour is undefined for non-finite inputs (NaN, inf).

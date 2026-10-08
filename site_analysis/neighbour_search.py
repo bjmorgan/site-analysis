@@ -2,9 +2,11 @@
 
 Provides ``PeriodicNeighbourIndex``, which finds the indexed points
 within a cutoff of each query point, or the nearest indexed point, in a
-periodic cell of any shape. Results equal those of computing the
-minimum-image distance from every query point to every indexed point,
-with memory that scales with the number of points and pairs found.
+periodic cell, including non-orthogonal cells. Distances are those of
+``paired_mic_distances``, over 27 periodic images, and results equal
+those of computing that distance from every query point to every indexed
+point, with memory that scales with the number of points and pairs
+found.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from site_analysis.distances import paired_mic_distances
 # coplanar.
 _MIN_SINGULAR_VALUE = 1e-8
 
-# Candidate searches are widened slightly so that rounding cannot drop a
+# Candidate searches are widened slightly so that rounding does not drop a
 # neighbour. Exact distances then remove any extra candidates.
 _RELATIVE_TOLERANCE = 1e-9
 _ABSOLUTE_TOLERANCE = 1e-12
@@ -65,7 +67,13 @@ class PeriodicNeighbourIndex:
     unit length. A tree search with radius ``r / sigma_min`` therefore
     finds every pair within Cartesian distance ``r``. The distance of each
     candidate pair is then computed over 27 periodic images by
-    ``paired_mic_distances``.
+    ``paired_mic_distances``, so results match that function. These are
+    the true minimum-image distances whenever they are shorter than the
+    cell's smallest perpendicular width; in strongly skewed cells, longer
+    distances can be overestimated.
+
+    An index is fixed to the lattice it was built with. Build a new index
+    if the lattice changes.
     """
 
     def __init__(self,
@@ -82,7 +90,7 @@ class PeriodicNeighbourIndex:
         Raises:
             ValueError: If ``frac_coords`` does not have shape (N, 3), or
                 ``lattice_matrix`` does not have shape (3, 3) or is
-                singular.
+                singular or nearly so.
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
@@ -96,7 +104,7 @@ class PeriodicNeighbourIndex:
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
         if self._sigma_min < _MIN_SINGULAR_VALUE:
-            raise ValueError("lattice_matrix must be non-singular, but its rows are coplanar")
+            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)
 
@@ -124,7 +132,7 @@ class PeriodicNeighbourIndex:
             query_frac: np.ndarray) -> np.ndarray:
         """Return the tree search radius that covers a Cartesian distance.
 
-        The radius is widened slightly so that rounding cannot drop a
+        The radius is widened slightly so that rounding does not drop a
         neighbour. Rounding errors in the exact distances grow with the
         magnitude of the fractional coordinates, and so does the widening.
 
@@ -220,6 +228,9 @@ class PeriodicNeighbourIndex:
         Raises:
             ValueError: If ``query_frac`` does not have shape (M, 3), or
                 the index is empty.
+            RuntimeError: If some query point has no candidate. The tree's
+                nearest point is always a candidate, so this would mean a
+                bug in the search.
         """
         query_frac = _as_coords(query_frac, "query_frac")
         if len(self) == 0:
@@ -235,5 +246,7 @@ class PeriodicNeighbourIndex:
             query_frac, self._search_radius(upper, query_frac))
         order = np.lexsort((point_idx, distances, query_idx))
         _, first_per_query = np.unique(query_idx[order], return_index=True)
+        if len(first_per_query) != query_frac.shape[0]:
+            raise RuntimeError("query_nearest found no candidate for some query points")
         nearest = order[first_per_query]
         return point_idx[nearest], distances[nearest]

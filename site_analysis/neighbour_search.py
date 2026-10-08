@@ -18,7 +18,7 @@ from typing import cast
 import numpy as np
 from scipy.spatial import cKDTree
 
-from site_analysis.distances import paired_mic_distances
+from site_analysis.distances import _paired_mic_distances
 
 # The rows of the normalised lattice are unit vectors, so a smallest
 # singular value below this means the lattice vectors are (almost)
@@ -181,7 +181,7 @@ class PeriodicNeighbourIndex:
         point_idx = np.fromiter(itertools.chain.from_iterable(neighbour_lists),
                                 dtype=np.intp, count=int(counts.sum()))
         query_idx = np.repeat(np.arange(len(neighbour_lists), dtype=np.intp), counts)
-        distances = paired_mic_distances(
+        distances = _paired_mic_distances(
             query_frac[query_idx], self._frac_coords[point_idx], self._lattice_matrix)
         return query_idx, point_idx, distances
 
@@ -247,7 +247,7 @@ class PeriodicNeighbourIndex:
         # The exact distance to the tree's nearest point is an upper bound
         # on the nearest minimum-image distance.
         _, first = self._tree.query(self._scaled(query_frac), k=1)
-        upper = paired_mic_distances(
+        upper = _paired_mic_distances(
             query_frac, self._frac_coords[first], self._lattice_matrix)
         query_idx, point_idx, distances = self._candidates(
             query_frac, self._search_radius(upper, query_frac))

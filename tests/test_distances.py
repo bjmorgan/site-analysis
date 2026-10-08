@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import patch
 import numpy as np
 from pymatgen.core import Lattice
 from site_analysis._compat import HAS_NUMBA
+import site_analysis.distances as dist_mod
 
 
 class TestFracToCart(unittest.TestCase):
@@ -181,6 +183,18 @@ class TestPairedMicDistances(unittest.TestCase):
             with self.subTest(frac1_shape=frac1.shape, lattice_shape=lattice.shape):
                 with self.assertRaises(ValueError):
                     paired_mic_distances(frac1, frac2, lattice)
+
+    def test_non_finite_input_raises_value_error(self):
+        """NaN or inf in either coordinate array or the lattice raises ValueError, with or without numba."""
+        for value in (np.nan, np.inf):
+            for argument in range(3):
+                args = [np.zeros((2, 3)), np.zeros((2, 3)), 10.0 * np.eye(3)]
+                args[argument][0, 0] = value
+                for has_numba in (HAS_NUMBA, False):
+                    with self.subTest(value=value, argument=argument, has_numba=has_numba):
+                        with patch.object(dist_mod, 'HAS_NUMBA', has_numba):
+                            with self.assertRaises(ValueError):
+                                dist_mod.paired_mic_distances(*args)
 
 
 class TestNumpyFallback(unittest.TestCase):

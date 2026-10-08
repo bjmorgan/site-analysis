@@ -7,6 +7,7 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.spherical_site_collection import SphericalSiteCollection
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
+from site_analysis.distances import mic_distance
 from site_analysis.site import Site
 
 
@@ -359,6 +360,70 @@ class TestReach(unittest.TestCase):
         self.atom._frac_coords = np.array([0.4, 0.5, 0.5])
         self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
         self.assertEqual(self.atom.in_site, self.large.index)
+
+
+def _nearest_containing_site(sites, point, lattice_matrix):
+    """Return the index of the containing site with the nearest centre, or None.
+
+    Checks every site. Of containing sites at equal distances, the first in
+    the list is returned.
+    """
+    nearest_index, nearest_distance = None, np.inf
+    for site in sites:
+        distance = mic_distance(site.frac_coords, point, lattice_matrix)
+        if distance <= site.rcut and distance < nearest_distance:
+            nearest_index, nearest_distance = site.index, distance
+    return nearest_index
+
+
+class TestMatchesBruteForce(unittest.TestCase):
+    """Assignments match checking every site."""
+
+    def test_atoms_without_history_go_to_the_nearest_containing_site(self):
+        """Atoms with no recent site go to the containing site with the nearest centre."""
+        rng = np.random.default_rng(3)
+        lattice_matrix = Lattice.from_parameters(8.0, 9.0, 10.0, 75, 100, 110).matrix
+        # Site indices differ from list positions.
+        Site._newid = 100
+        sites = [SphericalSite(frac_coords=centre, rcut=rcut)
+                 for centre, rcut in zip(rng.random((40, 3)), rng.uniform(0.5, 2.5, 40))]
+        collection = SphericalSiteCollection(sites)
+        atoms = [Atom(index=i) for i in range(60)]
+        # Some atoms are outside the cell, to test wrapping.
+        for atom, point in zip(atoms, rng.uniform(-0.2, 1.2, (60, 3))):
+            atom._frac_coords = point
+
+        collection.assign_site_occupations(atoms, lattice_matrix)
+
+        self.assertEqual(
+            [atom.in_site for atom in atoms],
+            [_nearest_containing_site(sites, atom.frac_coords, lattice_matrix) for atom in atoms])
+
+
+class TestReachTolerance(unittest.TestCase):
+    """Tests for widening the reach so that rounding cannot leave out a site."""
+
+    def test_atom_at_the_radius_is_assigned_without_numba(self):
+        """An atom exactly at the site radius is assigned when numba is not used."""
+        # Without numba, the containment test and the reach query compute
+        # the same distance by different numpy operations, which usually
+        # round alike. These specific coordinates are a case where they do
+        # not: the reach query's distance is one ulp larger than the
+        # containment test's, which is the radius, so the atom is found
+        # only because the reach is widened.
+        centre = np.array([0.12428327649956394, 0.6706244146936303, 0.6471895115742501])
+        point = np.array([1.4898346963218356, 0.1318870907354004, -0.1345752421468751])
+        lattice_matrix = np.array([[10.76328146769828, 0.0, -3.6633263423816893],
+                                   [-2.1357799113482145, 6.384391996928692, 3.732980239510001],
+                                   [0.0, 0.0, 5.409735239361947]])
+        with patch("site_analysis.distances.HAS_NUMBA", False):
+            rcut = mic_distance(centre, point, lattice_matrix)
+            site = SphericalSite(frac_coords=centre, rcut=rcut)
+            collection = SphericalSiteCollection([site])
+            atom = Atom(index=0)
+            atom._frac_coords = point
+            collection.assign_site_occupations([atom], lattice_matrix)
+        self.assertEqual(atom.in_site, site.index)
 
 
 if __name__ == '__main__':

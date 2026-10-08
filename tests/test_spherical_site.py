@@ -58,6 +58,8 @@ class SphericalSiteInitTestCase(unittest.TestCase):
                     clone.frac_coords[0] = 0.9
                 with self.assertRaises(ValueError):
                     clone.frac_coords += 0.5
+                with self.assertRaises(ValueError):
+                    clone.frac_coords.flags.writeable = True
                 np.testing.assert_array_equal(clone.frac_coords, [0.1, 0.2, 0.3])
 
     def test_init_stores_centre_as_floats(self):
@@ -87,6 +89,19 @@ class SphericalSiteInitTestCase(unittest.TestCase):
             with self.subTest(rcut=rcut):
                 with self.assertRaisesRegex(ValueError, "rcut must be non-negative"):
                     SphericalSite(frac_coords=np.zeros(3), rcut=rcut)
+
+    def test_zero_radius_contains_only_its_centre(self):
+        """A site with radius 0 is accepted and contains only a point exactly at its centre."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=0.0)
+        lattice_matrix = np.eye(3) * 10.0
+        self.assertTrue(site.contains_point(np.array([0.5, 0.5, 0.5]), lattice_matrix=lattice_matrix))
+        self.assertFalse(site.contains_point(np.array([0.5, 0.5, 0.5001]), lattice_matrix=lattice_matrix))
+
+    def test_infinite_radius_contains_every_point(self):
+        """A site with an infinite radius is accepted and contains every point."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=float('inf'))
+        lattice_matrix = np.eye(3) * 10.0
+        self.assertTrue(site.contains_point(np.array([0.0, 0.0, 0.0]), lattice_matrix=lattice_matrix))
 
 
 class SphericalSiteTestCase(unittest.TestCase):

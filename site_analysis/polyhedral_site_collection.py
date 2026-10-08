@@ -106,6 +106,14 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 vectors. Used to rank candidate sites by the distance of
                 their reference centres from each atom; the containment
                 checks themselves do not use it.
+
+        Raises:
+            ValueError: When every site has a reference centre and an
+                atom's search reaches the distance ranking (the atom is
+                not in its recent sites or learned transition
+                destinations): if ``lattice_matrix`` is not a finite,
+                non-singular (3, 3) matrix, or if the atom's coordinates
+                are not finite.
         """
         self.reset_site_occupations()
         for atom in atoms:
@@ -165,13 +173,25 @@ def _collect_reference_centres(
         - centres is an (N, 3) array of fractional coordinates, or None
           if any site lacks a reference centre.
         - site_indices is a list of site indices.
+
+    Raises:
+        ValueError: If a site has a reference centre that is not three
+            finite numbers, even if another site lacks one.
     """
     centres = []
     for s in sites:
         if s.reference_center is None:
-            return None, [s.index for s in sites]
-        centres.append(s.reference_center)
-    return np.array(centres), [s.index for s in sites]
+            continue
+        centre = np.asarray(s.reference_center, dtype=np.float64)
+        if centre.shape != (3,) or not np.isfinite(centre).all():
+            raise ValueError(
+                f"reference centre of site {s.index} must be three finite numbers, "
+                f"got {s.reference_center}")
+        centres.append(centre)
+    site_indices = [s.index for s in sites]
+    if len(centres) < len(sites):
+        return None, site_indices
+    return np.array(centres), site_indices
 
 
 def construct_neighbouring_sites(

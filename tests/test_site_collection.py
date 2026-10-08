@@ -407,9 +407,9 @@ class TestSiteCentreIndex(unittest.TestCase):
 
     def test_reach_limits_ranking_to_sites_within_reach(self):
         """With a reach, one list holds the sites within it, including one exactly at it."""
-        # 2 A, 1 A, 2.002 A and 5.7 A from the origin.
+        # 2 A, 1 A, 2 * (1 + 1e-6) A and 5.7 A from the origin.
         centres = np.array([[0.0, 0.25, 0.0], [0.125, 0.0, 0.0],
-                            [0.0, 0.0, 0.25025], [0.5, 0.5, 0.0]])
+                            [0.0, 0.0, 0.25 * (1 + 1e-6)], [0.5, 0.5, 0.0]])
         site_centres = _SiteCentreIndex(centres, [0, 1, 2, 3], reach=2.0)
         self.assertEqual(
             list(site_centres.ranked_site_indices(np.zeros(3), np.eye(3) * 8.0)), [[1, 0]])

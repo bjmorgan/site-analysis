@@ -176,7 +176,7 @@ This method benefits from using an idealised structure in the builder, as regula
 - `label`: Optional label for all sites
 - `use_reference_centers`: Whether to use reference centre unwrapping for periodic boundary conditions (default: `True`)
   - `True`: Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images
-  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms
+  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms. The polyhedral site search also falls back to the neighbours of an atom's most recent site, then list order, instead of ranking sites by distance
 
 **Example:**
 ```python

@@ -13,7 +13,9 @@ This handles overlapping spherical sites in a consistent way -- if an atom
 is in a region where multiple sites overlap, it will remain assigned to its
 original site as long as it stays within that site's volume. This
 persistence can be useful for tracking atoms through small oscillations
-without generating spurious site transitions.
+without generating spurious site transitions. An atom that is not in one of
+its recent sites or a learned transition destination goes to the containing
+site with the nearest centre.
 """
 
 import numpy as np
@@ -81,6 +83,13 @@ class SphericalSiteCollection(PriorityAssignmentMixin[SphericalSite], SiteCollec
             atoms: List of Atom objects to be assigned to sites.
             lattice_matrix: (3, 3) lattice matrix where rows are lattice
                 vectors.
+
+        Raises:
+            ValueError: When an atom's search reaches the distance ranking
+                (the atom is not in its recent sites or learned transition
+                destinations): if ``lattice_matrix`` is not a finite,
+                non-singular (3, 3) matrix, or if the atom's coordinates
+                are not finite.
         """
         self.reset_site_occupations()
         for atom in atoms:

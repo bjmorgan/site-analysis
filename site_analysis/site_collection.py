@@ -89,6 +89,8 @@ class _SiteCentreIndex:
             self._index = PeriodicNeighbourIndex(self._centres, lattice_matrix)
             self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64)
             # The edge of a cube holding one site's share of the cell volume.
+            # A sphere of this radius holds about four sites on average, so
+            # the first list is short but rarely empty.
             volume = abs(np.linalg.det(self._lattice_matrix))
             self._nearby_radius = (volume / len(self._centres)) ** (1 / 3)
         return self._index
@@ -96,7 +98,7 @@ class _SiteCentreIndex:
     def ranked_site_indices(self,
             frac_coords: np.ndarray,
             lattice_matrix: np.ndarray) -> Iterator[list[int]]:
-        """Yield site indices in order of distance from a point.
+        """Yield lists of site indices in order of distance from a point.
 
         Sites are ordered by the Cartesian minimum-image distance of their
         centres from the point, with equal distances in the order of the
@@ -216,7 +218,7 @@ class PriorityAssignmentMixin(Generic[SiteT]):
                 vectors.
 
         Yields:
-            Site: Sites in optimal checking order.
+            Site: Sites in search order.
         """
         checked_indices: set[int] = set()
         most_recent_index: int | None = None

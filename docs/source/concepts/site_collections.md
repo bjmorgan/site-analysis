@@ -44,7 +44,7 @@ The handling of spatial ambiguity is the key difference between collection types
 
 | Scenario | Spherical / Polyhedral | Voronoi / Dynamic Voronoi |
 |---|---|---|
-| Overlapping sites | Priority-based: atom stays in previous site if possible | Cannot occur (space is partitioned) |
+| Overlapping sites | Priority-based: atom stays in previous site if possible; otherwise, after learned transitions, it goes to the containing site with the nearest centre (see above) | Cannot occur (space is partitioned) |
 | Gaps between sites | Atom is unassigned (`None`) | Cannot occur (space is partitioned) |
 
 See the [sites concepts page](sites.md) for guidance on choosing a site type based on these trade-offs.

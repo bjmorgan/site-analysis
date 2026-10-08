@@ -469,7 +469,9 @@ class TrajectoryBuilder:
                   legitimately span >50% of the unit cell (e.g., octahedral sites
                   in a 2x2x2 FCC supercell). May offer performance benefits for
                   some setups. Only use after verifying it works correctly for your
-                  structures.
+                  structures. It also makes the polyhedral site search fall back
+                  to the neighbours of an atom's most recent site, then list
+                  order, instead of ranking sites by distance.
 
         Returns:
             self: For method chaining

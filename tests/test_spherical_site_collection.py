@@ -355,12 +355,6 @@ class TestReach(unittest.TestCase):
         self.assertEqual(
             list(self.collection._get_priority_sites(self.atom, self.lattice_matrix)), [])
 
-    def test_non_finite_atom_coordinates_raise(self):
-        """An atom with non-finite coordinates raises ValueError once it reaches the ranking."""
-        self.atom._frac_coords = np.array([np.nan, 0.5, 0.5])
-        with self.assertRaises(ValueError):
-            self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
-
     def test_atom_found_in_large_site_beyond_smaller_radii(self):
         """The reach is the largest radius, so a large site beyond small ones is found."""
         # 1 A from small's centre, outside it, 2 A from large's, inside it,
@@ -368,6 +362,20 @@ class TestReach(unittest.TestCase):
         self.atom._frac_coords = np.array([0.4, 0.5, 0.5])
         self.collection.assign_site_occupations([self.atom], self.lattice_matrix)
         self.assertEqual(self.atom.in_site, self.large.index)
+
+
+class TestNonFiniteAtomCoordinates(unittest.TestCase):
+    """Tests for assigning atoms whose coordinates are not finite."""
+
+    def test_non_finite_atom_coordinates_raise(self):
+        """An atom with non-finite coordinates raises ValueError once it reaches the ranking."""
+        Site._newid = 0
+        collection = SphericalSiteCollection(
+            [SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)])
+        atom = Atom(index=0)
+        atom._frac_coords = np.array([np.nan, 0.5, 0.5])
+        with self.assertRaises(ValueError):
+            collection.assign_site_occupations([atom], np.eye(3) * 10.0)
 
 
 def _nearest_containing_site(sites, point, lattice_matrix):

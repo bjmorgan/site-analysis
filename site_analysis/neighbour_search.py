@@ -69,8 +69,9 @@ class PeriodicNeighbourIndex:
     candidate pair is then computed over 27 periodic images by
     ``paired_mic_distances``, so results match that function. These are
     the true minimum-image distances whenever they are shorter than the
-    cell's smallest perpendicular width; in strongly skewed cells, longer
-    distances can be overestimated.
+    cell's smallest perpendicular width, and always in orthogonal cells.
+    In thin or strongly skewed cells, longer distances can be
+    overestimated (see #84).
 
     An index is fixed to the lattice it was built with. Build a new index
     if the lattice changes.
@@ -187,7 +188,8 @@ class PeriodicNeighbourIndex:
         Args:
             query_frac: Fractional coordinates of the query points,
                 shape (M, 3).
-            cutoff: Distance cutoff, in the units of the lattice matrix.
+            cutoff: Distance cutoff, in the units of the lattice matrix;
+                ``np.inf`` returns every pair.
                 Pairs with a minimum-image distance ``<= cutoff``,
                 including those exactly at the cutoff, are returned.
 

@@ -232,10 +232,18 @@ class TestQueryNearest(unittest.TestCase):
     def test_query_point_without_candidate_raises(self):
         """A query point with no candidate raises instead of being dropped."""
         index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
-        no_candidates = (np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp), np.empty(0))
-        with patch.object(index, "_candidates", return_value=no_candidates):
-            with self.assertRaises(RuntimeError):
-                index.query_nearest(np.zeros((1, 3)))
+        cases = {
+            # (query_idx, point_idx, distances) from the candidate search.
+            "no query has a candidate": (
+                np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp), np.empty(0)),
+            "only the first query has a candidate": (
+                np.array([0], dtype=np.intp), np.array([0], dtype=np.intp), np.array([0.0])),
+        }
+        for name, candidates in cases.items():
+            with self.subTest(name):
+                with patch.object(index, "_candidates", return_value=candidates):
+                    with self.assertRaises(RuntimeError):
+                        index.query_nearest(np.zeros((2, 3)))
 
     def test_empty_index_raises(self):
         """An empty index has no nearest point, so raises ValueError."""

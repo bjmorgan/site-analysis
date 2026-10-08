@@ -30,7 +30,7 @@ if HAS_NUMBA:
         frac2: np.ndarray,
         lattice_matrix: np.ndarray,
     ) -> float:
-        """JIT-compiled minimum-image distance checking all 27 images.
+        """JIT-compiled minimum-image distance over 27 periodic images.
 
         Args:
             frac1: Fractional coordinates of point 1, shape (3,).
@@ -44,7 +44,9 @@ if HAS_NUMBA:
         d0_base = frac1[0] - frac2[0]
         d1_base = frac1[1] - frac2[1]
         d2_base = frac1[2] - frac2[2]
-        # Reduce to nearest integer so 27-image search covers all cases
+        # Wrap to the nearest image. The 27 images searched are those within
+        # one cell of it, which is exact when the true distance is below the
+        # cell's smallest perpendicular width (#84).
         d0_base -= round(d0_base)
         d1_base -= round(d1_base)
         d2_base -= round(d2_base)
@@ -163,8 +165,9 @@ def mic_distance(
     Checks the 27 periodic images nearest in fractional coordinates.
     This gives the true minimum distance whenever that distance is
     shorter than the cell's smallest perpendicular width (the smallest
-    distance between opposite faces); in strongly skewed cells, longer
-    distances can be overestimated.
+    distance between opposite faces), and always in orthogonal cells. In
+    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
+    longer distances can be overestimated (see #84).
     Uses numba JIT compilation when available for improved performance
     on repeated single-pair calls.
 
@@ -199,10 +202,12 @@ def all_mic_distances(
     """Minimum-image distance matrix between two sets of points.
 
     Checks the 27 periodic images of each pair nearest in fractional
-    coordinates, which is needed for triclinic cells. This gives the true minimum distance whenever that distance is
+    coordinates, which is needed for triclinic cells. This gives the true
+    minimum distance whenever that distance is
     shorter than the cell's smallest perpendicular width (the smallest
-    distance between opposite faces); in strongly skewed cells, longer
-    distances can be overestimated.
+    distance between opposite faces), and always in orthogonal cells. In
+    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
+    longer distances can be overestimated (see #84).
     Uses numba JIT compilation with parallel execution when available.
 
     Note:
@@ -247,10 +252,12 @@ def paired_mic_distances(
     """Minimum-image distances between corresponding pairs of points.
 
     Checks the 27 periodic images of each pair nearest in fractional
-    coordinates. This gives the true minimum distance whenever that distance is
+    coordinates. This gives the true minimum distance whenever that
+    distance is
     shorter than the cell's smallest perpendicular width (the smallest
-    distance between opposite faces); in strongly skewed cells, longer
-    distances can be overestimated.
+    distance between opposite faces), and always in orthogonal cells. In
+    thin or strongly skewed cells, such as a 1x10x1 hexagonal supercell,
+    longer distances can be overestimated (see #84).
     Uses numba JIT compilation with parallel execution when available.
 
     Note:

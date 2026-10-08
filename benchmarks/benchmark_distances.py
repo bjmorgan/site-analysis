@@ -6,8 +6,8 @@ Compares:
 3. mic_distance numba (single pair, if available)
 4. pymatgen Lattice.get_all_distances (batch, Cython)
 5. all_mic_distances numpy (batch)
-6. PeriodicNeighbourIndex nearest and within-cutoff queries, against
-   computing every pairwise distance
+6. PeriodicNeighbourIndex nearest and within-cutoff queries, with the
+   nearest query also compared against computing every pairwise distance
 
 Tests across:
 - Cubic and triclinic lattices
@@ -122,9 +122,10 @@ def benchmark_batch(lattice, sizes=None, n_repeats=5):
 def brute_force_nearest(query, points, matrix, chunk=256):
     """Find each query point's nearest distance from every pairwise distance.
 
-    Distances are computed in blocks with ``paired_mic_distances``, which
-    copies coordinates for each pair, so this takes up to about twice as
-    long as a kernel that computes a full distance matrix directly.
+    Distances are computed in blocks with ``paired_mic_distances``, on
+    coordinates repeated for each pair with ``np.repeat`` and ``np.tile``,
+    so this takes up to about twice as long as a kernel that computes a
+    full distance matrix directly.
 
     Args:
         query: Fractional coordinates of the query points, shape (M, 3).

@@ -337,7 +337,9 @@ class TrajectoryBuilder:
                     labels: str | list[str] | None = None) -> TrajectoryBuilder:
         """Define spherical sites.
         
-        Note: Sites will be generated when build() is called.
+        Note: Sites will be generated when build() is called, which raises
+        ``ValueError`` if a centre is not three finite numbers or a radius
+        is negative or NaN.
         
         Args:
             centres: list of fractional coordinate centres for spherical sites
@@ -788,7 +790,9 @@ class TrajectoryBuilder:
                 than ``min_atom_distance``, if duplicate sites are
                 detected, or if a commitment radius is not positive, or a
                 dict of radii does not cover every site label or is given
-                while some sites have no label.
+                while some sites have no label, or if a spherical site's
+                centre is not three finite numbers or its radius is
+                negative or NaN.
             TypeError: If site types are mixed, or if a commitment radius is
                 not a number.
         """

@@ -43,6 +43,7 @@ class SphericalSiteInitTestCase(unittest.TestCase):
     def test_init_stores_centre_as_floats(self):
         site = SphericalSite(frac_coords=[0, 1, 0], rcut=1)
         self.assertEqual(site.frac_coords.dtype, np.float64)
+        self.assertIsInstance(site.rcut, float)
 
     def test_as_dict_copies_centre(self):
         site = SphericalSite(frac_coords=np.array([0.1, 0.2, 0.3]), rcut=1.0)

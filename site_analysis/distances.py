@@ -31,6 +31,17 @@ _MIN_RELATIVE_VOLUME = 1e-8
 # nearest integer. numba rounds to a 64-bit integer, which would overflow.
 _WHOLE_NUMBER_LIMIT = 2.0 ** 52
 
+# Boxes of more than this many shifts are searched by enumerating the ball
+# of images that could be nearer (_search_ball) rather than the whole box
+# (_search_box). The box is cheaper while it is small, as it is for every
+# pair in a near-cubic cell; the ball skips most of the large boxes that
+# long pairs get in elongated, thin or sheared cells, but builds its
+# decomposition of the lattice for each pair. Profiled with numba over
+# near-cubic, elongated, thin and sheared cells: at 64 no cell was more
+# than about 5% slower than with the box alone, and elongated or sheared
+# cells were up to 3.7 times faster; at 27 some thin cells were slower.
+_MAX_BOX_SEARCH = 64
+
 # Shifts of up to one cell along each axis. Without numba, pairs whose
 # shift box fits within these get all 27 in one array operation, this many
 # pairs at a time, which keeps the temporary arrays to a few megabytes.
@@ -247,6 +258,122 @@ def _search_box(
 
 
 @_jitable
+def _enumeration_basis(
+    rows: Sequence[Sequence[float]] | np.ndarray,
+    inverse_widths: tuple[float, float, float],
+) -> tuple[tuple[int, int, int, int, int, int],
+           tuple[float, float, float, float, float, float, float, float, float]]:
+    """The lattice decomposed for ``_search_ball``.
+
+    The lattice vectors are taken in a cyclic order that ends with the
+    axis of the widest perpendicular width, which the search enumerates
+    first, and orthogonalised in that order (Gram-Schmidt). With ``y`` the
+    fractional displacement in that order, the Cartesian displacement has
+    components ``R22 * y2``, ``R11 * y1 + R12 * y2`` and
+    ``R00 * y0 + R01 * y1 + R02 * y2`` along the orthonormal directions.
+
+    Args:
+        rows: Lattice vectors as rows, indexed ``rows[i][j]``.
+        inverse_widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``.
+
+    Returns:
+        ``(order, factors)``. ``order`` holds the axis taken at each of
+        the three levels, then the level of each axis.
+        ``factors`` is ``(1 / R00, R01 / R00, R02 / R00, 1 / R11,
+        R12 / R11, 1 / R22, R11, R12, R22)``.
+    """
+    if inverse_widths[0] <= inverse_widths[1] and inverse_widths[0] <= inverse_widths[2]:
+        p0, p1, p2, q0, q1, q2 = 1, 2, 0, 2, 0, 1
+    elif inverse_widths[1] <= inverse_widths[2]:
+        p0, p1, p2, q0, q1, q2 = 2, 0, 1, 1, 2, 0
+    else:
+        p0, p1, p2, q0, q1, q2 = 0, 1, 2, 0, 1, 2
+    a, b, c = rows[p0], rows[p1], rows[p2]
+    r00 = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
+    e00, e01, e02 = a[0] / r00, a[1] / r00, a[2] / r00
+    r01 = b[0] * e00 + b[1] * e01 + b[2] * e02
+    u10, u11, u12 = b[0] - r01 * e00, b[1] - r01 * e01, b[2] - r01 * e02
+    r11 = math.sqrt(u10 * u10 + u11 * u11 + u12 * u12)
+    e10, e11, e12 = u10 / r11, u11 / r11, u12 / r11
+    r02 = c[0] * e00 + c[1] * e01 + c[2] * e02
+    r12 = c[0] * e10 + c[1] * e11 + c[2] * e12
+    u20 = c[0] - r02 * e00 - r12 * e10
+    u21 = c[1] - r02 * e01 - r12 * e11
+    u22 = c[2] - r02 * e02 - r12 * e12
+    r22 = math.sqrt(u20 * u20 + u21 * u21 + u22 * u22)
+    return ((p0, p1, p2, q0, q1, q2),
+            (1.0 / r00, r01 / r00, r02 / r00, 1.0 / r11, r12 / r11, 1.0 / r22,
+             r11, r12, r22))
+
+
+@_jitable
+def _search_ball(
+    r0: float,
+    r1: float,
+    r2: float,
+    best: float,
+    rows: Sequence[Sequence[float]] | np.ndarray,
+    inverse_widths: tuple[float, float, float],
+) -> float:
+    """Smallest squared length among the images that could be nearer.
+
+    Enumerates the images within the ball of the current best distance
+    (Fincke-Pohst), one axis at a time from the widest: each shift along
+    an axis leaves less of the distance for the axes after it, so far
+    fewer images are visited than in the box from ``_shift_bounds``, which
+    bounds each axis on its own. Has the same arguments and result as
+    ``_search_box``.
+
+    Args:
+        r0: First component of the rounded fractional displacement.
+        r1: Second component of the rounded fractional displacement.
+        r2: Third component of the rounded fractional displacement.
+        best: Squared length of the rounded image.
+        rows: Lattice vectors as rows, indexed ``rows[i][j]``.
+        inverse_widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``.
+
+    Returns:
+        The smallest squared length found, at most ``best``.
+    """
+    order, factors = _enumeration_basis(rows, inverse_widths)
+    i_r00, r01_r00, r02_r00, i_r11, r12_r11, i_r22, r11, r12, r22 = factors
+    r = (r0, r1, r2)
+    y0c, y1c, y2c = r[order[0]], r[order[1]], r[order[2]]
+    # Images up to a relative margin beyond the current best are visited,
+    # so that rounding in these bounds cannot leave out a nearer image.
+    slack = 1.0 + _SHIFT_MARGIN
+    d = math.sqrt(best * slack)
+    for n2 in range(math.ceil(-d * i_r22 - y2c - _SHIFT_MARGIN),
+                    math.floor(d * i_r22 - y2c + _SHIFT_MARGIN) + 1):
+        y2 = y2c + n2
+        t2 = r22 * y2
+        rest2 = best * slack - t2 * t2
+        if rest2 < 0.0:
+            continue
+        s1 = math.sqrt(rest2) * i_r11
+        c1 = r12_r11 * y2
+        for n1 in range(math.ceil(-s1 - c1 - y1c - _SHIFT_MARGIN),
+                        math.floor(s1 - c1 - y1c + _SHIFT_MARGIN) + 1):
+            y1 = y1c + n1
+            t1 = r11 * y1 + r12 * y2
+            rest1 = rest2 - t1 * t1
+            if rest1 < 0.0:
+                continue
+            s0 = math.sqrt(rest1) * i_r00
+            c0 = r01_r00 * y1 + r02_r00 * y2
+            for n0 in range(math.ceil(-s0 - c0 - y0c - _SHIFT_MARGIN),
+                            math.floor(s0 - c0 - y0c + _SHIFT_MARGIN) + 1):
+                n = (n0, n1, n2)
+                candidate = _squared_length(
+                    r0 + n[order[3]], r1 + n[order[4]], r2 + n[order[5]], rows)
+                if candidate < best:
+                    best = candidate
+    return best
+
+
+@_jitable
 def _pair_distance(
     f0: float,
     f1: float,
@@ -261,7 +388,9 @@ def _pair_distance(
     shifts ``n`` in the box from ``_shift_bounds`` can give a nearer image
     ``r + n``. For pairs closer than about half the cell's smallest
     perpendicular width the box holds only ``n = 0``, and ``d`` is the
-    answer; otherwise ``_search_box`` searches it.
+    answer. Otherwise ``_search_box`` searches the box, or, if it holds
+    more than ``_MAX_BOX_SEARCH`` shifts, ``_search_ball`` searches the
+    ball of images that could be nearer.
 
     Args:
         f0: First component of the fractional displacement.
@@ -287,7 +416,9 @@ def _pair_distance(
     lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, inverse_widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
         return d
-    return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
+    if (hi0 - lo0 + 1) * (hi1 - lo1 + 1) * (hi2 - lo2 + 1) <= _MAX_BOX_SEARCH:
+        return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
+    return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths))
 
 
 if HAS_NUMBA:

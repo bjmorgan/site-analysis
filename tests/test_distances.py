@@ -39,6 +39,13 @@ HARD_CELLS_ON_EVERY_AXIS = {
     "rhombohedral, 10 degree angles": Lattice.from_parameters(5.0, 5.0, 5.0, 10, 10, 10).matrix,
 }
 
+# Elongated cells, in which long pairs have boxes of many shifts that the
+# ball search mostly skips.
+ELONGATED_CELLS = {
+    "orthorhombic 10x10x200": Lattice.orthorhombic(10.0, 10.0, 200.0).matrix,
+    "hexagonal 12x12x60, long axis first": np.roll(Lattice.hexagonal(12.0, 60.0).matrix, 1, axis=0),
+}
+
 
 def brute_force_distances(frac1, frac2, lattice_matrix, reach=12):
     """Minimum-image distances between pairs, from every shift up to ``reach`` cells each way."""
@@ -283,7 +290,7 @@ class TestExactMinimumImage(unittest.TestCase):
         """Single and paired distances, with and without numba, are identical."""
         rng = np.random.default_rng(85)
         cells = {"triclinic": Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix,
-                 **HARD_CELLS_ON_EVERY_AXIS}
+                 **HARD_CELLS_ON_EVERY_AXIS, **ELONGATED_CELLS}
         for name, lattice_matrix in cells.items():
             frac1 = rng.uniform(-2.0, 3.0, (200, 3))
             frac2 = rng.uniform(-2.0, 3.0, (200, 3))
@@ -348,6 +355,49 @@ class TestExactMinimumImage(unittest.TestCase):
                 np.testing.assert_array_equal(
                     dist_mod.paired_mic_distances(
                         far[np.newaxis], near[np.newaxis], lattice_matrix), [0.0])
+
+
+class TestSearches(unittest.TestCase):
+    """The box and ball searches find the same images, and each is used where it is cheaper."""
+
+    @staticmethod
+    def rounded_images(frac1, frac2, lattice_matrix):
+        """Rounded displacements and their squared lengths, as _pair_distance starts."""
+        rows = lattice_matrix.tolist()
+        for a, b in zip(frac1, frac2):
+            r = [dist_mod._wrap(float(x) - float(y)) for x, y in zip(a, b)]
+            yield r, dist_mod._squared_length(*r, rows), rows
+
+    def test_box_and_ball_searches_agree_exactly(self):
+        """Both searches return the same smallest squared length for every pair."""
+        rng = np.random.default_rng(86)
+        cells = {"triclinic": Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix,
+                 **HARD_CELLS_ON_EVERY_AXIS, **ELONGATED_CELLS}
+        for name, lattice_matrix in cells.items():
+            inverse_widths = dist_mod._inverse_widths(lattice_matrix.tolist())
+            frac1 = rng.uniform(-1.0, 2.0, (40, 3))
+            frac2 = rng.uniform(-1.0, 2.0, (40, 3))
+            with self.subTest(cell=name):
+                for r, best, rows in self.rounded_images(frac1, frac2, lattice_matrix):
+                    self.assertEqual(
+                        dist_mod._search_ball(*r, best, rows, inverse_widths),
+                        dist_mod._search_box(*r, best, rows, inverse_widths))
+
+    def test_large_boxes_use_the_ball_search(self):
+        """A long pair in an elongated cell is searched by the ball, a short one by the box."""
+        lattice_matrix = ELONGATED_CELLS["orthorhombic 10x10x200"]
+        long_pair = (np.array([0.1, 0.2, 0.0]), np.array([0.3, 0.4, 0.4]))
+        # 6.4 A apart across the short axes: a box of 2 x 2 x 1 shifts.
+        near_pair = (np.array([0.55, 0.65, 0.0]), np.array([0.1, 0.2, 0.0]))
+        cases = {"long pair": (long_pair, "_search_ball", "_search_box"),
+                 "pair needing a small box": (near_pair, "_search_box", "_search_ball")}
+        for name, ((frac1, frac2), used, unused) in cases.items():
+            with self.subTest(name), patch.object(dist_mod, "HAS_NUMBA", False), \
+                    patch.object(dist_mod, used, wraps=getattr(dist_mod, used)) as used_search, \
+                    patch.object(dist_mod, unused, wraps=getattr(dist_mod, unused)) as unused_search:
+                dist_mod.mic_distance(frac1, frac2, lattice_matrix)
+                used_search.assert_called_once()
+                unused_search.assert_not_called()
 
 
 class TestUndefinedDistances(unittest.TestCase):

@@ -2,11 +2,11 @@
 
 Provides ``PeriodicNeighbourIndex``, which finds the indexed points
 within a cutoff of each query point, or the nearest indexed point, in a
-periodic cell, including non-orthogonal cells. Distances are those of
-``paired_mic_distances``, over 27 periodic images, and results equal
-those of computing that distance from every query point to every indexed
-point, with memory that scales with the number of points and pairs
-found.
+periodic cell, including non-orthogonal cells. Distances are exact
+minimum-image distances, those of ``paired_mic_distances``, and results
+equal those of computing that distance from every query point to every
+indexed point, with memory that scales with the number of points and
+pairs found.
 """
 
 from __future__ import annotations
@@ -18,12 +18,11 @@ from typing import cast
 import numpy as np
 from scipy.spatial import cKDTree
 
-from site_analysis.distances import _paired_mic_distances
-
-# The rows of the normalised lattice are unit vectors, so a smallest
-# singular value below this means the lattice vectors are (almost)
-# coplanar.
-_MIN_SINGULAR_VALUE = 1e-8
+from site_analysis.distances import (
+    _inverse_widths,
+    _inverse_widths_are_finite,
+    _paired_mic_distances,
+)
 
 # Candidate searches are widened slightly so that rounding does not drop a
 # neighbour. Exact distances then remove any extra candidates.
@@ -68,13 +67,9 @@ class PeriodicNeighbourIndex:
     ``sigma_min`` times the scaled separation, where ``sigma_min`` is the
     smallest singular value of the lattice matrix with each row scaled to
     unit length. A tree search with radius ``r / sigma_min`` therefore
-    finds every pair within Cartesian distance ``r``. The distance of each
-    candidate pair is then computed over 27 periodic images by
-    ``paired_mic_distances``, so results match that function. These are
-    the true minimum-image distances whenever they are shorter than the
-    cell's smallest perpendicular width, and always in orthogonal cells.
-    In thin or strongly skewed cells, longer distances can be
-    overestimated.
+    finds every pair within Cartesian distance ``r``. The exact
+    minimum-image distance of each candidate pair is then computed by
+    ``paired_mic_distances``, so results match that function.
 
     An index is fixed to the lattice it was built with. Build a new index
     if the lattice changes.
@@ -104,13 +99,14 @@ class PeriodicNeighbourIndex:
             )
         if not np.isfinite(self._lattice_matrix).all():
             raise ValueError("lattice_matrix must be finite")
+        # The test the distance functions apply, so that no lattice accepted
+        # here gives them undefined distances. It also keeps sigma_min well
+        # above zero: the relative volume is at most 1.5 times sigma_min.
+        if not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist())):
+            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
-        if np.any(self._lengths == 0.0):
-            raise ValueError("lattice_matrix must be non-singular, but has a zero-length row")
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
-        if self._sigma_min < _MIN_SINGULAR_VALUE:
-            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)
 

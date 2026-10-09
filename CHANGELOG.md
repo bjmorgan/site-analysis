@@ -8,12 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells, including non-orthogonal ones. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point. Like the existing distance functions, it uses the 27 periodic images nearest in fractional coordinates, which give the true minimum-image distance whenever it is shorter than the cell's smallest perpendicular width (#84).
-- `site_analysis.distances.paired_mic_distances()`, for minimum-image distances between given pairs of points. It raises `ValueError` for non-finite input, and gives the same distances with and without numba.
+- `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells, including non-orthogonal ones. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point. Its distances are exact minimum-image distances in any cell.
+- `site_analysis.distances.paired_mic_distances()`, for exact minimum-image distances between given pairs of points. It raises `ValueError` for non-finite input or a lattice matrix that is singular or nearly so, and gives the same distances with and without numba.
 
 ### Changed
 
-- Finding coordination environments (`get_coordination_indices()`), checking reference structures, structure alignment, mapping atoms between structures (`IndexMapper`, `site_index_mapping()`), calculating species distances (`calculate_species_distances()`), and Voronoi and dynamic Voronoi site assignment now use `PeriodicNeighbourIndex` instead of computing every pairwise distance. Their memory use now scales with the number of atoms rather than its square, and they are much faster for large systems. Results are unchanged.
+- Finding coordination environments (`get_coordination_indices()`), checking reference structures, structure alignment, mapping atoms between structures (`IndexMapper`, `site_index_mapping()`), calculating species distances (`calculate_species_distances()`), and Voronoi and dynamic Voronoi site assignment now use `PeriodicNeighbourIndex` instead of computing every pairwise distance. Their memory use now scales with the number of atoms rather than its square, and they are much faster for large systems. Results are unchanged, except in thin or strongly skewed cells, where they are now exact (see Fixed).
 - When they search for neighbours, each of these now raises `ValueError` for non-finite coordinates, coordinates not shaped (N, 3), or a lattice matrix that is singular, non-finite or not shaped (3, 3). Previously such input could give meaningless results without an error.
 - Spherical site collections, and polyhedral site collections whose sites all have reference centres (the default from `TrajectoryBuilder`), now check the sites left after an atom's recent sites and learned transitions in order of the Cartesian minimum-image distance of their centres (for polyhedral sites, their reference centres) from the atom, rather than the fractional distance from the atom's most recent site, which is approximate for cells that are not cubic. Atoms with no recent site start with this ranking, rather than with the nearest site and its learned transitions. Rankings are computed with `PeriodicNeighbourIndex` when needed, rather than stored for every site, so their memory no longer scales with the square of the number of sites. Assignment now raises `ValueError` for a singular or non-finite lattice matrix, or for non-finite coordinates, when an atom's search reaches this ranking.
 - In these collections, where two or more overlapping sites contain an atom, and none is one of its recent sites or a learned transition destination from its most recent site, the atom now goes to the one whose centre (for polyhedral sites, reference centre) is nearest to it, so assignments can differ from earlier versions. This includes atoms at the first timestep, which have no recent sites. Re-analysing the Li6PS5Cl tutorial trajectory (a cubic cell) with overlapping spherical sites of radius 1.5 Å changes 4.4% of assignments; more may change in cells that are not cubic, where the old ranking was further from the true distances. Assignments to sites that do not overlap are unchanged.
@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Site collections keep their own copy of the list of sites they are given, so changing that list afterwards no longer changes the collection.
 - `PolyhedralSiteCollection` raises `ValueError` for a site whose reference centre is not three finite numbers. Previously, such a centre was accepted.
 - `Trajectory.sites` is now the site collection's own list of sites, rather than the list passed in.
+- Without numba, minimum-image distances are faster: spherical site assignment takes less than half as long per frame on the Li6PS5Cl tutorial trajectory. `mic_distance()` now gives the same distances with and without numba.
+- `mic_distance()` returns NaN for non-finite coordinates or a lattice matrix that is singular or nearly so. Previously, NaN coordinates gave inf with numba and NaN without, and a singular lattice gave a meaningless distance.
 
 ### Removed
 
@@ -30,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Minimum-image distances are now exact in any cell: `mic_distance()`, and through it and `PeriodicNeighbourIndex` the coordination environments, atom mapping, structure alignment, species distances, Voronoi and spherical site assignment and commitment that use them. Previously only the 27 periodic images nearest in fractional coordinates were checked, which could overestimate distances of at least 1.5 times the cell's smallest perpendicular width in thin or strongly skewed cells (#84).
 - `get_nearest_neighbour_indices()` no longer raises when `n_coord` equals the number of atoms matching `vertex_species`. Previously, it raised a `ValueError` from numpy.
 - `TrajectoryBuilder.with_min_atom_distance()` now raises `ValueError` for NaN. Previously, NaN silently turned off the close-pair check.
 - `site_index_mapping()` now returns integer indices when nothing matches `species1_filter`. Previously, it returned an empty float array, which could not be used as indices.

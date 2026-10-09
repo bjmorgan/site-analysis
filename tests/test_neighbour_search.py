@@ -10,7 +10,9 @@ from site_analysis.distances import paired_mic_distances
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 
-# Orthogonal, monoclinic, hexagonal, triclinic and rhombohedral cells.
+# Orthogonal, monoclinic, hexagonal, triclinic and rhombohedral cells, and
+# a thin hexagonal supercell in which the nearest image of a pair can lie
+# several cells from the image nearest in fractional coordinates (#84).
 CELLS = {
     "cubic": Lattice.cubic(10.0).matrix,
     "orthorhombic": Lattice.orthorhombic(4.0, 9.0, 6.0).matrix,
@@ -18,6 +20,8 @@ CELLS = {
     "hexagonal": Lattice.hexagonal(5.0, 8.0).matrix,
     "triclinic": Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix,
     "rhombohedral": Lattice.from_parameters(6.0, 6.0, 6.0, 60, 60, 60).matrix,
+    "thin hexagonal 1x10x1": (
+        Lattice.hexagonal(3.0, 4.0).matrix * np.array([[1.0], [10.0], [1.0]])),
 }
 
 
@@ -86,6 +90,8 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
             "(3, 4)": np.eye(3, 4),
             "zero-length vector": np.diag([1.0, 1.0, 0.0]),
             "coplanar vectors": np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]),
+            # Nearly parallel vectors: a cell with almost no volume.
+            "nearly parallel vectors": np.array([[1.0, 0.0, 0.0], [1.0, 1e-3, 0.0], [1.0, 0.0, 5e-6]]),
             "non-finite": np.diag([1.0, 1.0, np.nan]),
         }
         for name, lattice_matrix in lattices.items():
@@ -167,6 +173,13 @@ class TestQueryWithin(unittest.TestCase):
         np.testing.assert_array_equal(query_idx, rows)
         np.testing.assert_array_equal(point_idx, cols)
 
+    def test_finds_pair_whose_nearest_image_is_several_cells_away(self):
+        """The #84 pair, 6 * sqrt(3) apart, is found with a 10.5 cutoff."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), CELLS["thin hexagonal 1x10x1"])
+        _, point_idx, distances = index.query_within(np.array([[0.0, 0.4, 0.0]]), 10.5)
+        np.testing.assert_array_equal(point_idx, [0])
+        self.assertAlmostEqual(distances[0], 6 * np.sqrt(3), places=12)
+
     def test_invalid_cutoff_raises(self):
         """A negative or NaN cutoff raises ValueError."""
         index = PeriodicNeighbourIndex(np.zeros((1, 3)), np.eye(3))
@@ -236,12 +249,18 @@ class TestQueryNearest(unittest.TestCase):
         rng = np.random.default_rng(5)
         triclinic_points = rng.random((50, 3))
         cubic_points = rng.random((200, 3))
-        cases = {
-            "random queries, triclinic": (
-                CELLS["triclinic"], triclinic_points, rng.uniform(-50.0, 50.0, (40, 3))),
-            # Rounding errors in the distances grow with the coordinates,
-            # of both the query points and the indexed points, and with the
-            # longest lattice vector.
+        with self.subTest(case="random queries, triclinic"):
+            query = rng.uniform(-50.0, 50.0, (40, 3))
+            dense = brute_force_distances(query, triclinic_points, CELLS["triclinic"])
+            point_idx, distances = PeriodicNeighbourIndex(
+                triclinic_points, CELLS["triclinic"]).query_nearest(query)
+            np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
+            np.testing.assert_array_equal(distances, dense.min(axis=1))
+        # Rounding errors in the distances grow with the coordinates, of both
+        # the query points and the indexed points, and with the longest
+        # lattice vector. Each query point is a copy of the indexed point
+        # with the same index, which is therefore its nearest point.
+        copies = {
             "copies 1000 cells away, cubic": (
                 np.eye(3) * 100.0, cubic_points, cubic_points + 1000.0),
             "indexed points 1000 cells away, cubic": (
@@ -249,13 +268,13 @@ class TestQueryNearest(unittest.TestCase):
             "copies 100 cells away, 1 x 1 x 1000 cell": (
                 Lattice.orthorhombic(1.0, 1.0, 1000.0).matrix, cubic_points, cubic_points + 100.0),
         }
-        for name, (lattice_matrix, points, query) in cases.items():
+        for name, (lattice_matrix, points, query) in copies.items():
             with self.subTest(case=name):
-                dense = brute_force_distances(query, points, lattice_matrix)
                 point_idx, distances = PeriodicNeighbourIndex(
                     points, lattice_matrix).query_nearest(query)
-                np.testing.assert_array_equal(point_idx, dense.argmin(axis=1))
-                np.testing.assert_array_equal(distances, dense.min(axis=1))
+                np.testing.assert_array_equal(point_idx, np.arange(len(points)))
+                np.testing.assert_array_equal(
+                    distances, paired_mic_distances(query, points, lattice_matrix))
 
     def test_single_point_index(self):
         """With one indexed point, every query finds it."""

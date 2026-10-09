@@ -269,6 +269,37 @@ if HAS_NUMBA:
         return result
 
 
+# The rows and reciprocal widths of the last lattice that ``mic_distance``
+# was given without numba, keyed by the lattice's bytes. Computing them
+# takes about as long as a distance, and callers such as spherical sites
+# ask for many distances in one lattice. One tuple, so that a reader never
+# pairs one lattice's key with another lattice's values.
+_last_lattice: tuple[bytes, list[list[float]], tuple[float, float, float]] = (
+    b"", [], (math.nan, math.nan, math.nan))
+
+
+def _rows_and_widths(
+    lattice_matrix: np.ndarray,
+) -> tuple[list[list[float]], tuple[float, float, float]]:
+    """Lattice rows as Python floats, and reciprocal widths, kept for reuse.
+
+    Args:
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors (pymatgen convention).
+
+    Returns:
+        ``(rows, widths)`` for ``_pair_distance``.
+    """
+    global _last_lattice
+    stored = _last_lattice
+    key = lattice_matrix.tobytes()
+    if key != stored[0]:
+        rows = lattice_matrix.tolist()
+        stored = (key, rows, _inverse_widths(rows))
+        _last_lattice = stored
+    return stored[1], stored[2]
+
+
 def mic_distance(
     frac1: np.ndarray,
     frac2: np.ndarray,
@@ -278,7 +309,8 @@ def mic_distance(
 
     The shortest distance between any periodic images of the two points,
     exact for any cell. Uses numba JIT compilation when available for
-    improved performance on repeated single-pair calls.
+    improved performance on repeated single-pair calls; the result is the
+    same without numba.
 
     Note:
         Behaviour is undefined for non-finite inputs (NaN, inf).
@@ -294,10 +326,11 @@ def mic_distance(
     """
     if HAS_NUMBA:
         return float(_mic_distance_numba(frac1, frac2, lattice_matrix))
-    return float(_paired_mic_distances_numpy(
-        np.asarray(frac1, dtype=np.float64)[np.newaxis],
-        np.asarray(frac2, dtype=np.float64)[np.newaxis],
-        np.asarray(lattice_matrix, dtype=np.float64))[0])
+    rows, widths = _rows_and_widths(lattice_matrix)
+    return _pair_distance(float(frac1[0]) - float(frac2[0]),
+                          float(frac1[1]) - float(frac2[1]),
+                          float(frac1[2]) - float(frac2[2]),
+                          rows, widths)
 
 
 def paired_mic_distances(

@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Site collections keep their own copy of the list of sites they are given, so changing that list afterwards no longer changes the collection.
 - `PolyhedralSiteCollection` raises `ValueError` for a site whose reference centre is not three finite numbers. Previously, such a centre was accepted.
 - `Trajectory.sites` is now the site collection's own list of sites, rather than the list passed in.
+- Without numba, minimum-image distances are faster: spherical site assignment takes about a third as long per frame on the Li6PS5Cl tutorial trajectory. `mic_distance()` now gives the same distances with and without numba.
 
 ### Removed
 

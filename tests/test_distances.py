@@ -280,6 +280,19 @@ class TestExactMinimumImage(unittest.TestCase):
                 for other in results[1:]:
                     np.testing.assert_array_equal(other, results[0])
 
+    def test_numpy_mic_distance_follows_a_change_of_lattice(self):
+        """Without numba, each distance uses its own lattice, however lattices alternate."""
+        frac1, frac2 = np.array([0.1, 0.2, 0.3]), np.array([0.6, 0.9, 0.8])
+        lattices = [Lattice.cubic(5.0).matrix,
+                    Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix]
+        expected = [brute_force_distance(frac1, frac2, m) for m in lattices]
+        with patch.object(dist_mod, "HAS_NUMBA", False):
+            for i in (0, 1, 0, 1):
+                with self.subTest(call_with_lattice=i):
+                    self.assertAlmostEqual(
+                        dist_mod.mic_distance(frac1, frac2, lattices[i]),
+                        expected[i], places=12)
+
 
 class TestNumpyFallback(unittest.TestCase):
     """Tests that numpy fallback paths are correct regardless of numba."""

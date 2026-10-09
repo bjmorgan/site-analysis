@@ -8,8 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells, including non-orthogonal ones. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point. Like the existing distance functions, it uses the 27 periodic images nearest in fractional coordinates, which give the true minimum-image distance whenever it is shorter than the cell's smallest perpendicular width (#84).
-- `site_analysis.distances.paired_mic_distances()`, for minimum-image distances between given pairs of points. It raises `ValueError` for non-finite input, and gives the same distances with and without numba.
+- `PeriodicNeighbourIndex` (`site_analysis.neighbour_search`), a KD-tree neighbour search for periodic cells, including non-orthogonal ones. `query_within()` finds the points within a cutoff of each query point, and `query_nearest()` finds the nearest point. Its distances are exact minimum-image distances in any cell.
+- `site_analysis.distances.paired_mic_distances()`, for exact minimum-image distances between given pairs of points. It raises `ValueError` for non-finite input, and gives the same distances with and without numba.
 
 ### Changed
 
@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `mic_distance()` now gives the exact minimum-image distance in any cell. Previously it checked only the 27 periodic images nearest in fractional coordinates, which could overestimate distances of at least 1.5 times the cell's smallest perpendicular width in thin or strongly skewed cells (#84).
 - `get_nearest_neighbour_indices()` no longer raises when `n_coord` equals the number of atoms matching `vertex_species`. Previously, it raised a `ValueError` from numpy.
 - `TrajectoryBuilder.with_min_atom_distance()` now raises `ValueError` for NaN. Previously, NaN silently turned off the close-pair check.
 - `site_index_mapping()` now returns integer indices when nothing matches `species1_filter`. Previously, it returned an empty float array, which could not be used as indices.

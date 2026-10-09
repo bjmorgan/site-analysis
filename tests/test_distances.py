@@ -1,8 +1,37 @@
+import itertools
+import math
 import unittest
+from unittest.mock import patch
+
 import numpy as np
 from pymatgen.core import Lattice
 from site_analysis._compat import HAS_NUMBA
 import site_analysis.distances as dist_mod
+
+
+# Run with and without numba where numba is installed.
+BACKENDS = (False, True) if HAS_NUMBA else (False,)
+
+# Cells in which the nearest image of a pair can lie several cells away
+# from the image nearest in fractional coordinates (#84).
+HARD_CELLS = {
+    "thin hexagonal 1x10x1": (
+        Lattice.hexagonal(3.0, 4.0).matrix * np.array([[1.0], [10.0], [1.0]])),
+    "monoclinic 1x1x8, beta 125": (
+        Lattice.monoclinic(4.0, 5.0, 6.0, 125).matrix * np.array([[1.0], [1.0], [8.0]])),
+    "cubic lattice in a cell sheared 5x": (
+        np.array([[1.0, 0.0, 0.0], [5.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        @ Lattice.cubic(3.0).matrix),
+}
+
+
+def brute_force_distance(frac1, frac2, lattice_matrix, reach=12):
+    """Minimum-image distance from every shift up to ``reach`` cells each way."""
+    shifts = np.array(list(itertools.product(range(-reach, reach + 1), repeat=3)),
+                      dtype=float)
+    d = np.asarray(frac1, dtype=float) - np.asarray(frac2, dtype=float)
+    d -= np.round(d)
+    return float(np.linalg.norm((d + shifts) @ lattice_matrix, axis=1).min())
 
 
 class TestFracToCart(unittest.TestCase):
@@ -192,6 +221,64 @@ class TestPairedMicDistances(unittest.TestCase):
                 with self.subTest(value=value, argument=argument):
                     with self.assertRaises(ValueError):
                         dist_mod.paired_mic_distances(*args)
+
+
+class TestExactMinimumImage(unittest.TestCase):
+    """Distances are exact even where the nearest image is several cells away."""
+
+    def test_issue_84_pair(self):
+        """The #84 pair is 6 * sqrt(3) apart, not the 10.82 the nearest 27 images give."""
+        lattice_matrix = HARD_CELLS["thin hexagonal 1x10x1"]
+        frac1, frac2 = np.zeros(3), np.array([0.0, 0.4, 0.0])
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                self.assertAlmostEqual(
+                    dist_mod.mic_distance(frac1, frac2, lattice_matrix),
+                    6 * math.sqrt(3), places=12)
+                np.testing.assert_allclose(
+                    dist_mod.paired_mic_distances(
+                        frac1[np.newaxis], frac2[np.newaxis], lattice_matrix),
+                    [6 * math.sqrt(3)], rtol=1e-14)
+
+    def test_matches_brute_force_in_hard_cells(self):
+        """Single and paired distances match a search over many images."""
+        rng = np.random.default_rng(84)
+        for name, lattice_matrix in HARD_CELLS.items():
+            frac1 = rng.uniform(-1.0, 2.0, (100, 3))
+            frac2 = rng.uniform(-1.0, 2.0, (100, 3))
+            expected = [brute_force_distance(a, b, lattice_matrix)
+                        for a, b in zip(frac1, frac2)]
+            for has_numba in BACKENDS:
+                with self.subTest(cell=name, numba=has_numba), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    np.testing.assert_allclose(
+                        dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix),
+                        expected, rtol=1e-12)
+                    np.testing.assert_allclose(
+                        [dist_mod.mic_distance(a, b, lattice_matrix)
+                         for a, b in zip(frac1, frac2)],
+                        expected, rtol=1e-12)
+
+    def test_all_implementations_agree_exactly(self):
+        """Single and paired distances, with and without numba, are identical."""
+        rng = np.random.default_rng(85)
+        cells = {"triclinic": Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix,
+                 **HARD_CELLS}
+        for name, lattice_matrix in cells.items():
+            frac1 = rng.uniform(-2.0, 3.0, (200, 3))
+            frac2 = rng.uniform(-2.0, 3.0, (200, 3))
+            results = []
+            for has_numba in BACKENDS:
+                with patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    results.append(
+                        dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix))
+                    results.append(np.array(
+                        [dist_mod.mic_distance(a, b, lattice_matrix)
+                         for a, b in zip(frac1, frac2)]))
+            with self.subTest(cell=name):
+                for other in results[1:]:
+                    np.testing.assert_array_equal(other, results[0])
 
 
 class TestNumpyFallback(unittest.TestCase):

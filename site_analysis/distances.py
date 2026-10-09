@@ -27,6 +27,13 @@ _SHIFT_MARGIN = 1e-9
 # search for their nearest images can be slow.
 _MIN_RELATIVE_VOLUME = 1e-8
 
+# A cell whose longest edge is more than this many times its narrowest
+# perpendicular width is rejected too. Every shift either search considers
+# is at most about the longest edge times the largest reciprocal width, so
+# shifts stay far within the 64-bit integers numba uses. Real cells are
+# below 1e4.
+_MAX_ELONGATION = 2.0 ** 50
+
 # Floats this large or larger are whole numbers, so they are their own
 # nearest integer. numba rounds to a 64-bit integer, which would overflow.
 _WHOLE_NUMBER_LIMIT = 2.0 ** 52
@@ -36,11 +43,13 @@ _WHOLE_NUMBER_LIMIT = 2.0 ** 52
 # (_search_box). The box is cheaper while it is small, as it is for every
 # pair in a near-cubic cell; the ball skips most of the large boxes that
 # long pairs get in elongated, thin or sheared cells, but builds its
-# decomposition of the lattice for each pair. Profiled with numba over
-# near-cubic, elongated, thin and sheared cells: at 64 no cell was more
-# than about 5% slower than with the box alone, and elongated or sheared
-# cells were up to 3.7 times faster; at 27 some thin cells were slower.
-_MAX_BOX_SEARCH = 64
+# decomposition of the lattice for each pair. Profiled with and without
+# numba over near-cubic, slab, elongated, thin and sheared cells, trying 8,
+# 27, 64 and 125: at 27 no cell was more than about 10% slower than at its
+# best threshold, except a thin cell without numba (20% slower than at 64),
+# and slab cells such as 12 x 12 x 60 A were up to twice as fast without
+# numba as at 64.
+_MAX_BOX_SEARCH = 27
 
 # Shifts of up to one cell along each axis. Without numba, pairs whose
 # shift box fits within these get all 27 in one array operation, this many
@@ -129,7 +138,9 @@ def _inverse_widths(
     Returns:
         ``(1 / w_0, 1 / w_1, 1 / w_2)``, or three NaNs if the cell is
         singular or nearly so (its volume is below ``_MIN_RELATIVE_VOLUME``
-        times the product of its edge lengths) or not finite.
+        times the product of its edge lengths), extremely elongated (its
+        longest edge is more than ``_MAX_ELONGATION`` times its narrowest
+        width), or not finite.
     """
     l0 = math.sqrt(rows[0][0] * rows[0][0] + rows[0][1] * rows[0][1] + rows[0][2] * rows[0][2])
     l1 = math.sqrt(rows[1][0] * rows[1][0] + rows[1][1] * rows[1][1] + rows[1][2] * rows[1][2])
@@ -153,9 +164,12 @@ def _inverse_widths(
     relative_volume = abs(u00 * c0x + u01 * c0y + u02 * c0z)
     if not relative_volume > _MIN_RELATIVE_VOLUME:
         return math.nan, math.nan, math.nan
-    return (math.sqrt(c0x * c0x + c0y * c0y + c0z * c0z) / (l0 * relative_volume),
-            math.sqrt(c1x * c1x + c1y * c1y + c1z * c1z) / (l1 * relative_volume),
-            math.sqrt(c2x * c2x + c2y * c2y + c2z * c2z) / (l2 * relative_volume))
+    iw0 = math.sqrt(c0x * c0x + c0y * c0y + c0z * c0z) / (l0 * relative_volume)
+    iw1 = math.sqrt(c1x * c1x + c1y * c1y + c1z * c1z) / (l1 * relative_volume)
+    iw2 = math.sqrt(c2x * c2x + c2y * c2y + c2z * c2z) / (l2 * relative_volume)
+    if not max(l0, l1, l2) * max(iw0, iw1, iw2) <= _MAX_ELONGATION:
+        return math.nan, math.nan, math.nan
+    return iw0, iw1, iw2
 
 
 @_jitable
@@ -258,20 +272,43 @@ def _search_box(
 
 
 @_jitable
+def _shift_range(centre: float, half_width: float) -> tuple[int, int]:
+    """The integer shifts ``n`` with ``|centre + n| <= half_width``.
+
+    The range is widened by ``_SHIFT_MARGIN`` so that rounding cannot leave
+    out a shift.
+
+    Args:
+        centre: The coordinate before shifting.
+        half_width: The largest coordinate allowed after shifting.
+
+    Returns:
+        ``(lo, hi)``, the inclusive range of shifts.
+    """
+    return (math.ceil(-half_width - centre - _SHIFT_MARGIN),
+            math.floor(half_width - centre + _SHIFT_MARGIN))
+
+
+@_jitable
 def _enumeration_basis(
     rows: Sequence[Sequence[float]] | np.ndarray,
     inverse_widths: tuple[float, float, float],
-) -> tuple[tuple[int, int, int, int, int, int],
+) -> tuple[tuple[int, int, int], tuple[int, int, int],
            tuple[float, float, float, float, float, float, float, float, float]]:
     """The lattice decomposed for ``_search_ball``.
 
-    The lattice vectors are taken in a cyclic order that ends with the
-    axis of the widest perpendicular width, which the search enumerates
-    first, and orthogonalised in that order (Gram-Schmidt). With ``y`` the
-    fractional displacement in that order, the Cartesian displacement has
+    The search runs one loop per axis. Level 2 is the outermost loop and
+    level 0 the innermost. The axis with the widest perpendicular width
+    goes at level 2, because it has the fewest shifts to try; the other two
+    follow in cyclic order, although any order would do.
+
+    The lattice vectors are orthogonalised in the order of levels 0, 1, 2
+    (Gram-Schmidt, which writes the lattice as an orthonormal basis times
+    an upper triangular matrix ``R``). With ``y`` the fractional
+    displacement in level order, the Cartesian displacement then has
     components ``R22 * y2``, ``R11 * y1 + R12 * y2`` and
-    ``R00 * y0 + R01 * y1 + R02 * y2`` along the third, second and first
-    orthonormal directions.
+    ``R00 * y0 + R01 * y1 + R02 * y2`` along three orthonormal directions,
+    so each level's range of shifts follows from the levels outside it.
 
     Args:
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
@@ -279,10 +316,10 @@ def _enumeration_basis(
             ``_inverse_widths``.
 
     Returns:
-        ``(order, factors)``. ``order`` holds the axis taken at each of
-        the three levels, then the level of each axis.
-        ``factors`` is ``(1 / R00, R01 / R00, R02 / R00, 1 / R11,
-        R12 / R11, 1 / R22, R11, R12, R22)``.
+        ``(axes, levels, factors)``. ``axes[k]`` is the axis at level
+        ``k``, and ``levels[i]`` the level of axis ``i``. ``factors`` is
+        ``(1 / R00, R01 / R00, R02 / R00, 1 / R11, R12 / R11, 1 / R22,
+        R11, R12, R22)``.
     """
     if inverse_widths[0] <= inverse_widths[1] and inverse_widths[0] <= inverse_widths[2]:
         p0, p1, p2, q0, q1, q2 = 1, 2, 0, 2, 0, 1
@@ -303,7 +340,7 @@ def _enumeration_basis(
     u21 = c[1] - r02 * e01 - r12 * e11
     u22 = c[2] - r02 * e02 - r12 * e12
     r22 = math.sqrt(u20 * u20 + u21 * u21 + u22 * u22)
-    return ((p0, p1, p2, q0, q1, q2),
+    return ((p0, p1, p2), (q0, q1, q2),
             (1.0 / r00, r01 / r00, r02 / r00, 1.0 / r11, r12 / r11, 1.0 / r22,
              r11, r12, r22))
 
@@ -321,10 +358,11 @@ def _search_ball(
 
     Enumerates the images within the ball of the current best distance
     (Fincke-Pohst), one axis at a time from the widest: each shift along
-    an axis leaves less of the distance for the axes after it, so far
-    fewer images are visited than in the box from ``_shift_bounds``, which
-    bounds each axis on its own. Has the same arguments and result as
-    ``_search_box``.
+    an axis leaves less of the distance for the axes after it. In
+    elongated, thin or sheared cells far fewer images are visited than in
+    the box from ``_shift_bounds``, which bounds each axis on its own. Has
+    the same arguments as ``_search_box``, and finds the same smallest
+    squared length.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -338,41 +376,43 @@ def _search_ball(
     Returns:
         The smallest squared length found, at most ``best``.
     """
-    order, factors = _enumeration_basis(rows, inverse_widths)
+    axes, levels, factors = _enumeration_basis(rows, inverse_widths)
     i_r00, r01_r00, r02_r00, i_r11, r12_r11, i_r22, r11, r12, r22 = factors
     r = (r0, r1, r2)
-    y0c, y1c, y2c = r[order[0]], r[order[1]], r[order[2]]
+    y0c, y1c, y2c = r[axes[0]], r[axes[1]], r[axes[2]]
+    # First, the image found by rounding one level at a time from the
+    # outermost (Babai's nearest plane; y2c is already rounded). In
+    # unreduced or sheared cells it is usually far nearer than the rounded
+    # image, and the ball starts small. Every image, here and below, is
+    # scored with _squared_length in the original axis order, so that
+    # results are identical to _search_box's.
+    y1 = y1c + round(-r12_r11 * y2c - y1c)
+    y = (y0c + round(-r01_r00 * y1 - r02_r00 * y2c - y0c), y1, y2c)
+    candidate = _squared_length(y[levels[0]], y[levels[1]], y[levels[2]], rows)
+    if candidate < best:
+        best = candidate
     # Images up to a relative margin beyond the current best are visited,
     # so that rounding in these bounds does not leave out a nearer image in
     # any but nearly singular cells.
     slack = 1.0 + _SHIFT_MARGIN
-    d = math.sqrt(best * slack)
-    for n2 in range(math.ceil(-d * i_r22 - y2c - _SHIFT_MARGIN),
-                    math.floor(d * i_r22 - y2c + _SHIFT_MARGIN) + 1):
+    lo2, hi2 = _shift_range(y2c, math.sqrt(best * slack) * i_r22)
+    for n2 in range(lo2, hi2 + 1):
         y2 = y2c + n2
         t2 = r22 * y2
         rest2 = best * slack - t2 * t2
         if rest2 < 0.0:
             continue
-        s1 = math.sqrt(rest2) * i_r11
-        c1 = r12_r11 * y2
-        for n1 in range(math.ceil(-s1 - c1 - y1c - _SHIFT_MARGIN),
-                        math.floor(s1 - c1 - y1c + _SHIFT_MARGIN) + 1):
+        lo1, hi1 = _shift_range(r12_r11 * y2 + y1c, math.sqrt(rest2) * i_r11)
+        for n1 in range(lo1, hi1 + 1):
             y1 = y1c + n1
             t1 = r11 * y1 + r12 * y2
             rest1 = rest2 - t1 * t1
             if rest1 < 0.0:
                 continue
-            s0 = math.sqrt(rest1) * i_r00
-            c0 = r01_r00 * y1 + r02_r00 * y2
-            for n0 in range(math.ceil(-s0 - c0 - y0c - _SHIFT_MARGIN),
-                            math.floor(s0 - c0 - y0c + _SHIFT_MARGIN) + 1):
-                n = (n0, n1, n2)
-                # Scored with _squared_length in the original axis order, not
-                # from the remaining distance, so that results are identical
-                # to _search_box's.
-                candidate = _squared_length(
-                    r0 + n[order[3]], r1 + n[order[4]], r2 + n[order[5]], rows)
+            lo0, hi0 = _shift_range(r01_r00 * y1 + r02_r00 * y2 + y0c, math.sqrt(rest1) * i_r00)
+            for n0 in range(lo0, hi0 + 1):
+                y = (y0c + n0, y1, y2)
+                candidate = _squared_length(y[levels[0]], y[levels[1]], y[levels[2]], rows)
                 if candidate < best:
                     best = candidate
     return best
@@ -421,8 +461,9 @@ def _pair_distance(
     lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, inverse_widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
         return d
-    # Counted in floats: in a nearly singular cell the count can exceed a
-    # 64-bit integer, which numba would wrap round to a negative number.
+    # Counted in floats: each range fits a 64-bit integer (_MAX_ELONGATION
+    # ensures it), but in a nearly singular cell their product may not, and
+    # numba would wrap it round to an arbitrary number.
     if (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
         return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
     return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths))
@@ -581,8 +622,10 @@ def mic_distance(
     input, the result is the same without numba.
 
     Note:
-        The distance is undefined for non-finite inputs (NaN, inf) or a
-        lattice matrix that is singular or nearly so, and NaN is returned.
+        The distance is undefined for non-finite inputs (NaN, inf), and
+        NaN is returned. NaN is also returned for a lattice matrix that is
+        singular, nearly so, or extremely elongated (an edge more than
+        2**50 times the cell's narrowest perpendicular width).
 
     Args:
         frac1: Fractional coordinates of point 1, a float64 array of
@@ -631,7 +674,8 @@ def paired_mic_distances(
         ValueError: If the coordinate arrays do not both have shape
             (K, 3), or ``lattice_matrix`` does not have shape (3, 3), or
             any of the three is not finite, or the lattice matrix is
-            singular or nearly so.
+            singular, nearly so, or extremely elongated (an edge more than
+            2**50 times the cell's narrowest perpendicular width).
     """
     frac_coords1 = np.ascontiguousarray(frac_coords1, dtype=np.float64)
     frac_coords2 = np.ascontiguousarray(frac_coords2, dtype=np.float64)
@@ -652,7 +696,7 @@ def paired_mic_distances(
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must be finite")
     if not _inverse_widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
-        raise ValueError("lattice_matrix must be non-singular")
+        raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
     return _paired_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
 
 
@@ -678,7 +722,7 @@ def _paired_mic_distances(
         (K,) array of minimum-image distances between
         ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
         coordinates are not finite, and for every pair if the lattice
-        matrix is singular or nearly so.
+        matrix is singular, nearly so, or extremely elongated.
     """
     if HAS_NUMBA:
         kernel = (_paired_mic_distances_parallel
@@ -707,7 +751,7 @@ def _paired_mic_distances_numpy(
         (K,) array of minimum-image distances between
         ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
         coordinates are not finite, and for every pair if the lattice
-        matrix is singular or nearly so.
+        matrix is singular, nearly so, or extremely elongated.
     """
     rows = lattice_matrix.tolist()
     inverse_widths = _inverse_widths(rows)
@@ -715,9 +759,8 @@ def _paired_mic_distances_numpy(
     distances = np.full(frac_displacements.shape[0], np.nan)
     if not _inverse_widths_are_finite(inverse_widths):
         return distances
-    # Non-finite pairs are left out: their shift bounds would be NaN, and
-    # converting NaN to an integer gives a different, meaningless number on
-    # each platform.
+    # Non-finite pairs are left out: their shift bounds would be NaN, which
+    # no search can use.
     finite = np.isfinite(frac_displacements).all(axis=1)
     if finite.all():
         return _distances_from_rounded_images(frac_displacements, rows, inverse_widths)
@@ -733,15 +776,19 @@ def _distances_from_rounded_images(
 ) -> np.ndarray:
     """Exact minimum-image distances for many fractional displacements.
 
-    ``_pair_distance`` vectorised: the rounded image of every
-    displacement, then, for those whose box holds more than one image,
-    every shift of up to one cell each way at once if their box fits
-    within that; ``_search_ball`` for each displacement whose box holds
-    more than ``_MAX_BOX_SEARCH`` shifts, as ``_pair_distance`` does; and
-    for the rest, each shift in their combined box, evaluated for just
-    those whose own box contains it. Each image's arithmetic follows
-    ``_pair_distance`` step for step, and any extra images evaluated are
-    further than the rounded image, so the results are identical.
+    ``_pair_distance`` vectorised. It finds the rounded image of every
+    displacement, then searches the displacements whose box holds more
+    than one image in one of three ways:
+
+    - if the box lies within one cell each way, every such shift at once;
+    - if it holds more than ``_MAX_BOX_SEARCH`` shifts, ``_search_ball``,
+      one displacement at a time, as ``_pair_distance`` does;
+    - otherwise, each shift in the combined box of all such
+      displacements, evaluated for just those whose own box contains it.
+
+    Each image's arithmetic follows ``_pair_distance`` step for step, and
+    any extra images evaluated are further than the rounded image, so the
+    results are identical.
 
     Args:
         frac_displacements: Fractional displacements, shape (K, 3).

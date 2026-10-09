@@ -84,7 +84,7 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
                     PeriodicNeighbourIndex(np.array([[0.1, value, 0.2]]), np.eye(3))
 
     def test_rejects_invalid_lattice(self):
-        """A lattice matrix that is not (3, 3), not finite, or singular raises ValueError."""
+        """A lattice matrix that is not (3, 3), not finite, singular or extremely elongated raises ValueError."""
         lattices = {
             "(2, 2)": np.eye(2),
             "(3, 4)": np.eye(3, 4),
@@ -92,6 +92,8 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
             "coplanar vectors": np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]),
             # Nearly parallel vectors: a cell with almost no volume.
             "nearly parallel vectors": np.array([[1.0, 0.0, 0.0], [1.0, 1e-3, 0.0], [1.0, 0.0, 5e-6]]),
+            # An edge about 2e20 times the cell's narrowest perpendicular width.
+            "extremely elongated": np.array([[1e-10, 0.0, 0.0], [1e10, 1e10, 0.0], [0.0, 0.0, 1.0]]),
             "non-finite": np.diag([1.0, 1.0, np.nan]),
         }
         for name, lattice_matrix in lattices.items():

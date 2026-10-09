@@ -89,7 +89,9 @@ class PeriodicNeighbourIndex:
         Raises:
             ValueError: If ``frac_coords`` does not have shape (N, 3) or is
                 not finite, or ``lattice_matrix`` does not have shape
-                (3, 3), is not finite, or is singular or nearly so.
+                (3, 3), is not finite, or is singular, nearly so, or
+                extremely elongated (an edge more than 2**50 times the
+                cell's narrowest perpendicular width).
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
@@ -103,7 +105,7 @@ class PeriodicNeighbourIndex:
         # here gives them undefined distances. It also keeps sigma_min well
         # above zero: the relative volume is at most 1.5 times sigma_min.
         if not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist())):
-            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
+            raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())

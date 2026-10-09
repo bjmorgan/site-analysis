@@ -336,7 +336,8 @@ class TestUndefinedDistances(unittest.TestCase):
         """A volume that is only rounding error, or tiny next to the edges, gives no widths."""
         cases = {
             "volume from rounding": self.NEARLY_SINGULAR,
-            "flat cell": Lattice.from_parameters(4.0, 5.0, 6.0, 90, 30, 120).matrix,
+            # The third vector is only 2e-8 out of the plane of the other two.
+            "flat cell": np.array([[4.0, 0.0, 0.0], [0.0, 5.0, 0.0], [3.0, 4.0, 2e-8]]),
         }
         for name, lattice_matrix in cases.items():
             with self.subTest(name):

@@ -294,6 +294,52 @@ class TestExactMinimumImage(unittest.TestCase):
                         expected[i], places=12)
 
 
+class TestUndefinedDistances(unittest.TestCase):
+    """Non-finite input and singular lattices give NaN or raise, never hang."""
+
+    SINGULAR = np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+    def test_mic_distance_of_non_finite_input_is_nan(self):
+        """NaN or inf coordinates give NaN, with and without numba."""
+        for has_numba in BACKENDS:
+            for value in (np.nan, np.inf):
+                with self.subTest(numba=has_numba, value=value), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    self.assertTrue(math.isnan(dist_mod.mic_distance(
+                        np.array([value, 0.2, 0.3]), np.zeros(3), 10.0 * np.eye(3))))
+
+    def test_mic_distance_in_singular_lattice_is_nan(self):
+        """A lattice with coplanar vectors gives NaN, with and without numba."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                self.assertTrue(math.isnan(dist_mod.mic_distance(
+                    np.array([0.1, 0.2, 0.3]), np.zeros(3), self.SINGULAR)))
+
+    def test_paired_mic_distances_rejects_singular_lattice(self):
+        """paired_mic_distances raises ValueError for a singular lattice."""
+        with self.assertRaises(ValueError):
+            dist_mod.paired_mic_distances(np.zeros((2, 3)), np.zeros((2, 3)), self.SINGULAR)
+
+    def test_unchecked_paired_distances_give_nan_for_non_finite_pairs(self):
+        """A non-finite pair gives NaN and leaves the other pairs unchanged."""
+        # In this cell the finite pairs need only their rounded image, so
+        # before the guard exists the NaN pair cannot widen the numpy shift
+        # search into an endless loop.
+        lattice_matrix = 10.0 * np.eye(3)
+        frac1 = np.array([[0.1, 0.2, 0.3], [np.nan, 0.2, 0.3], [0.4, 0.3, 0.2]])
+        frac2 = np.zeros((3, 3))
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                result = dist_mod._paired_mic_distances(frac1, frac2, lattice_matrix)
+                self.assertTrue(math.isnan(result[1]))
+                np.testing.assert_array_equal(
+                    result[[0, 2]],
+                    dist_mod._paired_mic_distances(
+                        frac1[[0, 2]], frac2[[0, 2]], lattice_matrix))
+
+
 class TestNumpyFallback(unittest.TestCase):
     """Tests that numpy fallback paths are correct regardless of numba."""
 

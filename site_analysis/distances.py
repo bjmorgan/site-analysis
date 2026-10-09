@@ -112,6 +112,19 @@ def _inverse_widths(
 
 
 @_jitable
+def _widths_are_finite(widths: tuple[float, float, float]) -> bool:
+    """Whether reciprocal widths are finite, which they are for a non-singular cell.
+
+    Args:
+        widths: Reciprocal perpendicular widths, from ``_inverse_widths``.
+
+    Returns:
+        ``True`` if all three are finite.
+    """
+    return widths[0] < math.inf and widths[1] < math.inf and widths[2] < math.inf
+
+
+@_jitable
 def _pair_distance(
     f0: float,
     f1: float,
@@ -138,6 +151,11 @@ def _pair_distance(
     Returns:
         The minimum-image distance.
     """
+    # Non-finite input or a singular lattice: there is no distance to find,
+    # and rounding NaN would raise in Python.
+    if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
+            and _widths_are_finite(widths)):
+        return math.nan
     r0 = f0 - round(f0)
     r1 = f1 - round(f1)
     r2 = f2 - round(f2)
@@ -313,7 +331,8 @@ def mic_distance(
     same without numba.
 
     Note:
-        Behaviour is undefined for non-finite inputs (NaN, inf).
+        The distance is undefined for non-finite inputs (NaN, inf) or a
+        singular lattice matrix, and NaN is returned.
 
     Args:
         frac1: Fractional coordinates of point 1, shape (3,).
@@ -359,7 +378,8 @@ def paired_mic_distances(
     Raises:
         ValueError: If the coordinate arrays do not both have shape
             (K, 3), or ``lattice_matrix`` does not have shape (3, 3), or
-            any of the three is not finite.
+            any of the three is not finite, or the lattice matrix is
+            singular.
     """
     frac_coords1 = np.ascontiguousarray(frac_coords1, dtype=np.float64)
     frac_coords2 = np.ascontiguousarray(frac_coords2, dtype=np.float64)
@@ -379,6 +399,8 @@ def paired_mic_distances(
                         ("lattice_matrix", lattice_matrix)):
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must be finite")
+    if not _widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
+        raise ValueError("lattice_matrix must be non-singular")
     return _paired_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
 
 
@@ -402,7 +424,9 @@ def _paired_mic_distances(
 
     Returns:
         (K,) array of minimum-image distances between
-        ``frac_coords1[k]`` and ``frac_coords2[k]``.
+        ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
+        coordinates are not finite, and for every pair if the lattice
+        matrix is singular.
     """
     if frac_coords1.shape[0] == 0:
         return np.zeros(0)
@@ -431,11 +455,22 @@ def _paired_mic_distances_numpy(
 
     Returns:
         (K,) array of minimum-image distances between
-        ``frac_coords1[k]`` and ``frac_coords2[k]``.
+        ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
+        coordinates are not finite, and for every pair if the lattice
+        matrix is singular.
     """
     rows = lattice_matrix.tolist()
-    return _distances_from_rounded_images(
-        frac_coords1 - frac_coords2, rows, _inverse_widths(rows))
+    widths = _inverse_widths(rows)
+    frac_displacements = frac_coords1 - frac_coords2
+    distances = np.full(frac_displacements.shape[0], np.nan)
+    if not _widths_are_finite(widths):
+        return distances
+    finite = np.isfinite(frac_displacements).all(axis=1)
+    if finite.all():
+        return _distances_from_rounded_images(frac_displacements, rows, widths)
+    distances[finite] = _distances_from_rounded_images(
+        frac_displacements[finite], rows, widths)
+    return distances
 
 
 def _distances_from_rounded_images(

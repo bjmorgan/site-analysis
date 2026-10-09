@@ -18,7 +18,11 @@ from typing import cast
 import numpy as np
 from scipy.spatial import cKDTree
 
-from site_analysis.distances import _paired_mic_distances
+from site_analysis.distances import (
+    _inverse_widths,
+    _inverse_widths_are_finite,
+    _paired_mic_distances,
+)
 
 # The rows of the normalised lattice are unit vectors, so a smallest
 # singular value below this means the lattice vectors are (almost)
@@ -105,7 +109,10 @@ class PeriodicNeighbourIndex:
             raise ValueError("lattice_matrix must be non-singular, but has a zero-length row")
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
-        if self._sigma_min < _MIN_SINGULAR_VALUE:
+        # The second test is the one the distance functions apply, so that no
+        # lattice accepted here gives them undefined distances.
+        if (self._sigma_min < _MIN_SINGULAR_VALUE
+                or not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist()))):
             raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)

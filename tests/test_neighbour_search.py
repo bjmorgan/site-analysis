@@ -90,6 +90,9 @@ class TestPeriodicNeighbourIndexConstruction(unittest.TestCase):
             "(3, 4)": np.eye(3, 4),
             "zero-length vector": np.diag([1.0, 1.0, 0.0]),
             "coplanar vectors": np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]),
+            # No vector is nearly in the plane of the other two, but the
+            # cell has almost no volume, too little for the distances.
+            "nearly parallel vectors": np.array([[1.0, 0.0, 0.0], [1.0, 1e-3, 0.0], [1.0, 0.0, 5e-6]]),
             "non-finite": np.diag([1.0, 1.0, np.nan]),
         }
         for name, lattice_matrix in lattices.items():

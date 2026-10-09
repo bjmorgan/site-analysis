@@ -20,6 +20,16 @@ from site_analysis._compat import HAS_NUMBA
 # cannot leave out an image that might be the nearest.
 _SHIFT_MARGIN = 1e-9
 
+# A cell whose volume is below this fraction of the product of its edge
+# lengths counts as singular: its lattice vectors are (nearly) coplanar, and
+# the boxes of shifts to search would be astronomically large. Real cells
+# are far above it (a rhombohedral cell with 10 degree angles is at 0.03).
+_MIN_RELATIVE_VOLUME = 1e-8
+
+# Floats this large or larger are whole numbers, so they are their own
+# nearest integer. numba rounds to a 64-bit integer, which would overflow.
+_WHOLE_NUMBER_LIMIT = 2.0 ** 52
+
 # Shifts of up to one cell along each axis. Without numba, pairs whose
 # shift box fits within these get all 27 in one array operation, this many
 # pairs at a time, which keeps the temporary arrays to a few megabytes.
@@ -101,8 +111,9 @@ def _inverse_widths(
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
 
     Returns:
-        ``(1 / w_0, 1 / w_1, 1 / w_2)``, or three NaNs if the cell volume
-        is zero or not finite.
+        ``(1 / w_0, 1 / w_1, 1 / w_2)``, or three NaNs if the cell is
+        singular or nearly so (its volume is below ``_MIN_RELATIVE_VOLUME``
+        times the product of its edge lengths) or not finite.
     """
     c0x = rows[1][1] * rows[2][2] - rows[1][2] * rows[2][1]
     c0y = rows[1][2] * rows[2][0] - rows[1][0] * rows[2][2]
@@ -114,7 +125,10 @@ def _inverse_widths(
     c2y = rows[0][2] * rows[1][0] - rows[0][0] * rows[1][2]
     c2z = rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0]
     volume = abs(rows[0][0] * c0x + rows[0][1] * c0y + rows[0][2] * c0z)
-    if not (volume > 0.0 and volume < math.inf):
+    edges = (math.sqrt(rows[0][0] * rows[0][0] + rows[0][1] * rows[0][1] + rows[0][2] * rows[0][2])
+             * math.sqrt(rows[1][0] * rows[1][0] + rows[1][1] * rows[1][1] + rows[1][2] * rows[1][2])
+             * math.sqrt(rows[2][0] * rows[2][0] + rows[2][1] * rows[2][1] + rows[2][2] * rows[2][2]))
+    if not (volume > _MIN_RELATIVE_VOLUME * edges and volume < math.inf):
         return math.nan, math.nan, math.nan
     return (math.sqrt(c0x * c0x + c0y * c0y + c0z * c0z) / volume,
             math.sqrt(c1x * c1x + c1y * c1y + c1z * c1z) / volume,
@@ -122,16 +136,31 @@ def _inverse_widths(
 
 
 @_jitable
-def _widths_are_finite(widths: tuple[float, float, float]) -> bool:
+def _inverse_widths_are_finite(inverse_widths: tuple[float, float, float]) -> bool:
     """Whether reciprocal widths are finite, which they are for a non-singular cell.
 
     Args:
-        widths: Reciprocal perpendicular widths, from ``_inverse_widths``.
+        inverse_widths: Reciprocal perpendicular widths, from ``_inverse_widths``.
 
     Returns:
         ``True`` if all three are finite.
     """
-    return widths[0] < math.inf and widths[1] < math.inf and widths[2] < math.inf
+    return inverse_widths[0] < math.inf and inverse_widths[1] < math.inf and inverse_widths[2] < math.inf
+
+
+@_jitable
+def _wrap(f: float) -> float:
+    """A fractional coordinate minus its nearest whole number.
+
+    Args:
+        f: A finite fractional coordinate or displacement.
+
+    Returns:
+        ``f - round(f)``, in ``[-0.5, 0.5]``, with halves rounded to even.
+    """
+    if abs(f) >= _WHOLE_NUMBER_LIMIT:
+        return 0.0
+    return f - round(f)
 
 
 @_jitable
@@ -140,12 +169,12 @@ def _shift_bounds(
     r1: float,
     r2: float,
     d: float,
-    widths: tuple[float, float, float],
+    inverse_widths: tuple[float, float, float],
 ) -> tuple[int, int, int, int, int, int]:
     """The box of integer shifts that holds every image within a distance.
 
     An image ``r + n`` at most ``d`` away has
-    ``|r_i + n_i| <= d * widths[i]`` on each axis. The ranges are widened
+    ``|r_i + n_i| <= d * inverse_widths[i]`` on each axis. The ranges are widened
     by ``_SHIFT_MARGIN`` so that rounding cannot leave out a shift.
 
     Args:
@@ -153,7 +182,7 @@ def _shift_bounds(
         r1: Second component of the rounded fractional displacement.
         r2: Third component of the rounded fractional displacement.
         d: The distance to search within.
-        widths: The cell's reciprocal perpendicular widths, from
+        inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``.
 
     Returns:
@@ -161,12 +190,12 @@ def _shift_bounds(
         on each axis. Each range contains 0 when ``d`` is the length of
         ``r``.
     """
-    return (math.ceil(-d * widths[0] - r0 - _SHIFT_MARGIN),
-            math.floor(d * widths[0] - r0 + _SHIFT_MARGIN),
-            math.ceil(-d * widths[1] - r1 - _SHIFT_MARGIN),
-            math.floor(d * widths[1] - r1 + _SHIFT_MARGIN),
-            math.ceil(-d * widths[2] - r2 - _SHIFT_MARGIN),
-            math.floor(d * widths[2] - r2 + _SHIFT_MARGIN))
+    return (math.ceil(-d * inverse_widths[0] - r0 - _SHIFT_MARGIN),
+            math.floor(d * inverse_widths[0] - r0 + _SHIFT_MARGIN),
+            math.ceil(-d * inverse_widths[1] - r1 - _SHIFT_MARGIN),
+            math.floor(d * inverse_widths[1] - r1 + _SHIFT_MARGIN),
+            math.ceil(-d * inverse_widths[2] - r2 - _SHIFT_MARGIN),
+            math.floor(d * inverse_widths[2] - r2 + _SHIFT_MARGIN))
 
 
 @_jitable
@@ -176,7 +205,7 @@ def _search_box(
     r2: float,
     best: float,
     rows: Sequence[Sequence[float]] | np.ndarray,
-    widths: tuple[float, float, float],
+    inverse_widths: tuple[float, float, float],
 ) -> float:
     """Smallest squared length among the images that could be nearer.
 
@@ -189,13 +218,13 @@ def _search_box(
         r2: Third component of the rounded fractional displacement.
         best: Squared length of the rounded image.
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
-        widths: The cell's reciprocal perpendicular widths, from
+        inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``.
 
     Returns:
         The smallest squared length found, at most ``best``.
     """
-    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), widths)
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
     for n0 in range(lo0, hi0 + 1):
         for n1 in range(lo1, hi1 + 1):
             for n2 in range(lo2, hi2 + 1):
@@ -211,14 +240,15 @@ def _pair_distance(
     f1: float,
     f2: float,
     rows: Sequence[Sequence[float]] | np.ndarray,
-    widths: tuple[float, float, float],
+    inverse_widths: tuple[float, float, float],
 ) -> float:
     """Exact minimum-image distance for one fractional displacement.
 
     Starts from the image nearest in fractional coordinates,
     ``r = f - round(f)``, at Cartesian distance ``d``. Only the integer
     shifts ``n`` in the box from ``_shift_bounds`` can give a nearer image
-    ``r + n``. In most cells the box holds only ``n = 0``, and ``d`` is the
+    ``r + n``. For pairs closer than about half the cell's smallest
+    perpendicular width the box holds only ``n = 0``, and ``d`` is the
     answer; otherwise ``_search_box`` searches it.
 
     Args:
@@ -226,7 +256,7 @@ def _pair_distance(
         f1: Second component of the fractional displacement.
         f2: Third component of the fractional displacement.
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
-        widths: The cell's reciprocal perpendicular widths, from
+        inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``.
 
     Returns:
@@ -235,17 +265,17 @@ def _pair_distance(
     # Non-finite input or a singular lattice: there is no distance to find,
     # and rounding NaN would raise in Python.
     if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
-            and _widths_are_finite(widths)):
+            and _inverse_widths_are_finite(inverse_widths)):
         return math.nan
-    r0 = f0 - round(f0)
-    r1 = f1 - round(f1)
-    r2 = f2 - round(f2)
+    r0 = _wrap(f0)
+    r1 = _wrap(f1)
+    r2 = _wrap(f2)
     best = _squared_length(r0, r1, r2, rows)
     d = math.sqrt(best)
-    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, widths)
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, inverse_widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
         return d
-    return math.sqrt(_search_box(r0, r1, r2, best, rows, widths))
+    return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
 
 
 if HAS_NUMBA:
@@ -313,7 +343,7 @@ if HAS_NUMBA:
             ``frac_coords1[k]`` and ``frac_coords2[k]``.
         """
         rows = _lattice_rows(lattice_matrix)
-        widths = _inverse_widths(rows)
+        inverse_widths = _inverse_widths(rows)
         n = frac_coords1.shape[0]
         result = np.empty(n)
         for p in range(n):
@@ -321,7 +351,7 @@ if HAS_NUMBA:
                 frac_coords1[p, 0] - frac_coords2[p, 0],
                 frac_coords1[p, 1] - frac_coords2[p, 1],
                 frac_coords1[p, 2] - frac_coords2[p, 2],
-                rows, widths)
+                rows, inverse_widths)
         return result
 
     @numba.njit(cache=True, parallel=True)
@@ -345,7 +375,7 @@ if HAS_NUMBA:
         # Numba cannot compile a tuple of tuples in a parallel function, so
         # the lattice matrix itself stands in for the rows. Its elements
         # are the same floats, so the results equal the serial kernel's.
-        widths = _inverse_widths(lattice_matrix)
+        inverse_widths = _inverse_widths(lattice_matrix)
         n = frac_coords1.shape[0]
         result = np.empty(n)
         for p in numba.prange(n):
@@ -353,7 +383,7 @@ if HAS_NUMBA:
                 frac_coords1[p, 0] - frac_coords2[p, 0],
                 frac_coords1[p, 1] - frac_coords2[p, 1],
                 frac_coords1[p, 2] - frac_coords2[p, 2],
-                lattice_matrix, widths)
+                lattice_matrix, inverse_widths)
         return result
 
 
@@ -366,7 +396,7 @@ _last_lattice: tuple[bytes, list[list[float]], tuple[float, float, float]] = (
     b"", [], (math.nan, math.nan, math.nan))
 
 
-def _rows_and_widths(
+def _rows_and_inverse_widths(
     lattice_matrix: np.ndarray,
 ) -> tuple[list[list[float]], tuple[float, float, float]]:
     """Lattice rows as Python floats, and reciprocal widths, kept for reuse.
@@ -376,7 +406,7 @@ def _rows_and_widths(
             vectors (pymatgen convention).
 
     Returns:
-        ``(rows, widths)`` for ``_pair_distance``.
+        ``(rows, inverse_widths)`` for ``_pair_distance``.
     """
     global _last_lattice
     stored = _last_lattice
@@ -397,16 +427,18 @@ def mic_distance(
 
     The shortest distance between any periodic images of the two points,
     exact for any cell. Uses numba JIT compilation when available for
-    improved performance on repeated single-pair calls; the result is the
-    same without numba.
+    improved performance on repeated single-pair calls; for float64
+    input, the result is the same without numba.
 
     Note:
         The distance is undefined for non-finite inputs (NaN, inf) or a
-        singular lattice matrix, and NaN is returned.
+        lattice matrix that is singular or nearly so, and NaN is returned.
 
     Args:
-        frac1: Fractional coordinates of point 1, shape (3,).
-        frac2: Fractional coordinates of point 2, shape (3,).
+        frac1: Fractional coordinates of point 1, a float64 array of
+            shape (3,).
+        frac2: Fractional coordinates of point 2, a float64 array of
+            shape (3,).
         lattice_matrix: (3, 3) lattice matrix where rows are lattice
             vectors (pymatgen convention: ``lattice.matrix``).
 
@@ -415,11 +447,11 @@ def mic_distance(
     """
     if HAS_NUMBA:
         return float(_mic_distance_numba(frac1, frac2, lattice_matrix))
-    rows, widths = _rows_and_widths(lattice_matrix)
+    rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
     return _pair_distance(float(frac1[0]) - float(frac2[0]),
                           float(frac1[1]) - float(frac2[1]),
                           float(frac1[2]) - float(frac2[2]),
-                          rows, widths)
+                          rows, inverse_widths)
 
 
 def paired_mic_distances(
@@ -449,7 +481,7 @@ def paired_mic_distances(
         ValueError: If the coordinate arrays do not both have shape
             (K, 3), or ``lattice_matrix`` does not have shape (3, 3), or
             any of the three is not finite, or the lattice matrix is
-            singular.
+            singular or nearly so.
     """
     frac_coords1 = np.ascontiguousarray(frac_coords1, dtype=np.float64)
     frac_coords2 = np.ascontiguousarray(frac_coords2, dtype=np.float64)
@@ -469,7 +501,7 @@ def paired_mic_distances(
                         ("lattice_matrix", lattice_matrix)):
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must be finite")
-    if not _widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
+    if not _inverse_widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
         raise ValueError("lattice_matrix must be non-singular")
     return _paired_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
 
@@ -496,7 +528,7 @@ def _paired_mic_distances(
         (K,) array of minimum-image distances between
         ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
         coordinates are not finite, and for every pair if the lattice
-        matrix is singular.
+        matrix is singular or nearly so.
     """
     if frac_coords1.shape[0] == 0:
         return np.zeros(0)
@@ -527,26 +559,26 @@ def _paired_mic_distances_numpy(
         (K,) array of minimum-image distances between
         ``frac_coords1[k]`` and ``frac_coords2[k]``. NaN for a pair whose
         coordinates are not finite, and for every pair if the lattice
-        matrix is singular.
+        matrix is singular or nearly so.
     """
     rows = lattice_matrix.tolist()
-    widths = _inverse_widths(rows)
+    inverse_widths = _inverse_widths(rows)
     frac_displacements = frac_coords1 - frac_coords2
     distances = np.full(frac_displacements.shape[0], np.nan)
-    if not _widths_are_finite(widths):
+    if not _inverse_widths_are_finite(inverse_widths):
         return distances
     finite = np.isfinite(frac_displacements).all(axis=1)
     if finite.all():
-        return _distances_from_rounded_images(frac_displacements, rows, widths)
+        return _distances_from_rounded_images(frac_displacements, rows, inverse_widths)
     distances[finite] = _distances_from_rounded_images(
-        frac_displacements[finite], rows, widths)
+        frac_displacements[finite], rows, inverse_widths)
     return distances
 
 
 def _distances_from_rounded_images(
     frac_displacements: np.ndarray,
     rows: list[list[float]],
-    widths: tuple[float, float, float],
+    inverse_widths: tuple[float, float, float],
 ) -> np.ndarray:
     """Exact minimum-image distances for many fractional displacements.
 
@@ -562,7 +594,7 @@ def _distances_from_rounded_images(
     Args:
         frac_displacements: Fractional displacements, shape (K, 3).
         rows: Lattice vectors as rows, from ``lattice_matrix.tolist()``.
-        widths: The cell's reciprocal perpendicular widths, from
+        inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``.
 
     Returns:
@@ -571,9 +603,9 @@ def _distances_from_rounded_images(
     r = frac_displacements - np.round(frac_displacements)
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
-    inverse_widths = np.array(widths)
-    lo = np.ceil(-d * inverse_widths - r - _SHIFT_MARGIN).astype(np.int64)
-    hi = np.floor(d * inverse_widths - r + _SHIFT_MARGIN).astype(np.int64)
+    per_axis = np.array(inverse_widths)
+    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN).astype(np.int64)
+    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN).astype(np.int64)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
     within_one_cell = np.all((lo[search] >= -1) & (hi[search] <= 1), axis=1)
     # Boxes within one cell each way, which include every long pair in a

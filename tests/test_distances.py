@@ -25,6 +25,11 @@ HARD_CELLS = {
     "cubic lattice in a cell sheared 5x": (
         np.array([[1.0, 0.0, 0.0], [5.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
         @ Lattice.cubic(3.0).matrix),
+    # The same lattice as an ordinary triclinic cell, described by vectors
+    # that are sums of its reduced ones.
+    "triclinic lattice in an unreduced cell": (
+        np.array([[1.0, 1.0, 1.0], [1.0, 1.0, 0.0], [1.0, 0.0, 1.0]])
+        @ Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix),
 }
 
 # The hard cells with their lattice vectors in each cyclic order, so that
@@ -43,7 +48,7 @@ HARD_CELLS_ON_EVERY_AXIS = {
 # ball search mostly skips.
 ELONGATED_CELLS = {
     "orthorhombic 10x10x200": Lattice.orthorhombic(10.0, 10.0, 200.0).matrix,
-    "hexagonal 12x12x60, long axis first": np.roll(Lattice.hexagonal(12.0, 60.0).matrix, 1, axis=0),
+    "hexagonal 12x12x200, long axis first": np.roll(Lattice.hexagonal(12.0, 200.0).matrix, 1, axis=0),
 }
 
 
@@ -399,6 +404,41 @@ class TestSearches(unittest.TestCase):
                 used_search.assert_called_once()
                 unused_search.assert_not_called()
 
+    def test_numpy_batches_use_the_ball_search_for_large_boxes(self):
+        """Without numba, batches send pairs with large boxes to the ball search too."""
+        lattice_matrix = ELONGATED_CELLS["orthorhombic 10x10x200"]
+        frac1 = np.array([[0.1, 0.2, 0.0], [0.1, 0.2, 0.0]])
+        frac2 = np.array([[0.3, 0.4, 0.4], [0.3, 0.4, 0.45]])
+        with patch.object(dist_mod, "HAS_NUMBA", False), \
+                patch.object(dist_mod, "_search_ball", wraps=dist_mod._search_ball) as ball:
+            dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
+        self.assertEqual(ball.call_count, 2)
+
+    def test_huge_boxes_finish(self):
+        """A long pair in a very elongated cell, with a box of 200 million shifts, is found at once."""
+        lattice_matrix = np.diag([1.0, 1.0, 10000.0])
+        frac1, frac2 = np.array([0.5, 0.5, 0.5]), np.zeros(3)
+        # In an orthogonal cell the rounded image is the nearest.
+        expected = math.sqrt(0.25 + 0.25 + 5000.0 ** 2)
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                self.assertEqual(dist_mod.mic_distance(frac1, frac2, lattice_matrix), expected)
+                np.testing.assert_array_equal(
+                    dist_mod.paired_mic_distances(
+                        frac1[np.newaxis], frac2[np.newaxis], lattice_matrix), [expected])
+
+    @unittest.skipUnless(HAS_NUMBA, "numba not installed")
+    def test_box_too_large_to_count_in_64_bits_uses_the_ball(self):
+        """With numba, a box of more shifts than a 64-bit integer holds is searched by the ball."""
+        # A relative volume of 1.04e-8, just above the singular threshold:
+        # this pair's box holds about 3e19 shifts.
+        lattice_matrix = np.array([[1.0, 0.0, 0.0], [-0.5, 0.866, 0.0], [-0.5, -0.866, 1.2e-8]])
+        frac1, frac2 = np.array([0.02, 0.0, 0.001]), np.zeros(3)
+        # The rounded image is the nearest.
+        self.assertAlmostEqual(dist_mod.mic_distance(frac1, frac2, lattice_matrix),
+                               float(np.linalg.norm(frac1 @ lattice_matrix)), places=12)
+
 
 class TestUndefinedDistances(unittest.TestCase):
     """Non-finite input and singular lattices give NaN or raise."""
@@ -546,14 +586,15 @@ class TestNumbaAcceleration(unittest.TestCase):
 
     def test_small_and_large_batches_agree(self):
         """Small batches, on one thread, and large batches, in parallel, give identical distances."""
-        lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
+        # About half the pairs in this cell are searched by the ball.
+        lattice_matrix = HARD_CELLS["cubic lattice in a cell sheared 5x"]
         rng = np.random.default_rng(7)
         n = 2 * dist_mod._PARALLEL_MIN_PAIRS
         frac1 = rng.uniform(-2.0, 3.0, (n, 3))
         frac2 = rng.uniform(-2.0, 3.0, (n, 3))
         small_n = dist_mod._PARALLEL_MIN_PAIRS - 1
-        large = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
-        small = dist_mod.paired_mic_distances(frac1[:small_n], frac2[:small_n], lattice.matrix)
+        large = dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
+        small = dist_mod.paired_mic_distances(frac1[:small_n], frac2[:small_n], lattice_matrix)
         np.testing.assert_array_equal(small, large[:small_n])
 
     def test_small_batches_use_serial_kernel(self):

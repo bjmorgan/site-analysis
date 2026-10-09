@@ -270,7 +270,8 @@ def _enumeration_basis(
     first, and orthogonalised in that order (Gram-Schmidt). With ``y`` the
     fractional displacement in that order, the Cartesian displacement has
     components ``R22 * y2``, ``R11 * y1 + R12 * y2`` and
-    ``R00 * y0 + R01 * y1 + R02 * y2`` along the orthonormal directions.
+    ``R00 * y0 + R01 * y1 + R02 * y2`` along the third, second and first
+    orthonormal directions.
 
     Args:
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
@@ -342,7 +343,8 @@ def _search_ball(
     r = (r0, r1, r2)
     y0c, y1c, y2c = r[order[0]], r[order[1]], r[order[2]]
     # Images up to a relative margin beyond the current best are visited,
-    # so that rounding in these bounds cannot leave out a nearer image.
+    # so that rounding in these bounds does not leave out a nearer image in
+    # any but nearly singular cells.
     slack = 1.0 + _SHIFT_MARGIN
     d = math.sqrt(best * slack)
     for n2 in range(math.ceil(-d * i_r22 - y2c - _SHIFT_MARGIN),
@@ -366,6 +368,9 @@ def _search_ball(
             for n0 in range(math.ceil(-s0 - c0 - y0c - _SHIFT_MARGIN),
                             math.floor(s0 - c0 - y0c + _SHIFT_MARGIN) + 1):
                 n = (n0, n1, n2)
+                # Scored with _squared_length in the original axis order, not
+                # from the remaining distance, so that results are identical
+                # to _search_box's.
                 candidate = _squared_length(
                     r0 + n[order[3]], r1 + n[order[4]], r2 + n[order[5]], rows)
                 if candidate < best:
@@ -416,7 +421,9 @@ def _pair_distance(
     lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, inverse_widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
         return d
-    if (hi0 - lo0 + 1) * (hi1 - lo1 + 1) * (hi2 - lo2 + 1) <= _MAX_BOX_SEARCH:
+    # Counted in floats: in a nearly singular cell the count can exceed a
+    # 64-bit integer, which numba would wrap round to a negative number.
+    if (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
         return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
     return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths))
 
@@ -729,11 +736,12 @@ def _distances_from_rounded_images(
     ``_pair_distance`` vectorised: the rounded image of every
     displacement, then, for those whose box holds more than one image,
     every shift of up to one cell each way at once if their box fits
-    within that, or else each shift in the combined box of the rest,
-    evaluated for just those whose own box contains it. Each image's
-    arithmetic follows ``_pair_distance`` step for step, and any extra
-    images evaluated are further than the rounded image, so the results
-    are identical.
+    within that; ``_search_ball`` for each displacement whose box holds
+    more than ``_MAX_BOX_SEARCH`` shifts, as ``_pair_distance`` does; and
+    for the rest, each shift in their combined box, evaluated for just
+    those whose own box contains it. Each image's arithmetic follows
+    ``_pair_distance`` step for step, and any extra images evaluated are
+    further than the rounded image, so the results are identical.
 
     Args:
         frac_displacements: Fractional displacements, shape (K, 3).
@@ -748,8 +756,8 @@ def _distances_from_rounded_images(
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
     per_axis = np.array(inverse_widths)
-    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN).astype(np.int64)
-    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN).astype(np.int64)
+    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
+    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
     if search.size == 0:
         return np.asarray(np.sqrt(best))
@@ -767,11 +775,19 @@ def _distances_from_rounded_images(
             rp[:, 1, np.newaxis] + _NEIGHBOUR_SHIFTS[:, 1],
             rp[:, 2, np.newaxis] + _NEIGHBOUR_SHIFTS[:, 2], rows)
         best[pairs] = np.minimum(best[pairs], candidate.min(axis=1))
-    # Larger boxes, in thin, sheared or elongated cells: each shift in their
-    # combined box, for just the pairs whose own box contains it.
-    far = search[~within_one_cell]
+    # Larger boxes, in thin, sheared or elongated cells, counted in floats
+    # as they can exceed a 64-bit integer. Those of more than
+    # _MAX_BOX_SEARCH shifts: the ball search, pair by pair, as with numba.
+    rest = search[~within_one_cell]
+    box_size = np.prod(hi[rest] - lo[rest] + 1.0, axis=1)
+    for p in rest[box_size > _MAX_BOX_SEARCH]:
+        best[p] = _search_ball(float(r[p, 0]), float(r[p, 1]), float(r[p, 2]),
+                               float(best[p]), rows, inverse_widths)
+    # The others: each shift in their combined box, for just the pairs whose
+    # own box contains it.
+    far = rest[box_size <= _MAX_BOX_SEARCH]
     if far.size:
-        lo, hi = lo[far], hi[far]
+        lo, hi = lo[far].astype(np.int64), hi[far].astype(np.int64)
         r_search, best_search = r[far], best[far]
         for n0 in range(lo[:, 0].min(), hi[:, 0].max() + 1):
             in_box_0 = (lo[:, 0] <= n0) & (n0 <= hi[:, 0])

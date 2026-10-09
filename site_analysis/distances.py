@@ -20,6 +20,16 @@ from site_analysis._compat import HAS_NUMBA
 # cannot leave out an image that might be the nearest.
 _SHIFT_MARGIN = 1e-9
 
+# Shifts of up to one cell along each axis. Without numba, pairs whose
+# shift box fits within these get all 27 in one array operation, this many
+# pairs at a time, which keeps the temporary arrays to a few megabytes.
+_NEIGHBOUR_SHIFTS = np.array(
+    [[i, j, k] for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)],
+    dtype=np.float64,
+)
+_NEIGHBOUR_SHIFTS.flags.writeable = False
+_NEIGHBOUR_BLOCK = 8192
+
 # Below this many pairs, paired distances are computed on one thread,
 # because dispatching work to numba's thread pool costs more than it saves.
 # Measured on a 10-core machine; the break-even point grows with the number
@@ -125,6 +135,77 @@ def _widths_are_finite(widths: tuple[float, float, float]) -> bool:
 
 
 @_jitable
+def _shift_bounds(
+    r0: float,
+    r1: float,
+    r2: float,
+    d: float,
+    widths: tuple[float, float, float],
+) -> tuple[int, int, int, int, int, int]:
+    """The box of integer shifts that holds every image within a distance.
+
+    An image ``r + n`` at most ``d`` away has
+    ``|r_i + n_i| <= d * widths[i]`` on each axis. The ranges are widened
+    by ``_SHIFT_MARGIN`` so that rounding cannot leave out a shift.
+
+    Args:
+        r0: First component of the rounded fractional displacement.
+        r1: Second component of the rounded fractional displacement.
+        r2: Third component of the rounded fractional displacement.
+        d: The distance to search within.
+        widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``.
+
+    Returns:
+        ``(lo0, hi0, lo1, hi1, lo2, hi2)``, the inclusive range of shifts
+        on each axis. Each range contains 0 when ``d`` is the length of
+        ``r``.
+    """
+    return (math.ceil(-d * widths[0] - r0 - _SHIFT_MARGIN),
+            math.floor(d * widths[0] - r0 + _SHIFT_MARGIN),
+            math.ceil(-d * widths[1] - r1 - _SHIFT_MARGIN),
+            math.floor(d * widths[1] - r1 + _SHIFT_MARGIN),
+            math.ceil(-d * widths[2] - r2 - _SHIFT_MARGIN),
+            math.floor(d * widths[2] - r2 + _SHIFT_MARGIN))
+
+
+@_jitable
+def _search_box(
+    r0: float,
+    r1: float,
+    r2: float,
+    best: float,
+    rows: Sequence[Sequence[float]] | np.ndarray,
+    widths: tuple[float, float, float],
+) -> float:
+    """Smallest squared length among the images that could be nearer.
+
+    Evaluates every shift in the box from ``_shift_bounds``, which holds
+    every image no further away than the rounded image.
+
+    Args:
+        r0: First component of the rounded fractional displacement.
+        r1: Second component of the rounded fractional displacement.
+        r2: Third component of the rounded fractional displacement.
+        best: Squared length of the rounded image.
+        rows: Lattice vectors as rows, indexed ``rows[i][j]``.
+        widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``.
+
+    Returns:
+        The smallest squared length found, at most ``best``.
+    """
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), widths)
+    for n0 in range(lo0, hi0 + 1):
+        for n1 in range(lo1, hi1 + 1):
+            for n2 in range(lo2, hi2 + 1):
+                candidate = _squared_length(r0 + n0, r1 + n1, r2 + n2, rows)
+                if candidate < best:
+                    best = candidate
+    return best
+
+
+@_jitable
 def _pair_distance(
     f0: float,
     f1: float,
@@ -135,10 +216,10 @@ def _pair_distance(
     """Exact minimum-image distance for one fractional displacement.
 
     Starts from the image nearest in fractional coordinates,
-    ``r = f - round(f)``, at Cartesian distance ``d``. Any image ``r + n``
-    no further away has ``|r_i + n_i| <= d * widths[i]``, so only the
-    integer shifts ``n`` in that box can be nearer. In most cells the box
-    holds only ``n = 0``, and ``d`` is the answer.
+    ``r = f - round(f)``, at Cartesian distance ``d``. Only the integer
+    shifts ``n`` in the box from ``_shift_bounds`` can give a nearer image
+    ``r + n``. In most cells the box holds only ``n = 0``, and ``d`` is the
+    answer; otherwise ``_search_box`` searches it.
 
     Args:
         f0: First component of the fractional displacement.
@@ -161,21 +242,10 @@ def _pair_distance(
     r2 = f2 - round(f2)
     best = _squared_length(r0, r1, r2, rows)
     d = math.sqrt(best)
-    lo0 = math.ceil(-d * widths[0] - r0 - _SHIFT_MARGIN)
-    hi0 = math.floor(d * widths[0] - r0 + _SHIFT_MARGIN)
-    lo1 = math.ceil(-d * widths[1] - r1 - _SHIFT_MARGIN)
-    hi1 = math.floor(d * widths[1] - r1 + _SHIFT_MARGIN)
-    lo2 = math.ceil(-d * widths[2] - r2 - _SHIFT_MARGIN)
-    hi2 = math.floor(d * widths[2] - r2 + _SHIFT_MARGIN)
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
         return d
-    for n0 in range(lo0, hi0 + 1):
-        for n1 in range(lo1, hi1 + 1):
-            for n2 in range(lo2, hi2 + 1):
-                candidate = _squared_length(r0 + n0, r1 + n1, r2 + n2, rows)
-                if candidate < best:
-                    best = candidate
-    return math.sqrt(best)
+    return math.sqrt(_search_box(r0, r1, r2, best, rows, widths))
 
 
 if HAS_NUMBA:
@@ -481,10 +551,13 @@ def _distances_from_rounded_images(
     """Exact minimum-image distances for many fractional displacements.
 
     ``_pair_distance`` vectorised: the rounded image of every
-    displacement, then each shift in the combined box of the
-    displacements that need more than one image, evaluated for just
-    those whose own box contains it. The arithmetic follows
-    ``_pair_distance`` step for step, so the results are identical.
+    displacement, then, for those whose box holds more than one image,
+    every shift of up to one cell each way at once if their box fits
+    within that, or else each shift in the combined box of the rest,
+    evaluated for just those whose own box contains it. Each image's
+    arithmetic follows ``_pair_distance`` step for step, and any extra
+    images evaluated are further than the rounded image, so the results
+    are identical.
 
     Args:
         frac_displacements: Fractional displacements, shape (K, 3).
@@ -502,9 +575,26 @@ def _distances_from_rounded_images(
     lo = np.ceil(-d * inverse_widths - r - _SHIFT_MARGIN).astype(np.int64)
     hi = np.floor(d * inverse_widths - r + _SHIFT_MARGIN).astype(np.int64)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
-    if search.size:
-        lo, hi = lo[search], hi[search]
-        r_search, best_search = r[search], best[search]
+    within_one_cell = np.all((lo[search] >= -1) & (hi[search] <= 1), axis=1)
+    # Boxes within one cell each way, which include every long pair in a
+    # near-cubic cell: all 27 such shifts at once, a block of pairs at a
+    # time. A shift outside a pair's own box gives an image further away
+    # than its rounded image, so it cannot change the result.
+    near = search[within_one_cell]
+    for start in range(0, near.size, _NEIGHBOUR_BLOCK):
+        pairs = near[start:start + _NEIGHBOUR_BLOCK]
+        rp = r[pairs]
+        candidate = _squared_length(
+            rp[:, 0, np.newaxis] + _NEIGHBOUR_SHIFTS[:, 0],
+            rp[:, 1, np.newaxis] + _NEIGHBOUR_SHIFTS[:, 1],
+            rp[:, 2, np.newaxis] + _NEIGHBOUR_SHIFTS[:, 2], rows)
+        best[pairs] = np.minimum(best[pairs], candidate.min(axis=1))
+    # Larger boxes, in thin, sheared or elongated cells: each shift in their
+    # combined box, for just the pairs whose own box contains it.
+    far = search[~within_one_cell]
+    if far.size:
+        lo, hi = lo[far], hi[far]
+        r_search, best_search = r[far], best[far]
         for n0 in range(lo[:, 0].min(), hi[:, 0].max() + 1):
             in_box_0 = (lo[:, 0] <= n0) & (n0 <= hi[:, 0])
             for n1 in range(lo[:, 1].min(), hi[:, 1].max() + 1):
@@ -517,7 +607,7 @@ def _distances_from_rounded_images(
                         candidate = _squared_length(
                             rp[:, 0] + n0, rp[:, 1] + n1, rp[:, 2] + n2, rows)
                         best_search[pairs] = np.minimum(best_search[pairs], candidate)
-        best[search] = best_search
+        best[far] = best_search
     return np.asarray(np.sqrt(best))
 
 

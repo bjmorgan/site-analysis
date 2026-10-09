@@ -10,7 +10,9 @@ from site_analysis.distances import paired_mic_distances
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 
-# Orthogonal, monoclinic, hexagonal, triclinic and rhombohedral cells.
+# Orthogonal, monoclinic, hexagonal, triclinic and rhombohedral cells, and
+# a thin hexagonal supercell in which the nearest image of a pair can lie
+# several cells from the image nearest in fractional coordinates (#84).
 CELLS = {
     "cubic": Lattice.cubic(10.0).matrix,
     "orthorhombic": Lattice.orthorhombic(4.0, 9.0, 6.0).matrix,
@@ -18,6 +20,8 @@ CELLS = {
     "hexagonal": Lattice.hexagonal(5.0, 8.0).matrix,
     "triclinic": Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix,
     "rhombohedral": Lattice.from_parameters(6.0, 6.0, 6.0, 60, 60, 60).matrix,
+    "thin hexagonal 1x10x1": (
+        Lattice.hexagonal(3.0, 4.0).matrix * np.array([[1.0], [10.0], [1.0]])),
 }
 
 
@@ -166,6 +170,13 @@ class TestQueryWithin(unittest.TestCase):
             points, lattice_matrix).query_within(query, 0.0)
         np.testing.assert_array_equal(query_idx, rows)
         np.testing.assert_array_equal(point_idx, cols)
+
+    def test_finds_pair_whose_nearest_image_is_several_cells_away(self):
+        """The #84 pair, 6 * sqrt(3) apart, is found with a 10.5 cutoff."""
+        index = PeriodicNeighbourIndex(np.zeros((1, 3)), CELLS["thin hexagonal 1x10x1"])
+        _, point_idx, distances = index.query_within(np.array([[0.0, 0.4, 0.0]]), 10.5)
+        np.testing.assert_array_equal(point_idx, [0])
+        self.assertAlmostEqual(distances[0], 6 * np.sqrt(3), places=12)
 
     def test_invalid_cutoff_raises(self):
         """A negative or NaN cutoff raises ValueError."""

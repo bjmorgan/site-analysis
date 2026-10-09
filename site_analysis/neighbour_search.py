@@ -2,11 +2,11 @@
 
 Provides ``PeriodicNeighbourIndex``, which finds the indexed points
 within a cutoff of each query point, or the nearest indexed point, in a
-periodic cell, including non-orthogonal cells. Distances are those of
-``paired_mic_distances``, over 27 periodic images, and results equal
-those of computing that distance from every query point to every indexed
-point, with memory that scales with the number of points and pairs
-found.
+periodic cell, including non-orthogonal cells. Distances are exact
+minimum-image distances, those of ``paired_mic_distances``, and results
+equal those of computing that distance from every query point to every
+indexed point, with memory that scales with the number of points and
+pairs found.
 """
 
 from __future__ import annotations
@@ -68,13 +68,9 @@ class PeriodicNeighbourIndex:
     ``sigma_min`` times the scaled separation, where ``sigma_min`` is the
     smallest singular value of the lattice matrix with each row scaled to
     unit length. A tree search with radius ``r / sigma_min`` therefore
-    finds every pair within Cartesian distance ``r``. The distance of each
-    candidate pair is then computed over 27 periodic images by
-    ``paired_mic_distances``, so results match that function. These are
-    the true minimum-image distances whenever they are shorter than the
-    cell's smallest perpendicular width, and always in orthogonal cells.
-    In thin or strongly skewed cells, longer distances can be
-    overestimated.
+    finds every pair within Cartesian distance ``r``. The exact
+    minimum-image distance of each candidate pair is then computed by
+    ``paired_mic_distances``, so results match that function.
 
     An index is fixed to the lattice it was built with. Build a new index
     if the lattice changes.

@@ -24,11 +24,6 @@ from site_analysis.distances import (
     _paired_mic_distances,
 )
 
-# The rows of the normalised lattice are unit vectors, so a smallest
-# singular value below this means the lattice vectors are (almost)
-# coplanar.
-_MIN_SINGULAR_VALUE = 1e-8
-
 # Candidate searches are widened slightly so that rounding does not drop a
 # neighbour. Exact distances then remove any extra candidates.
 _RELATIVE_TOLERANCE = 1e-9
@@ -104,16 +99,14 @@ class PeriodicNeighbourIndex:
             )
         if not np.isfinite(self._lattice_matrix).all():
             raise ValueError("lattice_matrix must be finite")
+        # The test the distance functions apply, so that no lattice accepted
+        # here gives them undefined distances. It also keeps sigma_min well
+        # above zero: the relative volume is at most 1.5 times sigma_min.
+        if not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist())):
+            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
-        if np.any(self._lengths == 0.0):
-            raise ValueError("lattice_matrix must be non-singular, but has a zero-length row")
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
-        # The second test is the one the distance functions apply, so that no
-        # lattice accepted here gives them undefined distances.
-        if (self._sigma_min < _MIN_SINGULAR_VALUE
-                or not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist()))):
-            raise ValueError("lattice_matrix must be non-singular, but its rows are (nearly) coplanar")
         self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)
 

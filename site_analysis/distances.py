@@ -21,9 +21,10 @@ from site_analysis._compat import HAS_NUMBA
 _SHIFT_MARGIN = 1e-9
 
 # A cell whose volume is below this fraction of the product of its edge
-# lengths counts as singular: its lattice vectors are (nearly) coplanar, and
-# the boxes of shifts to search would be astronomically large. Real cells
-# are far above it (a rhombohedral cell with 10 degree angles is at 0.03).
+# lengths counts as singular: its lattice vectors are (nearly) coplanar.
+# Real cells are far above it (a rhombohedral cell with 10 degree angles is
+# at 0.026). Cells only a little above it are valid but very flat, and the
+# search for their nearest images can be slow.
 _MIN_RELATIVE_VOLUME = 1e-8
 
 # Floats this large or larger are whole numbers, so they are their own
@@ -78,7 +79,9 @@ def _squared_length(
     """Squared Cartesian length of a fractional displacement.
 
     The products and sums are element-wise and in a fixed order, so that
-    numba, Python floats and numpy arrays all round alike.
+    numba, Python floats and numpy arrays all round alike. A matrix
+    product would not: BLAS can round differently for batches of
+    different sizes.
 
     Args:
         d0: First fractional component, a float or an array.
@@ -106,7 +109,8 @@ def _inverse_widths(
     the length of column ``i`` of the inverse lattice matrix. Any
     displacement of Cartesian length ``d`` has fractional components
     ``|f_i| <= d / w_i``. The volume is computed from the unit vectors
-    along the rows, so scaling a cell up or down cannot overflow it.
+    along the rows, so the test for a singular cell does not depend on
+    the cell's scale.
 
     Args:
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
@@ -119,8 +123,7 @@ def _inverse_widths(
     l0 = math.sqrt(rows[0][0] * rows[0][0] + rows[0][1] * rows[0][1] + rows[0][2] * rows[0][2])
     l1 = math.sqrt(rows[1][0] * rows[1][0] + rows[1][1] * rows[1][1] + rows[1][2] * rows[1][2])
     l2 = math.sqrt(rows[2][0] * rows[2][0] + rows[2][1] * rows[2][1] + rows[2][2] * rows[2][2])
-    if not (l0 > 0.0 and l1 > 0.0 and l2 > 0.0
-            and l0 < math.inf and l1 < math.inf and l2 < math.inf):
+    if not (0.0 < l0 < math.inf and 0.0 < l1 < math.inf and 0.0 < l2 < math.inf):
         return math.nan, math.nan, math.nan
     u00, u01, u02 = rows[0][0] / l0, rows[0][1] / l0, rows[0][2] / l0
     u10, u11, u12 = rows[1][0] / l1, rows[1][1] / l1, rows[1][2] / l1
@@ -539,8 +542,6 @@ def _paired_mic_distances(
         coordinates are not finite, and for every pair if the lattice
         matrix is singular or nearly so.
     """
-    if frac_coords1.shape[0] == 0:
-        return np.zeros(0)
     if HAS_NUMBA:
         kernel = (_paired_mic_distances_parallel
                   if frac_coords1.shape[0] >= _PARALLEL_MIN_PAIRS
@@ -576,6 +577,9 @@ def _paired_mic_distances_numpy(
     distances = np.full(frac_displacements.shape[0], np.nan)
     if not _inverse_widths_are_finite(inverse_widths):
         return distances
+    # Non-finite pairs are left out: their shift bounds would be NaN, and
+    # converting NaN to an integer gives a different, meaningless number on
+    # each platform.
     finite = np.isfinite(frac_displacements).all(axis=1)
     if finite.all():
         return _distances_from_rounded_images(frac_displacements, rows, inverse_widths)
@@ -616,6 +620,8 @@ def _distances_from_rounded_images(
     lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN).astype(np.int64)
     hi = np.floor(d * per_axis - r + _SHIFT_MARGIN).astype(np.int64)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
+    if search.size == 0:
+        return np.asarray(np.sqrt(best))
     within_one_cell = np.all((lo[search] >= -1) & (hi[search] <= 1), axis=1)
     # Boxes within one cell each way, which include every long pair in a
     # near-cubic cell: all 27 such shifts at once, a block of pairs at a

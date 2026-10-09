@@ -17,6 +17,9 @@ BACKENDS = (False, True) if HAS_NUMBA else (False,)
 HARD_CELLS = {
     "thin hexagonal 1x10x1": (
         Lattice.hexagonal(3.0, 4.0).matrix * np.array([[1.0], [10.0], [1.0]])),
+    # The same at a thousandth of the size, so that distances are below 1.
+    "thin hexagonal 1x10x1, scaled by 1e-3": (
+        Lattice.hexagonal(3.0e-3, 4.0e-3).matrix * np.array([[1.0], [10.0], [1.0]])),
     "monoclinic 1x1x8, beta 125": (
         Lattice.monoclinic(4.0, 5.0, 6.0, 125).matrix * np.array([[1.0], [1.0], [8.0]])),
     "cubic lattice in a cell sheared 5x": (
@@ -25,22 +28,30 @@ HARD_CELLS = {
 }
 
 # The hard cells with their lattice vectors in each cyclic order, so that
-# the thin or skewed direction falls on every axis in turn, and a moderately
-# skewed cell in which some pairs need shifts of two cells along an axis.
+# the thin or skewed direction falls on every axis in turn; a moderately
+# skewed cell in which some pairs need shifts of two cells along an axis;
+# and a rhombohedral cell with 10 degree angles, flatter than real cells
+# but far from singular.
 HARD_CELLS_ON_EVERY_AXIS = {
     **{f"{name}, vectors rolled {k}": np.roll(lattice_matrix, k, axis=0)
        for name, lattice_matrix in HARD_CELLS.items() for k in range(3)},
     "skewed 2.7x3.9x8.4": Lattice.from_parameters(2.7, 3.9, 8.4, 100.7, 37.2, 81.3).matrix,
+    "rhombohedral, 10 degree angles": Lattice.from_parameters(5.0, 5.0, 5.0, 10, 10, 10).matrix,
 }
 
 
-def brute_force_distance(frac1, frac2, lattice_matrix, reach=12):
-    """Minimum-image distance from every shift up to ``reach`` cells each way."""
+def brute_force_distances(frac1, frac2, lattice_matrix, reach=12):
+    """Minimum-image distances between pairs, from every shift up to ``reach`` cells each way."""
     shifts = np.array(list(itertools.product(range(-reach, reach + 1), repeat=3)),
                       dtype=float)
-    d = np.asarray(frac1, dtype=float) - np.asarray(frac2, dtype=float)
+    d = np.atleast_2d(np.asarray(frac1, dtype=float) - np.asarray(frac2, dtype=float))
     d -= np.round(d)
-    return float(np.linalg.norm((d + shifts) @ lattice_matrix, axis=1).min())
+    return np.linalg.norm((d[:, np.newaxis, :] + shifts) @ lattice_matrix, axis=2).min(axis=1)
+
+
+def brute_force_distance(frac1, frac2, lattice_matrix, reach=12):
+    """Minimum-image distance between two points, as ``brute_force_distances``."""
+    return float(brute_force_distances(frac1, frac2, lattice_matrix, reach)[0])
 
 
 class TestFracToCart(unittest.TestCase):
@@ -256,8 +267,7 @@ class TestExactMinimumImage(unittest.TestCase):
         for name, lattice_matrix in HARD_CELLS_ON_EVERY_AXIS.items():
             frac1 = rng.uniform(-1.0, 2.0, (100, 3))
             frac2 = rng.uniform(-1.0, 2.0, (100, 3))
-            expected = [brute_force_distance(a, b, lattice_matrix)
-                        for a, b in zip(frac1, frac2)]
+            expected = brute_force_distances(frac1, frac2, lattice_matrix)
             for has_numba in BACKENDS:
                 with self.subTest(cell=name, numba=has_numba), \
                         patch.object(dist_mod, "HAS_NUMBA", has_numba):
@@ -289,7 +299,7 @@ class TestExactMinimumImage(unittest.TestCase):
                 for other in results[1:]:
                     np.testing.assert_array_equal(other, results[0])
 
-    def test_numpy_mic_distance_follows_a_change_of_lattice(self):
+    def test_mic_distance_without_numba_follows_a_change_of_lattice(self):
         """Without numba, each distance uses its own lattice, however lattices alternate."""
         frac1, frac2 = np.array([0.1, 0.2, 0.3]), np.array([0.6, 0.9, 0.8])
         lattices = [Lattice.cubic(5.0).matrix,
@@ -341,25 +351,18 @@ class TestExactMinimumImage(unittest.TestCase):
 
 
 class TestUndefinedDistances(unittest.TestCase):
-    """Non-finite input and singular lattices give NaN or raise, never hang."""
+    """Non-finite input and singular lattices give NaN or raise."""
 
-    SINGULAR = np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    # Singular in exact arithmetic, as the third vector is the sum of the
-    # first two, but rounding leaves a volume of about 1e-14 rather than 0.
-    NEARLY_SINGULAR = (np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]])
-                       @ Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix)
-
-    def test_nearly_singular_lattices_count_as_singular(self):
-        """A volume that is only rounding error, or tiny next to the edges, gives no widths."""
-        cases = {
-            "volume from rounding": self.NEARLY_SINGULAR,
-            # The third vector is only 2e-8 out of the plane of the other two.
-            "flat cell": np.array([[4.0, 0.0, 0.0], [0.0, 5.0, 0.0], [3.0, 4.0, 2e-8]]),
-        }
-        for name, lattice_matrix in cases.items():
-            with self.subTest(name):
-                self.assertFalse(dist_mod._inverse_widths_are_finite(
-                    dist_mod._inverse_widths(lattice_matrix.tolist())))
+    SINGULAR_LATTICES = {
+        "two parallel vectors": np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+        # Singular in exact arithmetic, but rounding leaves a volume of
+        # about 1e-14 rather than 0.
+        "third vector the sum of the others": (
+            np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]])
+            @ Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix),
+        # The third vector is only 2e-8 out of the plane of the other two.
+        "flat cell": np.array([[4.0, 0.0, 0.0], [0.0, 5.0, 0.0], [3.0, 4.0, 2e-8]]),
+    }
 
     def test_mic_distance_of_non_finite_input_is_nan(self):
         """NaN or inf coordinates give NaN, with and without numba."""
@@ -372,34 +375,35 @@ class TestUndefinedDistances(unittest.TestCase):
 
     def test_mic_distance_in_singular_lattice_is_nan(self):
         """A singular or nearly singular lattice gives NaN, with and without numba."""
-        for lattice_matrix in (self.SINGULAR, self.NEARLY_SINGULAR):
+        for name, lattice_matrix in self.SINGULAR_LATTICES.items():
             for has_numba in BACKENDS:
-                with self.subTest(numba=has_numba, lattice=lattice_matrix.tolist()), \
+                with self.subTest(name, numba=has_numba), \
                         patch.object(dist_mod, "HAS_NUMBA", has_numba):
                     self.assertTrue(math.isnan(dist_mod.mic_distance(
                         np.array([0.1, 0.2, 0.3]), np.zeros(3), lattice_matrix)))
 
     def test_paired_mic_distances_rejects_singular_lattice(self):
         """paired_mic_distances raises ValueError for a singular or nearly singular lattice."""
-        for lattice_matrix in (self.SINGULAR, self.NEARLY_SINGULAR):
-            with self.subTest(lattice=lattice_matrix.tolist()):
+        for name, lattice_matrix in self.SINGULAR_LATTICES.items():
+            with self.subTest(name):
                 with self.assertRaises(ValueError):
                     dist_mod.paired_mic_distances(
                         np.zeros((2, 3)), np.zeros((2, 3)), lattice_matrix)
 
     def test_unchecked_paired_distances_give_nan_for_non_finite_pairs(self):
         """A non-finite pair gives NaN and leaves the other pairs unchanged."""
-        # In this cell the finite pairs need only their rounded image, so
-        # without the guard on non-finite pairs the NaN pair still could not
-        # widen the numpy shift search into an endless loop: the test would
-        # fail rather than hang.
+        # Converting NaN to an integer gives a different number on each
+        # platform, so numpy is made to raise on it: without the guard on
+        # non-finite pairs, the test then fails everywhere. In this cell the
+        # finite pairs need only their rounded image, so it cannot hang.
         lattice_matrix = 10.0 * np.eye(3)
         frac1 = np.array([[0.1, 0.2, 0.3], [np.nan, 0.2, 0.3], [0.4, 0.3, 0.2]])
         frac2 = np.zeros((3, 3))
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch.object(dist_mod, "HAS_NUMBA", has_numba):
-                result = dist_mod._paired_mic_distances(frac1, frac2, lattice_matrix)
+                with np.errstate(invalid="raise"):
+                    result = dist_mod._paired_mic_distances(frac1, frac2, lattice_matrix)
                 self.assertTrue(math.isnan(result[1]))
                 np.testing.assert_array_equal(
                     result[[0, 2]],
@@ -412,8 +416,6 @@ class TestNumpyFallback(unittest.TestCase):
 
     def test_mic_distance_numpy_fallback_matches_pymatgen(self):
         """Numpy mic_distance fallback produces correct results."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(42)
         with patch.object(dist_mod, 'HAS_NUMBA', False):
@@ -426,8 +428,6 @@ class TestNumpyFallback(unittest.TestCase):
 
     def test_paired_mic_distances_numpy_fallback_matches_pymatgen(self):
         """Numpy paired_mic_distances fallback produces correct results."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(42)
         frac1 = rng.random((20, 3))
@@ -439,8 +439,6 @@ class TestNumpyFallback(unittest.TestCase):
 
     def test_paired_mic_distances_numpy_fallback_does_not_depend_on_batch(self):
         """Without numba, a pair's distance is the same in batches of any size."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(6.0, 6.0, 6.0, 60, 60, 60)
         rng = np.random.default_rng(43)
         frac1 = rng.uniform(-2.0, 3.0, (1000, 3))
@@ -466,6 +464,19 @@ class TestNumpyFallback(unittest.TestCase):
                 blocked = dist_mod.paired_mic_distances(frac1, frac2, lattice.matrix)
         np.testing.assert_array_equal(blocked, whole)
 
+    def test_numpy_batches_match_single_pairs_in_hard_cells(self):
+        """Without numba, a pair's distance in a batch is its distance on its own, in every hard cell."""
+        rng = np.random.default_rng(87)
+        for name, lattice_matrix in HARD_CELLS_ON_EVERY_AXIS.items():
+            frac1 = rng.uniform(-1.0, 2.0, (100, 3))
+            frac2 = rng.uniform(-1.0, 2.0, (100, 3))
+            with self.subTest(cell=name), patch.object(dist_mod, 'HAS_NUMBA', False):
+                whole = dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
+                single = np.concatenate([
+                    dist_mod.paired_mic_distances(frac1[i:i + 1], frac2[i:i + 1], lattice_matrix)
+                    for i in range(len(frac1))])
+                np.testing.assert_array_equal(single, whole)
+
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
 class TestNumbaAcceleration(unittest.TestCase):
@@ -485,7 +496,6 @@ class TestNumbaAcceleration(unittest.TestCase):
 
     def test_small_and_large_batches_agree(self):
         """Small batches, on one thread, and large batches, in parallel, give identical distances."""
-        import site_analysis.distances as dist_mod
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(7)
         n = 2 * dist_mod._PARALLEL_MIN_PAIRS
@@ -498,8 +508,6 @@ class TestNumbaAcceleration(unittest.TestCase):
 
     def test_small_batches_use_serial_kernel(self):
         """Batches below the parallel threshold use the single-threaded kernel."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
         lattice = Lattice.cubic(10.0)
         rng = np.random.default_rng(8)
         n = dist_mod._PARALLEL_MIN_PAIRS - 1
@@ -510,8 +518,6 @@ class TestNumbaAcceleration(unittest.TestCase):
 
     def test_large_batches_use_parallel_kernel(self):
         """Batches at or above the parallel threshold use the parallel kernel."""
-        from unittest.mock import patch
-        import site_analysis.distances as dist_mod
         lattice = Lattice.cubic(10.0)
         rng = np.random.default_rng(8)
         n = dist_mod._PARALLEL_MIN_PAIRS

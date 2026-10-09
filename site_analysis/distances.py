@@ -105,7 +105,8 @@ def _inverse_widths(
     by the other two lattice vectors, so ``1 / w_i = |a_j x a_k| / V``,
     the length of column ``i`` of the inverse lattice matrix. Any
     displacement of Cartesian length ``d`` has fractional components
-    ``|f_i| <= d / w_i``.
+    ``|f_i| <= d / w_i``. The volume is computed from the unit vectors
+    along the rows, so scaling a cell up or down cannot overflow it.
 
     Args:
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
@@ -115,24 +116,32 @@ def _inverse_widths(
         singular or nearly so (its volume is below ``_MIN_RELATIVE_VOLUME``
         times the product of its edge lengths) or not finite.
     """
-    c0x = rows[1][1] * rows[2][2] - rows[1][2] * rows[2][1]
-    c0y = rows[1][2] * rows[2][0] - rows[1][0] * rows[2][2]
-    c0z = rows[1][0] * rows[2][1] - rows[1][1] * rows[2][0]
-    c1x = rows[2][1] * rows[0][2] - rows[2][2] * rows[0][1]
-    c1y = rows[2][2] * rows[0][0] - rows[2][0] * rows[0][2]
-    c1z = rows[2][0] * rows[0][1] - rows[2][1] * rows[0][0]
-    c2x = rows[0][1] * rows[1][2] - rows[0][2] * rows[1][1]
-    c2y = rows[0][2] * rows[1][0] - rows[0][0] * rows[1][2]
-    c2z = rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0]
-    volume = abs(rows[0][0] * c0x + rows[0][1] * c0y + rows[0][2] * c0z)
-    edges = (math.sqrt(rows[0][0] * rows[0][0] + rows[0][1] * rows[0][1] + rows[0][2] * rows[0][2])
-             * math.sqrt(rows[1][0] * rows[1][0] + rows[1][1] * rows[1][1] + rows[1][2] * rows[1][2])
-             * math.sqrt(rows[2][0] * rows[2][0] + rows[2][1] * rows[2][1] + rows[2][2] * rows[2][2]))
-    if not (volume > _MIN_RELATIVE_VOLUME * edges and volume < math.inf):
+    l0 = math.sqrt(rows[0][0] * rows[0][0] + rows[0][1] * rows[0][1] + rows[0][2] * rows[0][2])
+    l1 = math.sqrt(rows[1][0] * rows[1][0] + rows[1][1] * rows[1][1] + rows[1][2] * rows[1][2])
+    l2 = math.sqrt(rows[2][0] * rows[2][0] + rows[2][1] * rows[2][1] + rows[2][2] * rows[2][2])
+    if not (l0 > 0.0 and l1 > 0.0 and l2 > 0.0
+            and l0 < math.inf and l1 < math.inf and l2 < math.inf):
         return math.nan, math.nan, math.nan
-    return (math.sqrt(c0x * c0x + c0y * c0y + c0z * c0z) / volume,
-            math.sqrt(c1x * c1x + c1y * c1y + c1z * c1z) / volume,
-            math.sqrt(c2x * c2x + c2y * c2y + c2z * c2z) / volume)
+    u00, u01, u02 = rows[0][0] / l0, rows[0][1] / l0, rows[0][2] / l0
+    u10, u11, u12 = rows[1][0] / l1, rows[1][1] / l1, rows[1][2] / l1
+    u20, u21, u22 = rows[2][0] / l2, rows[2][1] / l2, rows[2][2] / l2
+    c0x = u11 * u22 - u12 * u21
+    c0y = u12 * u20 - u10 * u22
+    c0z = u10 * u21 - u11 * u20
+    c1x = u21 * u02 - u22 * u01
+    c1y = u22 * u00 - u20 * u02
+    c1z = u20 * u01 - u21 * u00
+    c2x = u01 * u12 - u02 * u11
+    c2y = u02 * u10 - u00 * u12
+    c2z = u00 * u11 - u01 * u10
+    # The volume of the cell of unit vectors: the cell's volume divided by
+    # the product of its edge lengths.
+    relative_volume = abs(u00 * c0x + u01 * c0y + u02 * c0z)
+    if not relative_volume > _MIN_RELATIVE_VOLUME:
+        return math.nan, math.nan, math.nan
+    return (math.sqrt(c0x * c0x + c0y * c0y + c0z * c0z) / (l0 * relative_volume),
+            math.sqrt(c1x * c1x + c1y * c1y + c1z * c1z) / (l1 * relative_volume),
+            math.sqrt(c2x * c2x + c2y * c2y + c2z * c2z) / (l2 * relative_volume))
 
 
 @_jitable

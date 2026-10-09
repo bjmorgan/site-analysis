@@ -310,6 +310,23 @@ class TestExactMinimumImage(unittest.TestCase):
                     dist_mod.mic_distance(frac1, frac2, lattice_matrix),
                     brute_force_distance(frac1, frac2, lattice_matrix), places=12)
 
+    def test_distances_scale_with_the_cell(self):
+        """Scaling a cell by a very large or small factor scales its distances."""
+        lattice_matrix = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix
+        frac1, frac2 = np.array([0.1, 0.9, 0.5]), np.array([0.9, 0.1, 0.4])
+        for has_numba in BACKENDS:
+            with patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                unscaled = dist_mod.mic_distance(frac1, frac2, lattice_matrix)
+                for scale in (1e-105, 1e105):
+                    with self.subTest(numba=has_numba, scale=scale):
+                        self.assertAlmostEqual(
+                            dist_mod.mic_distance(frac1, frac2, scale * lattice_matrix) / scale,
+                            unscaled, places=12)
+                        np.testing.assert_allclose(
+                            dist_mod.paired_mic_distances(
+                                frac1[np.newaxis], frac2[np.newaxis], scale * lattice_matrix) / scale,
+                            [unscaled], rtol=1e-12)
+
     def test_coordinates_beyond_64_bit_integers(self):
         """Coordinates too large for a 64-bit integer are whole numbers of cells."""
         lattice_matrix = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix

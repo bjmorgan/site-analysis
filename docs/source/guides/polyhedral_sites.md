@@ -64,8 +64,7 @@ trajectory = (TrajectoryBuilder()
     .with_mobile_species("Li")
     .with_structure_alignment(
         align=True,
-        align_species=["O"],      # Align using framework atoms
-        align_metric='rmsd'
+        align_species=["O"]      # Align using framework atoms
     )
     .with_site_mapping(mapping_species=["O"])  # Map vertex atoms
     .with_polyhedral_sites(
@@ -122,8 +121,7 @@ rbs = ReferenceBasedSites(
     reference_structure=ideal_structure,
     target_structure=md_structure,
     align=True,
-    align_species=["O"],
-    align_metric='rmsd'
+    align_species=["O"]
 )
 
 # Create polyhedral sites

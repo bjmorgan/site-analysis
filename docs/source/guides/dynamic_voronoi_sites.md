@@ -76,8 +76,7 @@ trajectory = (TrajectoryBuilder()
     .with_mobile_species("Li")
     .with_structure_alignment(
         align=True,
-        align_species=["O", "P"],  # Align on framework
-        align_metric='rmsd'
+        align_species=["O", "P"]  # Align on framework
     )
     .with_dynamic_voronoi_sites(
         centre_species="Li",
@@ -131,8 +130,7 @@ rbs = ReferenceBasedSites(
     reference_structure=ideal_structure,
     target_structure=md_structure,
     align=True,
-    align_species=["O", "Cl"],
-    align_metric='rmsd'
+    align_species=["O", "Cl"]
 )
 
 # Create dynamic Voronoi sites

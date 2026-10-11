@@ -60,6 +60,8 @@ class _SpeciesGroup:
             reference atoms (infinite for a single atom). If every
             reference atom is within it of a target atom, no two share a
             nearest target atom, so the pairing is one to one.
+        sample: Fractional coordinates of the reference atoms on which
+            candidates are screened, up to ``_SAMPLE_SIZE`` of them.
     """
 
     name: str
@@ -67,6 +69,7 @@ class _SpeciesGroup:
     target: np.ndarray
     index: PeriodicNeighbourIndex
     threshold: float
+    sample: np.ndarray
 
 
 def _threshold(frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> float:
@@ -110,14 +113,13 @@ def _sample_indices(n_atoms: int) -> np.ndarray:
 
 
 def _screen(candidates: np.ndarray,
-        groups: list[_SpeciesGroup],
-        samples: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        groups: list[_SpeciesGroup]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Screen candidate translations on a sample of atoms.
 
     Each candidate first takes one refinement step on the sample: it moves
     by the mean displacement from the sampled atoms to their nearest
     target atoms. That removes the anchor's own displacement from its
-    site, which every candidate from that anchor shares, so each sampled
+    site, which every candidate shares, so each sampled
     atom is then judged on its own displacement, as in the final check.
     The step has not converged, so the screen is slightly stricter than
     the final check.
@@ -125,7 +127,6 @@ def _screen(candidates: np.ndarray,
     Args:
         candidates: Candidate translations, fractional, shape (M, 3).
         groups: The alignment species.
-        samples: For each species, the sampled reference coordinates.
 
     Returns:
         ``(passed, moved, rmsd)``: an (M,) boolean array, true where every
@@ -137,22 +138,22 @@ def _screen(candidates: np.ndarray,
     passed = np.ones(len(candidates), dtype=bool)
     moved = np.empty_like(candidates)
     squares = np.zeros(len(candidates))
-    n_sampled = sum(len(sample) for sample in samples)
+    n_sampled = sum(len(group.sample) for group in groups)
     for start in range(0, len(candidates), _SCREEN_BLOCK):
         block = candidates[start:start + _SCREEN_BLOCK]
         rows = slice(start, start + len(block))
         total = np.zeros_like(block)
-        for group, sample in zip(groups, samples):
-            points = (sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
+        for group in groups:
+            points = (group.sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
             nearest, _ = group.index.query_nearest(points.reshape(-1, 3))
             displacement = group.target[nearest].reshape(points.shape) - points
             total += (displacement - np.round(displacement)).sum(axis=1)
         block = block + total / n_sampled
         moved[rows] = block
-        for group, sample in zip(groups, samples):
-            points = (sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
+        for group in groups:
+            points = (group.sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
             _, distances = group.index.query_nearest(points.reshape(-1, 3))
-            distances = distances.reshape(len(block), len(sample))
+            distances = distances.reshape(len(block), len(group.sample))
             passed[rows] &= (distances < group.threshold).all(axis=1)
             squares[rows] += (distances ** 2).sum(axis=1)
     return passed, moved, np.sqrt(squares / n_sampled)
@@ -242,24 +243,37 @@ def _metrics(distances: np.ndarray) -> dict[str, float]:
     }
 
 
-def _check_deprecated_alignment_options(**options: Any) -> None:
+def _check_deprecated_alignment_options(*,
+        align_metric: str | None,
+        align_algorithm: str | None,
+        align_minimizer_options: dict[str, Any] | None,
+        align_tolerance: float | None) -> None:
     """Warn about deprecated alignment options, which have no effect.
 
     Call this directly from the public function or method that takes the
     options, so that the warning points at the user's call.
 
     Args:
-        **options: The deprecated options by name; ``None`` means not passed.
+        align_metric: Deprecated option; None if not passed.
+        align_algorithm: Deprecated option; None if not passed.
+        align_minimizer_options: Deprecated option; None if not passed.
+        align_tolerance: Deprecated option; None if not passed.
 
     Raises:
-        ValueError: If ``align_metric`` is ``'max_dist'``: alignment now
-            always minimises the RMSD, so honouring it is impossible and
-            ignoring it would change the result.
+        ValueError: If ``align_metric`` is ``'max_dist'`` (in any case):
+            alignment now always minimises the RMSD, so honouring it is
+            impossible and ignoring it would change the result.
     """
-    if options.get("align_metric") == "max_dist":
+    if isinstance(align_metric, str) and align_metric.lower() == "max_dist":
         raise ValueError(
             "align_metric='max_dist' is no longer supported: alignment now always "
             "minimises the RMSD. Delete align_metric from this call.")
+    options = {
+        "align_metric": align_metric,
+        "align_algorithm": align_algorithm,
+        "align_minimizer_options": align_minimizer_options,
+        "align_tolerance": align_tolerance,
+    }
     passed = [name for name, value in options.items() if value is not None]
     if passed:
         names = ", ".join(passed)
@@ -280,7 +294,7 @@ class StructureAligner:
             target_frac_coords: np.ndarray,
             target_species: list[str],
             lattice_matrix: np.ndarray,
-            species: list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
+            species: str | list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
         """Find the translation that superimposes the reference on the target.
 
         Screens candidate translations on a sample of atoms and refines
@@ -296,6 +310,10 @@ class StructureAligner:
         full check (within about a percent of the threshold) can be
         rejected.
 
+        A species with a single atom has no threshold (any translation
+        pairs it one to one), so it cannot reject an alignment; aligning
+        on such a species alone rests the result on one atom.
+
         Args:
             reference_frac_coords: Fractional coordinates of the reference
                 structure, shape (N, 3).
@@ -305,8 +323,8 @@ class StructureAligner:
             target_species: Species string of each target atom.
             lattice_matrix: (3, 3) lattice matrix shared by both
                 structures, rows as lattice vectors.
-            species: Species to align on. If None, all species are used
-                and the compositions must match.
+            species: Species to align on, as a list or a single string. If
+                None, all species are used and the compositions must match.
 
         Returns:
             ``(translation, metrics)``: the fractional translation to add
@@ -316,11 +334,15 @@ class StructureAligner:
             nearest target atom of the same species.
 
         Raises:
-            ValueError: If the structures cannot be compared on these
-                species (see ``_validate_structures``), or the coordinates
-                and species of a structure differ in length, or no
+            ValueError: If ``species`` is None and the compositions differ;
+                if ``species`` is empty; if a species is missing from either
+                structure or its counts differ; if the coordinates and
+                species of a structure differ in length; if the reference
+                has coincident atoms of an alignment species; or if no
                 candidate passes the screen and the full check.
         """
+        if isinstance(species, str):
+            species = [species]
         reference_frac_coords = np.asarray(reference_frac_coords, dtype=float)
         target_frac_coords = np.asarray(target_frac_coords, dtype=float)
         for name, coords, names in (("reference", reference_frac_coords, reference_species),
@@ -339,14 +361,18 @@ class StructureAligner:
             groups.append(_SpeciesGroup(
                 name=name, reference=reference, target=target,
                 index=PeriodicNeighbourIndex(target, lattice_matrix),
-                threshold=_threshold(reference, lattice_matrix)))
-        samples = [group.reference[_sample_indices(len(group.reference))]
-                   for group in groups]
+                threshold=_threshold(reference, lattice_matrix),
+                sample=reference[_sample_indices(len(reference))]))
+        for group in groups:
+            if group.threshold == 0.0:
+                raise ValueError(
+                    f"The reference has coincident {group.name} atoms, so the "
+                    f"{group.name} atoms cannot be matched one to one")
         # The candidates put each reference atom of the species with the
         # fewest atoms on the first target atom of that species.
         anchor_group = min(groups, key=lambda group: (len(group.reference), group.name))
         candidates = (anchor_group.target[0] - anchor_group.reference) % 1.0
-        passed, moved, rmsd = _screen(candidates, groups, samples)
+        passed, moved, rmsd = _screen(candidates, groups)
         survivors = moved[passed]
         # Best fit first: translations that only nearly superimpose the
         # alignment atoms, such as near-symmetries of a slightly distorted
@@ -360,9 +386,10 @@ class StructureAligner:
             thresholds = ", ".join(
                 f"{group.name}: {group.threshold:.3g} A" for group in groups)
             raise ValueError(
-                "No translation brings every alignment atom within half the "
-                f"shortest same-species spacing of a target atom ({thresholds}). "
-                "Align on species whose atoms stay on their sites.")
+                "No candidate translation brings every alignment atom within half the "
+                f"shortest same-species spacing in the reference of a target atom "
+                f"({thresholds}; {len(survivors)} of {len(candidates)} candidates "
+                "passed the screen). Align on species whose atoms stay on their sites.")
         return best[0], _metrics(best[1])
 
     def _validate_structures(self,
@@ -393,7 +420,8 @@ class StructureAligner:
             if ref_counts != target_counts:
                 raise ValueError(
                     f"Structures have different compositions: "
-                    f"{ref_counts} vs {target_counts}"
+                    f"{ref_counts} vs {target_counts}. Pass the alignment species "
+                    "to align on species present in equal numbers in both"
                 )
             species_to_use = sorted(ref_counts.keys())
         else:
@@ -411,6 +439,7 @@ class StructureAligner:
             if ref_count != target_count:
                 raise ValueError(
                     f"Different number of {sp} atoms: "
-                    f"{ref_count} in reference vs {target_count} in target"
+                    f"{ref_count} in reference vs {target_count} in target. "
+                    "Align on species present in equal numbers in both structures"
                 )
         return species_to_use

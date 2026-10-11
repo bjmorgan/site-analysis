@@ -5,7 +5,7 @@ for defining crystallographic sites in a target structure based on coordination
 environments identified in a reference structure. This approach is particularly
 useful for:
 
-1. Analyzing structures with distortions relative to an ideal reference
+1. Analysing structures with distortions relative to an ideal reference
 2. Tracking specific site types across different structures or simulation frames
 3. Creating consistent site definitions across diverse structures
 
@@ -50,15 +50,18 @@ class ReferenceBasedSites:
         target_structure: Target structure where sites will be created.
         aligned_structure: Reference structure translated to match the target
             (None if align=False).
-        translation_vector: Translation vector used for alignment (None if align=False).
-        alignment_metrics: Metrics describing quality of structure alignment (None if align=False).
+        translation_vector: Fractional translation added to the reference
+            coordinates to align them with the target, wrapped into [0, 1)
+            (None if align=False).
+        alignment_metrics: Alignment quality, with keys 'rmsd', 'max_dist'
+            and 'mean_dist' in Angstrom (None if align=False).
     """
     
     def __init__(self, 
             reference_structure: Structure, 
             target_structure: Structure, 
             align: bool = True, 
-            align_species: list[str] | None = None, 
+            align_species: str | list[str] | None = None, 
             align_metric: str | None = None,
             align_algorithm: str | None = None,
             align_minimizer_options: dict[str, Any] | None = None,
@@ -69,7 +72,9 @@ class ReferenceBasedSites:
             reference_structure: Reference structure defining ideal coordination environments
             target_structure: Target structure where sites will be created
             align: Whether to perform structure alignment. Default is True.
-            align_species: Species to use for alignment. Default is all species.
+            align_species: Species to use for alignment, as a list or a single
+                string. Default is all species, in which case both structures
+                must have the same composition.
             align_metric: Deprecated; has no effect, except that 'max_dist'
                 raises ValueError. Will be removed in version 2.0.
             align_algorithm: Deprecated; has no effect. Will be removed in
@@ -86,6 +91,8 @@ class ReferenceBasedSites:
         _check_deprecated_alignment_options(
             align_metric=align_metric, align_algorithm=align_algorithm,
             align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
+        if isinstance(align_species, str):
+            align_species = [align_species]
 
         self.reference_structure = reference_structure
         self.target_structure = target_structure

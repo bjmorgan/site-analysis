@@ -6,6 +6,7 @@ superimposes a reference structure on a target structure.
 
 import math
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from pymatgen.core import Lattice, Structure
@@ -26,6 +27,12 @@ def align_structures(reference, target, species=None):
 def aligned_coords(reference, translation):
     """Reference fractional coordinates after the translation."""
     return (reference.frac_coords + translation) % 1.0
+
+
+def assert_same_translation(found, expected):
+    """The translations agree up to whole lattice vectors."""
+    difference = np.asarray(found) - np.asarray(expected)
+    np.testing.assert_allclose(difference - np.round(difference), 0.0, atol=1e-10)
 
 
 def nearest_same_species_distances(frac_coords, species, target):
@@ -80,7 +87,7 @@ class TestStructureAligner(unittest.TestCase):
         translation = [0.1, 0.2, 0.3]
         target = Structure(lattice, reference.species, reference.frac_coords + translation)
         found, metrics = align_structures(reference, target)
-        np.testing.assert_allclose(found, translation, atol=1e-10)
+        assert_same_translation(found, translation)
         self.assertLess(metrics['rmsd'], 1e-10)
 
     def test_species_based_alignment(self):
@@ -92,7 +99,7 @@ class TestStructureAligner(unittest.TestCase):
         target = Structure(lattice, reference.species,
                            [[0.1, 0.1, 0.1], [0.7, 0.7, 0.7], [0.35, 0.35, 0.35]])
         found, _ = align_structures(reference, target, species=["Na", "K"])
-        np.testing.assert_allclose(found, [0.1, 0.1, 0.1], atol=1e-10)
+        assert_same_translation(found, [0.1, 0.1, 0.1])
 
     def test_different_number_of_atoms(self):
         """Different counts fail for all species, but not for a species whose counts match."""
@@ -103,7 +110,7 @@ class TestStructureAligner(unittest.TestCase):
         with self.assertRaises(ValueError):
             align_structures(reference, target)
         found, _ = align_structures(reference, target, species=["Cl"])
-        np.testing.assert_allclose(found, [0.1, 0.1, 0.1], atol=1e-10)
+        assert_same_translation(found, [0.1, 0.1, 0.1])
 
     def test_different_compositions(self):
         """Structures with different species cannot be aligned on all species."""
@@ -124,7 +131,7 @@ class TestStructureAligner(unittest.TestCase):
                            [[0.1, 0.1, 0.1], [0.65, 0.65, 0.65],
                             [0.35, 0.35, 0.35], [0.85, 0.85, 0.85]])
         found, metrics = align_structures(reference, target)
-        np.testing.assert_allclose(found, [0.1375] * 3, atol=1e-12)
+        assert_same_translation(found, [0.1375] * 3)
         self.assertEqual(set(metrics), {'rmsd', 'max_dist', 'mean_dist'})
 
     def test_pbc_handling(self):
@@ -133,6 +140,7 @@ class TestStructureAligner(unittest.TestCase):
         reference = Structure(lattice, ["Na", "Cl"], [[0.05, 0.05, 0.05], [0.55, 0.55, 0.55]])
         target = Structure(lattice, ["Na", "Cl"], [[0.95, 0.95, 0.95], [0.45, 0.45, 0.45]])
         found, _ = align_structures(reference, target)
+        self.assertTrue(((found >= 0.0) & (found < 1.0)).all())
         species = [site.species_string for site in reference]
         distances = nearest_same_species_distances(
             aligned_coords(reference, found), species, target)
@@ -163,7 +171,7 @@ class TestStructureAligner(unittest.TestCase):
         target = Structure(lattice, species[::-1], coords[::-1])
         found, metrics = align_structures(reference, target)
         self.assertLess(metrics['rmsd'], 1e-10)
-        np.testing.assert_allclose(found, [0.0, 0.0, 0.0], atol=1e-10)
+        assert_same_translation(found, [0.0, 0.0, 0.0])
 
     def test_align_with_permuted_atoms_and_translation(self):
         """Atom order does not matter when the target is also translated."""
@@ -174,7 +182,7 @@ class TestStructureAligner(unittest.TestCase):
         target = Structure(lattice, species[::-1], ((coords + 0.1) % 1.0)[::-1])
         found, metrics = align_structures(reference, target)
         self.assertLess(metrics['rmsd'], 1e-10)
-        np.testing.assert_allclose(found, [0.1, 0.1, 0.1], atol=1e-10)
+        assert_same_translation(found, [0.1, 0.1, 0.1])
 
     def test_validate_structures(self):
         """Test the _validate_structures method with various scenarios."""
@@ -212,6 +220,22 @@ class TestStructureAligner(unittest.TestCase):
                               [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
         with self.assertRaisesRegex(ValueError, "No species to align on"):
             align_structures(structure, structure.copy(), species=[])
+
+    def test_coincident_reference_atoms_raise(self):
+        """Two reference atoms of an alignment species at the same position cannot be matched one to one."""
+        lattice = Lattice.cubic(5.0)
+        reference = Structure(lattice, ["Na", "Na", "Cl"],
+                              [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        with self.assertRaisesRegex(ValueError, "coincident Na atoms"):
+            align_structures(reference, reference.copy())
+
+    def test_species_as_a_string(self):
+        """A single species may be given as a string."""
+        reference = rock_salt((2, 2, 2))
+        target = with_noise(reference, scale=0.05, seed=9, shift=(0.1, 0.0, 0.0))
+        as_string, _ = align_structures(reference, target, species="Na")
+        as_list, _ = align_structures(reference, target, species=["Na"])
+        np.testing.assert_array_equal(as_string, as_list)
 
 
 class TestCandidateSearch(unittest.TestCase):
@@ -286,6 +310,10 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
         threshold = aligner_module._threshold(
             reference.frac_coords[sodium], reference.lattice.matrix)
+        # This relies on the anchor being the first target Na and on
+        # _sample_indices choosing the sample, so a change to either needs
+        # this test updated. It is the only test that fails without the
+        # screen's refinement step.
         # The anchor is the first target Na. Displacing it and a sampled Na
         # in opposite directions puts that Na 1.2 thresholds from its
         # partner at every candidate from the anchor.
@@ -305,7 +333,7 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = next(i for i, site in enumerate(target) if site.species_string == "Na")
         target.replace(sodium, "Na", (target[sodium].frac_coords + [0.25, 0.0, 0.0]) % 1.0)
         with self.assertRaisesRegex(
-                ValueError, r"\(Na: .*\)\. Align on species whose atoms stay on their sites"):
+                ValueError, r"\(Na: .*candidates passed the screen\)\. Align on species whose atoms stay on their sites"):
             align_structures(reference, target, species=["Na"])
 
     def test_a_misplaced_atom_outside_the_sample_raises(self):
@@ -336,6 +364,15 @@ class TestCandidateSearch(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"O: 1\.5 A"):
             align_structures(reference, target)
 
+    def test_screening_in_small_blocks_gives_the_same_result(self):
+        """The block size bounds memory only."""
+        reference = rock_salt()
+        target = with_noise(reference, scale=0.05, seed=10, shift=(0.5 / 3, 0.0, 0.0))
+        expected, _ = align_structures(reference, target)
+        with patch.object(aligner_module, "_SCREEN_BLOCK", 3):
+            found, _ = align_structures(reference, target)
+        np.testing.assert_array_equal(found, expected)
+
     def test_same_input_gives_the_same_result(self):
         """Alignment is deterministic."""
         reference = rock_salt((2, 2, 2))
@@ -353,7 +390,15 @@ class TestDeprecatedAlignmentOptions(unittest.TestCase):
         with self.assertWarnsRegex(
                 FutureWarning, r"align_algorithm, align_tolerance have no effect .* delete them"):
             aligner_module._check_deprecated_alignment_options(
-                align_algorithm="Nelder-Mead", align_tolerance=1e-4)
+                align_metric=None, align_algorithm="Nelder-Mead",
+                align_minimizer_options=None, align_tolerance=1e-4)
+
+    def test_max_dist_is_rejected_in_any_case(self):
+        """'MAX_DIST' is rejected like 'max_dist'."""
+        with self.assertRaisesRegex(ValueError, "max_dist"):
+            aligner_module._check_deprecated_alignment_options(
+                align_metric="MAX_DIST", align_algorithm=None,
+                align_minimizer_options=None, align_tolerance=None)
 
 
 class TestThreshold(unittest.TestCase):

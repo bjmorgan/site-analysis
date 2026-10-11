@@ -1246,29 +1246,32 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			TrajectoryBuilder().with_structure_alignment(align_species=["O"])
 
 	def test_factory_functions_warn_about_deprecated_alignment_options(self):
-		"""The factory functions warn at the caller's line."""
+		"""The factory functions warn once, at the caller's line."""
+		calls = (
+			(create_trajectory_with_polyhedral_sites, "align_algorithm",
+			 "differential_evolution"),
+			(create_trajectory_with_dynamic_voronoi_sites, "align_tolerance", 1e-5))
 		with patch.object(TrajectoryBuilder, "build"):
-			with self.assertWarnsRegex(FutureWarning, "align_algorithm has no effect") as context:
-				create_trajectory_with_polyhedral_sites(
-					self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
-					align_algorithm="differential_evolution")
-			self.assertEqual(context.filename, __file__)
-			with self.assertWarnsRegex(FutureWarning, "align_tolerance has no effect") as context:
-				create_trajectory_with_dynamic_voronoi_sites(
-					self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
-					align_tolerance=1e-5)
-			self.assertEqual(context.filename, __file__)
+			for factory, option, value in calls:
+				with self.subTest(factory.__name__):
+					with warnings.catch_warnings(record=True) as caught:
+						warnings.simplefilter("always")
+						factory(self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
+								**{option: value})
+					future = [w for w in caught if issubclass(w.category, FutureWarning)]
+					self.assertEqual(len(future), 1)
+					self.assertRegex(str(future[0].message), f"{option} has no effect")
+					self.assertEqual(future[0].filename, __file__)
 
-	def test_with_structure_alignment_unit(self):
-		"""Unit test that with_structure_alignment correctly stores alignment parameters."""
-		builder = TrajectoryBuilder()
-		result = builder.with_structure_alignment(align=True, align_species=["Na"])
-		self.assertIs(result, builder)
-		self.assertEqual(builder._align, True)
-		self.assertEqual(builder._align_species, ["Na"])
-		builder.with_structure_alignment(align_species="Ca")
-		self.assertEqual(builder._align_species, ["Ca"],
-						"Single string species should be converted to a list")
+	def test_factory_functions_reject_max_dist_alignment_metric(self):
+		"""The factory functions raise for align_metric='max_dist'."""
+		with patch.object(TrajectoryBuilder, "build"):
+			for factory in (create_trajectory_with_polyhedral_sites,
+							create_trajectory_with_dynamic_voronoi_sites):
+				with self.subTest(factory.__name__):
+					with self.assertRaisesRegex(ValueError, "max_dist"):
+						factory(self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
+								align_metric="max_dist")
 
 	def test_use_reference_centers_passed_to_reference_based_sites(self):
 		"""Test that use_reference_centers parameter is correctly passed to ReferenceBasedSites."""

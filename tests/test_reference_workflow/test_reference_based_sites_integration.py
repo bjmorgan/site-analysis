@@ -499,7 +499,9 @@ class TestPBCImplemenetation(unittest.TestCase):
         
         # Test that the site with Cl 7 among its vertices gets incorrectly unwrapped by legacy method
         # Sites are found by their target vertices: alignment may relabel them.
-        site = next(site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19})
+        matching = [site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19}]
+        self.assertEqual(len(matching), 1, "Expected exactly one site with these vertices")
+        site = matching[0]
         site.assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Check for incorrect unwrapping - coordinates should not match target structure
@@ -533,7 +535,9 @@ class TestPBCImplemenetation(unittest.TestCase):
         
         # Test that the site with Cl 7 among its vertices is correctly handled by new method
         # Sites are found by their target vertices: alignment may relabel them.
-        site = next(site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19})
+        matching = [site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19}]
+        self.assertEqual(len(matching), 1, "Expected exactly one site with these vertices")
+        site = matching[0]
         site.assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Verify vertex coordinates match target structure exactly

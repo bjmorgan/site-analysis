@@ -41,7 +41,7 @@ This implementation:
 2. Creates corresponding sites in the target structure 
 3. Automatically aligns the reference structure to the target structure, ensuring the coordination environments can be correctly mapped between them
 
-The TrajectoryBuilder's `.with_polyhedral_sites()` and `.with_dynamic_voronoi_sites()` methods both utilize the RBS workflow internally, providing a streamlined interface for this functionality.
+The TrajectoryBuilder's `.with_polyhedral_sites()` and `.with_dynamic_voronoi_sites()` methods both utilise the RBS workflow internally, providing a streamlined interface for this functionality.
 
 ## Workflow Mechanism
 
@@ -74,7 +74,7 @@ For the Reference-Based Sites workflow to function correctly, the reference and 
 
 ### Structure Alignment
 
-When working with reference and target structures that have different numbers of mobile atoms (such as when analyzing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
+When working with reference and target structures that have different numbers of mobile atoms (such as when analysing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
 
 **Important**: Structure alignment is **enabled by default** for the reference-based workflow, even if not explicitly configured. To disable alignment, you must explicitly set `align=False`.
 
@@ -133,7 +133,7 @@ trajectory = (TrajectoryBuilder()
     .build())
 ```
 
-The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centers.
+The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centres.
 
 ### Periodic Boundary Condition Handling
 
@@ -190,7 +190,7 @@ For optimal results:
 
 1. **Use crystallographically defined reference structures**
    
-   Use structures with well-defined, regular coordination environments as references. Geometry-optimized structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyze in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately.
+   Use structures with well-defined, regular coordination environments as references. Geometry-optimised structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyse in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately.
 
 2. **Select appropriate alignment species**
    
@@ -198,7 +198,7 @@ For optimal results:
 
 3. **Adjust cutoff parameters as needed**
    
-   Optimize cutoff values based on typical bond distances in your system. Different materials may require different cutoff values to properly identify coordination environments, so some experimentation with these parameters may be necessary.
+   Optimise cutoff values based on typical bond distances in your system. Different materials may require different cutoff values to properly identify coordination environments, so some experimentation with these parameters may be necessary.
 
 ## Troubleshooting
 
@@ -215,16 +215,16 @@ This error occurs when the specified coordination environments cannot be found i
 ### Alignment Errors
 
 ```
-ValueError: Different number of O atoms: 24 in reference vs 20 in target
+ValueError: Structure alignment failed: Different number of O atoms: 24 in reference vs 20 in target. Align on species present in equal numbers in both structures
 ```
 
 This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
 
 ```
-ValueError: Structure alignment failed: No translation brings every alignment atom within half the shortest same-species spacing of a target atom (O: 1.31 A). Align on species whose atoms stay on their sites.
+ValueError: Structure alignment failed: No candidate translation brings every alignment atom within half the shortest same-species spacing in the reference of a target atom (O: 1.31 A; 0 of 49152 candidates passed the screen). Align on species whose atoms stay on their sites.
 ```
 
-No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that no alignment atom in the target has moved from its site by half the shortest spacing between atoms of its species or more.
+No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that no alignment atom in the target has moved from its site by half the shortest spacing between reference atoms of its species or more.
 
 ### Mapping Conflicts
 
@@ -236,12 +236,12 @@ This error occurs when the mapping cannot establish a one-to-one correspondence 
 
 ## Advanced Implementation
 
-For specialized applications requiring more direct control, the RBS workflow can be accessed directly:
+For specialised applications requiring more direct control, the RBS workflow can be accessed directly:
 
 ```python
 from site_analysis.reference_workflow import ReferenceBasedSites
 
-# Initialize the reference-based workflow
+# Initialise the reference-based workflow
 rbs = ReferenceBasedSites(
     reference_structure=reference_structure,
     target_structure=target_structure,
@@ -264,4 +264,4 @@ atoms = atoms_from_structure(target_structure, "Li")
 trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
 ```
 
-This direct approach provides additional control for specialized analyses and can be integrated with custom analysis workflows.
+This direct approach provides additional control for specialised analyses and can be integrated with custom analysis workflows.

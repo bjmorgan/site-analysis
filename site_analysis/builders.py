@@ -959,6 +959,8 @@ def create_trajectory_with_polyhedral_sites(
         align: Whether to perform structure alignment before site mapping.
         align_species: Species to use for structure alignment. If None and 
             mapping_species is specified, mapping_species will be used.
+            If neither is given, all species are used and both structures
+            must have the same composition.
         align_metric: Deprecated; has no effect, except that 'max_dist'
             raises ValueError. Will be removed in version 2.0.
         align_algorithm: Deprecated; has no effect. Will be removed in
@@ -1042,6 +1044,8 @@ def create_trajectory_with_dynamic_voronoi_sites(
         align: Whether to perform structure alignment before site mapping.
         align_species: Species to use for structure alignment. If None and 
             mapping_species is specified, mapping_species will be used.
+            If neither is given, all species are used and both structures
+            must have the same composition.
         align_metric: Deprecated; has no effect, except that 'max_dist'
             raises ValueError. Will be removed in version 2.0.
         align_algorithm: Deprecated; has no effect. Will be removed in

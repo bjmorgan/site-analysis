@@ -4,11 +4,13 @@ These tests verify that StructureAligner correctly aligns reference structures t
 structures by finding optimal translation vectors.
 """
 
+import math
 import unittest
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from unittest.mock import patch, Mock, MagicMock
 
+import site_analysis.reference_workflow.structure_aligner as aligner_module
 from site_analysis.reference_workflow.structure_aligner import StructureAligner
 
 
@@ -722,6 +724,30 @@ class TestStructureAligner(unittest.TestCase):
             aligner._run_minimizer('unknown_algorithm', objective_function, 0.05)
         self.assertIn("unknown_algorithm", str(context.exception))
         self.assertIn("Supported algorithms", str(context.exception))
+
+
+class TestThreshold(unittest.TestCase):
+    """The per-species threshold is half the shortest same-species spacing."""
+
+    def test_half_the_shortest_spacing(self):
+        """In rock salt, half the Na-Na spacing, a / (2 sqrt 2)."""
+        unit = Structure.from_spacegroup(
+            "Fm-3m", Lattice.cubic(4.0), ["Na", "Cl"], [[0, 0, 0], [0.5, 0.5, 0.5]])
+        reference = unit * (2, 2, 2)
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        self.assertAlmostEqual(
+            aligner_module._threshold(reference.frac_coords[sodium], reference.lattice.matrix),
+            4.0 / (2 * math.sqrt(2)), places=12)
+
+    def test_one_atom_has_no_threshold(self):
+        """A single atom maps one to one under any translation."""
+        self.assertEqual(aligner_module._threshold(np.zeros((1, 3)), np.eye(3)), math.inf)
+
+    def test_an_atom_nearer_its_own_image_than_the_others(self):
+        """In a thin cell the search widens past the atom's own images."""
+        self.assertAlmostEqual(aligner_module._threshold(
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]]), np.diag([1.0, 1.0, 20.0])),
+            5.0, places=12)
 
 if __name__ == '__main__':
     unittest.main()

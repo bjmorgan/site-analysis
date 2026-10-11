@@ -17,11 +17,45 @@ This module is a key component of the reference-based workflow for defining
 sites in one structure based on a template from another structure.
 """
 
+import math
 import numpy as np
 from pymatgen.core import Structure
 from typing import Any, Callable
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 from site_analysis.tools import calculate_species_distances
+
+# The densest sphere packing (density pi / sqrt(18)) bounds the closest
+# distance between two points of a periodic structure with N points in
+# volume V by (sqrt(2) * V / N) ** (1/3) = 1.1225 * (V / N) ** (1/3).
+_CLOSEST_PAIR_FACTOR = 1.13
+
+
+def _threshold(frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> float:
+    """Half the shortest minimum-image distance between two different points.
+
+    Args:
+        frac_coords: Fractional coordinates, shape (N, 3).
+        lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
+
+    Returns:
+        Half the shortest distance, or infinity for fewer than two points.
+    """
+    n_points = len(frac_coords)
+    if n_points < 2:
+        return math.inf
+    index = PeriodicNeighbourIndex(frac_coords, lattice_matrix)
+    volume = abs(float(np.linalg.det(lattice_matrix)))
+    # The packing bound covers every pair of points of the periodic
+    # structure, including a point and its own image. If an image is the
+    # nearer, the search widens until two different points are found.
+    cutoff = _CLOSEST_PAIR_FACTOR * (volume / n_points) ** (1 / 3)
+    while True:
+        query_idx, point_idx, distances = index.query_within(frac_coords, cutoff)
+        different = query_idx != point_idx
+        if different.any():
+            return 0.5 * float(distances[different].min())
+        cutoff *= 2.0
+
 
 class StructureAligner:
     """Aligns crystal structures via translation optimization.

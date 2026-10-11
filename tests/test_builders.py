@@ -1,4 +1,5 @@
 import unittest
+import warnings
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
@@ -397,47 +398,26 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		
 	def test_with_structure_alignment(self):
 		"""Test setting alignment options."""
-		# Start with a fresh builder
 		builder = TrajectoryBuilder()
-		
+
 		# Set alignment options with a list of species
-		result = builder.with_structure_alignment(
-			align=False,
-			align_species=["Li"],
-			align_metric="max_dist"
-		)
-		
-		# Verify chaining works
+		result = builder.with_structure_alignment(align=False, align_species=["Li"])
+
+		# Verify chaining works and options were stored
 		self.assertIs(result, builder)
-		
-		# Verify options were stored
 		self.assertEqual(builder._align, False)
 		self.assertEqual(builder._align_species, ["Li"])
-		self.assertEqual(builder._align_metric, "max_dist")
-		
-		# Test with a single species string
-		builder.with_structure_alignment(
-			align=True,
-			align_species="Na",
-			align_metric="rmsd"
-		)
-		
-		# Verify single species string is converted to list
+
+		# A single species string is converted to a list
+		builder.with_structure_alignment(align=True, align_species="Na")
 		self.assertEqual(builder._align, True)
 		self.assertEqual(builder._align_species, ["Na"])
-		self.assertEqual(builder._align_metric, "rmsd")
-		
-		# Test with default align value
-		builder.with_structure_alignment(
-			align_species="Ca",
-			align_metric="max_dist"
-		)
-		
-		# Verify align defaulted to True
+
+		# align defaults to True
+		builder.with_structure_alignment(align_species="Ca")
 		self.assertEqual(builder._align, True)
 		self.assertEqual(builder._align_species, ["Ca"])
-		self.assertEqual(builder._align_metric, "max_dist")
-	
+
 	def test_polyhedral_sites_no_sites_found(self):
 		"""Test that build() raises an error when polyhedral sites return an empty list."""
 		# Configure the builder
@@ -911,11 +891,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				reference_structure=self.reference_structure,
 				target_structure=self.structure,
 				align=True,
-				align_species=["O"],
-				align_metric='rmsd',
-				align_algorithm='Nelder-Mead',
-				align_minimizer_options=None,
-				align_tolerance=0.0001
+				align_species=["O"]
 			)
 			
 			# Verify create_polyhedral_sites was called with the correct mapping parameters
@@ -1071,11 +1047,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				reference_structure=self.reference_structure,
 				target_structure=self.structure,
 				align=True,  # Alignment should be enabled
-				align_species=["O"],  # Should use mapping species for alignment
-				align_metric='rmsd',
-				align_algorithm='Nelder-Mead',
-				align_minimizer_options=None,
-				align_tolerance=0.0001
+				align_species=["O"]  # Should use mapping species for alignment
 			)
 			
 	def test_with_spherical_sites_single_radius(self):
@@ -1189,7 +1161,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._atoms = [Mock(spec=Atom)]
 		builder._align = False
 		builder._align_species = ["Na"]
-		builder._align_metric = "max_dist"
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
 
@@ -1210,7 +1181,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			self.assertIsNone(builder._atoms)
 			self.assertTrue(builder._align)  # Default is True
 			self.assertIsNone(builder._align_species)
-			self.assertEqual(builder._align_metric, 'rmsd')
 			self.assertIsNone(builder._mapping_species)
 			self.assertEqual(builder._site_generators, [])
 			
@@ -1226,7 +1196,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._atoms = [Mock(spec=Atom)]
 		builder._align = False
 		builder._align_species = ["Na"]
-		builder._align_metric = "max_dist"
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
 		
@@ -1241,7 +1210,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertIsNone(builder._atoms)
 		self.assertTrue(builder._align)  # Default is True
 		self.assertIsNone(builder._align_species)
-		self.assertEqual(builder._align_metric, 'rmsd')
 		self.assertIsNone(builder._mapping_species)
 		self.assertEqual(builder._site_generators, [])
 		
@@ -1255,210 +1223,53 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Verify reset() was called exactly once
 			mock_reset.assert_called_once()
 			
+	def test_deprecated_alignment_options_warn(self):
+		"""Each deprecated option raises FutureWarning at the caller's line and is not stored."""
+		for option, value in (("align_metric", "rmsd"), ("align_algorithm", "differential_evolution"),
+							  ("align_minimizer_options", {"popsize": 20}), ("align_tolerance", 1e-5)):
+			with self.subTest(option):
+				builder = TrajectoryBuilder()
+				with self.assertWarnsRegex(FutureWarning, f"{option} has no effect") as context:
+					builder.with_structure_alignment(**{option: value})
+				self.assertEqual(context.filename, __file__)
+				self.assertFalse(hasattr(builder, "_" + option))
+
+	def test_max_dist_alignment_metric_raises(self):
+		"""Alignment no longer minimises the largest distance, so asking for it is an error."""
+		with self.assertRaisesRegex(ValueError, "max_dist"):
+			TrajectoryBuilder().with_structure_alignment(align_metric="max_dist")
+
+	def test_alignment_without_deprecated_options_does_not_warn(self):
+		"""The default call raises no warning."""
+		with warnings.catch_warnings():
+			warnings.simplefilter("error")
+			TrajectoryBuilder().with_structure_alignment(align_species=["O"])
+
+	def test_factory_functions_warn_about_deprecated_alignment_options(self):
+		"""The factory functions warn at the caller's line."""
+		with patch.object(TrajectoryBuilder, "build"):
+			with self.assertWarnsRegex(FutureWarning, "align_algorithm has no effect") as context:
+				create_trajectory_with_polyhedral_sites(
+					self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
+					align_algorithm="differential_evolution")
+			self.assertEqual(context.filename, __file__)
+			with self.assertWarnsRegex(FutureWarning, "align_tolerance has no effect") as context:
+				create_trajectory_with_dynamic_voronoi_sites(
+					self.structure, self.reference_structure, "Li", "Li", "O", 2.0, 4,
+					align_tolerance=1e-5)
+			self.assertEqual(context.filename, __file__)
+
 	def test_with_structure_alignment_unit(self):
 		"""Unit test that with_structure_alignment correctly stores alignment parameters."""
-		# Create a test builder
 		builder = TrajectoryBuilder()
-		
-		# Define test parameters
-		align = True
-		align_species = ["Na"]
-		align_metric = "max_dist"
-		align_algorithm = "differential_evolution"
-		align_minimizer_options = {"popsize": 20, "maxiter": 500}
-		
-		# Call with_structure_alignment with our parameters
-		result = builder.with_structure_alignment(
-			align=align,
-			align_species=align_species,
-			align_metric=align_metric,
-			align_algorithm=align_algorithm,
-			align_minimizer_options=align_minimizer_options
-		)
-		
-		# Verify method returns self for chaining
+		result = builder.with_structure_alignment(align=True, align_species=["Na"])
 		self.assertIs(result, builder)
-		
-		# Verify parameters are correctly stored in instance variables
-		self.assertEqual(builder._align, align)
-		self.assertEqual(builder._align_species, align_species)
-		self.assertEqual(builder._align_metric, align_metric)
-		self.assertEqual(builder._align_algorithm, align_algorithm)
-		self.assertEqual(builder._align_minimizer_options, align_minimizer_options)
-		
-		# Test with single string for align_species
+		self.assertEqual(builder._align, True)
+		self.assertEqual(builder._align_species, ["Na"])
 		builder.with_structure_alignment(align_species="Ca")
-		self.assertEqual(builder._align_species, ["Ca"], 
+		self.assertEqual(builder._align_species, ["Ca"],
 						"Single string species should be converted to a list")
-						
-	def test_factory_functions_with_alignment_options(self):
-		"""Test that factory functions accept and pass alignment algorithm, options, and tolerance."""
-		# Mock necessary classes
-		with patch('site_analysis.builders.TrajectoryBuilder') as MockBuilder, \
-			patch('site_analysis.builders.Trajectory'):
-			
-			# Configure mock builder
-			mock_builder = Mock()
-			MockBuilder.return_value = mock_builder
-			
-			# Configure method chaining
-			for method in ['with_structure', 'with_reference_structure', 'with_mobile_species',
-						'with_structure_alignment', 'with_polyhedral_sites', 'build']:
-				setattr(mock_builder, method, Mock(return_value=mock_builder))
-			
-			# Test with polyhedral sites
-			algorithm = 'differential_evolution'
-			minimizer_options = {'popsize': 20, 'maxiter': 500}
-			custom_tolerance = 1e-5  # Add custom tolerance
-			
-			create_trajectory_with_polyhedral_sites(
-				structure=Mock(spec=Structure),
-				reference_structure=Mock(spec=Structure),
-				mobile_species="Li",
-				centre_species="O",
-				vertex_species="Li",
-				cutoff=2.0,
-				n_vertices=4,
-				label="test",
-				align=True,
-				align_species=["O"],
-				align_metric="rmsd",
-				align_algorithm=algorithm,
-				align_minimizer_options=minimizer_options,
-				align_tolerance=custom_tolerance  
-			)
-			
-			# Verify with_structure_alignment was called with all parameters
-			mock_builder.with_structure_alignment.assert_called_once()
-			args, kwargs = mock_builder.with_structure_alignment.call_args
-			self.assertEqual(kwargs['align'], True)
-			self.assertEqual(kwargs['align_species'], ["O"])
-			self.assertEqual(kwargs['align_metric'], "rmsd")
-			self.assertEqual(kwargs['align_algorithm'], algorithm)
-			self.assertEqual(kwargs['align_minimizer_options'], minimizer_options)
-			self.assertEqual(kwargs['align_tolerance'], custom_tolerance)  
-			
-			# Reset mocks for dynamic voronoi sites test
-			mock_builder.reset_mock()
-			for method in ['with_structure', 'with_reference_structure', 'with_mobile_species',
-						'with_structure_alignment', 'with_dynamic_voronoi_sites', 'build']:
-				setattr(mock_builder, method, Mock(return_value=mock_builder))
-			
-			# Test with dynamic voronoi sites
-			create_trajectory_with_dynamic_voronoi_sites(
-				structure=Mock(spec=Structure),
-				reference_structure=Mock(spec=Structure),
-				mobile_species="Li",
-				centre_species="O",
-				reference_species="Li",
-				cutoff=2.0,
-				n_reference=4,
-				label="test",
-				align=True,
-				align_species=["O"],
-				align_metric="rmsd",
-				align_algorithm=algorithm,
-				align_minimizer_options=minimizer_options,
-				align_tolerance=custom_tolerance  
-			)
-			
-			# Verify with_structure_alignment was called with all parameters
-			mock_builder.with_structure_alignment.assert_called_once()
-			args, kwargs = mock_builder.with_structure_alignment.call_args
-			self.assertEqual(kwargs['align_tolerance'], custom_tolerance)  
-			
-	def test_tolerance_passed_to_reference_based_sites(self):
-		"""Test that align_tolerance is correctly passed to ReferenceBasedSites."""
-		# Configure the builder
-		builder = TrajectoryBuilder()
-		builder.with_structure(self.structure)
-		builder.with_reference_structure(self.reference_structure)
-		builder.with_mobile_species("Li")
-		
-		# Set a custom tolerance
-		custom_tolerance = 1e-5
-		builder.with_structure_alignment(
-			align=True, 
-			align_species=["O"],
-			align_tolerance=custom_tolerance
-		)
-		
-		# Set up polyhedral sites
-		builder.with_polyhedral_sites(
-			centre_species="Li",
-			vertex_species="O",
-			cutoff=2.0,
-			n_vertices=4,
-			label="tetrahedral"
-		)
-		
-		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
-			
-			# Configure mock to return a mock RBS instance
-			mock_rbs = Mock()
-			mock_rbs_class.return_value = mock_rbs
-			
-			# Configure mock to return site objects
-			mock_sites = [Mock(), Mock()]
-			mock_rbs.create_polyhedral_sites.return_value = mock_sites
-			
-			# Call build to trigger site creation
-			builder.build()
-			
-			# Verify ReferenceBasedSites was created with the correct tolerance
-			mock_rbs_class.assert_called_once()
-			_, kwargs = mock_rbs_class.call_args
-			self.assertEqual(kwargs["align_tolerance"], custom_tolerance)
-			
-	def test_tolerance_passed_to_reference_based_sites_for_dynamic_voronoi(self):
-		"""Test that align_tolerance is correctly passed to ReferenceBasedSites for dynamic Voronoi sites."""
-		# Configure the builder
-		builder = TrajectoryBuilder()
-		builder.with_structure(self.structure)
-		builder.with_reference_structure(self.reference_structure)
-		builder.with_mobile_species("Li")
-		
-		# Set a custom tolerance
-		custom_tolerance = 1e-5
-		builder.with_structure_alignment(
-			align=True, 
-			align_species=["O"],
-			align_tolerance=custom_tolerance
-		)
-		
-		# Set up dynamic Voronoi sites
-		builder.with_dynamic_voronoi_sites(
-			centre_species="Li",
-			reference_species="O",
-			cutoff=2.0,
-			n_reference=4,
-			label="tetrahedral"
-		)
-		
-		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
-			
-			# Configure mock to return a mock RBS instance
-			mock_rbs = Mock()
-			mock_rbs_class.return_value = mock_rbs
-			
-			# Configure mock to return site objects
-			mock_sites = [Mock(), Mock()]
-			mock_rbs.create_dynamic_voronoi_sites.return_value = mock_sites
-			
-			# Call build to trigger site creation
-			builder.build()
-			
-			# Verify ReferenceBasedSites was created with the correct tolerance
-			mock_rbs_class.assert_called_once()
-			_, kwargs = mock_rbs_class.call_args
-			self.assertEqual(kwargs["align_tolerance"], custom_tolerance)
-		
+
 	def test_use_reference_centers_passed_to_reference_based_sites(self):
 		"""Test that use_reference_centers parameter is correctly passed to ReferenceBasedSites."""
 		# Configure the builder

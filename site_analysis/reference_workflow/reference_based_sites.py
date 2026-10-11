@@ -25,7 +25,8 @@ from typing import Any
 
 from pymatgen.core import Structure
 
-from site_analysis.reference_workflow.structure_aligner import StructureAligner
+from site_analysis.reference_workflow.structure_aligner import (
+    StructureAligner, check_deprecated_alignment_options)
 from site_analysis.reference_workflow.coord_finder import CoordinationEnvironmentFinder
 from site_analysis.reference_workflow.index_mapper import IndexMapper
 from site_analysis.reference_workflow.site_factory import SiteFactory
@@ -58,10 +59,10 @@ class ReferenceBasedSites:
             target_structure: Structure, 
             align: bool = True, 
             align_species: list[str] | None = None, 
-            align_metric: str = 'rmsd',
-            align_algorithm: str = 'Nelder-Mead',
+            align_metric: str | None = None,
+            align_algorithm: str | None = None,
             align_minimizer_options: dict[str, Any] | None = None,
-            align_tolerance: float = 1e-4) -> None:
+            align_tolerance: float | None = None) -> None:
         """Initialise ReferenceBasedSites with reference and target structures.
         
         Args:
@@ -69,12 +70,19 @@ class ReferenceBasedSites:
             target_structure: Target structure where sites will be created
             align: Whether to perform structure alignment. Default is True.
             align_species: Species to use for alignment. Default is all species.
-            align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
-            align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
-                            Default is 'Nelder-Mead'.
-            align_minimizer_options: Additional options for the minimizer. Default is None.
-            align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
+            align_metric: Deprecated; has no effect, except that 'max_dist'
+                raises ValueError. Will be removed in version 2.0.
+            align_algorithm: Deprecated; has no effect. Will be removed in
+                version 2.0.
+            align_minimizer_options: Deprecated; has no effect. Will be
+                removed in version 2.0.
+            align_tolerance: Deprecated; has no effect. Will be removed in
+                version 2.0.
         """
+        check_deprecated_alignment_options(
+            align_metric=align_metric, align_algorithm=align_algorithm,
+            align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
+
         self.reference_structure = reference_structure
         self.target_structure = target_structure
 

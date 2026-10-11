@@ -18,7 +18,9 @@ any size, without symmetry information.
 """
 
 import math
+import warnings
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -242,6 +244,35 @@ def _metrics(distances: np.ndarray) -> dict[str, float]:
         'max_dist': float(distances.max()),
         'mean_dist': float(distances.mean()),
     }
+
+
+def check_deprecated_alignment_options(**options: Any) -> None:
+    """Warn about deprecated alignment options, which have no effect.
+
+    Call this directly from the public function or method that takes the
+    options, so that the warning points at the user's call.
+
+    Args:
+        **options: The deprecated options by name; ``None`` means not passed.
+
+    Raises:
+        ValueError: If ``align_metric`` is ``'max_dist'``: alignment now
+            always minimises the RMSD, so honouring it is impossible and
+            ignoring it would change the result.
+    """
+    if options.get("align_metric") == "max_dist":
+        raise ValueError(
+            "align_metric='max_dist' is no longer supported: alignment now always "
+            "minimises the RMSD. Delete align_metric from this call.")
+    passed = [name for name, value in options.items() if value is not None]
+    if passed:
+        names = ", ".join(passed)
+        verb = "has" if len(passed) == 1 else "have"
+        warnings.warn(
+            f"{names} {verb} no effect and will be removed in version 2.0; delete "
+            f"{'it' if len(passed) == 1 else 'them'} from this call. Alignment now "
+            "always finds the best-fitting translation, whatever the origin offset.",
+            FutureWarning, stacklevel=3)
 
 
 class StructureAligner:

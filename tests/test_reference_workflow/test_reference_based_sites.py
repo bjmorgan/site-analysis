@@ -179,6 +179,21 @@ class TestReferenceBasedSites(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Structure alignment failed: no translation"):
                 ReferenceBasedSites(self.reference, self.target, align=True)
 
+    def test_deprecated_alignment_options_warn(self):
+        """The deprecated options warn at the caller's line and do not reach the aligner."""
+        with self.structure_aligner_patch:
+            with self.assertWarnsRegex(FutureWarning, "align_algorithm has no effect") as context:
+                ReferenceBasedSites(self.reference, self.target, align=True,
+                                    align_algorithm="differential_evolution")
+            self.assertEqual(context.filename, __file__)
+            _, kwargs = self.mock_structure_aligner.align.call_args
+            self.assertEqual(kwargs, {'species': None})
+
+    def test_max_dist_alignment_metric_raises(self):
+        """Alignment no longer minimises the largest distance, so asking for it is an error."""
+        with self.assertRaisesRegex(ValueError, "max_dist"):
+            ReferenceBasedSites(self.reference, self.target, align=True, align_metric="max_dist")
+
     def test_find_coordination_environments(self):
         """Test the _find_coordination_environments method."""
         with self.coord_finder_patch:

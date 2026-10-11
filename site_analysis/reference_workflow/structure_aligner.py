@@ -128,15 +128,6 @@ def _screen(candidates: np.ndarray,
     screen.
     Atoms outside the sample are checked only after refinement.
 
-    Displacements are wrapped by rounding, which gives the exact
-    minimum-image vector whenever it is shorter than half the cell's
-    narrowest width: then every fractional component is below one half.
-    The displacements screened here are at most about half the
-    same-species spacing, so rounding could pick another image only in a
-    cell narrower than that spacing. The final check measures exact
-    minimum-image distances, so a wrong image could reject a candidate
-    but never accept a wrong alignment.
-
     Args:
         candidates: Candidate translations, fractional, shape (M, 3).
         groups: The alignment species.

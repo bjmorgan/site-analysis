@@ -102,7 +102,6 @@ class ReferenceBasedSites:
         self._ref_lattice_matrix: np.ndarray = reference_structure.lattice.matrix
         self._ref_species = [s.species_string for s in reference_structure]
         self._target_frac_coords = target_structure.frac_coords
-        self._target_lattice_matrix = target_structure.lattice.matrix
         self._target_species = [s.species_string for s in target_structure]
 
         # Initialise alignment attributes
@@ -139,14 +138,14 @@ class ReferenceBasedSites:
         """Create PolyhedralSite objects based on coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
+            center_species: Species at the centre of coordination environments
             vertex_species: Species at vertices of coordination environments
             cutoff: Cutoff distance for coordination environment (required)
             n_vertices: Number of vertices per environment (required)
             label: Label to apply to all created sites. Default is None.
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
-            use_reference_centers: Whether to use reference centers for 
+            use_reference_centers: Whether to use reference centres for 
                 PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
                 Default is True.
             
@@ -168,7 +167,7 @@ class ReferenceBasedSites:
         # Check we do not have repeat periodic images in the coordination environments
         self._validate_unique_environments(ref_environments)
         
-        # Calculate reference centers if requested
+        # Calculate reference centres if requested
         if use_reference_centers:
             center_indices = list(ref_environments.keys())
             reference_centers = self._calculate_reference_centers_from_indices(center_indices)
@@ -204,14 +203,14 @@ class ReferenceBasedSites:
         """Create DynamicVoronoiSite objects based on coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
-            reference_species: Species of reference atoms used to define the dynamic site centers
+            center_species: Species at the centre of coordination environments
+            reference_species: Species of reference atoms used to define the dynamic site centres
             cutoff: Cutoff distance for finding reference atoms (required)
             n_reference: Number of reference atoms per site (required)
             label: Label to apply to all created sites. Default is None.
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
-            use_reference_centers: Whether to use reference centers for 
+            use_reference_centers: Whether to use reference centres for 
                 PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
                 Default is True.
             
@@ -230,7 +229,7 @@ class ReferenceBasedSites:
         # Check we do not have repeat periodic images in the coordination environments
         self._validate_unique_environments(ref_environments)
         
-        # Calculate reference centers if requested
+        # Calculate reference centres if requested
         if use_reference_centers:
             center_indices = list(ref_environments.keys())
             reference_centers = self._calculate_reference_centers_from_indices(center_indices)
@@ -293,14 +292,14 @@ class ReferenceBasedSites:
         """Find coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
+            center_species: Species at the centre of coordination environments
             coordination_species: Coordination atom species
             cutoff: Cutoff distance for coordination environment
             n_coord: Number of coordination atoms per environment
             
         Returns:
-            Dictionary mapping center atom indices to lists of coordinating atom indices.
-            Keys are indices of center atoms, values are lists of coordinating atom indices.
+            Dictionary mapping centre atom indices to lists of coordinating atom indices.
+            Keys are indices of centre atoms, values are lists of coordinating atom indices.
             
         Raises:
             ValueError: If coordination environments cannot be found.
@@ -389,7 +388,7 @@ class ReferenceBasedSites:
         """Validate that each environment contains unique atom indices.
         
         Args:
-            environments: Dict of environments, where keys are center atom indices 
+            environments: Dict of environments, where keys are centre atom indices 
                 and values are lists of coordinating atom indices.
             
         Raises:
@@ -410,6 +409,6 @@ class ReferenceBasedSites:
                     f"Please use a larger supercell for your analysis."
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
-        """Calculate reference centres from center atom indices."""
+        """Calculate reference centres from centre atom indices."""
         coords = self._effective_ref_coords
         return [coords[i].copy() for i in center_indices]

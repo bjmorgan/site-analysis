@@ -77,6 +77,18 @@ def spinel(supercell=(1, 1, 1)):
     return unit * supercell
 
 
+def random_framework(seed=6, n_atoms=60, a=10.0, min_separation=2.0):
+    """O atoms at random positions at least min_separation apart: no translational symmetry."""
+    rng = np.random.default_rng(seed)
+    points = []
+    while len(points) < n_atoms:
+        point = rng.random(3)
+        if all(np.linalg.norm(((point - other + 0.5) % 1.0 - 0.5) * a) > min_separation
+               for other in points):
+            points.append(point)
+    return Structure(Lattice.cubic(a), ["O"] * n_atoms, points)
+
+
 class TestStructureAligner(unittest.TestCase):
     """Test cases for the StructureAligner class."""
 
@@ -133,6 +145,10 @@ class TestStructureAligner(unittest.TestCase):
         found, metrics = align_structures(reference, target)
         assert_same_translation(found, [0.1375] * 3)
         self.assertEqual(set(metrics), {'rmsd', 'max_dist', 'mean_dist'})
+        distances = np.array([0.0375, 0.0125, 0.0125, 0.0125]) * 5.0 * math.sqrt(3.0)
+        self.assertAlmostEqual(metrics['rmsd'], math.sqrt(np.mean(distances ** 2)), places=12)
+        self.assertAlmostEqual(metrics['max_dist'], distances.max(), places=12)
+        self.assertAlmostEqual(metrics['mean_dist'], distances.mean(), places=12)
 
     def test_pbc_handling(self):
         """A translation across the cell boundary is found."""
@@ -140,7 +156,6 @@ class TestStructureAligner(unittest.TestCase):
         reference = Structure(lattice, ["Na", "Cl"], [[0.05, 0.05, 0.05], [0.55, 0.55, 0.55]])
         target = Structure(lattice, ["Na", "Cl"], [[0.95, 0.95, 0.95], [0.45, 0.45, 0.45]])
         found, _ = align_structures(reference, target)
-        self.assertTrue(((found >= 0.0) & (found < 1.0)).all())
         species = [site.species_string for site in reference]
         distances = nearest_same_species_distances(
             aligned_coords(reference, found), species, target)
@@ -192,16 +207,16 @@ class TestStructureAligner(unittest.TestCase):
         species_d = ["Na", "Na", "Cl", "Cl", "F"]
         aligner = StructureAligner()
         self.assertCountEqual(aligner._validate_structures(species_a, species_b, None), ["Cl", "Na"])
-        with self.assertRaisesRegex(ValueError, "different compositions"):
+        with self.assertRaisesRegex(ValueError, r"different compositions.*Pass the alignment species"):
             aligner._validate_structures(species_a, species_c, None)
-        with self.assertRaisesRegex(ValueError, "different compositions"):
+        with self.assertRaisesRegex(ValueError, r"different compositions.*Pass the alignment species"):
             aligner._validate_structures(species_a, species_d, None)
         self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na"]), ["Na"])
-        with self.assertRaisesRegex(ValueError, "not found in reference"):
+        with self.assertRaisesRegex(ValueError, r"Species 'F' not found in reference structure \(it has Cl, Na\)"):
             aligner._validate_structures(species_a, species_d, ["F"])
         with self.assertRaisesRegex(ValueError, "not found in target"):
             aligner._validate_structures(species_d, species_a, ["F"])
-        with self.assertRaisesRegex(ValueError, "Different number of Na atoms"):
+        with self.assertRaisesRegex(ValueError, r"Different number of Na atoms.*Align on species present in equal numbers"):
             aligner._validate_structures(species_a, species_c, ["Na"])
         # A species named twice is used once
         self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na", "Na"]), ["Na"])
@@ -275,17 +290,31 @@ class TestCandidateSearch(unittest.TestCase):
 
     def test_arbitrary_offset_of_a_random_framework(self):
         """An offset of an irregular framework, with many false minima, is found."""
-        rng = np.random.default_rng(6)
-        points = []
-        while len(points) < 60:
-            point = rng.random(3)
-            if all(np.linalg.norm(((point - other + 0.5) % 1.0 - 0.5) * 10.0) > 2.0
-                   for other in points):
-                points.append(point)
-        reference = Structure(Lattice.cubic(10.0), ["O"] * 60, points)
+        reference = random_framework()
         target = with_noise(reference, scale=0.05, seed=7, shift=(0.37, 0.12, 0.29))
         found, metrics = align_structures(reference, target)
         self.assertLess(metrics['rmsd'], 0.15)
+
+    def test_refinement_finds_the_least_squares_translation(self):
+        """With every atom paired with its own image, the result is the shift plus the mean noise."""
+        reference = random_framework()
+        rng = np.random.default_rng(11)
+        noise = rng.normal(scale=0.05, size=(len(reference), 3))
+        shift = np.array([0.37, 0.12, 0.29])
+        target = Structure(reference.lattice, reference.species,
+                           ((reference.frac_coords + shift) % 1.0) @ reference.lattice.matrix + noise,
+                           coords_are_cartesian=True)
+        found, _ = align_structures(reference, target)
+        expected = shift + reference.lattice.get_fractional_coords(noise).mean(axis=0)
+        assert_same_translation(found, expected)
+
+    def test_translation_is_wrapped_into_the_unit_cell(self):
+        """Every component of the translation is in [0, 1)."""
+        reference = rock_salt((2, 2, 2))
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                found, _ = align_structures(reference, with_noise(reference, scale=0.1, seed=seed))
+                self.assertTrue(((found >= 0.0) & (found < 1.0)).all(), found)
 
     def test_near_symmetry_is_not_mistaken_for_the_alignment(self):
         """The best fit wins over a translation that only nearly superimposes the atoms.
@@ -310,13 +339,12 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
         threshold = aligner_module._threshold(
             reference.frac_coords[sodium], reference.lattice.matrix)
-        # This relies on the anchor being the first target Na and on
-        # _sample_indices choosing the sample, so a change to either needs
-        # this test updated. It is the only test that fails without the
-        # screen's refinement step.
-        # The anchor is the first target Na. Displacing it and a sampled Na
-        # in opposite directions puts that Na 1.2 thresholds from its
-        # partner at every candidate from the anchor.
+        # This relies on the anchor being the first target Na, and on
+        # _sample_indices to pick a sampled atom other than the anchor (with
+        # rock_salt((2, 2, 2)) all 32 Na are sampled), so a change to either
+        # needs this test updated. Displacing the anchor and a sampled Na in
+        # opposite directions puts that Na 1.2 thresholds from its partner
+        # at every candidate from the anchor.
         sampled = aligner_module._sample_indices(len(sodium))[1]
         cartesian = reference.cart_coords.copy()
         cartesian[sodium[0]] += [0.6 * threshold, 0.0, 0.0]
@@ -333,7 +361,7 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = next(i for i, site in enumerate(target) if site.species_string == "Na")
         target.replace(sodium, "Na", (target[sodium].frac_coords + [0.25, 0.0, 0.0]) % 1.0)
         with self.assertRaisesRegex(
-                ValueError, r"\(Na: .*candidates passed the screen\)\. Align on species whose atoms stay on their sites"):
+                ValueError, r"Could not superimpose the reference on the target using Na\. Align on framework species"):
             align_structures(reference, target, species=["Na"])
 
     def test_a_misplaced_atom_outside_the_sample_raises(self):
@@ -344,9 +372,10 @@ class TestCandidateSearch(unittest.TestCase):
         unsampled = next(k for k in range(len(sodium)) if k not in sampled)
         target = reference.copy()
         index = sodium[unsampled]
-        # Onto a Cl site: a / 2 from every Na site, beyond the Na threshold a / (2 sqrt 2).
+        # Onto a Cl site: a / 2 from its nearest Na sites, beyond the Na threshold a / (2 sqrt 2).
         target.replace(index, "Na", (target[index].frac_coords + [0.5 / 3, 0.0, 0.0]) % 1.0)
-        with self.assertRaisesRegex(ValueError, r"\(Na: "):
+        with self.assertRaisesRegex(
+                ValueError, r"Could not superimpose the reference on the target using Na\. Align on framework species"):
             align_structures(reference, target, species=["Na"])
 
     def test_each_species_is_held_to_its_own_threshold(self):
@@ -361,7 +390,7 @@ class TestCandidateSearch(unittest.TestCase):
         # One O moved 2 A along a body diagonal: beyond 1.5 A, within 3 A.
         target.translate_sites([0], np.full(3, 2.0 / math.sqrt(3)),
                                frac_coords=False, to_unit_cell=True)
-        with self.assertRaisesRegex(ValueError, r"O: 1\.5 A"):
+        with self.assertRaisesRegex(ValueError, r"Could not superimpose the reference on the target using O, Ti\."):
             align_structures(reference, target)
 
     def test_screening_in_small_blocks_gives_the_same_result(self):

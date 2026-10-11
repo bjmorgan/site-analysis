@@ -130,7 +130,6 @@ class TestReferenceBasedSites(unittest.TestCase):
             np.testing.assert_array_equal(rbs._ref_lattice_matrix, self.reference.lattice.matrix)
             self.assertEqual(rbs._ref_species, [s.species_string for s in self.reference])
             np.testing.assert_array_equal(rbs._target_frac_coords, self.target.frac_coords)
-            np.testing.assert_array_equal(rbs._target_lattice_matrix, self.target.lattice.matrix)
             self.assertEqual(rbs._target_species, [s.species_string for s in self.target])
 
     def test_init_without_alignment(self):

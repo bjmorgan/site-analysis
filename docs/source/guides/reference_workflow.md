@@ -221,10 +221,19 @@ ValueError: Structure alignment failed: Different number of O atoms: 24 in refer
 This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
 
 ```
-ValueError: Structure alignment failed: No candidate translation brings every alignment atom within half the shortest same-species spacing in the reference of a target atom (O: 1.31 A; 0 of 49152 candidates passed the screen). Align on species whose atoms stay on their sites.
+ValueError: Structure alignment failed: Could not superimpose the reference on the target using O. Align on framework species whose atoms stay near their sites, and check that both structures use the same cell and orientation. See "Alignment Errors" in the reference workflow guide.
 ```
 
-No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that no alignment atom in the target has moved from its site by half the shortest spacing between reference atoms of its species or more.
+Alignment looks for a translation that puts every reference atom of the alignment species close to a target atom of the same species: within half the shortest distance between two reference atoms of that species. That limit guarantees that each reference atom is matched to a different target atom. The error means that no translation achieved it. Common causes:
+
+- **A mobile species among the alignment species.** If `align_species` is not set, every species is used, including mobile ions, which rarely sit on their reference sites. Align on framework species instead, for example `align_species=["O"]`.
+- **A different cell setting.** Alignment only translates. If the axes are permuted or the supercell has a different shape, no translation fits; build the reference in the same setting as the target.
+- **A strongly disordered target.** An alignment atom that has moved far from its site, for instance a framework atom in a hot MD frame, can exceed the limit. Try a different frame, or align on a stiffer species.
+- **A distorted reference.** If the reference is not close to the target's average structure, for example a relaxed cell containing a defect, an idealised or symmetrised reference can help.
+
+Candidates are screened on a sample of atoms before they are refined, so an alignment whose worst atom is very close to the limit can occasionally be rejected even though it would pass. A different frame or alignment species resolves this.
+
+Distances are measured in the reference structure's lattice. Alignment works in fractional coordinates, so a target cell that is strained relative to the reference, such as an NPT frame or a relaxed cell, still aligns correctly.
 
 ### Mapping Conflicts
 

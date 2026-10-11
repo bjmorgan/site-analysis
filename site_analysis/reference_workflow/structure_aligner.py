@@ -9,10 +9,11 @@ At the right translation, every reference atom of an alignment species
 lies near a target atom of that species. So the right translation lies
 near one of the translations that put a reference atom exactly on a
 chosen target atom (the anchor). The aligner screens all of these
-candidates on a sample of atoms, then refines them in order of fit, each
-to minimise the RMSD of same-species nearest-neighbour distances, and
-returns the first that brings every alignment atom within its species'
-threshold. Translations that differ by a translational symmetry of the
+candidates on a sample of atoms, then refines those that pass, best fit
+first, each to minimise the RMSD of same-species nearest-neighbour
+distances, and returns the first that brings every alignment atom within
+its species' threshold (half the shortest same-species spacing in the
+reference). Translations that differ by a translational symmetry of the
 alignment atoms fit equally well and only relabel the sites; any one of
 them is returned. The search is deterministic and finds origin offsets
 of any size, without symmetry information.
@@ -119,10 +120,12 @@ def _screen(candidates: np.ndarray,
     Each candidate first takes one refinement step on the sample: it moves
     by the mean displacement from the sampled atoms to their nearest
     target atoms. That removes the anchor's own displacement from its
-    site, which every candidate shares, so each sampled
-    atom is then judged on its own displacement, as in the final check.
-    The step has not converged, so the screen is slightly stricter than
-    the final check.
+    site, which every candidate shares, so each sampled atom is then
+    judged on its own displacement, as in the final check. The step is
+    fitted to the sample alone and is not iterated, so a sampled atom's
+    distance can differ slightly from the final check's: an alignment
+    whose worst atom is very close to its threshold can fail the screen.
+    Atoms outside the sample are checked only after refinement.
 
     Args:
         candidates: Candidate translations, fractional, shape (M, 3).
@@ -260,7 +263,7 @@ def _check_deprecated_alignment_options(*,
         align_tolerance: Deprecated option; None if not passed.
 
     Raises:
-        ValueError: If ``align_metric`` is ``'max_dist'`` (in any case):
+        ValueError: If ``align_metric`` is ``'max_dist'`` (case-insensitively):
             alignment now always minimises the RMSD, so honouring it is
             impossible and ignoring it would change the result.
     """
@@ -297,22 +300,15 @@ class StructureAligner:
             species: str | list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
         """Find the translation that superimposes the reference on the target.
 
-        Screens candidate translations on a sample of atoms and refines
-        them in order of fit, returning the first that brings every
-        reference atom of the alignment species within half the shortest
-        same-species spacing of a target atom of that species, refined to
-        minimise the RMSD of those distances. Translations that differ by a
-        translational symmetry of the alignment atoms fit equally well; any
-        one of them is returned. Atom order does not matter.
-
-        The screen is a filter: it applies the final threshold after a
-        single refinement step, so an alignment that only just passes the
-        full check (within about a percent of the threshold) can be
-        rejected.
-
-        A species with a single atom has no threshold (any translation
-        pairs it one to one), so it cannot reject an alignment; aligning
-        on such a species alone rests the result on one atom.
+        Screens candidate translations on a sample of atoms, then refines
+        those that pass, best fit first, and returns the first that
+        superimposes the structures: every reference atom of the alignment
+        species within half the shortest same-species spacing in the
+        reference of a target atom of that species. Translations that
+        differ by a translational symmetry of the alignment atoms fit
+        equally well; any one of them is returned. Atom order does not
+        matter. The reference workflow guide ("Alignment Errors") explains
+        what to do when no translation is found.
 
         Args:
             reference_frac_coords: Fractional coordinates of the reference
@@ -328,18 +324,19 @@ class StructureAligner:
 
         Returns:
             ``(translation, metrics)``: the fractional translation to add
-            to the reference coordinates, and a dictionary with the
-            ``'rmsd'``, ``'max_dist'`` and ``'mean_dist'`` of the distances
-            from each reference atom of the alignment species to its
-            nearest target atom of the same species.
+            to the reference coordinates, wrapped into the unit cell, and
+            a dictionary with the ``'rmsd'``, ``'max_dist'`` and
+            ``'mean_dist'`` of the distances from each reference atom of
+            the alignment species to its nearest target atom of the same
+            species.
 
         Raises:
-            ValueError: If ``species`` is None and the compositions differ;
-                if ``species`` is empty; if a species is missing from either
-                structure or its counts differ; if the coordinates and
-                species of a structure differ in length; if the reference
-                has coincident atoms of an alignment species; or if no
-                candidate passes the screen and the full check.
+            ValueError: If the structures cannot be compared on these
+                species (different compositions when ``species`` is None,
+                an empty ``species``, a missing species or different counts,
+                coordinates and species of different lengths, or coincident
+                reference atoms of an alignment species), or if no
+                translation superimposes them.
         """
         if isinstance(species, str):
             species = [species]
@@ -369,7 +366,8 @@ class StructureAligner:
                     f"The reference has coincident {group.name} atoms, so the "
                     f"{group.name} atoms cannot be matched one to one")
         # The candidates put each reference atom of the species with the
-        # fewest atoms on the first target atom of that species.
+        # fewest atoms (ties broken by name) on the first target atom of
+        # that species.
         anchor_group = min(groups, key=lambda group: (len(group.reference), group.name))
         candidates = (anchor_group.target[0] - anchor_group.reference) % 1.0
         passed, moved, rmsd = _screen(candidates, groups)
@@ -383,13 +381,12 @@ class StructureAligner:
             if best is not None:
                 break
         if best is None:
-            thresholds = ", ".join(
-                f"{group.name}: {group.threshold:.3g} A" for group in groups)
+            used = ", ".join(group.name for group in groups)
             raise ValueError(
-                "No candidate translation brings every alignment atom within half the "
-                f"shortest same-species spacing in the reference of a target atom "
-                f"({thresholds}; {len(survivors)} of {len(candidates)} candidates "
-                "passed the screen). Align on species whose atoms stay on their sites.")
+                f"Could not superimpose the reference on the target using {used}. "
+                "Align on framework species whose atoms stay near their sites, and "
+                "check that both structures use the same cell and orientation. See "
+                "\"Alignment Errors\" in the reference workflow guide.")
         return best[0], _metrics(best[1])
 
     def _validate_structures(self,
@@ -433,9 +430,13 @@ class StructureAligner:
             ref_count = sum(1 for s in ref_species if s == sp)
             target_count = sum(1 for s in target_species if s == sp)
             if ref_count == 0:
-                raise ValueError(f"Species {sp} not found in reference structure")
+                raise ValueError(
+                    f"Species {sp!r} not found in reference structure "
+                    f"(it has {', '.join(sorted(set(ref_species)))})")
             if target_count == 0:
-                raise ValueError(f"Species {sp} not found in target structure")
+                raise ValueError(
+                    f"Species {sp!r} not found in target structure "
+                    f"(it has {', '.join(sorted(set(target_species)))})")
             if ref_count != target_count:
                 raise ValueError(
                     f"Different number of {sp} atoms: "

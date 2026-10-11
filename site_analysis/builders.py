@@ -70,7 +70,7 @@ class TrajectoryBuilder:
     - Site mapping: Use ``with_site_mapping()`` to specify which species are used
       to identify corresponding sites between structures.
 
-    **Default Behaviors**
+    **Default Behaviours**
 
     - Alignment is enabled by default.
     - If mapping species are specified but alignment species are not, mapping

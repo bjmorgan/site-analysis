@@ -169,7 +169,7 @@ Defines polyhedral sites using coordination environments.
 This method benefits from using an idealised structure in the builder, as regular coordination environments are easier to identify and define. However, the ReferenceBasedSites workflow (which this uses internally) can handle some degree of structural distortion.
 
 **Parameters:**
-- `centre_species`: Species at the center of coordination environments
+- `centre_species`: Species at the centre of coordination environments
 - `vertex_species`: Species at vertices of coordination environments
 - `cutoff`: Distance cutoff for coordination environment
 - `n_vertices`: Number of vertices per environment
@@ -196,7 +196,7 @@ For detailed explanations of periodic boundary condition handling, see {doc}`../
 Defines dynamic Voronoi sites using reference atom positions.
 
 **Parameters:**
-- `centre_species`: Species at the center of coordination environments
+- `centre_species`: Species at the centre of coordination environments
 - `reference_species`: Species of reference atoms for dynamic centres
 - `cutoff`: Distance cutoff for finding reference atoms
 - `n_reference`: Number of reference atoms per site
@@ -237,7 +237,7 @@ Controls structure alignment between reference and target structures.
 
 **Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries every translation that puts a reference atom of one alignment species (the one with the fewest atoms) on one of its target atoms, screens them on a sample of atoms, and refines them in order of fit, each to minimise the root-mean-square distance from each reference atom to the nearest target atom of the same species, until one brings every alignment atom within half the shortest spacing between reference atoms of its species. Translations that differ by a translational symmetry of the alignment atoms fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). It raises `ValueError` if no candidate does. The search is deterministic.
+Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries every translation that puts a reference atom of one alignment species on one chosen target atom of that species, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by a translational symmetry of the alignment atoms fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic.
 
 **Parameters:**
 - `align`: Whether to perform alignment (default: `True`)

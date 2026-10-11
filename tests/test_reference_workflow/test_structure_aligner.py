@@ -214,7 +214,7 @@ class TestStructureAligner(unittest.TestCase):
         self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na"]), ["Na"])
         with self.assertRaisesRegex(ValueError, r"Species 'F' not found in reference structure \(it has Cl, Na\)"):
             aligner._validate_structures(species_a, species_d, ["F"])
-        with self.assertRaisesRegex(ValueError, "not found in target"):
+        with self.assertRaisesRegex(ValueError, r"Species 'F' not found in target structure \(it has Cl, Na\)"):
             aligner._validate_structures(species_d, species_a, ["F"])
         with self.assertRaisesRegex(ValueError, r"Different number of Na atoms.*Align on species present in equal numbers"):
             aligner._validate_structures(species_a, species_c, ["Na"])
@@ -361,7 +361,7 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = next(i for i, site in enumerate(target) if site.species_string == "Na")
         target.replace(sodium, "Na", (target[sodium].frac_coords + [0.25, 0.0, 0.0]) % 1.0)
         with self.assertRaisesRegex(
-                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species"):
+                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species \(align_species\), and check that both structures use the same cell and orientation\. See \"Alignment Errors\" in the reference workflow guide\.$"):
             align_structures(reference, target, species=["Na"])
 
     def test_a_misplaced_atom_outside_the_sample_raises(self):

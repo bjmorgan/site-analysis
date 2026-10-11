@@ -51,7 +51,7 @@ class ReferenceBasedSites:
         aligned_structure: Reference structure translated to match the target
             (None if align=False).
         translation_vector: Fractional translation added to the reference
-            coordinates to align them with the target, wrapped into [0, 1)
+            coordinates to align them with the target, wrapped into the unit cell
             (None if align=False).
         alignment_metrics: Alignment quality, with keys 'rmsd', 'max_dist'
             and 'mean_dist' in Angstrom (None if align=False).
@@ -403,9 +403,9 @@ class ReferenceBasedSites:
                 duplicates = [idx for idx, count in counts.items() if count > 1]
                 
                 raise ValueError(
-                    f"Environment for center atom {center_idx} contains duplicate atom indices {duplicates}. "
+                    f"Environment for centre atom {center_idx} contains duplicate atom indices {duplicates}. "
                     f"This typically occurs in small unit cells where the same atom "
-                    f"appears as a neighbor in multiple periodic images. "
+                    f"appears as a neighbour in multiple periodic images. "
                     f"Please use a larger supercell for your analysis."
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:

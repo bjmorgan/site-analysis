@@ -226,14 +226,16 @@ ValueError: Structure alignment failed: Could not superimpose the reference on t
 
 Alignment looks for a translation that puts every reference atom of the alignment species close to a target atom of the same species: within half the shortest distance between two reference atoms of that species. That limit guarantees that each reference atom is matched to a different target atom. The error means that no translation achieved it. Common causes:
 
-- **A mobile species among the alignment species.** If `align_species` is not set, every species is used, including mobile ions, which rarely sit on their reference sites. Align on framework species instead, for example `align_species=["O"]`.
-- **A different cell setting.** Alignment only translates. If the axes are permuted or the supercell has a different shape, no translation fits; build the reference in the same setting as the target.
+- **A mobile species among the alignment species.** If neither `align_species` nor mapping species are set, every species is used, including mobile ions, which rarely sit on their reference sites. Align on framework species instead, for example `align_species=["O"]`.
+- **A different cell setting.** Alignment only translates. If the supercell differs (for example 2 x 1 x 1 against 1 x 2 x 1) or the axes are permuted or mirrored, usually no translation fits; build the reference in the same setting as the target. If the alignment atoms happen to look the same in both settings, alignment can succeed even though the other species do not line up, so make sure the two structures use the same setting.
 - **A strongly disordered target.** An alignment atom that has moved far from its site, for instance a framework atom in a hot MD frame, can exceed the limit. Try a different frame, or align on a stiffer species.
-- **A distorted reference.** If the reference is not close to the target's average structure, for example a relaxed cell containing a defect, an idealised or symmetrised reference can help.
+- **A distorted reference.** The limit is set by the reference's single shortest same-species distance, so one short pair in a distorted reference tightens it for every atom. If the reference is not close to the target's average structure, for example a reference relaxed around a defect, an idealised or symmetrised reference can help.
 
-Candidates are screened on a sample of atoms before they are refined, so an alignment whose worst atom is very close to the limit can occasionally be rejected even though it would pass. A different frame or alignment species resolves this.
+A species with a single atom has no such limit: aligning only on it always succeeds and rests on that one atom, so include a species with several atoms.
 
-Distances are measured in the reference structure's lattice. Alignment works in fractional coordinates, so a target cell that is strained relative to the reference, such as an NPT frame or a relaxed cell, still aligns correctly.
+Candidates are screened on a sample of atoms before they are refined, so an alignment whose worst atom is very close to the limit can occasionally be rejected even though it would pass. A different frame or alignment species usually resolves this.
+
+The limit and the reported alignment metrics are measured in the reference structure's lattice. Alignment works in fractional coordinates, so a target cell that is strained relative to the reference, such as an NPT frame or a relaxed cell, still aligns correctly.
 
 ### Mapping Conflicts
 

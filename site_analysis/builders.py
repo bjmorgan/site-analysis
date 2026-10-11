@@ -109,7 +109,7 @@ class TrajectoryBuilder:
         """Reset the builder state to default values.
         
         This method clears all configuration and returns the builder to its
-        initial state. It is called automatically during initialization and
+        initial state. It is called automatically during initialisation and
         after build(), but can also be called explicitly if needed.
         
         Returns:

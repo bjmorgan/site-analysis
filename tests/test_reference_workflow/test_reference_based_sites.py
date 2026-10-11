@@ -576,7 +576,7 @@ class TestReferenceBasedSites(unittest.TestCase):
                 rbs._validate_unique_environments(duplicate_environments)
             
             # Check error message
-            self.assertIn("Environment for center atom 0 contains duplicate atom indices", str(context.exception))
+            self.assertIn("Environment for centre atom 0 contains duplicate atom indices", str(context.exception))
             self.assertIn("2", str(context.exception))  # Should mention the duplicated index
     
     def test_validate_unique_environments_multiple_duplicates(self):

@@ -124,7 +124,8 @@ def _screen(candidates: np.ndarray,
     judged on its own displacement, as in the final check. The step is
     fitted to the sample alone and is not iterated, so a sampled atom's
     distance can differ slightly from the final check's: an alignment
-    whose worst atom is very close to its threshold can fail the screen.
+    in which a sampled atom is very close to its threshold can fail the
+    screen.
     Atoms outside the sample are checked only after refinement.
 
     Args:
@@ -317,8 +318,9 @@ class StructureAligner:
             target_frac_coords: Fractional coordinates of the target
                 structure, shape (M, 3).
             target_species: Species string of each target atom.
-            lattice_matrix: (3, 3) lattice matrix shared by both
-                structures, rows as lattice vectors.
+            lattice_matrix: (3, 3) lattice matrix used to measure
+                distances, rows as lattice vectors (the reference's lattice
+                in the reference workflow).
             species: Species to align on, as a list or a single string. If
                 None, all species are used and the compositions must match.
 

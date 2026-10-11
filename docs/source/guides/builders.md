@@ -246,7 +246,7 @@ Alignment finds the translation that superimposes the reference on the target, w
   - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
   - Use species whose atoms stay on their sites, typically framework atoms; this also avoids issues with different mobile ion counts
 
-The `align_metric`, `align_algorithm`, `align_minimizer_options` and `align_tolerance` parameters are deprecated: they have no effect, raise a `FutureWarning` and will be removed in version 2.0. `align_metric='max_dist'` raises `ValueError`.
+The `align_metric`, `align_algorithm`, `align_minimizer_options` and `align_tolerance` parameters are deprecated: they have no effect, issue a `FutureWarning` and will be removed in version 2.0. `align_metric='max_dist'` raises `ValueError`.
 
 **Examples:**
 ```python

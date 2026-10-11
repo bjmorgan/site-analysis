@@ -98,12 +98,13 @@ trajectory = (TrajectoryBuilder()
 
 This example shows how to specify framework atoms for alignment by using the `align_species` parameter. By selecting only framework species that have consistent counts in both structures, proper alignment can be achieved even when the mobile ion content differs between reference and target structures.
 
-Alignment finds origin offsets of any size, for example between the two origin choices of a space group, and it is deterministic. When the alignment species have translational symmetry, several translations superimpose them equally well; they differ only in which index each site receives. Alignment returns the one that moves the reference least, so a target that already shares the reference's origin keeps it, and its sites follow the reference's atom order. To give the sites the same indices in several separately built trajectories whose origins differ, align once, shift the reference by the translation found, and build every trajectory from the shifted reference with alignment switched off:
+Alignment finds origin offsets of any size, for example between the two origin choices of a space group, and it is deterministic. When the alignment species have translational symmetry, several translations superimpose them equally well. They differ only in which index each site receives, and any one of them may be returned, even when the target already shares the reference's origin. To give the sites the same indices in several trajectories whose structures share an origin with one another, align the reference to a structure from one of them, shift the reference by the translation found, and build every trajectory from the shifted reference with alignment switched off:
 
 ```python
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 
-rbs = ReferenceBasedSites(reference_structure, first_structure, align_species=["O", "Ti"])
+# frame: a structure from one of the trajectories
+rbs = ReferenceBasedSites(reference_structure, frame, align_species=["O", "Ti"])
 shifted_reference = reference_structure.copy()
 shifted_reference.translate_sites(
     range(len(shifted_reference)), rbs.translation_vector, to_unit_cell=True)
@@ -189,7 +190,7 @@ For optimal results:
 
 1. **Use crystallographically defined reference structures**
    
-   Use structures with well-defined, regular coordination environments as references. Geometry-optimized structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyze in your target structures.
+   Use structures with well-defined, regular coordination environments as references. Geometry-optimized structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyze in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately.
 
 2. **Select appropriate alignment species**
    
@@ -223,7 +224,7 @@ This error indicates a mismatch in atom counts between structures. Verify that b
 ValueError: Structure alignment failed: No translation brings every alignment atom within half the shortest same-species spacing of a target atom (O: 1.31 A). Align on species whose atoms stay on their sites.
 ```
 
-No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that the target is not far from its equilibrium structure.
+No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that no alignment atom in the target has moved from its site by half the shortest spacing between atoms of its species or more.
 
 ### Mapping Conflicts
 

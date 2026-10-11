@@ -194,6 +194,16 @@ class TestStructureAligner(unittest.TestCase):
             aligner._validate_structures(species_d, species_a, ["F"])
         with self.assertRaisesRegex(ValueError, "Different number of Na atoms"):
             aligner._validate_structures(species_a, species_c, ["Na"])
+        # A species named twice is used once
+        self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na", "Na"]), ["Na"])
+
+    def test_mismatched_coordinates_and_species_raise(self):
+        """Each structure needs one species per atom."""
+        coords = np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        with self.assertRaisesRegex(ValueError, "reference has 2 coordinates but 1 species"):
+            StructureAligner().align(coords, ["Na"], coords, ["Na", "Cl"], np.eye(3) * 5.0)
+        with self.assertRaisesRegex(ValueError, "target has 2 coordinates but 3 species"):
+            StructureAligner().align(coords, ["Na", "Cl"], coords, ["Na", "Cl", "Cl"], np.eye(3) * 5.0)
 
     def test_empty_species_raises(self):
         """An empty species list is rejected."""
@@ -204,7 +214,7 @@ class TestStructureAligner(unittest.TestCase):
 
 
 class TestCandidateSearch(unittest.TestCase):
-    """The search finds origin offsets of any size, and the shortest of equivalent alignments."""
+    """The search finds origin offsets of any size."""
 
     def assert_superimposed(self, reference, target, translation, tolerance):
         """Every translated reference atom is near a target atom of its species."""
@@ -269,27 +279,6 @@ class TestCandidateSearch(unittest.TestCase):
             aligned_coords(reference, found)[lithium], ["Li"] * len(lithium), target)
         self.assertLess(distances.max(), 0.3)
 
-    def test_equal_fits_give_the_shortest_translation(self):
-        """Of exactly equivalent alignments, the one that moves the reference least wins."""
-        reference = rock_salt((2, 2, 2))
-        shift = np.array([0.05, 0.0, 0.0]) / reference.lattice.a
-        target = with_noise(reference, scale=0.0, seed=0, shift=shift)
-        found, _ = align_structures(reference, target, species=["Na"])
-        np.testing.assert_allclose(
-            paired_mic_distances(found[np.newaxis], shift[np.newaxis],
-                                 reference.lattice.matrix), [0.0], atol=1e-9)
-
-    def test_structures_sharing_an_origin_keep_it(self):
-        """With thermal noise and near-symmetries, an origin already shared is kept."""
-        for name, reference, species in (("rock salt", rock_salt(), None),
-                                         ("spinel, on O", spinel((2, 2, 2)), ["O"])):
-            with self.subTest(name):
-                target = with_noise(reference, scale=0.1, seed=2)
-                found, _ = align_structures(reference, target, species=species)
-                length = paired_mic_distances(found[np.newaxis], np.zeros((1, 3)),
-                                              reference.lattice.matrix)[0]
-                self.assertLess(length, 0.05)
-
     def test_a_displaced_anchor_does_not_prevent_alignment(self):
         """The anchor's own displacement does not count against the candidates."""
         reference = rock_salt((2, 2, 2))
@@ -325,6 +314,17 @@ class TestCandidateSearch(unittest.TestCase):
         first, _ = align_structures(reference, target)
         second, _ = align_structures(reference, target)
         np.testing.assert_array_equal(first, second)
+
+
+class TestDeprecatedAlignmentOptions(unittest.TestCase):
+    """The deprecated options are named together in one warning."""
+
+    def test_several_options_are_named_together(self):
+        """Two options give one warning naming both."""
+        with self.assertWarnsRegex(
+                FutureWarning, r"align_algorithm, align_tolerance have no effect .* delete them"):
+            aligner_module._check_deprecated_alignment_options(
+                align_algorithm="Nelder-Mead", align_tolerance=1e-4)
 
 
 class TestThreshold(unittest.TestCase):

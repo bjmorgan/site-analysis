@@ -49,7 +49,7 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
-from site_analysis.reference_workflow.structure_aligner import check_deprecated_alignment_options
+from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
 import numpy as np
 from typing import cast, Callable, Sequence, Any
 
@@ -215,6 +215,10 @@ class TrajectoryBuilder:
         Returns:
             self: For method chaining
 
+        Raises:
+            ValueError: If align_metric is 'max_dist', which is no longer
+                supported.
+
         Example::
 
             # Use default alignment (enabled, all species)
@@ -227,7 +231,7 @@ class TrajectoryBuilder:
             # Disable alignment
             builder.with_structure_alignment(align=False)
         """
-        check_deprecated_alignment_options(
+        _check_deprecated_alignment_options(
             align_metric=align_metric, align_algorithm=align_algorithm,
             align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
 
@@ -974,9 +978,9 @@ def create_trajectory_with_polyhedral_sites(
         
     Raises:
         ValueError: If no coordination environments are found, if required 
-            structures are not set, or if structure alignment fails.
+            structures are not set, if structure alignment fails, or if align_metric is 'max_dist'.
     """
-    check_deprecated_alignment_options(
+    _check_deprecated_alignment_options(
         align_metric=align_metric, align_algorithm=align_algorithm,
         align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
     builder = TrajectoryBuilder()
@@ -1057,9 +1061,9 @@ def create_trajectory_with_dynamic_voronoi_sites(
         
     Raises:
         ValueError: If no coordination environments are found, if required 
-            structures are not set, or if structure alignment fails.
+            structures are not set, if structure alignment fails, or if align_metric is 'max_dist'.
     """
-    check_deprecated_alignment_options(
+    _check_deprecated_alignment_options(
         align_metric=align_metric, align_algorithm=align_algorithm,
         align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
     builder = TrajectoryBuilder()

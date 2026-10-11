@@ -10,11 +10,11 @@ lies near a target atom of that species. So the right translation lies
 near one of the translations that put a reference atom exactly on a
 chosen target atom (the anchor). The aligner screens all of these
 candidates on a sample of atoms, then refines the best-fitting one to
-minimise the RMSD of same-species nearest-neighbour distances. Of the
-translations that fit exactly as well, which differ by a translational
-symmetry of the alignment atoms, it returns the one that moves the
-reference least. The search is deterministic and finds origin offsets of
-any size, without symmetry information.
+minimise the RMSD of same-species nearest-neighbour distances.
+Translations that differ by a translational symmetry of the alignment
+atoms fit equally well and only relabel the sites; any one of them is
+returned. The search is deterministic and finds origin offsets of any
+size, without symmetry information.
 """
 
 import math
@@ -24,7 +24,6 @@ from typing import Any
 
 import numpy as np
 
-from site_analysis.distances import paired_mic_distances
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 # Candidates are screened on up to this many reference atoms of each
@@ -40,16 +39,10 @@ _SCREEN_BLOCK = 4096
 # Refinement stops after this many steps if the pairing still changes.
 _MAX_REFINEMENT_STEPS = 100
 
-# Alignments related by a translational symmetry of the alignment atoms
-# give the same distances in a different order, so their RMSDs agree to
-# rounding. Agreement to these tolerances (relative, and absolute in A)
-# marks two alignments as equivalent.
-_EQUIVALENT_RMSD_RTOL = 1e-9
-_EQUIVALENT_RMSD_ATOL = 1e-12
-
 # The densest sphere packing (density pi / sqrt(18)) bounds the closest
 # distance between two points of a periodic structure with N points in
-# volume V by (sqrt(2) * V / N) ** (1/3) = 1.1225 * (V / N) ** (1/3).
+# volume V by (sqrt(2) * V / N) ** (1/3) = 1.1225 * (V / N) ** (1/3);
+# the factor is rounded up for a margin.
 _CLOSEST_PAIR_FACTOR = 1.13
 
 
@@ -246,7 +239,7 @@ def _metrics(distances: np.ndarray) -> dict[str, float]:
     }
 
 
-def check_deprecated_alignment_options(**options: Any) -> None:
+def _check_deprecated_alignment_options(**options: Any) -> None:
     """Warn about deprecated alignment options, which have no effect.
 
     Call this directly from the public function or method that takes the
@@ -290,11 +283,10 @@ class StructureAligner:
         Finds a translation that brings every reference atom of the
         alignment species within half the shortest same-species spacing of
         a target atom of that species, choosing the one that fits best and
-        refining it to minimise the RMSD of those distances. Of the
-        translations that fit exactly as well, which differ by a
-        translational symmetry of the alignment atoms, returns the shortest,
-        so structures that already share an origin keep it. Atom order does
-        not matter.
+        refining it to minimise the RMSD of those distances. Translations
+        that differ by a translational symmetry of the alignment atoms fit
+        equally well; any one of them is returned. Atom order does not
+        matter.
 
         Args:
             reference_frac_coords: Fractional coordinates of the reference
@@ -317,13 +309,19 @@ class StructureAligner:
 
         Raises:
             ValueError: If the structures cannot be compared on these
-                species (see ``_validate_structures``), or no translation
-                superimposes them.
+                species (see ``_validate_structures``), or the coordinates
+                and species of a structure differ in length, or no
+                translation superimposes them.
         """
-        valid_species = self._validate_structures(
-            list(reference_species), list(target_species), species)
         reference_frac_coords = np.asarray(reference_frac_coords, dtype=float)
         target_frac_coords = np.asarray(target_frac_coords, dtype=float)
+        for name, coords, names in (("reference", reference_frac_coords, reference_species),
+                                    ("target", target_frac_coords, target_species)):
+            if len(coords) != len(names):
+                raise ValueError(
+                    f"The {name} has {len(coords)} coordinates but {len(names)} species")
+        valid_species = self._validate_structures(
+            list(reference_species), list(target_species), species)
         reference_species_array = np.asarray(reference_species)
         target_species_array = np.asarray(target_species)
         groups = []
@@ -357,19 +355,6 @@ class StructureAligner:
                 "No translation brings every alignment atom within half the "
                 f"shortest same-species spacing of a target atom ({thresholds}). "
                 "Align on species whose atoms stay on their sites.")
-        # Of the alignments that fit exactly as well, the shortest: the
-        # survivors in order of length, up to the first equivalent one.
-        # Every equivalent alignment puts the anchor near some reference
-        # atom, so it is among the candidates, and the best fit itself ends
-        # the search at the latest.
-        best_rmsd = _rmsd(best[1])
-        lengths = paired_mic_distances(survivors, np.zeros_like(survivors), lattice_matrix)
-        for candidate in survivors[np.argsort(lengths, kind="stable")]:
-            alignment = _alignment(candidate, groups)
-            if alignment is not None and math.isclose(
-                    _rmsd(alignment[1]), best_rmsd,
-                    rel_tol=_EQUIVALENT_RMSD_RTOL, abs_tol=_EQUIVALENT_RMSD_ATOL):
-                return alignment[0], _metrics(alignment[1])
         return best[0], _metrics(best[1])
 
     def _validate_structures(self,
@@ -404,7 +389,7 @@ class StructureAligner:
                 )
             species_to_use = sorted(ref_counts.keys())
         else:
-            species_to_use = species
+            species_to_use = list(dict.fromkeys(species))
         if not species_to_use:
             raise ValueError("No species to align on")
 

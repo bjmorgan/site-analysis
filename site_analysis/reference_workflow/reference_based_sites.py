@@ -26,7 +26,7 @@ from typing import Any
 from pymatgen.core import Structure
 
 from site_analysis.reference_workflow.structure_aligner import (
-    StructureAligner, check_deprecated_alignment_options)
+    StructureAligner, _check_deprecated_alignment_options)
 from site_analysis.reference_workflow.coord_finder import CoordinationEnvironmentFinder
 from site_analysis.reference_workflow.index_mapper import IndexMapper
 from site_analysis.reference_workflow.site_factory import SiteFactory
@@ -78,8 +78,12 @@ class ReferenceBasedSites:
                 removed in version 2.0.
             align_tolerance: Deprecated; has no effect. Will be removed in
                 version 2.0.
+
+        Raises:
+            ValueError: If align_metric is 'max_dist', which is no longer
+                supported, or if alignment fails.
         """
-        check_deprecated_alignment_options(
+        _check_deprecated_alignment_options(
             align_metric=align_metric, align_algorithm=align_algorithm,
             align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
 

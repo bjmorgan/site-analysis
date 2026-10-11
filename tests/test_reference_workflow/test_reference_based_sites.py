@@ -133,7 +133,6 @@ class TestReferenceBasedSites(unittest.TestCase):
             np.testing.assert_array_equal(rbs._target_lattice_matrix, self.target.lattice.matrix)
             self.assertEqual(rbs._target_species, [s.species_string for s in self.target])
 
-
     def test_init_without_alignment(self):
         """Test initialization without structure alignment."""
         with self.structure_aligner_patch:

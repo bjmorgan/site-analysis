@@ -1813,5 +1813,37 @@ class TestBuilderCommitment(unittest.TestCase):
 			self._build_trajectory(TrajectoryBuilder().with_commitment(radius=-1.0))
 
 
+class TestBuilderAlignment(unittest.TestCase):
+	"""Alignment through the builder."""
+
+	def test_reference_with_an_offset_origin_builds_the_same_sites(self):
+		"""A spinel reference with its origin offset builds the same sites."""
+		reference = Structure.from_spacegroup(
+			"Fd-3m", Lattice.cubic(8.25), ["Li", "Mn", "O"],
+			[[0.0, 0.0, 0.0], [0.625, 0.625, 0.625], [0.388, 0.388, 0.388]])
+		rng = np.random.default_rng(8)
+		target = Structure(reference.lattice, reference.species,
+						   reference.cart_coords + rng.normal(scale=0.05, size=(len(reference), 3)),
+						   coords_are_cartesian=True)
+		offset_reference = reference.copy()
+		offset_reference.translate_sites(
+			range(len(offset_reference)), [0.3, 0.1, 0.2], to_unit_cell=True)
+
+		def site_vertices(reference_structure):
+			trajectory = (TrajectoryBuilder()
+				.with_structure(target)
+				.with_reference_structure(reference_structure)
+				.with_mobile_species("Li")
+				.with_structure_alignment(align_species=["O"])
+				.with_polyhedral_sites(centre_species="Li", vertex_species="O",
+									   cutoff=2.2, n_vertices=4)
+				.build())
+			return sorted(tuple(sorted(site.vertex_indices)) for site in trajectory.sites)
+
+		expected = site_vertices(reference)
+		self.assertEqual(len(expected), 8)
+		self.assertEqual(site_vertices(offset_reference), expected)
+
+
 if __name__ == '__main__':
 	unittest.main()

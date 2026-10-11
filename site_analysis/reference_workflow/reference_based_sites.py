@@ -10,7 +10,7 @@ useful for:
 3. Creating consistent site definitions across diverse structures
 
 The ReferenceBasedSites class integrates several components to accomplish this workflow:
-- StructureAligner: Aligns the structures to find the optimal translation vector
+- StructureAligner: Finds the translation that superimposes the reference on the target
 - CoordinationEnvironmentFinder: Identifies coordination environments in the reference
 - IndexMapper: Maps atom indices between reference and target structures
 - SiteFactory: Creates appropriate site objects in the target structure
@@ -94,13 +94,7 @@ class ReferenceBasedSites:
 
         # Perform alignment if requested
         if align:
-            self._align_structures(
-                align_species,
-                align_metric,
-                align_algorithm,
-                align_minimizer_options,
-                align_tolerance
-            )
+            self._align_structures(align_species)
 
         # These will be initialised on first use
         self._coord_finder: CoordinationEnvironmentFinder | None = None
@@ -241,50 +235,33 @@ class ReferenceBasedSites:
         
         return sites
     
-    def _align_structures(self, 
-                        align_species: list[str] | None = None, 
-                        align_metric: str = 'rmsd',
-                        align_algorithm: str = 'Nelder-Mead',
-                        align_minimizer_options: dict[str, Any] | None = None,
-                        align_tolerance: float = 1e-4) -> None:
-        """Align target structure to reference structure.
-        
+    def _align_structures(self, align_species: list[str] | None = None) -> None:
+        """Align the reference structure to the target structure.
+
+        Sets ``translation_vector``, ``alignment_metrics`` and
+        ``aligned_structure``, the reference translated onto the target.
+
         Args:
-            align_species: Species to use for alignment. Default is all species.
-            align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
-            align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
-                        Default is 'Nelder-Mead'.
-            align_minimizer_options: Additional options for the minimizer. Default is None.
-            align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
-            
+            align_species: Species to align on. Default is all species.
+
         Raises:
             ValueError: If alignment fails.
         """
         try:
-            # Create a structure aligner
-            aligner = StructureAligner()
-            
-            # Align structures
-            aligned_structure, translation_vector, metrics = aligner.align(
-                self.reference_structure, 
-                self.target_structure, 
-                species=align_species, 
-                metric=align_metric,
-                tolerance=align_tolerance,
-                algorithm=align_algorithm,
-                minimizer_options=align_minimizer_options,
-            )
-            
-            # Update attributes
-            self.aligned_structure = aligned_structure
-            self.translation_vector = translation_vector
-            self.alignment_metrics = metrics
-            self._aligned_frac_coords = aligned_structure.frac_coords
-            
+            translation_vector, metrics = StructureAligner().align(
+                self._ref_frac_coords, self._ref_species,
+                self._target_frac_coords, self._target_species,
+                self._ref_lattice_matrix, species=align_species)
         except ValueError as e:
-            # Re-raise with more context
             raise ValueError(f"Structure alignment failed: {str(e)}") from e
-    
+        self.translation_vector = translation_vector
+        self.alignment_metrics = metrics
+        self._aligned_frac_coords = (self._ref_frac_coords + translation_vector) % 1.0
+        aligned_structure = self.reference_structure.copy()
+        for i, site in enumerate(aligned_structure):
+            aligned_structure[i] = site.species, self._aligned_frac_coords[i]
+        self.aligned_structure = aligned_structure
+
     def _find_coordination_environments(self, 
                                       center_species: str, 
                                       coordination_species: str | list[str], 

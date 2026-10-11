@@ -1,33 +1,76 @@
-"""Structure alignment tools for comparing and superimposing crystal structures.
+"""Structure alignment by translation.
 
-This module provides the StructureAligner class, which finds the optimal
-translation vector to superimpose one crystal structure onto another. This
-alignment is important for:
+This module provides the StructureAligner class, which finds the
+translation that superimposes a reference structure on a target structure
+in the same periodic cell. The reference-based workflow uses it to place
+sites defined in a reference structure onto the target.
 
-1. Comparing structures from different sources with different coordinate origins
-2. Analyzing structural changes while accounting for rigid translations
-3. Preparing structures for site mapping in reference-based workflows
-
-The alignment algorithm optimizes a translation vector to minimise distances
-between corresponding atoms in the two structures, considering periodic
-boundary conditions. It supports different optimisation metrics (RMSD or
-maximum atom distance) and can align based on specific atom species.
-
-This module is a key component of the reference-based workflow for defining
-sites in one structure based on a template from another structure.
+At the right translation, every reference atom of an alignment species
+lies near a target atom of that species. So the right translation lies
+near one of the translations that put a reference atom exactly on a
+chosen target atom (the anchor). The aligner screens all of these
+candidates on a sample of atoms, then refines the best-fitting one to
+minimise the RMSD of same-species nearest-neighbour distances. Of the
+translations that fit exactly as well, which differ by a translational
+symmetry of the alignment atoms, it returns the one that moves the
+reference least. The search is deterministic and finds origin offsets of
+any size, without symmetry information.
 """
 
 import math
+from dataclasses import dataclass
+
 import numpy as np
-from pymatgen.core import Structure
-from typing import Any, Callable
+
+from site_analysis.distances import paired_mic_distances
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
-from site_analysis.tools import calculate_species_distances
+
+# Candidates are screened on up to this many reference atoms of each
+# alignment species.
+_SAMPLE_SIZE = 32
+
+# Seed for choosing the sample, so that alignment is deterministic.
+_SEED = 0
+
+# Candidate translations screened at a time, to bound memory.
+_SCREEN_BLOCK = 4096
+
+# Refinement stops after this many steps if the pairing still changes.
+_MAX_REFINEMENT_STEPS = 100
+
+# Alignments related by a translational symmetry of the alignment atoms
+# give the same distances in a different order, so their RMSDs agree to
+# rounding. Agreement to these tolerances (relative, and absolute in A)
+# marks two alignments as equivalent.
+_EQUIVALENT_RMSD_RTOL = 1e-9
+_EQUIVALENT_RMSD_ATOL = 1e-12
 
 # The densest sphere packing (density pi / sqrt(18)) bounds the closest
 # distance between two points of a periodic structure with N points in
 # volume V by (sqrt(2) * V / N) ** (1/3) = 1.1225 * (V / N) ** (1/3).
 _CLOSEST_PAIR_FACTOR = 1.13
+
+
+@dataclass(frozen=True, eq=False)
+class _SpeciesGroup:
+    """The atoms of one alignment species.
+
+    Attributes:
+        name: Species string.
+        reference: Fractional coordinates of the reference atoms, (N, 3).
+        target: Fractional coordinates of the target atoms, (N, 3).
+        index: Neighbour index over the target atoms.
+        threshold: Half the shortest distance between two different
+            reference atoms (infinite for a single atom). If every
+            reference atom is within it of a target atom, no two share a
+            nearest target atom, so the pairing is one to one.
+    """
+
+    name: str
+    reference: np.ndarray
+    target: np.ndarray
+    index: PeriodicNeighbourIndex
+    threshold: float
 
 
 def _threshold(frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> float:
@@ -57,138 +100,247 @@ def _threshold(frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> float:
         cutoff *= 2.0
 
 
-class StructureAligner:
-    """Aligns crystal structures via translation optimization.
-    
-    This class provides methods to align a reference structure to a target structure
-    by finding the optimal translation vector that minimizes distances between
-    corresponding atoms, considering periodic boundary conditions.
-    """
-    
-    def align(self, 
-        reference: Structure, 
-        target: Structure, 
-        species: list[str] | None = None, 
-        metric: str = 'rmsd', 
-        tolerance: float = 1e-4,
-        algorithm: str = 'Nelder-Mead',
-        minimizer_options: dict[str, Any] | None = None) -> tuple[Structure, np.ndarray, dict[str, float]]:
-        """Align reference structure to target structure via translation.
+def _sample_indices(n_atoms: int) -> np.ndarray:
+    """Reference atoms of one species on which candidates are screened.
 
-        Finds the optimal translation vector that minimises distances
-        between corresponding atoms in the two structures.
+    Args:
+        n_atoms: Number of reference atoms of the species.
+
+    Returns:
+        Up to ``_SAMPLE_SIZE`` distinct indices, in increasing order.
+    """
+    rng = np.random.default_rng(_SEED)
+    return np.sort(rng.choice(n_atoms, size=min(_SAMPLE_SIZE, n_atoms), replace=False))
+
+
+def _screen(candidates: np.ndarray,
+        groups: list[_SpeciesGroup],
+        samples: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Screen candidate translations on a sample of atoms.
+
+    Each candidate first takes one refinement step on the sample: it moves
+    by the mean displacement from the sampled atoms to their nearest
+    target atoms. That removes the anchor's own displacement from its
+    site, which every candidate from that anchor shares, so each sampled
+    atom is then judged on its own displacement, as in the final check.
+
+    Args:
+        candidates: Candidate translations, fractional, shape (M, 3).
+        groups: The alignment species.
+        samples: For each species, the sampled reference coordinates.
+
+    Returns:
+        ``(passed, moved, rmsd)``: an (M,) boolean array, true where every
+        sampled atom of every species is within that species' threshold
+        of a target atom of the species after the step; the moved
+        candidates, shape (M, 3); and the RMSD of the sampled distances
+        after the step, shape (M,).
+    """
+    passed = np.ones(len(candidates), dtype=bool)
+    moved = np.empty_like(candidates)
+    squares = np.zeros(len(candidates))
+    n_sampled = sum(len(sample) for sample in samples)
+    for start in range(0, len(candidates), _SCREEN_BLOCK):
+        block = candidates[start:start + _SCREEN_BLOCK]
+        rows = slice(start, start + len(block))
+        total = np.zeros_like(block)
+        for group, sample in zip(groups, samples):
+            points = (sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
+            nearest, _ = group.index.query_nearest(points.reshape(-1, 3))
+            displacement = group.target[nearest].reshape(points.shape) - points
+            total += (displacement - np.round(displacement)).sum(axis=1)
+        block = block + total / n_sampled
+        moved[rows] = block
+        for group, sample in zip(groups, samples):
+            points = (sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
+            _, distances = group.index.query_nearest(points.reshape(-1, 3))
+            distances = distances.reshape(len(block), len(sample))
+            passed[rows] &= (distances < group.threshold).all(axis=1)
+            squares[rows] += (distances ** 2).sum(axis=1)
+    return passed, moved, np.sqrt(squares / n_sampled)
+
+
+def _refine(translation: np.ndarray, groups: list[_SpeciesGroup]) -> np.ndarray:
+    """Refine a translation to minimise the RMSD for its pairing.
+
+    Pairs each reference atom with its nearest target atom of the same
+    species and moves the translation by the mean displacement, which
+    minimises the RMSD for that pairing, until the pairing stops changing.
+    Displacements are wrapped by rounding, which gives the nearest image
+    for displacements under half the cell's narrowest width.
+
+    Args:
+        translation: Starting translation, fractional, shape (3,).
+        groups: The alignment species.
+
+    Returns:
+        The refined translation, wrapped into the unit cell.
+    """
+    pairing: list[np.ndarray] | None = None
+    for _ in range(_MAX_REFINEMENT_STEPS):
+        new_pairing = []
+        displacements = []
+        for group in groups:
+            shifted = (group.reference + translation) % 1.0
+            nearest, _ = group.index.query_nearest(shifted)
+            displacement = group.target[nearest] - shifted
+            displacements.append(displacement - np.round(displacement))
+            new_pairing.append(nearest)
+        if pairing is not None and all(
+                np.array_equal(old, new) for old, new in zip(pairing, new_pairing)):
+            break
+        pairing = new_pairing
+        translation = translation + np.concatenate(displacements).mean(axis=0)
+    return translation % 1.0
+
+
+def _nearest_distances(translation: np.ndarray,
+        groups: list[_SpeciesGroup]) -> list[np.ndarray]:
+    """Distance from each translated reference atom to its nearest target atom.
+
+    Args:
+        translation: Translation, fractional, shape (3,).
+        groups: The alignment species.
+
+    Returns:
+        For each species, the exact minimum-image distances.
+    """
+    return [group.index.query_nearest((group.reference + translation) % 1.0)[1]
+            for group in groups]
+
+
+def _alignment(candidate: np.ndarray,
+        groups: list[_SpeciesGroup]) -> tuple[np.ndarray, np.ndarray] | None:
+    """Refine a candidate translation and check that it superimposes the structures.
+
+    Args:
+        candidate: Candidate translation, fractional, shape (3,).
+        groups: The alignment species.
+
+    Returns:
+        (translation, distances), the refined translation and the
+        distance from each reference atom of the alignment species to its
+        nearest target atom of that species, if every distance is within
+        its species' threshold; otherwise None.
+    """
+    translation = _refine(candidate, groups)
+    distances = _nearest_distances(translation, groups)
+    if all((d < group.threshold).all() for d, group in zip(distances, groups)):
+        return translation, np.concatenate(distances)
+    return None
+
+
+def _rmsd(distances: np.ndarray) -> float:
+    """Root-mean-square of the distances."""
+    return float(np.sqrt(np.mean(distances ** 2)))
+
+
+def _metrics(distances: np.ndarray) -> dict[str, float]:
+    """The alignment metrics reported by StructureAligner.align."""
+    return {
+        'rmsd': _rmsd(distances),
+        'max_dist': float(distances.max()),
+        'mean_dist': float(distances.mean()),
+    }
+
+
+class StructureAligner:
+    """Finds the translation that superimposes a reference structure on a target."""
+
+    def align(self,
+            reference_frac_coords: np.ndarray,
+            reference_species: list[str],
+            target_frac_coords: np.ndarray,
+            target_species: list[str],
+            lattice_matrix: np.ndarray,
+            species: list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
+        """Find the translation that superimposes the reference on the target.
+
+        Finds a translation that brings every reference atom of the
+        alignment species within half the shortest same-species spacing of
+        a target atom of that species, choosing the one that fits best and
+        refining it to minimise the RMSD of those distances. Of the
+        translations that fit exactly as well, which differ by a
+        translational symmetry of the alignment atoms, returns the shortest,
+        so structures that already share an origin keep it. Atom order does
+        not matter.
 
         Args:
-            reference: Reference structure to translate.
-            target: Target structure to align to.
-            species: Species to include in alignment. If None, all
-                species present in both structures are used.
-            metric: Distance metric to optimise ('rmsd' or 'max_dist').
-            tolerance: Convergence tolerance for the optimiser.
-            algorithm: Optimisation algorithm ('Nelder-Mead' or
-                'differential_evolution').
-            minimizer_options: Additional options passed to the optimiser.
+            reference_frac_coords: Fractional coordinates of the reference
+                structure, shape (N, 3).
+            reference_species: Species string of each reference atom.
+            target_frac_coords: Fractional coordinates of the target
+                structure, shape (M, 3).
+            target_species: Species string of each target atom.
+            lattice_matrix: (3, 3) lattice matrix shared by both
+                structures, rows as lattice vectors.
+            species: Species to align on. If None, all species are used
+                and the compositions must match.
 
         Returns:
-            A tuple of (aligned_structure, translation_vector, metrics)
-            where aligned_structure is the translated reference,
-            translation_vector is the applied translation in fractional
-            coordinates, and metrics is a dictionary of alignment quality
-            measures.
+            ``(translation, metrics)``: the fractional translation to add
+            to the reference coordinates, and a dictionary with the
+            ``'rmsd'``, ``'max_dist'`` and ``'mean_dist'`` of the distances
+            from each reference atom of the alignment species to its
+            nearest target atom of the same species.
 
         Raises:
-            ValueError: If structures have incompatible compositions, if
-                ``species`` is empty, or if optimisation fails.
+            ValueError: If the structures cannot be compared on these
+                species (see ``_validate_structures``), or no translation
+                superimposes them.
         """
-        # Extract arrays from Structure at the public boundary
-        ref_frac_coords = reference.frac_coords
-        target_frac_coords = target.frac_coords
-        lattice_matrix = reference.lattice.matrix
-        ref_species = [s.species_string for s in reference]
-        target_species_list = [s.species_string for s in target]
-
-        # Validate structures and get species to use
         valid_species = self._validate_structures(
-            ref_species, target_species_list, species)
-
-        # Create objective function
-        objective_function = self._create_objective_function(
-            ref_frac_coords, target_frac_coords, lattice_matrix,
-            ref_species, target_species_list, valid_species, metric)
-
-        # Run the appropriate optimiser using the dispatcher
-        translation_vector = self._run_minimizer(
-            algorithm, objective_function, tolerance, minimizer_options)
-
-        # Apply the translation to get the aligned structure
-        aligned_structure = self._apply_translation(reference, translation_vector)
-
-        # Calculate final metrics using arrays
-        aligned_coords = (ref_frac_coords + translation_vector) % 1.0
-        species_distances, all_distances = calculate_species_distances(
-            aligned_coords, target_frac_coords, lattice_matrix,
-            ref_species, target_species_list, species=valid_species)
-
-        metrics = {
-            'rmsd': float(np.sqrt(np.mean(np.array(all_distances)**2))) if all_distances else float('inf'),
-            'max_dist': float(np.max(all_distances)) if all_distances else float('inf'),
-            'mean_dist': float(np.mean(all_distances)) if all_distances else float('inf'),
-        }
-
-        return aligned_structure, translation_vector, metrics
-        
-    def _create_objective_function(self,
-        ref_frac_coords: np.ndarray,
-        target_frac_coords: np.ndarray,
-        lattice_matrix: np.ndarray,
-        ref_species: list[str],
-        target_species: list[str],
-        valid_species: list[str],
-        metric: str) -> Callable[[np.ndarray], float]:
-        """Create the objective function for optimisation.
-
-        Args:
-            ref_frac_coords: Fractional coordinates of the reference structure.
-            target_frac_coords: Fractional coordinates of the target structure.
-            lattice_matrix: Lattice matrix for distance calculations.
-            ref_species: Species strings for each site in the reference.
-            target_species: Species strings for each site in the target.
-            valid_species: List of species to include in alignment.
-            metric: Metric to optimise (``'rmsd'`` or ``'max_dist'``).
-
-        Returns:
-            Objective function that takes a translation vector and returns
-            the distance metric value.
-        """
-        # The target does not move, so its neighbour indices are built once.
-        ref_species_array = np.asarray(ref_species)
+            list(reference_species), list(target_species), species)
+        reference_frac_coords = np.asarray(reference_frac_coords, dtype=float)
+        target_frac_coords = np.asarray(target_frac_coords, dtype=float)
+        reference_species_array = np.asarray(reference_species)
         target_species_array = np.asarray(target_species)
-        searches: list[tuple[np.ndarray, PeriodicNeighbourIndex]] = []
-        for sp in valid_species:
-            ref_idx = np.flatnonzero(ref_species_array == sp)
-            target_idx = np.flatnonzero(target_species_array == sp)
-            if len(ref_idx) and len(target_idx):
-                searches.append((ref_frac_coords[ref_idx], PeriodicNeighbourIndex(
-                    target_frac_coords[target_idx], lattice_matrix)))
+        groups = []
+        for name in valid_species:
+            reference = reference_frac_coords[reference_species_array == name]
+            target = target_frac_coords[target_species_array == name]
+            groups.append(_SpeciesGroup(
+                name=name, reference=reference, target=target,
+                index=PeriodicNeighbourIndex(target, lattice_matrix),
+                threshold=_threshold(reference, lattice_matrix)))
+        samples = [group.reference[_sample_indices(len(group.reference))]
+                   for group in groups]
+        # The candidates put each reference atom of the species with the
+        # fewest atoms on the first target atom of that species.
+        anchor_group = min(groups, key=lambda group: (len(group.reference), group.name))
+        candidates = (anchor_group.target[0] - anchor_group.reference) % 1.0
+        passed, moved, rmsd = _screen(candidates, groups, samples)
+        survivors = moved[passed]
+        # Best fit first: translations that only nearly superimpose the
+        # alignment atoms, such as near-symmetries of a slightly distorted
+        # sublattice, fit measurably worse than the right one.
+        best: tuple[np.ndarray, np.ndarray] | None = None
+        for candidate in survivors[np.argsort(rmsd[passed], kind="stable")]:
+            best = _alignment(candidate, groups)
+            if best is not None:
+                break
+        if best is None:
+            thresholds = ", ".join(
+                f"{group.name}: {group.threshold:.3g} A" for group in groups)
+            raise ValueError(
+                "No translation brings every alignment atom within half the "
+                f"shortest same-species spacing of a target atom ({thresholds}). "
+                "Align on species whose atoms stay on their sites.")
+        # Of the alignments that fit exactly as well, the shortest: the
+        # survivors in order of length, up to the first equivalent one.
+        # Every equivalent alignment puts the anchor near some reference
+        # atom, so it is among the candidates, and the best fit itself ends
+        # the search at the latest.
+        best_rmsd = _rmsd(best[1])
+        lengths = paired_mic_distances(survivors, np.zeros_like(survivors), lattice_matrix)
+        for candidate in survivors[np.argsort(lengths, kind="stable")]:
+            alignment = _alignment(candidate, groups)
+            if alignment is not None and math.isclose(
+                    _rmsd(alignment[1]), best_rmsd,
+                    rel_tol=_EQUIVALENT_RMSD_RTOL, abs_tol=_EQUIVALENT_RMSD_ATOL):
+                return alignment[0], _metrics(alignment[1])
+        return best[0], _metrics(best[1])
 
-        def objective_function(
-            translation_vector: np.ndarray) -> float:
-            if not searches:
-                return float('inf')
-            translation_vector = translation_vector % 1.0
-            all_distances = np.concatenate([
-                index.query_nearest((ref_coords + translation_vector) % 1.0)[1]
-                for ref_coords, index in searches])
-
-            if metric == 'rmsd':
-                return float(np.sqrt(np.mean(all_distances**2)))
-            elif metric == 'max_dist':
-                return float(np.max(all_distances))
-            else:
-                raise ValueError(f"Unknown metric: {metric}")
-
-        return objective_function
-    
     def _validate_structures(self,
                             ref_species: list[str],
                             target_species: list[str],
@@ -238,173 +390,3 @@ class StructureAligner:
                     f"{ref_count} in reference vs {target_count} in target"
                 )
         return species_to_use
-    
-    def _apply_translation(self, 
-                          structure: Structure, 
-                          translation_vector: np.ndarray) -> Structure:
-        """Apply translation to entire structure.
-        
-        Args:
-            structure: Structure to translate
-            translation_vector: Translation vector to apply
-            
-        Returns:
-            Translated structure
-        """
-        # Create a copy of the structure
-        new_structure: Structure = structure.copy()
-        
-        # Apply translation to all sites
-        for i, site in enumerate(new_structure):
-            frac_coords = site.frac_coords + translation_vector
-            # Ensure coordinates are within [0, 1)
-            frac_coords = frac_coords % 1.0
-            new_structure[i] = site.species, frac_coords
-        
-        return new_structure
-    
-    def _run_minimizer(self,
-        algorithm: str, 
-        objective_function: Callable[[np.ndarray], float],
-        tolerance: float,
-        minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
-        """Run the selected minimization algorithm.
-        
-        Args:
-            algorithm: Name of the algorithm to run
-            objective_function: Function to minimize
-            tolerance: Convergence tolerance
-            minimizer_options: Additional options for the minimizer
-            
-        Returns:
-            np.ndarray: Optimal translation vector
-            
-        Raises:
-            ValueError: If the algorithm is not supported
-        """
-        # Get the algorithm registry
-        algorithm_registry = self._get_algorithm_registry()
-        
-        # Check if algorithm is supported
-        if algorithm not in algorithm_registry:
-            raise ValueError(f"Unsupported algorithm: {algorithm}. "
-                            f"Supported algorithms: {', '.join(algorithm_registry.keys())}")
-        
-        # Get the appropriate implementation method
-        run_algorithm = algorithm_registry[algorithm]
-        
-        # Call the selected algorithm implementation
-        return run_algorithm(objective_function, tolerance, minimizer_options)
-        
-    def _get_algorithm_registry(self) -> dict[str, 
-                                                Callable[
-                                                    [Callable[[np.ndarray], float],
-                                                    float,
-                                                    dict[str, Any] | None
-                                                ], np.ndarray]]:
-        """Get the registry of supported optimization algorithms.
-        
-        Returns:
-            dict: Dictionary mapping algorithm names to implementation methods
-        """
-        return {
-            'Nelder-Mead': self._run_nelder_mead,
-            'differential_evolution': self._run_differential_evolution
-        }
-        
-    def _run_nelder_mead(self, 
-                    objective_function: Callable[[np.ndarray], float], 
-                    tolerance: float, 
-                    minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
-        """Run Nelder-Mead optimization.
-        
-        Args:
-            objective_function: Function to minimize
-            tolerance: Convergence tolerance
-            minimizer_options: Additional options for the minimizer
-            
-        Returns:
-            np.ndarray: Optimised translation vector
-            
-        Raises:
-            ValueError: If optimization fails
-        """
-        from scipy.optimize import minimize
-        
-        # Ensure minimizer_options is a dictionary
-        minimizer_options = minimizer_options or {}
-        
-        # Default options - ensure they exactly match the original implementation
-        options: dict[str, Any] = {
-            'xatol': tolerance,
-            'fatol': tolerance
-        }
-        
-        # Update with user-provided options
-        options.update(minimizer_options)
-        
-        # Run optimisation
-        result = minimize(  # type: ignore[call-overload]
-            objective_function,
-            x0=np.array([0, 0, 0]),  # Start with zero translation
-            method='Nelder-Mead',
-            options=options
-        )
-        
-        if not result.success:
-            raise ValueError(f"Optimization failed: {result.message}")
-        
-        # Ensure in [0,1) range
-        return np.array(result.x) % 1.0
-        
-    def _run_differential_evolution(self,
-            objective_function: Callable[[np.ndarray], float],
-            tolerance: float,
-            minimizer_options: dict[str, Any] | None = None) -> np.ndarray:
-        """Run differential evolution optimization.
-        
-        Args:
-            objective_function: Function to minimize
-            tolerance: Convergence tolerance
-            minimizer_options: Additional options for the minimizer
-            
-        Returns:
-            np.ndarray: Optimal translation vector
-        """
-        from scipy.optimize import differential_evolution
-        
-        # Default options for differential evolution
-        options: dict[str, Any] = {
-            'tol': tolerance,
-            'popsize': 15,
-            'maxiter': 1000,
-            'strategy': 'best1bin',
-            'updating': 'immediate',
-            'workers': 1  # Default to single process for compatibility
-        }
-        
-        # Bounds for translation vector (all components in [0,1))
-        bounds = [(0, 1), (0, 1), (0, 1)]
-        
-        # Update with user-provided options
-        if minimizer_options:
-            options.update(minimizer_options)
-        
-        # Extract bounds if provided in options
-        if minimizer_options and 'bounds' in minimizer_options:
-            bounds = minimizer_options['bounds']
-            options.pop('bounds')
-            
-        # Run optimization
-        result = differential_evolution(
-            objective_function,
-            bounds=bounds,
-            **options
-        )
-        
-        if not result.success:
-            raise ValueError(f"Differential evolution optimization failed: {result.message}")
-        
-        return np.array(result.x) % 1.0  # Ensure in [0,1) range
-        
-    

@@ -85,10 +85,7 @@ trajectory = (TrajectoryBuilder()
     .with_mobile_species("Li")
     .with_structure_alignment(
         align=True,                  # Enable alignment (default)
-        align_species=["O", "Ti"],   # Framework atoms only
-        align_metric='rmsd',         # Optimise root-mean-square distance (default)
-        align_algorithm='Nelder-Mead',  # Default local optimizer
-        align_tolerance=1e-4         # Default alignment precision
+        align_species=["O", "Ti"]    # Framework atoms only
     )
     .with_polyhedral_sites(
         centre_species="Li",
@@ -101,7 +98,19 @@ trajectory = (TrajectoryBuilder()
 
 This example shows how to specify framework atoms for alignment by using the `align_species` parameter. By selecting only framework species that have consistent counts in both structures, proper alignment can be achieved even when the mobile ion content differs between reference and target structures.
 
-For a full reference of all alignment parameters (`align_metric`, `align_algorithm`, `align_tolerance`, `align_minimizer_options`), see the [`with_structure_alignment` documentation](builders.md#with_structure_alignmentaligntrue-align_speciesnone-align_metricrmsd-align_algorithmnelder-mead-align_minimizer_optionsnone-align_tolerance1e-4) in the builder guide.
+Alignment finds origin offsets of any size, for example between the two origin choices of a space group, and it is deterministic. When the alignment species have translational symmetry, several translations superimpose them equally well; they differ only in which index each site receives. Alignment returns the one that moves the reference least, so a target that already shares the reference's origin keeps it, and its sites follow the reference's atom order. To give the sites the same indices in several separately built trajectories whose origins differ, align once, shift the reference by the translation found, and build every trajectory from the shifted reference with alignment switched off:
+
+```python
+from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
+
+rbs = ReferenceBasedSites(reference_structure, first_structure, align_species=["O", "Ti"])
+shifted_reference = reference_structure.copy()
+shifted_reference.translate_sites(
+    range(len(shifted_reference)), rbs.translation_vector, to_unit_cell=True)
+# then .with_reference_structure(shifted_reference) and .with_structure_alignment(align=False)
+```
+
+See the [`with_structure_alignment` documentation](builders.md#with_structure_alignmentaligntrue-align_speciesnone) in the builder guide.
 
 ### Site Mapping Configuration
 
@@ -209,6 +218,12 @@ ValueError: Different number of O atoms: 24 in reference vs 20 in target
 ```
 
 This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
+
+```
+ValueError: Structure alignment failed: No translation brings every alignment atom within half the shortest same-species spacing of a target atom (O: 1.31 A). Align on species whose atoms stay on their sites.
+```
+
+No translation superimposes the reference's alignment atoms on the target's. Check that the alignment species are framework atoms that stay on their sites, that both structures have the same cell and orientation (alignment only handles translation), and that the target is not far from its equilibrium structure.
 
 ### Mapping Conflicts
 

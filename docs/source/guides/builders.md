@@ -232,28 +232,21 @@ Sets a reference structure for polyhedral and dynamic Voronoi sites.
 builder.with_reference_structure(reference_structure)
 ```
 
-#### `with_structure_alignment(align=True, align_species=None, align_metric='rmsd', align_algorithm='Nelder-Mead', align_minimizer_options=None, align_tolerance=1e-4)`
+#### `with_structure_alignment(align=True, align_species=None)`
 Controls structure alignment between reference and target structures.
 
 **Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-All parameters are optional and have sensible defaults:
+Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries every translation that puts a reference atom of the alignment species on one chosen target atom, screens them on a sample of atoms, and refines the best fit to minimise the root-mean-square distance from each reference atom to the nearest target atom of the same species. Of the translations that fit equally well, it returns the one that moves the reference least, so structures that already share an origin keep it. It raises `ValueError` if no translation brings every alignment atom within half the shortest spacing between atoms of its species. The search is deterministic.
 
 **Parameters:**
 - `align`: Whether to perform alignment (default: `True`)
 - `align_species`: Species to use for alignment (default: `None`)
-  - If `None`, mapping species will be used if specified, otherwise all common species
+  - If `None`, mapping species will be used if specified, otherwise all species, and the two structures must then have the same composition
   - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
-  - Typically framework atoms are used to avoid issues with different mobile ion counts
-- `align_metric`: Metric for alignment (default: `'rmsd'`)
-  - `'rmsd'`: Root-mean-square deviation - minimises the average distance between corresponding atoms
-  - `'max_dist'`: Maximum distance - minimises the largest distance between any corresponding atom pair
-- `align_algorithm`: Algorithm for optimization (default: `'Nelder-Mead'`)
-  - `'Nelder-Mead'`: Local optimization, faster but may find local minima
-  - `'differential_evolution'`: Global optimization, more robust but slower
-- `align_minimizer_options`: Additional options for the minimizer as a dictionary (default: `None`)
-- `align_tolerance`: Convergence tolerance for the alignment optimization (default: `1e-4`)
-  - Lower values (e.g., `1e-5`) give more precise alignment but may take longer
+  - Use species whose atoms stay on their sites, typically framework atoms; this also avoids issues with different mobile ion counts
+
+The `align_metric`, `align_algorithm`, `align_minimizer_options` and `align_tolerance` parameters are deprecated: they have no effect, raise a `FutureWarning` and will be removed in version 2.0. `align_metric='max_dist'` raises `ValueError`.
 
 **Examples:**
 ```python
@@ -268,12 +261,6 @@ builder.with_structure_alignment(align_species=["O", "Ti"])
 # Disable alignment
 builder.with_structure_alignment(align=False)
        .with_polyhedral_sites(...)
-
-# Use global optimization for challenging alignments
-builder.with_structure_alignment(
-    align_algorithm='differential_evolution',
-    align_minimizer_options={'popsize': 20}
-)
 ```
 
 #### `with_site_mapping(mapping_species)`

@@ -5,12 +5,12 @@ for defining crystallographic sites in a target structure based on coordination
 environments identified in a reference structure. This approach is particularly
 useful for:
 
-1. Analyzing structures with distortions relative to an ideal reference
+1. Analysing structures with distortions relative to an ideal reference
 2. Tracking specific site types across different structures or simulation frames
 3. Creating consistent site definitions across diverse structures
 
 The ReferenceBasedSites class integrates several components to accomplish this workflow:
-- StructureAligner: Aligns the structures to find the optimal translation vector
+- StructureAligner: Finds the translation that superimposes the reference on the target
 - CoordinationEnvironmentFinder: Identifies coordination environments in the reference
 - IndexMapper: Maps atom indices between reference and target structures
 - SiteFactory: Creates appropriate site objects in the target structure
@@ -25,7 +25,8 @@ from typing import Any
 
 from pymatgen.core import Structure
 
-from site_analysis.reference_workflow.structure_aligner import StructureAligner
+from site_analysis.reference_workflow.structure_aligner import (
+    StructureAligner, _check_deprecated_alignment_options)
 from site_analysis.reference_workflow.coord_finder import CoordinationEnvironmentFinder
 from site_analysis.reference_workflow.index_mapper import IndexMapper
 from site_analysis.reference_workflow.site_factory import SiteFactory
@@ -39,7 +40,7 @@ class ReferenceBasedSites:
     This class ties together all components needed to define sites in crystal structures
     using a reference structure as a template:
     
-    1. StructureAligner - to align the target structure to the reference
+    1. StructureAligner - to find the translation that superimposes the reference structure on the target
     2. CoordinationEnvironmentFinder - to find coordination environments in the reference
     3. IndexMapper - to map environments from reference to target structure
     4. SiteFactory - to create appropriate site objects
@@ -49,32 +50,50 @@ class ReferenceBasedSites:
         target_structure: Target structure where sites will be created.
         aligned_structure: Reference structure translated to match the target
             (None if align=False).
-        translation_vector: Translation vector used for alignment (None if align=False).
-        alignment_metrics: Metrics describing quality of structure alignment (None if align=False).
+        translation_vector: Fractional translation added to the reference
+            coordinates to align them with the target, wrapped into the unit cell
+            (None if align=False).
+        alignment_metrics: Alignment quality, with keys 'rmsd', 'max_dist'
+            and 'mean_dist' in Angstrom (None if align=False).
     """
     
     def __init__(self, 
             reference_structure: Structure, 
             target_structure: Structure, 
             align: bool = True, 
-            align_species: list[str] | None = None, 
-            align_metric: str = 'rmsd',
-            align_algorithm: str = 'Nelder-Mead',
+            align_species: str | list[str] | None = None, 
+            align_metric: str | None = None,
+            align_algorithm: str | None = None,
             align_minimizer_options: dict[str, Any] | None = None,
-            align_tolerance: float = 1e-4) -> None:
+            align_tolerance: float | None = None) -> None:
         """Initialise ReferenceBasedSites with reference and target structures.
         
         Args:
             reference_structure: Reference structure defining ideal coordination environments
             target_structure: Target structure where sites will be created
             align: Whether to perform structure alignment. Default is True.
-            align_species: Species to use for alignment. Default is all species.
-            align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
-            align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
-                            Default is 'Nelder-Mead'.
-            align_minimizer_options: Additional options for the minimizer. Default is None.
-            align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
+            align_species: Species to use for alignment, as a list or a single
+                string. Default is all species, in which case both structures
+                must have the same composition.
+            align_metric: Deprecated; has no effect, except that 'max_dist'
+                raises ValueError. Will be removed in version 2.0.
+            align_algorithm: Deprecated; has no effect. Will be removed in
+                version 2.0.
+            align_minimizer_options: Deprecated; has no effect. Will be
+                removed in version 2.0.
+            align_tolerance: Deprecated; has no effect. Will be removed in
+                version 2.0.
+
+        Raises:
+            ValueError: If align_metric is 'max_dist', which is no longer
+                supported, or if alignment fails.
         """
+        _check_deprecated_alignment_options(
+            align_metric=align_metric, align_algorithm=align_algorithm,
+            align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
+        if isinstance(align_species, str):
+            align_species = [align_species]
+
         self.reference_structure = reference_structure
         self.target_structure = target_structure
 
@@ -83,7 +102,6 @@ class ReferenceBasedSites:
         self._ref_lattice_matrix: np.ndarray = reference_structure.lattice.matrix
         self._ref_species = [s.species_string for s in reference_structure]
         self._target_frac_coords = target_structure.frac_coords
-        self._target_lattice_matrix = target_structure.lattice.matrix
         self._target_species = [s.species_string for s in target_structure]
 
         # Initialise alignment attributes
@@ -94,13 +112,7 @@ class ReferenceBasedSites:
 
         # Perform alignment if requested
         if align:
-            self._align_structures(
-                align_species,
-                align_metric,
-                align_algorithm,
-                align_minimizer_options,
-                align_tolerance
-            )
+            self._align_structures(align_species)
 
         # These will be initialised on first use
         self._coord_finder: CoordinationEnvironmentFinder | None = None
@@ -126,14 +138,14 @@ class ReferenceBasedSites:
         """Create PolyhedralSite objects based on coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
+            center_species: Species at the centre of coordination environments
             vertex_species: Species at vertices of coordination environments
             cutoff: Cutoff distance for coordination environment (required)
             n_vertices: Number of vertices per environment (required)
             label: Label to apply to all created sites. Default is None.
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
-            use_reference_centers: Whether to use reference centers for 
+            use_reference_centers: Whether to use reference centres for 
                 PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
                 Default is True.
             
@@ -155,7 +167,7 @@ class ReferenceBasedSites:
         # Check we do not have repeat periodic images in the coordination environments
         self._validate_unique_environments(ref_environments)
         
-        # Calculate reference centers if requested
+        # Calculate reference centres if requested
         if use_reference_centers:
             center_indices = list(ref_environments.keys())
             reference_centers = self._calculate_reference_centers_from_indices(center_indices)
@@ -191,14 +203,14 @@ class ReferenceBasedSites:
         """Create DynamicVoronoiSite objects based on coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
-            reference_species: Species of reference atoms used to define the dynamic site centers
+            center_species: Species at the centre of coordination environments
+            reference_species: Species of reference atoms used to define the dynamic site centres
             cutoff: Cutoff distance for finding reference atoms (required)
             n_reference: Number of reference atoms per site (required)
             label: Label to apply to all created sites. Default is None.
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
-            use_reference_centers: Whether to use reference centers for 
+            use_reference_centers: Whether to use reference centres for 
                 PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
                 Default is True.
             
@@ -217,7 +229,7 @@ class ReferenceBasedSites:
         # Check we do not have repeat periodic images in the coordination environments
         self._validate_unique_environments(ref_environments)
         
-        # Calculate reference centers if requested
+        # Calculate reference centres if requested
         if use_reference_centers:
             center_indices = list(ref_environments.keys())
             reference_centers = self._calculate_reference_centers_from_indices(center_indices)
@@ -241,50 +253,37 @@ class ReferenceBasedSites:
         
         return sites
     
-    def _align_structures(self, 
-                        align_species: list[str] | None = None, 
-                        align_metric: str = 'rmsd',
-                        align_algorithm: str = 'Nelder-Mead',
-                        align_minimizer_options: dict[str, Any] | None = None,
-                        align_tolerance: float = 1e-4) -> None:
-        """Align target structure to reference structure.
-        
+    def _align_structures(self, align_species: list[str] | None = None) -> None:
+        """Align the reference structure to the target structure.
+
+        Sets ``translation_vector``, ``alignment_metrics`` and
+        ``aligned_structure``, the reference translated onto the target.
+
+        Alignment works in fractional coordinates: the reference's lattice
+        scales the distances used for the thresholds and metrics, and the
+        target's lattice is not used.
+
         Args:
-            align_species: Species to use for alignment. Default is all species.
-            align_metric: Metric for alignment ('rmsd', 'max_dist'). Default is 'rmsd'.
-            align_algorithm: Algorithm for optimization ('Nelder-Mead', 'differential_evolution'). 
-                        Default is 'Nelder-Mead'.
-            align_minimizer_options: Additional options for the minimizer. Default is None.
-            align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
-            
+            align_species: Species to align on. Default is all species.
+
         Raises:
             ValueError: If alignment fails.
         """
         try:
-            # Create a structure aligner
-            aligner = StructureAligner()
-            
-            # Align structures
-            aligned_structure, translation_vector, metrics = aligner.align(
-                self.reference_structure, 
-                self.target_structure, 
-                species=align_species, 
-                metric=align_metric,
-                tolerance=align_tolerance,
-                algorithm=align_algorithm,
-                minimizer_options=align_minimizer_options,
-            )
-            
-            # Update attributes
-            self.aligned_structure = aligned_structure
-            self.translation_vector = translation_vector
-            self.alignment_metrics = metrics
-            self._aligned_frac_coords = aligned_structure.frac_coords
-            
+            translation_vector, metrics = StructureAligner().align(
+                self._ref_frac_coords, self._ref_species,
+                self._target_frac_coords, self._target_species,
+                self._ref_lattice_matrix, species=align_species)
         except ValueError as e:
-            # Re-raise with more context
             raise ValueError(f"Structure alignment failed: {str(e)}") from e
-    
+        self.translation_vector = translation_vector
+        self.alignment_metrics = metrics
+        self._aligned_frac_coords = (self._ref_frac_coords + translation_vector) % 1.0
+        aligned_structure = self.reference_structure.copy()
+        for i, site in enumerate(aligned_structure):
+            aligned_structure[i] = site.species, self._aligned_frac_coords[i]
+        self.aligned_structure = aligned_structure
+
     def _find_coordination_environments(self, 
                                       center_species: str, 
                                       coordination_species: str | list[str], 
@@ -293,14 +292,14 @@ class ReferenceBasedSites:
         """Find coordination environments in the reference structure.
         
         Args:
-            center_species: Species at the center of coordination environments
+            center_species: Species at the centre of coordination environments
             coordination_species: Coordination atom species
             cutoff: Cutoff distance for coordination environment
             n_coord: Number of coordination atoms per environment
             
         Returns:
-            Dictionary mapping center atom indices to lists of coordinating atom indices.
-            Keys are indices of center atoms, values are lists of coordinating atom indices.
+            Dictionary mapping centre atom indices to lists of coordinating atom indices.
+            Keys are indices of centre atoms, values are lists of coordinating atom indices.
             
         Raises:
             ValueError: If coordination environments cannot be found.
@@ -389,7 +388,7 @@ class ReferenceBasedSites:
         """Validate that each environment contains unique atom indices.
         
         Args:
-            environments: Dict of environments, where keys are center atom indices 
+            environments: Dict of environments, where keys are centre atom indices 
                 and values are lists of coordinating atom indices.
             
         Raises:
@@ -404,12 +403,12 @@ class ReferenceBasedSites:
                 duplicates = [idx for idx, count in counts.items() if count > 1]
                 
                 raise ValueError(
-                    f"Environment for center atom {center_idx} contains duplicate atom indices {duplicates}. "
+                    f"Environment for centre atom {center_idx} contains duplicate atom indices {duplicates}. "
                     f"This typically occurs in small unit cells where the same atom "
-                    f"appears as a neighbor in multiple periodic images. "
+                    f"appears as a neighbour in multiple periodic images. "
                     f"Please use a larger supercell for your analysis."
                 )
     def _calculate_reference_centers_from_indices(self, center_indices: list[int]) -> list[np.ndarray]:
-        """Calculate reference centres from center atom indices."""
+        """Calculate reference centres from centre atom indices."""
         coords = self._effective_ref_coords
         return [coords[i].copy() for i in center_indices]

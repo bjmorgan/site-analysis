@@ -169,7 +169,7 @@ Defines polyhedral sites using coordination environments.
 This method benefits from using an idealised structure in the builder, as regular coordination environments are easier to identify and define. However, the ReferenceBasedSites workflow (which this uses internally) can handle some degree of structural distortion.
 
 **Parameters:**
-- `centre_species`: Species at the center of coordination environments
+- `centre_species`: Species at the centre of coordination environments
 - `vertex_species`: Species at vertices of coordination environments
 - `cutoff`: Distance cutoff for coordination environment
 - `n_vertices`: Number of vertices per environment
@@ -196,7 +196,7 @@ For detailed explanations of periodic boundary condition handling, see {doc}`../
 Defines dynamic Voronoi sites using reference atom positions.
 
 **Parameters:**
-- `centre_species`: Species at the center of coordination environments
+- `centre_species`: Species at the centre of coordination environments
 - `reference_species`: Species of reference atoms for dynamic centres
 - `cutoff`: Distance cutoff for finding reference atoms
 - `n_reference`: Number of reference atoms per site
@@ -232,28 +232,21 @@ Sets a reference structure for polyhedral and dynamic Voronoi sites.
 builder.with_reference_structure(reference_structure)
 ```
 
-#### `with_structure_alignment(align=True, align_species=None, align_metric='rmsd', align_algorithm='Nelder-Mead', align_minimizer_options=None, align_tolerance=1e-4)`
+#### `with_structure_alignment(align=True, align_species=None)`
 Controls structure alignment between reference and target structures.
 
 **Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-All parameters are optional and have sensible defaults:
+Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries every translation that puts a reference atom of one alignment species on one chosen target atom of that species, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by a translational symmetry of the alignment atoms fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic.
 
 **Parameters:**
 - `align`: Whether to perform alignment (default: `True`)
 - `align_species`: Species to use for alignment (default: `None`)
-  - If `None`, mapping species will be used if specified, otherwise all common species
+  - If `None`, mapping species will be used if specified, otherwise all species, and the two structures must then have the same composition
   - Can be a single species string (e.g., `"O"`) or a list of species (e.g., `["O", "Ti"]`)
-  - Typically framework atoms are used to avoid issues with different mobile ion counts
-- `align_metric`: Metric for alignment (default: `'rmsd'`)
-  - `'rmsd'`: Root-mean-square deviation - minimises the average distance between corresponding atoms
-  - `'max_dist'`: Maximum distance - minimises the largest distance between any corresponding atom pair
-- `align_algorithm`: Algorithm for optimization (default: `'Nelder-Mead'`)
-  - `'Nelder-Mead'`: Local optimization, faster but may find local minima
-  - `'differential_evolution'`: Global optimization, more robust but slower
-- `align_minimizer_options`: Additional options for the minimizer as a dictionary (default: `None`)
-- `align_tolerance`: Convergence tolerance for the alignment optimization (default: `1e-4`)
-  - Lower values (e.g., `1e-5`) give more precise alignment but may take longer
+  - Use species whose atoms stay on their sites, typically framework atoms; this also avoids issues with different mobile ion counts
+
+The `align_metric`, `align_algorithm`, `align_minimizer_options` and `align_tolerance` parameters are deprecated: they have no effect, issue a `FutureWarning` and will be removed in version 2.0. `align_metric='max_dist'` raises `ValueError`.
 
 **Examples:**
 ```python
@@ -268,12 +261,6 @@ builder.with_structure_alignment(align_species=["O", "Ti"])
 # Disable alignment
 builder.with_structure_alignment(align=False)
        .with_polyhedral_sites(...)
-
-# Use global optimization for challenging alignments
-builder.with_structure_alignment(
-    align_algorithm='differential_evolution',
-    align_minimizer_options={'popsize': 20}
-)
 ```
 
 #### `with_site_mapping(mapping_species)`

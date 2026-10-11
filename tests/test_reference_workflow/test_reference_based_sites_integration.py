@@ -497,15 +497,19 @@ class TestPBCImplemenetation(unittest.TestCase):
             cutoff=3.5, n_vertices=6, use_reference_centers=False  # Legacy method
         )
         
-        # Test that site 3 gets incorrectly unwrapped by legacy method
-        sites[3].assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
+        # Test that the site with Cl 7 among its vertices gets incorrectly unwrapped by legacy method
+        # Sites are found by their target vertices: alignment may relabel them.
+        matching = [site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19}]
+        self.assertEqual(len(matching), 1, "Expected exactly one site with these vertices")
+        site = matching[0]
+        site.assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Check for incorrect unwrapping - coordinates should not match target structure
-        expected_coords = target_structure.frac_coords[sites[3].vertex_indices]
-        actual_coords = sites[3].vertex_coords
+        expected_coords = target_structure.frac_coords[site.vertex_indices]
+        actual_coords = site.vertex_coords
         
         self.assertFalse(np.allclose(actual_coords, expected_coords, atol=1e-10),
-            "Legacy method should incorrectly unwrap site 3")
+            "Legacy method should incorrectly unwrap this site")
     
     def test_reference_center_pbc_method_correctly_handles_large_spread_polyhedra(self):
         """Test that reference_center PBC method correctly handles polyhedra with large spread."""
@@ -529,15 +533,19 @@ class TestPBCImplemenetation(unittest.TestCase):
             cutoff=3.5, n_vertices=6, use_reference_centers=True  # New method
         )
         
-        # Test that site 3 is correctly handled by new method
-        sites[3].assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
+        # Test that the site with Cl 7 among its vertices is correctly handled by new method
+        # Sites are found by their target vertices: alignment may relabel them.
+        matching = [site for site in sites if set(site.vertex_indices) == {3, 7, 9, 11, 18, 19}]
+        self.assertEqual(len(matching), 1, "Expected exactly one site with these vertices")
+        site = matching[0]
+        site.assign_vertex_coords(target_structure.frac_coords, target_structure.lattice.matrix)
         
         # Verify vertex coordinates match target structure exactly
-        expected_coords = target_structure.frac_coords[sites[3].vertex_indices]
-        actual_coords = sites[3].vertex_coords
+        expected_coords = target_structure.frac_coords[site.vertex_indices]
+        actual_coords = site.vertex_coords
         
         np.testing.assert_allclose(actual_coords, expected_coords, atol=1e-10,
-            err_msg="Site 3 vertices should match target structure exactly")
+            err_msg="The site's vertices should match the target structure exactly")
 
 
 if __name__ == "__main__":

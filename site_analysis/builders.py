@@ -49,6 +49,7 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
+from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
 import numpy as np
 from typing import cast, Callable, Sequence, Any
 
@@ -69,7 +70,7 @@ class TrajectoryBuilder:
     - Site mapping: Use ``with_site_mapping()`` to specify which species are used
       to identify corresponding sites between structures.
 
-    **Default Behaviors**
+    **Default Behaviours**
 
     - Alignment is enabled by default.
     - If mapping species are specified but alignment species are not, mapping
@@ -108,7 +109,7 @@ class TrajectoryBuilder:
         """Reset the builder state to default values.
         
         This method clears all configuration and returns the builder to its
-        initial state. It is called automatically during initialization and
+        initial state. It is called automatically during initialisation and
         after build(), but can also be called explicitly if needed.
         
         Returns:
@@ -122,10 +123,6 @@ class TrajectoryBuilder:
         # Alignment options
         self._align = True
         self._align_species: list[str] | None = None
-        self._align_metric = 'rmsd'
-        self._align_algorithm = 'Nelder-Mead'
-        self._align_minimizer_options: dict[str, Any] | None = None
-        self._align_tolerance = 1e-4  # Default tolerance value
         
         # Mapping options
         self._mapping_species: list[str] | None = None
@@ -178,46 +175,50 @@ class TrajectoryBuilder:
         self._mobile_species = species
         return self
     
-    def with_structure_alignment(self, 
-                align: bool = True, 
-                align_species: str | list[str] | None = None, 
-                align_metric: str = 'rmsd',
-                align_algorithm: str = 'Nelder-Mead',
+    def with_structure_alignment(self,
+                align: bool = True,
+                align_species: str | list[str] | None = None,
+                align_metric: str | None = None,
+                align_algorithm: str | None = None,
                 align_minimizer_options: dict[str, Any] | None = None,
-                align_tolerance: float = 1e-4) -> 'TrajectoryBuilder':
+                align_tolerance: float | None = None) -> 'TrajectoryBuilder':
         """Set options for aligning reference and target structures.
-        
-        Structure alignment finds the optimal translation vector to superimpose
-        the reference structure onto the target structure, minimizing distances
-        between corresponding atoms.
-        
+
+        Structure alignment finds the translation that superimposes the
+        reference structure on the target structure, whatever the offset
+        between their origins, so that sites defined in the reference can
+        be placed in the target. Translations related by a translational
+        symmetry of the alignment atoms fit equally well, and any one of
+        them may be chosen; they differ only in which index each site gets.
+
         Note:
             Structure alignment is ENABLED by default when using polyhedral or dynamic
             Voronoi sites, even if this method is not explicitly called. To disable
             alignment, call this method with align=False.
-        
-        All parameters are optional and have sensible defaults:
-        
+
         Args:
             align: Whether to perform structure alignment. Default is True.
             align_species: Species to use for alignment. Can be a string or list of strings.
                 Default is None, which means:
                 - If mapping species have been set with with_site_mapping(), those species will be used
-                - Otherwise, all common species between structures will be used
-            align_metric: Metric for alignment. Options are:
-                - 'rmsd': Root-mean-square deviation (default)
-                - 'max_dist': Maximum distance between any atom pair
-            align_algorithm: Algorithm for optimization. Options are:
-                - 'Nelder-Mead': Local optimizer, faster but may find local minima (default)
-                - 'differential_evolution': Global optimizer, more robust but slower
-            align_minimizer_options: Additional options for the minimizer as a dictionary.
-                Default is None (use algorithm defaults).
-            align_tolerance: Convergence tolerance for alignment optimizer. Default is 1e-4.
-                Lower values (e.g., 1e-5) give more precise alignment but may take longer.
-                
+                - Otherwise, all species will be used, and both structures must have the same composition
+                Use species whose atoms stay on their sites, such as framework atoms.
+            align_metric: Deprecated; has no effect, except that 'max_dist'
+                raises ValueError. Will be removed in version 2.0.
+            align_algorithm: Deprecated; has no effect. Will be removed in
+                version 2.0.
+            align_minimizer_options: Deprecated; has no effect. Will be
+                removed in version 2.0.
+            align_tolerance: Deprecated; has no effect. Will be removed in
+                version 2.0.
+
         Returns:
             self: For method chaining
-            
+
+        Raises:
+            ValueError: If align_metric is 'max_dist', which is no longer
+                supported.
+
         Example::
 
             # Use default alignment (enabled, all species)
@@ -229,27 +230,20 @@ class TrajectoryBuilder:
 
             # Disable alignment
             builder.with_structure_alignment(align=False)
-
-            # Use global optimization for challenging alignments
-            builder.with_structure_alignment(
-                align_algorithm='differential_evolution',
-                align_minimizer_options={'popsize': 20}
-            )
         """
+        _check_deprecated_alignment_options(
+            align_metric=align_metric, align_algorithm=align_algorithm,
+            align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
+
         self._align = align
-        
+
         # Convert single species string to a list
         if isinstance(align_species, str):
             self._align_species = [align_species]
         else:
             self._align_species = align_species
-            
-        self._align_metric = align_metric
-        self._align_algorithm = align_algorithm
-        self._align_minimizer_options = align_minimizer_options
-        self._align_tolerance = align_tolerance
         return self
-        
+
     def with_site_mapping(self, mapping_species: str | list[str] | None) -> TrajectoryBuilder:
         """Set the species to use for mapping sites between reference and target structures.
         
@@ -518,11 +512,7 @@ class TrajectoryBuilder:
                 reference_structure=self._reference_structure,
                 target_structure=self._structure,
                 align=self._align,
-                align_species=align_species,
-                align_metric=self._align_metric,
-                align_algorithm=self._align_algorithm,
-                align_minimizer_options=self._align_minimizer_options,
-                align_tolerance=self._align_tolerance  # Pass the tolerance
+                align_species=align_species
             )
             
             # Determine mapping species (use alignment species if mapping species not specified)
@@ -646,11 +636,7 @@ class TrajectoryBuilder:
                 reference_structure=self._reference_structure,
                 target_structure=self._structure,
                 align=self._align,
-                align_species=align_species,
-                align_metric=self._align_metric,
-                align_algorithm=self._align_algorithm,
-                align_minimizer_options=self._align_minimizer_options,
-                align_tolerance=self._align_tolerance 
+                align_species=align_species
             )
             
             # Determine mapping species (use alignment species if mapping species not specified)
@@ -942,11 +928,11 @@ def create_trajectory_with_polyhedral_sites(
     label: str | None = None,
     align: bool = True,
     align_species: str | list[str] | None = None,
-    align_metric: str = 'rmsd',
-    align_algorithm: str = 'Nelder-Mead',
+    align_metric: str | None = None,
+    align_algorithm: str | None = None,
     align_minimizer_options: dict[str, Any] | None = None,
     mapping_species: str | list[str] | None = None,
-    align_tolerance: float = 1e-4,
+    align_tolerance: float | None = None,
     use_reference_centers: bool = True
 ) -> Trajectory:
     """Create a Trajectory with polyhedral sites using reference-based workflow.
@@ -973,15 +959,18 @@ def create_trajectory_with_polyhedral_sites(
         align: Whether to perform structure alignment before site mapping.
         align_species: Species to use for structure alignment. If None and 
             mapping_species is specified, mapping_species will be used.
-        align_metric: Alignment metric. Options are 'rmsd' for root-mean-square 
-            deviation or 'max_dist' for maximum distance.
-        align_algorithm: Optimisation algorithm. Options are 'Nelder-Mead' for 
-            local optimisation or 'differential_evolution' for global optimisation.
-        align_minimizer_options: Additional options dictionary for the alignment 
-            optimiser.
+            If neither is given, all species are used and both structures
+            must have the same composition.
+        align_metric: Deprecated; has no effect, except that 'max_dist'
+            raises ValueError. Will be removed in version 2.0.
+        align_algorithm: Deprecated; has no effect. Will be removed in
+            version 2.0.
+        align_minimizer_options: Deprecated; has no effect. Will be
+            removed in version 2.0.
+        align_tolerance: Deprecated; has no effect. Will be removed in
+            version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        align_tolerance: Convergence tolerance for alignment optimiser.
         use_reference_centers: Whether to use reference centers for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
@@ -991,21 +980,17 @@ def create_trajectory_with_polyhedral_sites(
         
     Raises:
         ValueError: If no coordination environments are found, if required 
-            structures are not set, or if structure alignment fails.
+            structures are not set, if structure alignment fails, or if align_metric is 'max_dist'.
     """
+    _check_deprecated_alignment_options(
+        align_metric=align_metric, align_algorithm=align_algorithm,
+        align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
     builder = TrajectoryBuilder()
     return (builder
             .with_structure(structure)
             .with_reference_structure(reference_structure)
             .with_mobile_species(mobile_species)
-            .with_structure_alignment(
-                align=align,
-                align_species=align_species,
-                align_metric=align_metric,
-                align_algorithm=align_algorithm,
-                align_minimizer_options=align_minimizer_options,
-                align_tolerance=align_tolerance
-            )
+            .with_structure_alignment(align=align, align_species=align_species)
             .with_site_mapping(mapping_species)
             .with_polyhedral_sites(
                 centre_species,
@@ -1028,11 +1013,11 @@ def create_trajectory_with_dynamic_voronoi_sites(
     label: str | None = None,
     align: bool = True,
     align_species: str | list[str] | None = None,
-    align_metric: str = 'rmsd',
-    align_algorithm: str = 'Nelder-Mead',
+    align_metric: str | None = None,
+    align_algorithm: str | None = None,
     align_minimizer_options: dict[str, Any] | None = None,
     mapping_species: str | list[str] | None = None,
-    align_tolerance: float = 1e-4,
+    align_tolerance: float | None = None,
     use_reference_centers: bool = True
 ) -> Trajectory:
     """Create a Trajectory with dynamic Voronoi sites using reference-based workflow.
@@ -1059,15 +1044,18 @@ def create_trajectory_with_dynamic_voronoi_sites(
         align: Whether to perform structure alignment before site mapping.
         align_species: Species to use for structure alignment. If None and 
             mapping_species is specified, mapping_species will be used.
-        align_metric: Alignment metric. Options are 'rmsd' for root-mean-square 
-            deviation or 'max_dist' for maximum distance.
-        align_algorithm: Optimisation algorithm. Options are 'Nelder-Mead' for 
-            local optimisation or 'differential_evolution' for global optimisation.
-        align_minimizer_options: Additional options dictionary for the alignment 
-            optimiser.
+            If neither is given, all species are used and both structures
+            must have the same composition.
+        align_metric: Deprecated; has no effect, except that 'max_dist'
+            raises ValueError. Will be removed in version 2.0.
+        align_algorithm: Deprecated; has no effect. Will be removed in
+            version 2.0.
+        align_minimizer_options: Deprecated; has no effect. Will be
+            removed in version 2.0.
+        align_tolerance: Deprecated; has no effect. Will be removed in
+            version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        align_tolerance: Convergence tolerance for alignment optimiser.
         use_reference_centers: Whether to use reference centers for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
@@ -1077,21 +1065,17 @@ def create_trajectory_with_dynamic_voronoi_sites(
         
     Raises:
         ValueError: If no coordination environments are found, if required 
-            structures are not set, or if structure alignment fails.
+            structures are not set, if structure alignment fails, or if align_metric is 'max_dist'.
     """
+    _check_deprecated_alignment_options(
+        align_metric=align_metric, align_algorithm=align_algorithm,
+        align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
     builder = TrajectoryBuilder()
     return (builder
             .with_structure(structure)
             .with_reference_structure(reference_structure)
             .with_mobile_species(mobile_species)
-            .with_structure_alignment(
-                align=align,
-                align_species=align_species,
-                align_metric=align_metric,
-                align_algorithm=align_algorithm,
-                align_minimizer_options=align_minimizer_options,
-                align_tolerance=align_tolerance
-            )
+            .with_structure_alignment(align=align, align_species=align_species)
             .with_site_mapping(mapping_species)
             .with_dynamic_voronoi_sites(
                 centre_species,

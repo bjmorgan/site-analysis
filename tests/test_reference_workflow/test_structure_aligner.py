@@ -1,727 +1,456 @@
 """Unit tests for the StructureAligner class.
 
-These tests verify that StructureAligner correctly aligns reference structures to target 
-structures by finding optimal translation vectors.
+These tests verify that StructureAligner finds a translation that
+superimposes a reference structure on a target structure.
 """
 
+import math
 import unittest
-import numpy as np
-from pymatgen.core import Structure, Lattice
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch
 
+import numpy as np
+from pymatgen.core import Lattice, Structure
+
+import site_analysis.reference_workflow.structure_aligner as aligner_module
+from site_analysis.distances import paired_mic_distances
 from site_analysis.reference_workflow.structure_aligner import StructureAligner
+
+
+def align_structures(reference, target, species=None):
+    """Align two pymatgen structures through the array interface."""
+    return StructureAligner().align(
+        reference.frac_coords, [site.species_string for site in reference],
+        target.frac_coords, [site.species_string for site in target],
+        reference.lattice.matrix, species=species)
+
+
+def aligned_coords(reference, translation):
+    """Reference fractional coordinates after the translation."""
+    return (reference.frac_coords + translation) % 1.0
+
+
+def assert_same_translation(found, expected):
+    """The translations agree up to whole lattice vectors."""
+    difference = np.asarray(found) - np.asarray(expected)
+    np.testing.assert_allclose(difference - np.round(difference), 0.0, atol=1e-10)
+
+
+def nearest_same_species_distances(frac_coords, species, target):
+    """Distance from each point to the nearest target atom of its species."""
+    target_species = np.array([site.species_string for site in target])
+    distances = []
+    for coords, name in zip(frac_coords, species):
+        others = target.frac_coords[target_species == name]
+        distances.append(paired_mic_distances(
+            np.repeat(coords[np.newaxis], len(others), axis=0), others,
+            target.lattice.matrix).min())
+    return np.array(distances)
+
+
+def with_noise(structure, scale, seed, shift=(0.0, 0.0, 0.0)):
+    """The structure shifted (fractional), with Gaussian noise (A) added and its atoms shuffled."""
+    rng = np.random.default_rng(seed)
+    cartesian = (((structure.frac_coords + shift) % 1.0) @ structure.lattice.matrix
+                 + rng.normal(scale=scale, size=(len(structure), 3)))
+    order = rng.permutation(len(structure))
+    return Structure(structure.lattice, [structure.species[i] for i in order],
+                     cartesian[order], coords_are_cartesian=True)
+
+
+def rock_salt(supercell=(3, 3, 3), a=5.64):
+    """A rock-salt NaCl supercell."""
+    unit = Structure.from_spacegroup(
+        "Fm-3m", Lattice.cubic(a), ["Na", "Cl"], [[0, 0, 0], [0.5, 0.5, 0.5]])
+    return unit * supercell
+
+
+def spinel(supercell=(1, 1, 1)):
+    """A LiMn2O4 spinel supercell (origin choice 1, oxygen x = 0.388).
+
+    The oxygen sublattice is a slightly distorted cubic close packing, so
+    some translations that are not symmetries superimpose it to within
+    about 0.3 A.
+    """
+    unit = Structure.from_spacegroup(
+        "Fd-3m", Lattice.cubic(8.25), ["Li", "Mn", "O"],
+        [[0.0, 0.0, 0.0], [0.625, 0.625, 0.625], [0.388, 0.388, 0.388]])
+    return unit * supercell
+
+
+def random_framework(seed=6, n_atoms=60, a=10.0, min_separation=2.0):
+    """O atoms at random positions at least min_separation apart: no translational symmetry."""
+    rng = np.random.default_rng(seed)
+    points = []
+    while len(points) < n_atoms:
+        point = rng.random(3)
+        if all(np.linalg.norm(((point - other + 0.5) % 1.0 - 0.5) * a) > min_separation
+               for other in points):
+            points.append(point)
+    return Structure(Lattice.cubic(a), ["O"] * n_atoms, points)
 
 
 class TestStructureAligner(unittest.TestCase):
     """Test cases for the StructureAligner class."""
-    
+
     def test_basic_translation(self):
-        """Test alignment with a simple translation."""
-        # Create a simple cubic reference structure
+        """A uniform translation is recovered exactly."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl"], 
-                            coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
-        
-        # Create target with a known translation
+        reference = Structure(lattice, ["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
         translation = [0.1, 0.2, 0.3]
-        target_coords = [[coord[0] + translation[0], 
-                        coord[1] + translation[1], 
-                        coord[2] + translation[2]] for coord in reference.frac_coords]
-        target = Structure(lattice, reference.species, target_coords)
-        
-        # Align structures
-        aligner = StructureAligner()
-        aligned_structure, trans_vector, metrics = aligner.align(reference, target)
-        
-        # Check that the translation vector is correct (within numerical precision)
-        np.testing.assert_allclose(trans_vector, translation, rtol=1e-3, atol=1e-4)
-        
-        # Check that the aligned structure has the correct coordinates
-        np.testing.assert_allclose(
-            aligned_structure.frac_coords, target.frac_coords, rtol=1e-3, atol=1e-4)
-            
-        # Check metrics - should be near zero for perfect alignment
-        self.assertLess(metrics['rmsd'], 1e-3)
+        target = Structure(lattice, reference.species, reference.frac_coords + translation)
+        found, metrics = align_structures(reference, target)
+        assert_same_translation(found, translation)
+        self.assertLess(metrics['rmsd'], 1e-10)
 
     def test_species_based_alignment(self):
-        """Test alignment based only on selected species."""
-        # Create a reference structure with multiple species
+        """Only the alignment species decide the translation."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl", "K"], 
-                            coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]])
-        
-        # Create target with different translations for different species
-        # Na and K shifted by [0.1, 0.1, 0.1], Cl shifted by [0.2, 0.2, 0.2]
-        target_coords = [
-            [0.1, 0.1, 0.1],  # Na - shifted by [0.1, 0.1, 0.1]
-            [0.7, 0.7, 0.7],  # Cl - shifted by [0.2, 0.2, 0.2]
-            [0.35, 0.35, 0.35]  # K - shifted by [0.1, 0.1, 0.1]
-        ]
-        target = Structure(lattice, reference.species, target_coords)
-        
-        # Align structures using only Na and K
-        aligner = StructureAligner()
-        aligned_structure, trans_vector, metrics = aligner.align(reference, target, species=["Na", "K"])
-        
-        # Check that the translation matches the Na/K shift
-        np.testing.assert_allclose(trans_vector, [0.1, 0.1, 0.1], rtol=1e-3, atol=1e-4)
-        
-        # Check that Na and K are well-aligned, but Cl is not
-        na_idx = reference.indices_from_symbol("Na")[0]
-        k_idx = reference.indices_from_symbol("K")[0]
-        cl_idx = reference.indices_from_symbol("Cl")[0]
-        
-        # Na and K should align well
-        np.testing.assert_allclose(
-            aligned_structure[na_idx].frac_coords, 
-            target[na_idx].frac_coords,
-            rtol=1e-3, atol=1e-4)
-        np.testing.assert_allclose(
-            aligned_structure[k_idx].frac_coords, 
-            target[k_idx].frac_coords,
-            rtol=1e-3, atol=1e-4)
-            
-        # Cl should not align perfectly (check that coordinates are different)
-        self.assertFalse(np.allclose(
-            aligned_structure[cl_idx].frac_coords, 
-            target[cl_idx].frac_coords,
-            rtol=1e-3, atol=1e-4))
+        reference = Structure(lattice, ["Na", "Cl", "K"],
+                              [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5], [0.25, 0.25, 0.25]])
+        # Na and K shifted by 0.1, Cl by 0.2.
+        target = Structure(lattice, reference.species,
+                           [[0.1, 0.1, 0.1], [0.7, 0.7, 0.7], [0.35, 0.35, 0.35]])
+        found, _ = align_structures(reference, target, species=["Na", "K"])
+        assert_same_translation(found, [0.1, 0.1, 0.1])
 
     def test_different_number_of_atoms(self):
-        """Test alignment fails with different numbers of atoms."""
-        # Create a reference structure
+        """Different counts fail for all species, but not for a species whose counts match."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl"], 
-                            coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
-        
-        # Create target with an extra atom
-        target = Structure(lattice, 
-                         species=["Na", "Cl", "Na"], 
-                         coords=[[0.1, 0.1, 0.1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3]])
-        
-        # Alignment should fail with a ValueError
-        aligner = StructureAligner()
+        reference = Structure(lattice, ["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        target = Structure(lattice, ["Na", "Cl", "Na"],
+                           [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3]])
         with self.assertRaises(ValueError):
-            aligner.align(reference, target)
-            
-        # But should work if we specify a species that has the same count
-        aligned_structure, trans_vector, metrics = aligner.align(reference, target, species=["Cl"])
-        # Check that only Cl atoms are aligned
-        cl_idx_ref = reference.indices_from_symbol("Cl")[0]
-        cl_idx_target = target.indices_from_symbol("Cl")[0]
-        np.testing.assert_allclose(
-            aligned_structure[cl_idx_ref].frac_coords, 
-            target[cl_idx_target].frac_coords,
-            rtol=1e-3, atol=1e-4)
+            align_structures(reference, target)
+        found, _ = align_structures(reference, target, species=["Cl"])
+        assert_same_translation(found, [0.1, 0.1, 0.1])
 
     def test_different_compositions(self):
-        """Test alignment fails with different compositions."""
-        # Create a reference structure
+        """Structures with different species cannot be aligned on all species."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl"], 
-                            coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
-        
-        # Create target with different species
-        target = Structure(lattice, 
-                         species=["K", "Br"], 
-                         coords=[[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
-        
-        # Alignment should fail with a ValueError
-        aligner = StructureAligner()
+        reference = Structure(lattice, ["Na", "Cl"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        target = Structure(lattice, ["K", "Br"], [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
         with self.assertRaises(ValueError):
-            aligner.align(reference, target)
+            align_structures(reference, target)
 
-    def test_metric_selection(self):
-        """Test different metrics for alignment."""
-        # Create a reference structure
+    def test_minimises_rmsd_for_a_non_uniform_shift(self):
+        """With atoms shifted by different amounts, the translation is their mean shift."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl", "Na", "Cl"], 
-                            coords=[
-                                [0.0, 0.0, 0.0], 
-                                [0.5, 0.5, 0.5],
-                                [0.2, 0.2, 0.2],
-                                [0.7, 0.7, 0.7]
-                            ])
-        
-        # Create target with a non-uniform translation
-        target_coords = [
-            [0.1, 0.1, 0.1],  # +[0.1, 0.1, 0.1]
-            [0.65, 0.65, 0.65],  # +[0.15, 0.15, 0.15]
-            [0.35, 0.35, 0.35],  # +[0.15, 0.15, 0.15]
-            [0.85, 0.85, 0.85],  # +[0.15, 0.15, 0.15]
-        ]
-        target = Structure(lattice, reference.species, target_coords)
-        
-        aligner = StructureAligner()
-        
-        # Test RMSD metric
-        aligned_rmsd, trans_rmsd, metrics_rmsd = aligner.align(
-            reference, target, metric='rmsd')
-            
-        # Test max_dist metric
-        aligned_max, trans_max, metrics_max = aligner.align(
-            reference, target, metric='max_dist')
-            
-        # The translations may differ slightly due to the different metrics
-        # but they should all be close to the average translation
-        print(trans_rmsd, trans_max)
-        avg_translation = [0.14, 0.14, 0.14]
-        self.assertLess(np.linalg.norm(trans_rmsd - avg_translation), 0.05)
-        self.assertLess(np.linalg.norm(trans_max - avg_translation), 0.05)
-        
-        # Check that metrics are properly returned
-        self.assertIn('rmsd', metrics_rmsd)
-        self.assertIn('max_dist', metrics_rmsd)
-        self.assertIn('mean_dist', metrics_rmsd)
+        reference = Structure(lattice, ["Na", "Cl", "Na", "Cl"],
+                              [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5],
+                               [0.2, 0.2, 0.2], [0.7, 0.7, 0.7]])
+        # Shifted by 0.1, 0.15, 0.15 and 0.15 along each axis.
+        target = Structure(lattice, reference.species,
+                           [[0.1, 0.1, 0.1], [0.65, 0.65, 0.65],
+                            [0.35, 0.35, 0.35], [0.85, 0.85, 0.85]])
+        found, metrics = align_structures(reference, target)
+        assert_same_translation(found, [0.1375] * 3)
+        self.assertEqual(set(metrics), {'rmsd', 'max_dist', 'mean_dist'})
+        distances = np.array([0.0375, 0.0125, 0.0125, 0.0125]) * 5.0 * math.sqrt(3.0)
+        self.assertAlmostEqual(metrics['rmsd'], math.sqrt(np.mean(distances ** 2)), places=12)
+        self.assertAlmostEqual(metrics['max_dist'], distances.max(), places=12)
+        self.assertAlmostEqual(metrics['mean_dist'], distances.mean(), places=12)
 
     def test_pbc_handling(self):
-        """Test alignment with periodic boundary conditions."""
-        # Create a reference structure
+        """A translation across the cell boundary is found."""
         lattice = Lattice.cubic(5.0)
-        reference = Structure(lattice, 
-                            species=["Na", "Cl"], 
-                            coords=[[0.05, 0.05, 0.05], [0.55, 0.55, 0.55]])
-        
-        # Create target with a translation that wraps around PBC
-        # 0.05 -> 0.95 is a shift of 0.9 or -0.1
-        target = Structure(lattice, 
-                         species=["Na", "Cl"], 
-                         coords=[[0.95, 0.95, 0.95], [0.45, 0.45, 0.45]])
-        
-        # Align structures
-        aligner = StructureAligner()
-        aligned_structure, trans_vector, metrics = aligner.align(reference, target)
-        
-        # Check that the aligned structure coordinates match the target when considering PBC
-        for i in range(len(reference)):
-            # Compute minimum distance considering PBC
-            dist = target.lattice.get_distance_and_image(
-                aligned_structure[i].frac_coords, target[i].frac_coords)[0]
-            self.assertLess(dist, 0.01)  # Should be very close
-    
+        reference = Structure(lattice, ["Na", "Cl"], [[0.05, 0.05, 0.05], [0.55, 0.55, 0.55]])
+        target = Structure(lattice, ["Na", "Cl"], [[0.95, 0.95, 0.95], [0.45, 0.45, 0.45]])
+        found, _ = align_structures(reference, target)
+        species = [site.species_string for site in reference]
+        distances = nearest_same_species_distances(
+            aligned_coords(reference, found), species, target)
+        self.assertLess(distances.max(), 1e-10)
+
     def test_half_cell_offset(self):
-        """Test alignment with exactly half a unit cell offset in a highly symmetric structure.
-        
-        This represents a case where a gradient-based optimizer might struggle,
-        as the starting point is a local symmetric maximum.
-        """
-        # Create a reference structure with high symmetry
-        # Using rock salt (NaCl) structure which has full cubic symmetry
+        """A half-cell offset of a symmetric structure is superimposed exactly."""
         lattice = Lattice.cubic(5.0)
         species = ["Na", "Na", "Na", "Na", "Cl", "Cl", "Cl", "Cl"]
-        # Place atoms at the corners of a cube
         coords = np.array([
-            [0.0, 0.0, 0.0],  # Na at origin
-            [0.0, 0.5, 0.5],  # Na at face center
-            [0.5, 0.0, 0.5],  # Na at face center
-            [0.5, 0.5, 0.0],  # Na at face center
-            [0.5, 0.0, 0.0],  # Cl at edge center
-            [0.0, 0.5, 0.0],  # Cl at edge center
-            [0.0, 0.0, 0.5],  # Cl at edge center
-            [0.5, 0.5, 0.5],  # Cl at body center
+            [0.0, 0.0, 0.0], [0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0],
+            [0.5, 0.0, 0.0], [0.0, 0.5, 0.0], [0.0, 0.0, 0.5], [0.5, 0.5, 0.5],
         ])
         reference = Structure(lattice, species, coords)
-        
-        # Create target with exactly half a unit cell offset [0.5, 0.5, 0.5]
-        # This creates a perfectly symmetric case with multiple equivalent minima
-        half_cell_offset = np.array([0.5, 0.5, 0.5])
-        target_coords = np.mod(coords + half_cell_offset, 1.0)
-        target = Structure(lattice, species, target_coords)
-        
-        # Align structures
-        aligner = StructureAligner()
-        aligned_structure, trans_vector, metrics = aligner.align(reference, target)
-        
-        # Use the helper function to verify alignment quality by species
-        from site_analysis.tools import calculate_species_distances
-        aligned_species = [s.species_string for s in aligned_structure]
-        target_species = [s.species_string for s in target]
-        species_distances, all_distances = calculate_species_distances(
-            aligned_structure.frac_coords, target.frac_coords,
-            aligned_structure.lattice.matrix,
-            aligned_species, target_species)
-        
-        # Verify overall alignment quality
-        rmsd = np.sqrt(np.mean(np.array(all_distances)**2)) if all_distances else float('inf')
-        self.assertLess(rmsd, 0.01, "Overall RMSD is too large")
-        
-        # Check that each species is well-aligned
-        for sp, distances in species_distances.items():
-            for i, dist in enumerate(distances):
-                self.assertLess(dist, 0.01, 
-                    f"{sp} atom {i} not aligned properly (distance: {dist})")
-        
-        # Check that the translation vector is one of the valid forms
-        trans_components = np.mod(trans_vector, 1.0)  # Ensure in [0,1)
-        
-        # Convert components close to 1.0 to be close to 0.0 for easier checking
-        trans_components = np.abs(trans_components - np.rint(trans_components))
-        
-        # Count components close to 0.5
-        half_shift_count = sum(np.isclose(component, 0.5, atol=0.05) 
-                            for component in trans_components)
-        
-        # Count components close to 0.0
-        zero_shift_count = sum(np.isclose(component, 0.0, atol=0.05) 
-                            for component in trans_components)
-        
-        # Valid translations must have either:
-        # 1. Exactly one component close to 0.5 and two close to 0.0, OR
-        # 2. All three components close to 0.5
-        is_valid_translation = (
-            (half_shift_count == 1 and zero_shift_count == 2) or  # Single-axis half shift
-            (half_shift_count == 3)                               # Diagonal half shift
-        )
-        
-        self.assertTrue(is_valid_translation, 
-                    f"Translation vector {trans_vector} is not a valid half-cell shift pattern")
+        target = Structure(lattice, species, (coords + 0.5) % 1.0)
+        found, metrics = align_structures(reference, target)
+        distances = nearest_same_species_distances(
+            aligned_coords(reference, found), species, target)
+        self.assertLess(distances.max(), 1e-10)
+        self.assertLess(metrics['rmsd'], 1e-10)
 
-            
     def test_align_with_permuted_atoms(self):
-        """Test that alignment works correctly with permuted atom ordering."""
-        # Create a simple reference structure
+        """Atom order does not matter."""
         lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Cl", "Na", "Cl"]
-        coords1 = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8]   # Cl2
-        ]
-        reference = Structure(lattice, species1, coords1)
-        
-        # Create target with permuted atom order (reversed)
-        permuted_species = species1[::-1]  # Reverse the order
-        permuted_coords = coords1[::-1]    # Reverse the order
-        
-        target = Structure(lattice, permuted_species, permuted_coords)
-        
-        # Align the structures
-        aligner = StructureAligner()
-        aligned_structure, translation_vector, metrics = aligner.align(reference, target)
-        
-        # Check that alignment succeeded without translation
-        self.assertLess(metrics['rmsd'], 0.01)
-        np.testing.assert_array_almost_equal(translation_vector, [0, 0, 0], decimal=2)
-    
+        species = ["Na", "Cl", "Na", "Cl"]
+        coords = [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3], [0.8, 0.8, 0.8]]
+        reference = Structure(lattice, species, coords)
+        target = Structure(lattice, species[::-1], coords[::-1])
+        found, metrics = align_structures(reference, target)
+        self.assertLess(metrics['rmsd'], 1e-10)
+        assert_same_translation(found, [0.0, 0.0, 0.0])
+
     def test_align_with_permuted_atoms_and_translation(self):
-        """Test that alignment works correctly with permuted atoms and translation."""
-        # Create a simple reference structure
+        """Atom order does not matter when the target is also translated."""
         lattice = Lattice.cubic(5.0)
-        species1 = ["Na", "Cl", "Na", "Cl"]
-        coords1 = [
-            [0.1, 0.1, 0.1],  # Na1
-            [0.6, 0.6, 0.6],  # Cl1
-            [0.3, 0.3, 0.3],  # Na2
-            [0.8, 0.8, 0.8]   # Cl2
-        ]
-        reference = Structure(lattice, species1, coords1)
-        
-        # Apply a translation of [0.1, 0.1, 0.1]
-        translation = [0.1, 0.1, 0.1]
-        translated_coords = []
-        for coord in coords1:
-            translated = [(c + t) % 1.0 for c, t in zip(coord, translation)]
-            translated_coords.append(translated)
-        
-        # Permute the atom order
-        permuted_species = species1[::-1]  # Reverse the order
-        permuted_coords = translated_coords[::-1]  # Reverse the order
-        
-        target = Structure(lattice, permuted_species, permuted_coords)
-        
-        # Align the structures
-        aligner = StructureAligner()
-        aligned_structure, found_translation, metrics = aligner.align(reference, target)
-        
-        # Check that alignment succeeded and found the correct translation
-        self.assertLess(metrics['rmsd'], 0.01)
-        np.testing.assert_array_almost_equal(found_translation, translation, decimal=2)
-        
+        species = ["Na", "Cl", "Na", "Cl"]
+        coords = np.array([[0.1, 0.1, 0.1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3], [0.8, 0.8, 0.8]])
+        reference = Structure(lattice, species, coords)
+        target = Structure(lattice, species[::-1], ((coords + 0.1) % 1.0)[::-1])
+        found, metrics = align_structures(reference, target)
+        self.assertLess(metrics['rmsd'], 1e-10)
+        assert_same_translation(found, [0.1, 0.1, 0.1])
+
     def test_validate_structures(self):
         """Test the _validate_structures method with various scenarios."""
-        # Species lists for different compositions
-        species_a = ["Na", "Na", "Cl", "Cl"]       # Na2Cl2
-        species_b = ["Cl", "Na", "Cl", "Na"]       # Na2Cl2 (different ordering)
-        species_c = ["Na", "Na", "Na", "Cl", "Cl"] # Na3Cl2
-        species_d = ["Na", "Na", "Cl", "Cl", "F"]  # Na2Cl2F1
-
+        species_a = ["Na", "Na", "Cl", "Cl"]
+        species_b = ["Cl", "Na", "Cl", "Na"]
+        species_c = ["Na", "Na", "Na", "Cl", "Cl"]
+        species_d = ["Na", "Na", "Cl", "Cl", "F"]
         aligner = StructureAligner()
-
-        # Case 1: Both have identical composition, species=None
-        species_list = aligner._validate_structures(species_a, species_b, None)
-        self.assertCountEqual(species_list, ["Cl", "Na"])
-
-        # Case 2: Different composition, species=None
-        with self.assertRaises(ValueError) as context:
+        self.assertCountEqual(aligner._validate_structures(species_a, species_b, None), ["Cl", "Na"])
+        with self.assertRaisesRegex(ValueError, r"different compositions.*Pass the alignment species"):
             aligner._validate_structures(species_a, species_c, None)
-        self.assertIn("different compositions", str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaisesRegex(ValueError, r"different compositions.*Pass the alignment species"):
             aligner._validate_structures(species_a, species_d, None)
-        self.assertIn("different compositions", str(context.exception))
-
-        # Case 3: Species explicitly specified and exists in both
-        species_list = aligner._validate_structures(species_a, species_b, ["Na"])
-        self.assertEqual(species_list, ["Na"])
-
-        # Case 4: Species explicitly specified but doesn't exist in reference
-        with self.assertRaises(ValueError) as context:
+        self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na"]), ["Na"])
+        with self.assertRaisesRegex(ValueError, r"Species 'F' not found in reference structure \(it has Cl, Na\)"):
             aligner._validate_structures(species_a, species_d, ["F"])
-        self.assertIn("not found in reference", str(context.exception))
-
-        # Case 5: Species explicitly specified but doesn't exist in target
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaisesRegex(ValueError, r"Species 'F' not found in target structure \(it has Cl, Na\)"):
             aligner._validate_structures(species_d, species_a, ["F"])
-        self.assertIn("not found in target", str(context.exception))
-
-        # Case 6: Species explicitly specified but has different counts
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaisesRegex(ValueError, r"Different number of Na atoms.*Align on species present in equal numbers"):
             aligner._validate_structures(species_a, species_c, ["Na"])
-        self.assertIn("Different number of Na atoms", str(context.exception))
-        
+        # A species named twice is used once
+        self.assertEqual(aligner._validate_structures(species_a, species_b, ["Na", "Na"]), ["Na"])
+
+    def test_mismatched_coordinates_and_species_raise(self):
+        """Each structure needs one species per atom."""
+        coords = np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        with self.assertRaisesRegex(ValueError, "reference has 2 coordinates but 1 species"):
+            StructureAligner().align(coords, ["Na"], coords, ["Na", "Cl"], np.eye(3) * 5.0)
+        with self.assertRaisesRegex(ValueError, "target has 2 coordinates but 3 species"):
+            StructureAligner().align(coords, ["Na", "Cl"], coords, ["Na", "Cl", "Cl"], np.eye(3) * 5.0)
+
     def test_empty_species_raises(self):
-        """An empty species list is rejected before optimisation."""
+        """An empty species list is rejected."""
         structure = Structure(Lattice.cubic(5.0), ["Na", "Cl"],
                               [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
-        with self.assertRaises(ValueError) as context:
-            StructureAligner().align(structure, structure.copy(), species=[])
-        self.assertIn("No species to align on", str(context.exception))
+        with self.assertRaisesRegex(ValueError, "No species to align on"):
+            align_structures(structure, structure.copy(), species=[])
 
-    def test_tolerance_passed_to_minimizer(self):
-        """Test that the tolerance parameter is correctly passed to the minimizer."""
-        # Create mock structures that support iteration and array extraction
-        reference = self._make_iterable_mock_structure()
-        target = self._make_iterable_mock_structure()
+    def test_coincident_reference_atoms_raise(self):
+        """Two reference atoms of an alignment species at the same position cannot be matched one to one."""
+        lattice = Lattice.cubic(5.0)
+        reference = Structure(lattice, ["Na", "Na", "Cl"],
+                              [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+        with self.assertRaisesRegex(ValueError, "coincident Na atoms"):
+            align_structures(reference, reference.copy())
 
-        aligner = StructureAligner()
+    def test_species_as_a_string(self):
+        """A single species may be given as a string."""
+        reference = rock_salt((2, 2, 2))
+        target = with_noise(reference, scale=0.05, seed=9, shift=(0.1, 0.0, 0.0))
+        as_string, _ = align_structures(reference, target, species="Na")
+        as_list, _ = align_structures(reference, target, species=["Na"])
+        np.testing.assert_array_equal(as_string, as_list)
 
-        # Mock internal methods to isolate tolerance passing
-        aligner._validate_structures = Mock(return_value=["Na"])
-        mock_objective = Mock(return_value=0.1)
-        aligner._create_objective_function = Mock(return_value=mock_objective)
 
-        custom_tolerance = 0.05
+class TestCandidateSearch(unittest.TestCase):
+    """The search finds origin offsets of any size."""
 
-        with patch.object(aligner, '_run_nelder_mead') as mock_run_nelder_mead:
-            mock_run_nelder_mead.return_value = np.array([0.1, 0.1, 0.1])
+    def assert_superimposed(self, reference, target, translation, tolerance):
+        """Every translated reference atom is near a target atom of its species."""
+        species = [site.species_string for site in reference]
+        distances = nearest_same_species_distances(
+            aligned_coords(reference, translation), species, target)
+        self.assertLess(distances.max(), tolerance)
 
-            aligned_structure = self._make_iterable_mock_structure()
-            aligner._apply_translation = Mock(return_value=aligned_structure)
+    def test_half_cell_offset_in_a_supercell(self):
+        """A half-cell offset in a rock-salt supercell is found."""
+        reference = rock_salt()
+        target = with_noise(reference, scale=0.0, seed=0, shift=(0.5 / 3, 0.0, 0.0))
+        found, metrics = align_structures(reference, target)
+        self.assert_superimposed(reference, target, found, 1e-6)
+        self.assertLess(metrics['rmsd'], 1e-6)
 
-            with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc_distances:
-                mock_calc_distances.return_value = ({}, [0.1])
+    def test_arbitrary_offset_in_a_triclinic_cell(self):
+        """An arbitrary offset in a triclinic cell with thermal noise is recovered."""
+        unit = Structure(Lattice.from_parameters(4.0, 4.5, 5.0, 80, 95, 105),
+                         ["Na", "Cl"], [[0, 0, 0], [0.5, 0.5, 0.5]])
+        reference = unit * (3, 3, 3)
+        target = with_noise(reference, scale=0.05, seed=1, shift=(0.37, 0.12, 0.81))
+        found, metrics = align_structures(reference, target)
+        self.assert_superimposed(reference, target, found, 0.3)
+        self.assertLess(metrics['rmsd'], 0.1)
 
-                aligner.align(reference, target, tolerance=custom_tolerance)
+    def test_arbitrary_offset_in_spinel(self):
+        """An arbitrary offset in spinel is found (Nelder-Mead from zero gets stuck)."""
+        reference = spinel()
+        target = with_noise(reference, scale=0.05, seed=5, shift=(0.3, 0.1, 0.2))
+        found, metrics = align_structures(reference, target)
+        self.assertLess(metrics['rmsd'], 0.15)
 
-                mock_run_nelder_mead.assert_called_once()
-                args, kwargs = mock_run_nelder_mead.call_args
-                self.assertEqual(args[0], mock_objective)
-                self.assertEqual(args[1], custom_tolerance)
-                
-    def test_objective_function_rmsd(self):
-        """The rmsd objective is the RMSD of nearest same-species distances."""
-        aligner = StructureAligner()
-        ref_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
-        target_coords = ref_coords + np.array([0.1, 0.0, 0.0])
-        objective_function = aligner._create_objective_function(
-            ref_coords, target_coords, np.eye(3) * 5.0,
-            ["Na", "Na"], ["Na", "Na"], valid_species=["Na"], metric='rmsd')
-        # Translating by the offset superimposes the structures; with no
-        # translation each atom is 0.5 A from its nearest target atom.
-        self.assertAlmostEqual(objective_function(np.array([0.1, 0.0, 0.0])), 0.0, places=10)
-        self.assertAlmostEqual(objective_function(np.zeros(3)), 0.5, places=10)
+    def test_arbitrary_offset_of_a_random_framework(self):
+        """An offset of an irregular framework, with many false minima, is found."""
+        reference = random_framework()
+        target = with_noise(reference, scale=0.05, seed=7, shift=(0.37, 0.12, 0.29))
+        found, metrics = align_structures(reference, target)
+        self.assertLess(metrics['rmsd'], 0.15)
 
-    def test_objective_function_max_dist(self):
-        """The max_dist objective is the largest nearest same-species distance."""
-        aligner = StructureAligner()
-        ref_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
-        target_coords = np.array([[0.1, 0.1, 0.1], [0.3, 0.2, 0.2]])
-        objective_function = aligner._create_objective_function(
-            ref_coords, target_coords, np.eye(3) * 5.0,
-            ["Na", "Na"], ["Na", "Na"], valid_species=["Na"], metric='max_dist')
-        # Nearest distances are 0 A and 0.5 A.
-        self.assertAlmostEqual(objective_function(np.zeros(3)), 0.5, places=10)
+    def test_refinement_finds_the_least_squares_translation(self):
+        """With every atom paired with its own image, the result is the shift plus the mean noise."""
+        reference = random_framework()
+        rng = np.random.default_rng(11)
+        noise = rng.normal(scale=0.05, size=(len(reference), 3))
+        shift = np.array([0.37, 0.12, 0.29])
+        target = Structure(reference.lattice, reference.species,
+                           ((reference.frac_coords + shift) % 1.0) @ reference.lattice.matrix + noise,
+                           coords_are_cartesian=True)
+        found, _ = align_structures(reference, target)
+        expected = shift + reference.lattice.get_fractional_coords(noise).mean(axis=0)
+        assert_same_translation(found, expected)
 
-    def test_objective_function_in_a_hexagonal_cell(self):
-        """Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
-        # The target atoms are 1.28 A and 1.20 A from the reference atom.
-        # With the lattice transposed, the nearest would be the first, at 1.11 A.
-        aligner = StructureAligner()
-        objective_function = aligner._create_objective_function(
-            np.array([[0.5, 0.5, 0.5]]),
-            np.array([[0.5, 0.82, 0.5], [0.8, 0.8, 0.5]]),
-            Lattice.hexagonal(4.0, 6.0).matrix,
-            ["Na"], ["Na", "Na"], valid_species=["Na"], metric='rmsd')
-        self.assertAlmostEqual(objective_function(np.zeros(3)), 1.2, places=10)
+    def test_translation_is_wrapped_into_the_unit_cell(self):
+        """Every component of the translation is in [0, 1)."""
+        reference = rock_salt((2, 2, 2))
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                found, _ = align_structures(reference, with_noise(reference, scale=0.1, seed=seed))
+                self.assertTrue(((found >= 0.0) & (found < 1.0)).all(), found)
 
-    def test_objective_function_two_species(self):
-        """Each species is matched only to its own species, whatever the atom order."""
-        aligner = StructureAligner()
-        ref_coords = np.array([[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
-        # The target Cl at index 2 is on top of the reference Na, so matching
-        # across species would give smaller values.
-        target_coords = np.array([[0.6, 0.6, 0.6], [0.2, 0.1, 0.1], [0.1, 0.1, 0.1]])
-        args = (ref_coords, target_coords, np.eye(3) * 5.0, ["Na", "Cl"], ["Cl", "Na", "Cl"])
-        rmsd = aligner._create_objective_function(
-            *args, valid_species=["Na", "Cl"], metric='rmsd')
-        max_dist = aligner._create_objective_function(
-            *args, valid_species=["Na", "Cl"], metric='max_dist')
-        # Nearest same-species distances are 0.5 A for Na and 0 A for Cl.
-        self.assertAlmostEqual(rmsd(np.zeros(3)), np.sqrt(0.125), places=10)
-        self.assertAlmostEqual(max_dist(np.zeros(3)), 0.5, places=10)
+    def test_near_symmetry_is_not_mistaken_for_the_alignment(self):
+        """The best fit wins over a translation that only nearly superimposes the atoms.
 
-    def test_objective_function_without_shared_species_is_infinite(self):
-        """With no species present in both structures, the objective is infinite."""
-        aligner = StructureAligner()
-        coords = np.array([[0.1, 0.1, 0.1]])
-        objective_function = aligner._create_objective_function(
-            coords, coords.copy(), np.eye(3) * 5.0, ["Na"], ["Cl"],
-            valid_species=["Na"], metric='rmsd')
-        self.assertEqual(objective_function(np.zeros(3)), float('inf'))
+        Spinel's oxygens are nearly close-packed: some translations that
+        are not symmetries superimpose them to within about 0.3 A RMSD,
+        well within the threshold, but move every lithium site onto an
+        empty tetrahedron.
+        """
+        reference = spinel((2, 2, 2))
+        target = with_noise(reference, scale=0.05, seed=5, shift=(0.0625, 0.0625, 0.0625))
+        found, metrics = align_structures(reference, target, species=["O"])
+        self.assertLess(metrics['rmsd'], 0.15)
+        lithium = [i for i, site in enumerate(reference) if site.species_string == "Li"]
+        distances = nearest_same_species_distances(
+            aligned_coords(reference, found)[lithium], ["Li"] * len(lithium), target)
+        self.assertLess(distances.max(), 0.3)
 
-    def test_run_nelder_mead(self):
-        """Test that _run_nelder_mead properly runs the Nelder-Mead algorithm."""
-        # Create aligner
-        aligner = StructureAligner()
-        
-        # Create a mock objective function
-        objective_function = Mock(return_value=0.1)
-        
-        # Mock minimize to check if it receives the correct parameters
-        with patch('scipy.optimize.minimize') as mock_minimize:
-            # Configure mock to return a valid result
-            mock_result = Mock()
-            mock_result.success = True
-            mock_result.x = np.array([0.1, 0.1, 0.1])
-            mock_minimize.return_value = mock_result
-            
-            # Call the method
-            result = aligner._run_nelder_mead(objective_function, tolerance=0.05)
-            
-            # Verify minimize was called with the correct parameters
-            mock_minimize.assert_called_once()
-            args, kwargs = mock_minimize.call_args
-            self.assertEqual(args[0], objective_function)
-            self.assertEqual(kwargs['method'], 'Nelder-Mead')
-            self.assertEqual(kwargs['x0'].tolist(), [0, 0, 0])
-            self.assertEqual(kwargs['options']['xatol'], 0.05)
-            self.assertEqual(kwargs['options']['fatol'], 0.05)
-            
-            # Verify the result
-            np.testing.assert_array_equal(result, [0.1, 0.1, 0.1])
-            
-    def test_run_differential_evolution_basic_functionality(self):
-        """Test that _run_differential_evolution calls the SciPy function correctly."""
-        # Create aligner
-        aligner = StructureAligner()
-        
-        # Create a simple mock objective function
-        objective_function = Mock()
-        
-        # Mock differential_evolution to avoid actual optimization
-        with patch('scipy.optimize.differential_evolution') as mock_de:
-            # Configure mock to return a simple result
-            mock_result = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
-            mock_de.return_value = mock_result
-            
-            # Call the method with minimal parameters
-            aligner._run_differential_evolution(objective_function, tolerance=0.05)
-            
-            # Simply verify that differential_evolution was called with the right function
-            mock_de.assert_called_once()
-            args, _ = mock_de.call_args
-            self.assertEqual(args[0], objective_function)
-    
-    def test_run_differential_evolution_returns_valid_translation(self):
-        """Test that _run_differential_evolution returns a valid translation vector."""
-        aligner = StructureAligner()
-        expected_translation = np.array([0.1, 0.2, 0.3])
-        
-        with patch('scipy.optimize.differential_evolution') as mock_de:
-            # Return a known vector
-            mock_de.return_value = Mock(success=True, x=expected_translation)
-            
-            # Call the method
-            result = aligner._run_differential_evolution(Mock(), tolerance=0.05)
-            
-            # Verify the result is the expected translation
-            np.testing.assert_array_equal(result, expected_translation)
-    
-    def test_run_differential_evolution_handles_optimization_failure(self):
-        """Test that _run_differential_evolution handles optimization failures."""
-        aligner = StructureAligner()
-        
-        with patch('scipy.optimize.differential_evolution') as mock_de:
-            # Mock a failed optimization
-            mock_de.return_value = Mock(success=False, message="Test failure")
-            
-            # Check that it raises the expected error
-            with self.assertRaises(ValueError):
-                aligner._run_differential_evolution(Mock(), tolerance=0.05)
-                
-    def test_run_differential_evolution_passes_options(self):
-        """Test that _run_differential_evolution correctly passes options to the optimizer."""
-        aligner = StructureAligner()
-        
-        with patch('scipy.optimize.differential_evolution') as mock_de:
-            mock_de.return_value = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
-            
-            # Call with custom options
-            aligner._run_differential_evolution(
-                Mock(), 
-                tolerance=0.05,
-                minimizer_options={'popsize': 20, 'strategy': 'rand1bin'}
-            )
-            
-            # Check that the options were passed correctly
-            args, kwargs = mock_de.call_args
-            self.assertEqual(kwargs['tol'], 0.05)
-            self.assertEqual(kwargs['popsize'], 20)
-            self.assertEqual(kwargs['strategy'], 'rand1bin')
-            
-    def test_run_differential_evolution_does_not_mutate_options(self):
-        """Test that _run_differential_evolution does not mutate the caller's options dict."""
-        aligner = StructureAligner()
+    def test_a_displaced_anchor_does_not_prevent_alignment(self):
+        """The anchor's own displacement does not count against the candidates."""
+        reference = rock_salt((2, 2, 2))
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        threshold = aligner_module._threshold(
+            reference.frac_coords[sodium], reference.lattice.matrix)
+        # This relies on the anchor being the first target Na, and on
+        # _sample_indices to pick a sampled atom other than the anchor (with
+        # rock_salt((2, 2, 2)) all 32 Na are sampled), so a change to either
+        # needs this test updated. Displacing the anchor and a sampled Na in
+        # opposite directions puts that Na 1.2 thresholds from its partner
+        # at every candidate from the anchor.
+        sampled = aligner_module._sample_indices(len(sodium))[1]
+        cartesian = reference.cart_coords.copy()
+        cartesian[sodium[0]] += [0.6 * threshold, 0.0, 0.0]
+        cartesian[sodium[sampled]] -= [0.6 * threshold, 0.0, 0.0]
+        target = Structure(reference.lattice, reference.species, cartesian,
+                           coords_are_cartesian=True)
+        _, metrics = align_structures(reference, target, species=["Na"])
+        self.assertLess(metrics['max_dist'], threshold)
 
-        with patch('scipy.optimize.differential_evolution') as mock_de:
-            mock_de.return_value = Mock(success=True, x=np.array([0.1, 0.1, 0.1]))
+    def test_no_superimposing_translation_raises(self):
+        """A target atom far from every site leaves no translation that superimposes the structures."""
+        reference = rock_salt((2, 2, 2))
+        target = reference.copy()
+        sodium = next(i for i, site in enumerate(target) if site.species_string == "Na")
+        target.replace(sodium, "Na", (target[sodium].frac_coords + [0.25, 0.0, 0.0]) % 1.0)
+        with self.assertRaisesRegex(
+                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species \(align_species\), and check that both structures use the same cell and orientation\. See \"Alignment Errors\" in the reference workflow guide\.$"):
+            align_structures(reference, target, species=["Na"])
 
-            options = {'bounds': [(0, 2), (0, 2), (0, 2)], 'popsize': 20}
-            aligner._run_differential_evolution(
-                Mock(),
-                tolerance=0.05,
-                minimizer_options=options,
-            )
+    def test_a_misplaced_atom_outside_the_sample_raises(self):
+        """The full check catches a misplaced atom that the screen's sample does not include."""
+        reference = rock_salt()
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        sampled = set(aligner_module._sample_indices(len(sodium)).tolist())
+        unsampled = next(k for k in range(len(sodium)) if k not in sampled)
+        target = reference.copy()
+        index = sodium[unsampled]
+        # Onto a Cl site: a / 2 from its nearest Na sites, beyond the Na threshold a / (2 sqrt 2).
+        target.replace(index, "Na", (target[index].frac_coords + [0.5 / 3, 0.0, 0.0]) % 1.0)
+        with self.assertRaisesRegex(
+                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species"):
+            align_structures(reference, target, species=["Na"])
 
-            self.assertIn('bounds', options)
-            self.assertEqual(options['popsize'], 20)
+    def test_each_species_is_held_to_its_own_threshold(self):
+        """An atom beyond its own species' threshold fails, even within another species' threshold."""
+        # O on a simple cubic grid 3 A apart (threshold 1.5 A); Ti on a grid 6 A apart (threshold 3 A).
+        lattice = Lattice.cubic(12.0)
+        oxygen = [[i / 4, j / 4, k / 4] for i in range(4) for j in range(4) for k in range(4)]
+        titanium = [[(i + 0.25) / 2, (j + 0.25) / 2, (k + 0.25) / 2]
+                    for i in range(2) for j in range(2) for k in range(2)]
+        reference = Structure(lattice, ["O"] * 64 + ["Ti"] * 8, oxygen + titanium)
+        target = reference.copy()
+        # One O moved 2 A along a body diagonal: beyond 1.5 A, within 3 A.
+        target.translate_sites([0], np.full(3, 2.0 / math.sqrt(3)),
+                               frac_coords=False, to_unit_cell=True)
+        with self.assertRaisesRegex(ValueError, r"Could not superimpose the reference on the target using O, Ti\."):
+            align_structures(reference, target)
 
-    def _make_iterable_mock_structure(self):
-        """Create a mock Structure that supports iteration for species extraction."""
-        mock = MagicMock(spec=Structure)
-        mock.__iter__ = Mock(return_value=iter([]))
-        mock.frac_coords = np.array([]).reshape(0, 3)
-        mock.lattice.matrix = np.eye(3)
-        return mock
+    def test_screening_in_small_blocks_gives_the_same_result(self):
+        """The block size bounds memory only."""
+        reference = rock_salt()
+        target = with_noise(reference, scale=0.05, seed=10, shift=(0.5 / 3, 0.0, 0.0))
+        expected, _ = align_structures(reference, target)
+        with patch.object(aligner_module, "_SCREEN_BLOCK", 3):
+            found, _ = align_structures(reference, target)
+        np.testing.assert_array_equal(found, expected)
 
-    def test_align_calls_nelder_mead_by_default(self):
-        """Test that align uses Nelder-Mead by default."""
-        aligner = StructureAligner()
+    def test_same_input_gives_the_same_result(self):
+        """Alignment is deterministic."""
+        reference = rock_salt((2, 2, 2))
+        target = with_noise(reference, scale=0.1, seed=3)
+        first, _ = align_structures(reference, target)
+        second, _ = align_structures(reference, target)
+        np.testing.assert_array_equal(first, second)
 
-        # Mock all dependencies to isolate just the algorithm selection
-        aligner._validate_structures = Mock(return_value=["Na"])
-        aligner._create_objective_function = Mock(return_value=Mock())
-        aligner._run_nelder_mead = Mock(return_value=np.array([0, 0, 0]))
-        aligner._run_differential_evolution = Mock()
-        aligned = self._make_iterable_mock_structure()
-        aligner._apply_translation = Mock(return_value=aligned)
 
-        # Mock calculate_species_distances to avoid dependencies
-        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
-            mock_calc.return_value = ({}, [0.1])
+class TestDeprecatedAlignmentOptions(unittest.TestCase):
+    """The deprecated options are named together in one warning."""
 
-            reference = self._make_iterable_mock_structure()
-            target = self._make_iterable_mock_structure()
-            aligner.align(reference, target)
+    def test_several_options_are_named_together(self):
+        """Two options give one warning naming both."""
+        with self.assertWarnsRegex(
+                FutureWarning, r"align_algorithm, align_tolerance have no effect .* delete them"):
+            aligner_module._check_deprecated_alignment_options(
+                align_metric=None, align_algorithm="Nelder-Mead",
+                align_minimizer_options=None, align_tolerance=1e-4)
 
-            # Verify Nelder-Mead was called and differential_evolution was not
-            aligner._run_nelder_mead.assert_called_once()
-            aligner._run_differential_evolution.assert_not_called()
+    def test_max_dist_is_rejected_in_any_case(self):
+        """'MAX_DIST' is rejected like 'max_dist'."""
+        with self.assertRaisesRegex(ValueError, "max_dist"):
+            aligner_module._check_deprecated_alignment_options(
+                align_metric="MAX_DIST", align_algorithm=None,
+                align_minimizer_options=None, align_tolerance=None)
 
-    def test_align_calls_differential_evolution_when_specified(self):
-        """Test that align uses differential_evolution when specified."""
-        aligner = StructureAligner()
 
-        # Mock all dependencies to isolate just the algorithm selection
-        aligner._validate_structures = Mock(return_value=["Na"])
-        aligner._create_objective_function = Mock(return_value=Mock())
-        aligner._run_nelder_mead = Mock()
-        aligner._run_differential_evolution = Mock(return_value=np.array([0, 0, 0]))
-        aligned = self._make_iterable_mock_structure()
-        aligner._apply_translation = Mock(return_value=aligned)
+class TestThreshold(unittest.TestCase):
+    """The per-species threshold is half the shortest same-species spacing."""
 
-        # Mock calculate_species_distances to avoid dependencies
-        with patch('site_analysis.reference_workflow.structure_aligner.calculate_species_distances') as mock_calc:
-            mock_calc.return_value = ({}, [0.1])
+    def test_half_the_shortest_spacing(self):
+        """In rock salt, half the Na-Na spacing, a / (2 sqrt 2)."""
+        reference = rock_salt((2, 2, 2), a=4.0)
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        self.assertAlmostEqual(
+            aligner_module._threshold(reference.frac_coords[sodium], reference.lattice.matrix),
+            4.0 / (2 * math.sqrt(2)), places=12)
 
-            reference = self._make_iterable_mock_structure()
-            target = self._make_iterable_mock_structure()
-            aligner.align(reference, target, algorithm='differential_evolution')
+    def test_one_atom_has_no_threshold(self):
+        """A single atom maps one to one under any translation."""
+        self.assertEqual(aligner_module._threshold(np.zeros((1, 3)), np.eye(3)), math.inf)
 
-            # Verify differential_evolution was called and Nelder-Mead was not
-            aligner._run_differential_evolution.assert_called_once()
-            aligner._run_nelder_mead.assert_not_called()
-    
-    def test_align_raises_error_for_unknown_algorithm(self):
-        """Test that align raises an error for unknown algorithms."""
-        aligner = StructureAligner()
+    def test_an_atom_nearer_its_own_image_than_the_others(self):
+        """In a thin cell the search widens past the atom's own images."""
+        self.assertAlmostEqual(aligner_module._threshold(
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]]), np.diag([1.0, 1.0, 20.0])),
+            5.0, places=12)
 
-        # Mock minimum dependencies needed for the test
-        aligner._validate_structures = Mock(return_value=["Na"])
-        aligner._create_objective_function = Mock()
 
-        reference = self._make_iterable_mock_structure()
-        target = self._make_iterable_mock_structure()
-
-        with self.assertRaises(ValueError) as context:
-            aligner.align(reference, target, algorithm='invalid_algorithm')
-
-        self.assertIn("invalid_algorithm", str(context.exception))
-        
-    def test_algorithm_registry(self):
-        """Test that the algorithm registry correctly maps algorithms to their implementations."""
-        # Create aligner
-        aligner = StructureAligner()
-        
-        # Get the algorithm registry
-        registry = aligner._get_algorithm_registry()
-        
-        # Verify the registry has the expected keys
-        self.assertIn('Nelder-Mead', registry)
-        self.assertIn('differential_evolution', registry)
-        
-        # Verify the registry contains callable functions
-        self.assertTrue(callable(registry['Nelder-Mead']))
-        self.assertTrue(callable(registry['differential_evolution']))
-        
-        # Verify the registry functions are the correct methods
-        self.assertEqual(registry['Nelder-Mead'], aligner._run_nelder_mead)
-        self.assertEqual(registry['differential_evolution'], aligner._run_differential_evolution)
-        
-    def test_run_minimizer(self):
-        """Test that _run_minimizer correctly dispatches to the appropriate algorithm."""
-        aligner = StructureAligner()
-        
-        # Mock the registry methods
-        aligner._run_nelder_mead = Mock(return_value=np.array([0.1, 0.1, 0.1]))
-        aligner._run_differential_evolution = Mock(return_value=np.array([0.2, 0.2, 0.2]))
-        
-        objective_function = Mock()
-        
-        # Test Nelder-Mead dispatching
-        result = aligner._run_minimizer('Nelder-Mead', objective_function, 0.05)
-        aligner._run_nelder_mead.assert_called_once_with(objective_function, 0.05, None)
-        np.testing.assert_array_equal(result, np.array([0.1, 0.1, 0.1]))
-        
-        # Reset mocks
-        aligner._run_nelder_mead.reset_mock()
-        
-        # Test differential_evolution dispatching
-        result = aligner._run_minimizer('differential_evolution', objective_function, 0.05)
-        aligner._run_differential_evolution.assert_called_once_with(objective_function, 0.05, None)
-        np.testing.assert_array_equal(result, np.array([0.2, 0.2, 0.2]))
-        
-        # Test error for unknown algorithm
-        with self.assertRaises(ValueError) as context:
-            aligner._run_minimizer('unknown_algorithm', objective_function, 0.05)
-        self.assertIn("unknown_algorithm", str(context.exception))
-        self.assertIn("Supported algorithms", str(context.exception))
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

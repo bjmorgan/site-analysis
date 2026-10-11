@@ -67,25 +67,11 @@ class TestReferenceBasedSites(unittest.TestCase):
         )
     
     def _setup_mock_structure_aligner(self):
-        """Set up a mock StructureAligner."""
+        """Set up a mock StructureAligner that returns a translation and metrics."""
         mock = Mock()
-        aligned_reference = Mock(spec=Structure)
-        # Give aligned reference the array attributes needed by _map_environments
-        aligned_reference.frac_coords = np.array([
-            [0.05, 0.05, 0.05],
-            [0.55, 0.55, 0.55],
-            [0.55, 0.05, 0.05],
-            [0.05, 0.55, 0.55],
-        ])
-        aligned_lattice = Mock()
-        aligned_lattice.matrix = np.diag([5.0, 5.0, 5.0])
-        aligned_reference.lattice = aligned_lattice
         translation_vector = np.array([0.1, 0.1, 0.1])
         metrics = {'rmsd': 0.1, 'max_dist': 0.2, 'mean_dist': 0.15}
-
-        # Mock align method to return the aligned reference structure
-        mock.align.return_value = (aligned_reference, translation_vector, metrics)
-
+        mock.align.return_value = (translation_vector, metrics)
         return mock
     
     def _setup_mock_coord_finder(self):
@@ -122,30 +108,29 @@ class TestReferenceBasedSites(unittest.TestCase):
     def test_init_with_alignment(self):
         """Test initialization with structure alignment."""
         with self.structure_aligner_patch:
-            # Configure the mock to return aligned reference
-            aligned_reference, _, _ = self.mock_structure_aligner.align.return_value
-            translation_vector = np.array([0.1, 0.1, 0.1])
-            metrics = {'rmsd': 0.1, 'max_dist': 0.2, 'mean_dist': 0.15}
-            self.mock_structure_aligner.align.return_value = (aligned_reference, translation_vector, metrics)
+            translation_vector, metrics = self.mock_structure_aligner.align.return_value
 
-            # Initialize with alignment
             rbs = ReferenceBasedSites(self.reference, self.target, align=True)
 
             # Check public attributes
             self.assertEqual(rbs.reference_structure, self.reference)
             self.assertEqual(rbs.target_structure, self.target)
-            self.assertEqual(rbs.aligned_structure, aligned_reference)
             np.testing.assert_array_equal(rbs.translation_vector, translation_vector)
             self.assertEqual(rbs.alignment_metrics, metrics)
+
+            # The reference coordinates are translated, and the aligned
+            # structure holds them
+            expected = (self.reference.frac_coords + translation_vector) % 1.0
+            np.testing.assert_array_equal(rbs._aligned_frac_coords, expected)
+            np.testing.assert_array_equal(rbs.aligned_structure.frac_coords, expected)
+            self.assertEqual(rbs.aligned_structure.species, self.reference.species)
 
             # Check eagerly extracted arrays
             np.testing.assert_array_equal(rbs._ref_frac_coords, self.reference.frac_coords)
             np.testing.assert_array_equal(rbs._ref_lattice_matrix, self.reference.lattice.matrix)
             self.assertEqual(rbs._ref_species, [s.species_string for s in self.reference])
             np.testing.assert_array_equal(rbs._target_frac_coords, self.target.frac_coords)
-            np.testing.assert_array_equal(rbs._target_lattice_matrix, self.target.lattice.matrix)
             self.assertEqual(rbs._target_species, [s.species_string for s in self.target])
-            np.testing.assert_array_equal(rbs._aligned_frac_coords, aligned_reference.frac_coords)
 
     def test_init_without_alignment(self):
         """Test initialization without structure alignment."""
@@ -168,33 +153,45 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertIsNone(rbs._aligned_frac_coords)
     
     def test_align_structures(self):
-        """Test the _align_structures method."""
+        """_align_structures passes the structures' arrays to the aligner."""
         with self.structure_aligner_patch:
-            # Get the aligned reference that will be returned by the mock
-            aligned_reference, translation_vector, metrics = self.mock_structure_aligner.align.return_value
-            
-            # Initialize without alignment initially
+            translation_vector, metrics = self.mock_structure_aligner.align.return_value
             rbs = ReferenceBasedSites(self.reference, self.target, align=False)
-            
-            # Now perform alignment
-            rbs._align_structures(align_species=['Na'], align_metric='max_dist')
-            
-            # Check that align was called with correct parameters
-            self.mock_structure_aligner.align.assert_called_with(
-                self.reference,
-                self.target,
-                species=['Na'],
-                metric='max_dist',
-                tolerance=0.0001,
-                algorithm='Nelder-Mead',
-                minimizer_options=None
-            )
-            
-            # Check that attributes were updated correctly
-            self.assertIs(rbs.aligned_structure, aligned_reference)
+
+            rbs._align_structures(align_species=['Na'])
+
+            args, kwargs = self.mock_structure_aligner.align.call_args
+            np.testing.assert_array_equal(args[0], self.reference.frac_coords)
+            self.assertEqual(args[1], ["Na", "Cl", "Na", "Cl"])
+            np.testing.assert_array_equal(args[2], self.target.frac_coords)
+            self.assertEqual(args[3], ["Na", "Cl", "Na", "Cl"])
+            np.testing.assert_array_equal(args[4], self.reference.lattice.matrix)
+            self.assertEqual(kwargs, {'species': ['Na']})
             np.testing.assert_array_equal(rbs.translation_vector, translation_vector)
             self.assertEqual(rbs.alignment_metrics, metrics)
-    
+
+    def test_align_structures_reports_failure(self):
+        """An alignment failure is reported with context."""
+        with self.structure_aligner_patch:
+            self.mock_structure_aligner.align.side_effect = ValueError("no translation")
+            with self.assertRaisesRegex(ValueError, "Structure alignment failed: no translation"):
+                ReferenceBasedSites(self.reference, self.target, align=True)
+
+    def test_deprecated_alignment_options_warn(self):
+        """The deprecated options warn at the caller's line and do not reach the aligner."""
+        with self.structure_aligner_patch:
+            with self.assertWarnsRegex(FutureWarning, "align_algorithm has no effect") as context:
+                ReferenceBasedSites(self.reference, self.target, align=True,
+                                    align_algorithm="differential_evolution")
+            self.assertEqual(context.filename, __file__)
+            _, kwargs = self.mock_structure_aligner.align.call_args
+            self.assertEqual(kwargs, {'species': None})
+
+    def test_max_dist_alignment_metric_raises(self):
+        """Alignment no longer minimises the largest distance, so asking for it is an error."""
+        with self.assertRaisesRegex(ValueError, "max_dist"):
+            ReferenceBasedSites(self.reference, self.target, align=True, align_metric="max_dist")
+
     def test_find_coordination_environments(self):
         """Test the _find_coordination_environments method."""
         with self.coord_finder_patch:
@@ -245,9 +242,6 @@ class TestReferenceBasedSites(unittest.TestCase):
     def test_map_environments_with_aligned_structure(self):
         """Test the _map_environments method with an aligned structure."""
         with self.structure_aligner_patch, self.index_mapper_patch:
-            # Get the aligned reference mock from setup
-            aligned_reference, _, _ = self.mock_structure_aligner.align.return_value
-
             # Initialize with alignment
             rbs = ReferenceBasedSites(self.reference, self.target, align=True)
 
@@ -376,9 +370,6 @@ class TestReferenceBasedSites(unittest.TestCase):
     def test_create_dynamic_voronoi_sites_with_alignment(self):
         """Test the create_dynamic_voronoi_sites method when alignment has been performed."""
         with self.coord_finder_patch, self.index_mapper_patch, self.site_factory_patch, self.structure_aligner_patch:
-            # Get the aligned reference mock from setup
-            aligned_reference, _, _ = self.mock_structure_aligner.align.return_value
-            
             # Initialize with alignment
             rbs = ReferenceBasedSites(self.reference, self.target, align=True)
             
@@ -585,7 +576,7 @@ class TestReferenceBasedSites(unittest.TestCase):
                 rbs._validate_unique_environments(duplicate_environments)
             
             # Check error message
-            self.assertIn("Environment for center atom 0 contains duplicate atom indices", str(context.exception))
+            self.assertIn("Environment for centre atom 0 contains duplicate atom indices", str(context.exception))
             self.assertIn("2", str(context.exception))  # Should mention the duplicated index
     
     def test_validate_unique_environments_multiple_duplicates(self):
@@ -697,126 +688,6 @@ class TestReferenceBasedSites(unittest.TestCase):
             self.assertEqual(call_args.kwargs['ref_coordinating'], ref_environments)
             self.assertEqual(call_args.kwargs['target_species'], rbs2._target_species)
             self.assertIsNone(call_args.kwargs['species_filter'])
-            
-    def _make_mock_structure(self, n_atoms: int = 2) -> Mock:
-        """Create a mock Structure with the attributes needed by the constructor."""
-        mock = Mock(spec=Structure)
-        mock.frac_coords = np.zeros((n_atoms, 3))
-        mock_lattice = Mock()
-        mock_lattice.matrix = np.eye(3)
-        mock.lattice = mock_lattice
-        # Make it iterable with species_string
-        mock_sites = [Mock(species_string="X") for _ in range(n_atoms)]
-        mock.__iter__ = Mock(return_value=iter(mock_sites))
-        return mock
-
-    def test_align_structures_unit(self):
-        """Unit test for _align_structures - verifies parameters are correctly passed to StructureAligner."""
-        # Create mock structures with required attributes
-        mock_reference = self._make_mock_structure()
-        mock_target = self._make_mock_structure()
-
-        # Create test parameters
-        align_species = ["Na"]
-        align_metric = "max_dist"
-        align_algorithm = "differential_evolution"
-        align_minimizer_options = {"popsize": 20, "maxiter": 500}
-
-        # Create ReferenceBasedSites with mocked structures but don't call _align_structures yet
-        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
-            # Configure mock
-            mock_aligner = Mock()
-            MockAligner.return_value = mock_aligner
-            mock_aligner.align.return_value = (Mock(), np.array([0.1, 0.1, 0.1]), {"rmsd": 0.1})
-
-            # Create instance with align=False to avoid immediate call to _align_structures
-            rbs = ReferenceBasedSites(
-                reference_structure=mock_reference,
-                target_structure=mock_target,
-                align=False  # Important: don't align in the constructor
-            )
-            
-            # Now call _align_structures directly with our parameters
-            rbs._align_structures(
-                align_species=align_species,
-                align_metric=align_metric,
-                align_algorithm=align_algorithm,
-                align_minimizer_options=align_minimizer_options
-            )
-            
-            # Verify StructureAligner was created
-            MockAligner.assert_called_once()
-            
-            # Verify align was called with correct parameters
-            mock_aligner.align.assert_called_once()
-            _, kwargs = mock_aligner.align.call_args
-            
-            # Check each parameter was correctly passed
-            self.assertEqual(kwargs["species"], align_species)
-            self.assertEqual(kwargs["metric"], align_metric)
-            self.assertEqual(kwargs["algorithm"], align_algorithm)
-            self.assertEqual(kwargs["minimizer_options"], align_minimizer_options)
-            
-    def test_tolerance_passed_to_structure_aligner(self):
-        """Test that align_tolerance is correctly passed to StructureAligner.align()."""
-        # Create mock structures with required attributes
-        mock_reference = self._make_mock_structure()
-        mock_target = self._make_mock_structure()
-
-        # Custom tolerance value to test
-        align_tolerance = 1e-5
-
-        # Create ReferenceBasedSites with mocked structures
-        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
-            # Configure mock
-            mock_aligner = Mock()
-            MockAligner.return_value = mock_aligner
-            aligned_mock = self._make_mock_structure()
-            mock_aligner.align.return_value = (aligned_mock, np.array([0]), {"rmsd": 0})
-
-            # Create instance with align=True to trigger call to aligner
-            rbs = ReferenceBasedSites(
-                reference_structure=mock_reference,
-                target_structure=mock_target,
-                align=True,
-                align_tolerance=align_tolerance
-            )
-            
-            # Verify align was called with correct tolerance
-            mock_aligner.align.assert_called_once()
-            _, kwargs = mock_aligner.align.call_args
-            self.assertEqual(kwargs["tolerance"], align_tolerance)
-            
-    def test_align_structures_passes_tolerance(self):
-        """Test that _align_structures correctly passes tolerance to the StructureAligner."""
-        # Create mock structures with required attributes
-        mock_reference = self._make_mock_structure()
-        mock_target = self._make_mock_structure()
-
-        # Custom tolerance value to test
-        align_tolerance = 1e-5
-
-        # Create ReferenceBasedSites with mocked structures but don't align immediately
-        with patch('site_analysis.reference_workflow.reference_based_sites.StructureAligner') as MockAligner:
-            # Configure mock aligner
-            mock_aligner = Mock()
-            MockAligner.return_value = mock_aligner
-            mock_aligner.align.return_value = (Mock(), np.array([0]), {"rmsd": 0})
-            
-            # Create instance without alignment
-            rbs = ReferenceBasedSites(
-                reference_structure=mock_reference,
-                target_structure=mock_target,
-                align=False  # Don't align in constructor
-            )
-            
-            # Now directly call _align_structures with our custom tolerance
-            rbs._align_structures(align_tolerance=align_tolerance)
-            
-            # Verify align was called with correct tolerance
-            mock_aligner.align.assert_called_once()
-            _, kwargs = mock_aligner.align.call_args
-            self.assertEqual(kwargs["tolerance"], align_tolerance)
             
     def test_create_polyhedral_sites_passes_calculated_reference_centers_to_site_factory(self):
         """Test that create_polyhedral_sites passes calculated reference centers to site factory."""

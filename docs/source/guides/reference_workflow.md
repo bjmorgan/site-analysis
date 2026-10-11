@@ -41,7 +41,7 @@ This implementation:
 2. Creates corresponding sites in the target structure 
 3. Automatically aligns the reference structure to the target structure, ensuring the coordination environments can be correctly mapped between them
 
-The TrajectoryBuilder's `.with_polyhedral_sites()` and `.with_dynamic_voronoi_sites()` methods both utilize the RBS workflow internally, providing a streamlined interface for this functionality.
+The TrajectoryBuilder's `.with_polyhedral_sites()` and `.with_dynamic_voronoi_sites()` methods both utilise the RBS workflow internally, providing a streamlined interface for this functionality.
 
 ## Workflow Mechanism
 
@@ -74,7 +74,7 @@ For the Reference-Based Sites workflow to function correctly, the reference and 
 
 ### Structure Alignment
 
-When working with reference and target structures that have different numbers of mobile atoms (such as when analyzing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
+When working with reference and target structures that have different numbers of mobile atoms (such as when analysing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
 
 **Important**: Structure alignment is **enabled by default** for the reference-based workflow, even if not explicitly configured. To disable alignment, you must explicitly set `align=False`.
 
@@ -85,10 +85,7 @@ trajectory = (TrajectoryBuilder()
     .with_mobile_species("Li")
     .with_structure_alignment(
         align=True,                  # Enable alignment (default)
-        align_species=["O", "Ti"],   # Framework atoms only
-        align_metric='rmsd',         # Optimise root-mean-square distance (default)
-        align_algorithm='Nelder-Mead',  # Default local optimizer
-        align_tolerance=1e-4         # Default alignment precision
+        align_species=["O", "Ti"]    # Framework atoms only
     )
     .with_polyhedral_sites(
         centre_species="Li",
@@ -101,7 +98,20 @@ trajectory = (TrajectoryBuilder()
 
 This example shows how to specify framework atoms for alignment by using the `align_species` parameter. By selecting only framework species that have consistent counts in both structures, proper alignment can be achieved even when the mobile ion content differs between reference and target structures.
 
-For a full reference of all alignment parameters (`align_metric`, `align_algorithm`, `align_tolerance`, `align_minimizer_options`), see the [`with_structure_alignment` documentation](builders.md#with_structure_alignmentaligntrue-align_speciesnone-align_metricrmsd-align_algorithmnelder-mead-align_minimizer_optionsnone-align_tolerance1e-4) in the builder guide.
+Alignment finds origin offsets of any size, for example between the two origin choices of a space group, and it is deterministic. When the alignment species have translational symmetry, several translations superimpose them equally well. They differ only in which index each site receives, and any one of them may be returned, even when the target already shares the reference's origin. To give the sites the same indices in several trajectories whose structures share an origin with one another, align the reference to a structure from one of them, shift the reference by the translation found, and build every trajectory from the shifted reference with alignment switched off:
+
+```python
+from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
+
+# frame: a structure from one of the trajectories
+rbs = ReferenceBasedSites(reference_structure, frame, align_species=["O", "Ti"])
+shifted_reference = reference_structure.copy()
+shifted_reference.translate_sites(
+    range(len(shifted_reference)), rbs.translation_vector, to_unit_cell=True)
+# then .with_reference_structure(shifted_reference) and .with_structure_alignment(align=False)
+```
+
+See the [`with_structure_alignment` documentation](builders.md#with_structure_alignmentaligntrue-align_speciesnone) in the builder guide.
 
 ### Site Mapping Configuration
 
@@ -123,7 +133,7 @@ trajectory = (TrajectoryBuilder()
     .build())
 ```
 
-The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centers.
+The `mapping_species` parameter controls which atoms are used to define site geometries. For polyhedral sites, these atoms form the vertices of the polyhedra, while for dynamic Voronoi sites, they serve as reference atoms for calculating site centres.
 
 ### Periodic Boundary Condition Handling
 
@@ -180,7 +190,7 @@ For optimal results:
 
 1. **Use crystallographically defined reference structures**
    
-   Use structures with well-defined, regular coordination environments as references. Geometry-optimized structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyze in your target structures.
+   Use structures with well-defined, regular coordination environments as references. Geometry-optimised structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyse in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately.
 
 2. **Select appropriate alignment species**
    
@@ -188,7 +198,7 @@ For optimal results:
 
 3. **Adjust cutoff parameters as needed**
    
-   Optimize cutoff values based on typical bond distances in your system. Different materials may require different cutoff values to properly identify coordination environments, so some experimentation with these parameters may be necessary.
+   Optimise cutoff values based on typical bond distances in your system. Different materials may require different cutoff values to properly identify coordination environments, so some experimentation with these parameters may be necessary.
 
 ## Troubleshooting
 
@@ -205,10 +215,27 @@ This error occurs when the specified coordination environments cannot be found i
 ### Alignment Errors
 
 ```
-ValueError: Different number of O atoms: 24 in reference vs 20 in target
+ValueError: Structure alignment failed: Different number of O atoms: 24 in reference vs 20 in target. Align on species present in equal numbers in both structures
 ```
 
 This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
+
+```
+ValueError: Structure alignment failed: Could not superimpose the reference on the target using O. Try aligning only on immobile framework species (align_species), and check that both structures use the same cell and orientation. See "Alignment Errors" in the reference workflow guide.
+```
+
+Alignment looks for a translation that puts every reference atom of the alignment species close to a target atom of the same species: within half the shortest distance between two reference atoms of that species. That limit guarantees that each reference atom is matched to a different target atom. The error means that no translation achieved it. Common causes:
+
+- **A mobile species among the alignment species.** If neither `align_species` nor mapping species are set, every species is used, including mobile ions, which rarely sit on their reference sites. Align on framework species instead, for example `align_species=["O"]`.
+- **A different cell setting.** Alignment only translates. If the supercell differs (for example 2 x 1 x 1 against 1 x 2 x 1) or the axes are permuted or mirrored, usually no translation fits; build the reference in the same setting as the target. If the alignment atoms happen to look the same in both settings, alignment can succeed even though the other species do not line up, so make sure the two structures use the same setting.
+- **A strongly disordered target.** An alignment atom that has moved far from its site, for instance a framework atom in a hot MD frame, can exceed the limit. Try a different frame, or align on a stiffer species.
+- **A distorted reference.** The limit is set by the reference's single shortest same-species distance, so one short pair in a distorted reference tightens it for every atom. If the reference is not close to the target's average structure, for example a reference relaxed around a defect, an idealised or symmetrised reference can help.
+
+A species with a single atom has no such limit: aligning only on it always succeeds and rests on that one atom, so include a species with several atoms.
+
+Candidates are screened on a sample of atoms before they are refined, so an alignment whose worst atom is very close to the limit can occasionally be rejected even though it would pass. A different frame or alignment species usually resolves this.
+
+The limit and the reported alignment metrics are measured in the reference structure's lattice. Alignment works in fractional coordinates, so a target cell that is strained relative to the reference, such as an NPT frame or a relaxed cell, still aligns correctly.
 
 ### Mapping Conflicts
 
@@ -220,12 +247,12 @@ This error occurs when the mapping cannot establish a one-to-one correspondence 
 
 ## Advanced Implementation
 
-For specialized applications requiring more direct control, the RBS workflow can be accessed directly:
+For specialised applications requiring more direct control, the RBS workflow can be accessed directly:
 
 ```python
 from site_analysis.reference_workflow import ReferenceBasedSites
 
-# Initialize the reference-based workflow
+# Initialise the reference-based workflow
 rbs = ReferenceBasedSites(
     reference_structure=reference_structure,
     target_structure=target_structure,
@@ -248,4 +275,4 @@ atoms = atoms_from_structure(target_structure, "Li")
 trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
 ```
 
-This direct approach provides additional control for specialized analyses and can be integrated with custom analysis workflows.
+This direct approach provides additional control for specialised analyses and can be integrated with custom analysis workflows.

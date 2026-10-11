@@ -169,8 +169,6 @@ def _refine(translation: np.ndarray, groups: list[_SpeciesGroup]) -> np.ndarray:
     Pairs each reference atom with its nearest target atom of the same
     species and moves the translation by the mean displacement, which
     minimises the RMSD for that pairing, until the pairing stops changing.
-    Displacements are wrapped by rounding, which gives the nearest image
-    for displacements under half the cell's narrowest width.
 
     Args:
         translation: Starting translation, fractional, shape (3,).

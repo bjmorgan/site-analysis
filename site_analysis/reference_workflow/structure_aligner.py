@@ -384,8 +384,8 @@ class StructureAligner:
             used = ", ".join(group.name for group in groups)
             raise ValueError(
                 f"Could not superimpose the reference on the target using {used}. "
-                "Align on framework species whose atoms stay near their sites, and "
-                "check that both structures use the same cell and orientation. See "
+                "Try aligning only on immobile framework species (align_species), "
+                "and check that both structures use the same cell and orientation. See "
                 "\"Alignment Errors\" in the reference workflow guide.")
         return best[0], _metrics(best[1])
 

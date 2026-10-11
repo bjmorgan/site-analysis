@@ -361,7 +361,7 @@ class TestCandidateSearch(unittest.TestCase):
         sodium = next(i for i, site in enumerate(target) if site.species_string == "Na")
         target.replace(sodium, "Na", (target[sodium].frac_coords + [0.25, 0.0, 0.0]) % 1.0)
         with self.assertRaisesRegex(
-                ValueError, r"Could not superimpose the reference on the target using Na\. Align on framework species"):
+                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species"):
             align_structures(reference, target, species=["Na"])
 
     def test_a_misplaced_atom_outside_the_sample_raises(self):
@@ -375,7 +375,7 @@ class TestCandidateSearch(unittest.TestCase):
         # Onto a Cl site: a / 2 from its nearest Na sites, beyond the Na threshold a / (2 sqrt 2).
         target.replace(index, "Na", (target[index].frac_coords + [0.5 / 3, 0.0, 0.0]) % 1.0)
         with self.assertRaisesRegex(
-                ValueError, r"Could not superimpose the reference on the target using Na\. Align on framework species"):
+                ValueError, r"Could not superimpose the reference on the target using Na\. Try aligning only on immobile framework species"):
             align_structures(reference, target, species=["Na"])
 
     def test_each_species_is_held_to_its_own_threshold(self):

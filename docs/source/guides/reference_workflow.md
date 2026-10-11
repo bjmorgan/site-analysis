@@ -221,7 +221,7 @@ ValueError: Structure alignment failed: Different number of O atoms: 24 in refer
 This error indicates a mismatch in atom counts between structures. Verify that both structures use consistent supercell dimensions and that alignment species have identical counts in both structures. For structures with different compositions, use only framework atoms with consistent counts for alignment.
 
 ```
-ValueError: Structure alignment failed: Could not superimpose the reference on the target using O. Align on framework species whose atoms stay near their sites, and check that both structures use the same cell and orientation. See "Alignment Errors" in the reference workflow guide.
+ValueError: Structure alignment failed: Could not superimpose the reference on the target using O. Try aligning only on immobile framework species (align_species), and check that both structures use the same cell and orientation. See "Alignment Errors" in the reference workflow guide.
 ```
 
 Alignment looks for a translation that puts every reference atom of the alignment species close to a target atom of the same species: within half the shortest distance between two reference atoms of that species. That limit guarantees that each reference atom is matched to a different target atom. The error means that no translation achieved it. Common causes:

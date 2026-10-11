@@ -9,12 +9,13 @@ At the right translation, every reference atom of an alignment species
 lies near a target atom of that species. So the right translation lies
 near one of the translations that put a reference atom exactly on a
 chosen target atom (the anchor). The aligner screens all of these
-candidates on a sample of atoms, then refines the best-fitting one to
-minimise the RMSD of same-species nearest-neighbour distances.
-Translations that differ by a translational symmetry of the alignment
-atoms fit equally well and only relabel the sites; any one of them is
-returned. The search is deterministic and finds origin offsets of any
-size, without symmetry information.
+candidates on a sample of atoms, then refines them in order of fit, each
+to minimise the RMSD of same-species nearest-neighbour distances, and
+returns the first that brings every alignment atom within its species'
+threshold. Translations that differ by a translational symmetry of the
+alignment atoms fit equally well and only relabel the sites; any one of
+them is returned. The search is deterministic and finds origin offsets
+of any size, without symmetry information.
 """
 
 import math
@@ -118,6 +119,8 @@ def _screen(candidates: np.ndarray,
     target atoms. That removes the anchor's own displacement from its
     site, which every candidate from that anchor shares, so each sampled
     atom is then judged on its own displacement, as in the final check.
+    The step has not converged, so the screen is slightly stricter than
+    the final check.
 
     Args:
         candidates: Candidate translations, fractional, shape (M, 3).
@@ -280,13 +283,18 @@ class StructureAligner:
             species: list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
         """Find the translation that superimposes the reference on the target.
 
-        Finds a translation that brings every reference atom of the
-        alignment species within half the shortest same-species spacing of
-        a target atom of that species, choosing the one that fits best and
-        refining it to minimise the RMSD of those distances. Translations
-        that differ by a translational symmetry of the alignment atoms fit
-        equally well; any one of them is returned. Atom order does not
-        matter.
+        Screens candidate translations on a sample of atoms and refines
+        them in order of fit, returning the first that brings every
+        reference atom of the alignment species within half the shortest
+        same-species spacing of a target atom of that species, refined to
+        minimise the RMSD of those distances. Translations that differ by a
+        translational symmetry of the alignment atoms fit equally well; any
+        one of them is returned. Atom order does not matter.
+
+        The screen is a filter: it applies the final threshold after a
+        single refinement step, so an alignment that only just passes the
+        full check (within about a percent of the threshold) can be
+        rejected.
 
         Args:
             reference_frac_coords: Fractional coordinates of the reference
@@ -311,7 +319,7 @@ class StructureAligner:
             ValueError: If the structures cannot be compared on these
                 species (see ``_validate_structures``), or the coordinates
                 and species of a structure differ in length, or no
-                translation superimposes them.
+                candidate passes the screen and the full check.
         """
         reference_frac_coords = np.asarray(reference_frac_coords, dtype=float)
         target_frac_coords = np.asarray(target_frac_coords, dtype=float)

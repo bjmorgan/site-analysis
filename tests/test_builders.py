@@ -1633,9 +1633,10 @@ class TestBuilderAlignment(unittest.TestCase):
 			"Fd-3m", Lattice.cubic(8.25), ["Li", "Mn", "O"],
 			[[0.0, 0.0, 0.0], [0.625, 0.625, 0.625], [0.388, 0.388, 0.388]])
 		rng = np.random.default_rng(8)
-		target = Structure(reference.lattice, reference.species,
-						   reference.cart_coords + rng.normal(scale=0.05, size=(len(reference), 3)),
-						   coords_are_cartesian=True)
+		cartesian = reference.cart_coords + rng.normal(scale=0.05, size=(len(reference), 3))
+		order = rng.permutation(len(reference))
+		target = Structure(reference.lattice, [reference.species[i] for i in order],
+						   cartesian[order], coords_are_cartesian=True)
 		offset_reference = reference.copy()
 		offset_reference.translate_sites(
 			range(len(offset_reference)), [0.3, 0.1, 0.2], to_unit_cell=True)

@@ -40,7 +40,7 @@ class ReferenceBasedSites:
     This class ties together all components needed to define sites in crystal structures
     using a reference structure as a template:
     
-    1. StructureAligner - to align the target structure to the reference
+    1. StructureAligner - to find the translation that superimposes the reference structure on the target
     2. CoordinationEnvironmentFinder - to find coordination environments in the reference
     3. IndexMapper - to map environments from reference to target structure
     4. SiteFactory - to create appropriate site objects
@@ -252,6 +252,10 @@ class ReferenceBasedSites:
 
         Sets ``translation_vector``, ``alignment_metrics`` and
         ``aligned_structure``, the reference translated onto the target.
+
+        Alignment works in fractional coordinates: the reference's lattice
+        scales the distances used for the thresholds and metrics, and the
+        target's lattice is not used.
 
         Args:
             align_species: Species to align on. Default is all species.

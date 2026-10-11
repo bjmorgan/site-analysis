@@ -41,12 +41,13 @@ def nearest_same_species_distances(frac_coords, species, target):
 
 
 def with_noise(structure, scale, seed, shift=(0.0, 0.0, 0.0)):
-    """The structure shifted (fractional) and with Gaussian noise (A) added."""
+    """The structure shifted (fractional), with Gaussian noise (A) added and its atoms shuffled."""
     rng = np.random.default_rng(seed)
     cartesian = (((structure.frac_coords + shift) % 1.0) @ structure.lattice.matrix
                  + rng.normal(scale=scale, size=(len(structure), 3)))
-    return Structure(structure.lattice, structure.species, cartesian,
-                     coords_are_cartesian=True)
+    order = rng.permutation(len(structure))
+    return Structure(structure.lattice, [structure.species[i] for i in order],
+                     cartesian[order], coords_are_cartesian=True)
 
 
 def rock_salt(supercell=(3, 3, 3), a=5.64):
@@ -306,6 +307,34 @@ class TestCandidateSearch(unittest.TestCase):
         with self.assertRaisesRegex(
                 ValueError, r"\(Na: .*\)\. Align on species whose atoms stay on their sites"):
             align_structures(reference, target, species=["Na"])
+
+    def test_a_misplaced_atom_outside_the_sample_raises(self):
+        """The full check catches a misplaced atom that the screen's sample does not include."""
+        reference = rock_salt()
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        sampled = set(aligner_module._sample_indices(len(sodium)).tolist())
+        unsampled = next(k for k in range(len(sodium)) if k not in sampled)
+        target = reference.copy()
+        index = sodium[unsampled]
+        # Onto a Cl site: a / 2 from every Na site, beyond the Na threshold a / (2 sqrt 2).
+        target.replace(index, "Na", (target[index].frac_coords + [0.5 / 3, 0.0, 0.0]) % 1.0)
+        with self.assertRaisesRegex(ValueError, r"\(Na: "):
+            align_structures(reference, target, species=["Na"])
+
+    def test_each_species_is_held_to_its_own_threshold(self):
+        """An atom beyond its own species' threshold fails, even within another species' threshold."""
+        # O on a simple cubic grid 3 A apart (threshold 1.5 A); Ti on a grid 6 A apart (threshold 3 A).
+        lattice = Lattice.cubic(12.0)
+        oxygen = [[i / 4, j / 4, k / 4] for i in range(4) for j in range(4) for k in range(4)]
+        titanium = [[(i + 0.25) / 2, (j + 0.25) / 2, (k + 0.25) / 2]
+                    for i in range(2) for j in range(2) for k in range(2)]
+        reference = Structure(lattice, ["O"] * 64 + ["Ti"] * 8, oxygen + titanium)
+        target = reference.copy()
+        # One O moved 2 A along a body diagonal: beyond 1.5 A, within 3 A.
+        target.translate_sites([0], np.full(3, 2.0 / math.sqrt(3)),
+                               frac_coords=False, to_unit_cell=True)
+        with self.assertRaisesRegex(ValueError, r"O: 1\.5 A"):
+            align_structures(reference, target)
 
     def test_same_input_gives_the_same_result(self):
         """Alignment is deterministic."""

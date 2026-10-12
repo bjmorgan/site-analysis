@@ -402,6 +402,47 @@ class TestCandidateSearch(unittest.TestCase):
             found, _ = align_structures(reference, target)
         np.testing.assert_array_equal(found, expected)
 
+    def test_one_candidate_per_set_of_equivalent_alignments(self):
+        """In a supercell every candidate is equivalent, so only one is screened."""
+        reference = rock_salt()
+        target = with_noise(reference, scale=0.05, seed=12, shift=(0.37, 0.12, 0.29))
+        with patch.object(aligner_module, "_screen", wraps=aligner_module._screen) as screen:
+            found, metrics = align_structures(reference, target)
+        self.assertEqual(len(screen.call_args.args[0]), 1)
+        self.assert_superimposed(reference, target, found, 0.3)
+        self.assertLess(metrics['rmsd'], 0.15)
+
+    def test_candidates_related_by_a_symmetry_are_screened_once(self):
+        """Two repeats of an irregular framework give two equivalent candidates per atom."""
+        reference = random_framework() * (2, 1, 1)
+        target = with_noise(reference, scale=0.05, seed=16, shift=(0.37, 0.12, 0.29))
+        with patch.object(aligner_module, "_screen", wraps=aligner_module._screen) as screen:
+            found, metrics = align_structures(reference, target)
+        self.assertEqual(len(screen.call_args.args[0]), 60)
+        self.assert_superimposed(reference, target, found, 0.3)
+        self.assertLess(metrics['rmsd'], 0.15)
+
+    def test_a_symmetry_must_hold_for_every_alignment_species(self):
+        """A shift that is a symmetry of the anchor species alone does not merge candidates."""
+        reference = rock_salt()
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        # Cl is the anchor (ties broken by name); moving a sampled Na breaks
+        # the Na symmetry that the Cl atoms keep.
+        moved = sodium[aligner_module._sample_indices(len(sodium))[0]]
+        reference.translate_sites([moved], [0.4, 0.0, 0.0], frac_coords=False, to_unit_cell=True)
+        target = with_noise(reference, scale=0.0, seed=15, shift=(0.37, 0.12, 0.29))
+        _, metrics = align_structures(reference, target)
+        self.assertLess(metrics['max_dist'], 0.1)
+
+    def test_a_reference_without_symmetry_screens_every_candidate(self):
+        """Noise in the reference above the symmetry tolerance leaves no candidates equivalent."""
+        reference = with_noise(rock_salt(), scale=0.05, seed=13)
+        target = with_noise(reference, scale=0.05, seed=14, shift=(0.37, 0.12, 0.29))
+        with patch.object(aligner_module, "_screen", wraps=aligner_module._screen) as screen:
+            _, metrics = align_structures(reference, target)
+        self.assertEqual(len(screen.call_args.args[0]), 108)
+        self.assertLess(metrics['rmsd'], 0.15)
+
     def test_same_input_gives_the_same_result(self):
         """Alignment is deterministic."""
         reference = rock_salt((2, 2, 2))

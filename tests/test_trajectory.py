@@ -1313,8 +1313,9 @@ class TransitionEventsFromAnalysisTestCase(unittest.TestCase):
         events = trajectory.transition_events()
         frames = trajectory.atoms_trajectory
         for event in events:
-            self.assertEqual(frames[event.frame][event.atom], event.to_site)
-            earlier = [frames[f][event.atom] for f in range(event.frame)]
+            column = trajectory.atom_lookup[event.atom]
+            self.assertEqual(frames[event.frame][column], event.to_site)
+            earlier = [frames[f][column] for f in range(event.frame)]
             self.assertEqual([s for s in earlier if s is not None][-1], event.from_site)
 
     def test_timesteps_follow_trajectory_from_structures(self):

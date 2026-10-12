@@ -176,7 +176,7 @@ for event in atom_3:
 
 Transitions follow the same rule as `site.transitions`: a transition is a change of site between consecutive assigned frames of an atom's trajectory, skipping frames in which the atom is unassigned, and its frame is the frame in which the atom is first counted in its new site. An atom whose trajectory is `[5, None, None, 12]` makes one transition, from site 5 to site 12, at frame 3. With [commitment](commitment.md), a transition is a change of committed site.
 
-`frame` counts frames from 0 and indexes `atoms_trajectory` and `sites_trajectory` directly. `timestep` gives the label passed for each frame (`trajectory_from_structures()` numbers frames from 1); it is `None` if some frames were appended without a label. Atoms and sites are identified by their `index`, as in `atoms_trajectory`.
+`frame` counts frames from 0 and indexes `atoms_trajectory` and `sites_trajectory` directly. `timestep` gives the label passed for each frame (`trajectory_from_structures()` numbers frames from 1); it is `None` if some frames were appended without a label. `atom` is the atom's `index`, as in `site.contains_atoms` and `sites_trajectory`; its column in `atoms_trajectory` is `trajectory.atom_lookup[event.atom]`. `from_site` and `to_site` are site indices, the values stored in `atoms_trajectory`. Events are sorted by frame, then by atom index.
 
 The events are derived from the stored trajectory each time `transition_events()` is called, so they always agree with it, including after more frames are appended.
 

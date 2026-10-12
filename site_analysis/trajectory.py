@@ -560,7 +560,7 @@ class Trajectory:
         atom's committed site, so a transition is a change of committed
         site. Each transition is counted in ``site.transitions``, so the
         transitions from site i to site j number
-        ``self.sites[i].transitions[j]`` (by site index). The events are
+        ``self.site_by_index(i).transitions[j]``. The events are
         derived from the stored trajectory each time this is called.
 
         Returns:
@@ -572,7 +572,6 @@ class Trajectory:
         n_frames = len(self.atoms[0].trajectory)
         # Site of each atom in each frame, NaN where unassigned: (frames, atoms).
         sites = np.array([atom.trajectory for atom in self.atoms], dtype=float).T
-        sites = sites.reshape(n_frames, len(self.atoms))
         # Carry each atom's last assigned site forward over unassigned frames.
         assigned = ~np.isnan(sites)
         last_assigned = np.where(assigned, np.arange(n_frames)[:, np.newaxis], 0)

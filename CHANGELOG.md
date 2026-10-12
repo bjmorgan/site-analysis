@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- A new `Trajectory` resets its atoms and sites, so any trajectories, site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Previously only each atom's committed site was cleared.
+- A new `Trajectory` resets its atoms and sites, so any trajectories, site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are also cleared until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared.
 
 ## [1.10.0] - 2026-10-12
 

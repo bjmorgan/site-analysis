@@ -88,6 +88,7 @@ class TransitionEvents:
                 if getattr(self, field.name) is not None}
 
     def __len__(self) -> int:
+        """Number of transitions."""
         return len(self.frame)
 
     @overload
@@ -113,5 +114,6 @@ class TransitionEvents:
             to_site=self.to_site[key])
 
     def __iter__(self) -> Iterator[TransitionEvent]:
+        """Iterate over the transitions as ``TransitionEvent`` records."""
         for i in range(len(self)):
             yield self[i]

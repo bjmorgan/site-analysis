@@ -5,3 +5,4 @@ site\_analysis.transition\_events
     :members:
     :undoc-members:
     :show-inheritance:
+    :exclude-members: frame, timestep, atom, from_site, to_site

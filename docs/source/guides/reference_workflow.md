@@ -190,7 +190,7 @@ For optimal results:
 
 1. **Use crystallographically defined reference structures**
    
-   Use structures with well-defined, regular coordination environments as references. Geometry-optimised structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyse in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately.
+   Use structures with well-defined, regular coordination environments as references. Geometry-optimised structures often provide clearer coordination patterns and more consistent site definitions. Ensure the reference contains examples of all relevant site types you wish to analyse in your target structures. Where possible, build the reference from its space group and Wyckoff positions (for example with `Structure.from_spacegroup`), which makes equivalent sites exactly equivalent; a structure read from a file or relaxed is symmetric only approximately. A symmetric reference is also much faster to align in a supercell. Translations related by a symmetry of the reference give equivalent alignments, so alignment needs to try only those within one primitive cell. A reference whose atoms are displaced by more than about 0.01 Å from symmetric positions has no such symmetry, so every translation must be tried.
 
 2. **Select appropriate alignment species**
    

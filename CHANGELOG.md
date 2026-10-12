@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`): the frame (from 0), timestep label, atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they always agree with it and with `site.transitions` (#90).
+
 ### Changed
 
 - A new `Trajectory` resets its atoms and sites, so any trajectories, site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Previously only each atom's committed site was cleared.

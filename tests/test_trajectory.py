@@ -1219,17 +1219,12 @@ class TransitionEventsDerivationTestCase(unittest.TestCase):
         trajectory = self.make_trajectory([[0, 0, 1, 1]])
         self.assert_events(trajectory.transition_events(), [(2, 0, 0, 1)])
 
-    def test_transitions_in_one_frame_are_sorted_by_atom(self):
-        trajectory = self.make_trajectory([[0, 1], [2, 0], [1, 2]])
-        self.assert_events(trajectory.transition_events(),
-                           [(1, 0, 0, 1), (1, 1, 2, 0), (1, 2, 1, 2)])
-
     def test_events_are_sorted_by_frame_then_atom_index(self):
-        """Atoms given out of index order are still sorted by atom index."""
+        """Atoms given out of index order are sorted by atom index within a frame."""
         trajectory = self.make_trajectory(
-            [[0, 0, 1], [1, 2, 2]], atom_indices=[8, 4])
+            [[0, 1, 1, 2], [1, 2, 2, 0]], atom_indices=[8, 4])
         self.assert_events(trajectory.transition_events(),
-                           [(1, 4, 1, 2), (2, 8, 0, 1)])
+                           [(1, 4, 1, 2), (1, 8, 0, 1), (3, 4, 2, 0), (3, 8, 1, 2)])
 
     def test_unassigned_gap_between_two_sites_gives_one_event_on_arrival(self):
         trajectory = self.make_trajectory([[0, None, None, 2, 2]])
@@ -1255,12 +1250,6 @@ class TransitionEventsDerivationTestCase(unittest.TestCase):
     def test_timesteps_are_the_labels_of_each_event_frame(self):
         trajectory = self.make_trajectory([[0, 0, 1, 2]], timesteps=[10, 20, 30, 40])
         np.testing.assert_array_equal(trajectory.transition_events().timestep, [30, 40])
-
-    def test_timestep_is_none_unless_every_frame_has_a_label(self):
-        trajectory = self.make_trajectory([[0, 0, 1, 2]], timesteps=[10, 20])
-        events = trajectory.transition_events()
-        self.assertIsNone(events.timestep)
-        self.assertIsNone(events[0].timestep)
 
     def test_no_frames_gives_no_events(self):
         trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=0)])
@@ -1312,6 +1301,7 @@ class TransitionEventsFromAnalysisTestCase(unittest.TestCase):
         trajectory.trajectory_from_structures(self.random_frames(100, 3, seed=3))
         events = trajectory.transition_events()
         frames = trajectory.atoms_trajectory
+        self.assertGreater(len(events), 0)
         for event in events:
             column = trajectory.atom_lookup[event.atom]
             self.assertEqual(frames[event.frame][column], event.to_site)

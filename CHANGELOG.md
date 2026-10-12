@@ -8,11 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`): the frame (from 0), timestep label, atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they always agree with it and with `site.transitions` (#90).
+- `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`, with `TransitionEvent`): the frame (from 0), timestep label, atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they agree with it and with `site.transitions` (#90).
 
 ### Changed
 
-- A new `Trajectory` resets its atoms and sites, so any trajectories, site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are also cleared until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared.
+- A new `Trajectory` resets its atoms and sites, so any trajectories, recent-site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are unset until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared. Because the site search ranks candidate sites by their transition counts, reused overlapping sites may now be assigned differently.
 
 ## [1.10.0] - 2026-10-12
 

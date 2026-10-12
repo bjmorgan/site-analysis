@@ -65,9 +65,10 @@ class Trajectory:
         
         This constructor ensures all sites are of the same type and initialises the
         appropriate site collection based on the type of sites provided. The atoms
-        and sites are reset, so the analysis starts afresh: any trajectories, site
-        histories, committed sites and transition counts they hold from an earlier
-        analysis are cleared.
+        and sites are reset, so the analysis starts afresh: any trajectories,
+        recent-site histories, committed sites and transition counts they hold
+        from an earlier analysis are cleared, and each atom's current site and
+        coordinates are unset until the first structure is analysed.
         
         Args:
             sites: list of Site objects (must all be of the same type).
@@ -558,10 +559,10 @@ class Trajectory:
         frames of an atom's trajectory; frames in which the atom is
         unassigned are skipped. With commitment, the trajectory holds each
         atom's committed site, so a transition is a change of committed
-        site. Each transition is counted in ``site.transitions``, so the
-        transitions from site i to site j number
-        ``self.site_by_index(i).transitions[j]``. The events are
-        derived from the stored trajectory each time this is called.
+        site. These are the transitions counted in ``site.transitions``:
+        the number of events from site i to site j is
+        ``self.site_by_index(i).transitions[j]``. The events are derived
+        from the stored trajectory each time this is called.
 
         Returns:
             The transitions, sorted by frame and then by atom index. Each
@@ -577,8 +578,9 @@ class Trajectory:
         last_assigned = np.where(assigned, np.arange(n_frames)[:, np.newaxis], 0)
         np.maximum.accumulate(last_assigned, axis=0, out=last_assigned)
         carried = np.take_along_axis(sites, last_assigned, axis=0)
-        # NaN compares unequal to everything, so unassigned frames and atoms
-        # with no earlier site are excluded by the two isnan tests.
+        # NaN compares unequal to everything, even NaN, so the two isnan
+        # tests are needed to exclude unassigned frames and atoms with no
+        # earlier site.
         changed = (assigned[1:] & ~np.isnan(carried[:-1])
                    & (sites[1:] != carried[:-1]))
         previous_frame, column = np.nonzero(changed)

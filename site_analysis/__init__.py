@@ -20,4 +20,4 @@ from site_analysis.builders import (
     create_trajectory_with_dynamic_voronoi_sites
 )
 from site_analysis.transition_table import TransitionTable
-from site_analysis.transition_events import TransitionEvents
+from site_analysis.transition_events import TransitionEvent, TransitionEvents

@@ -23,9 +23,9 @@ class TransitionEvent(NamedTuple):
             counted in its new site.
         timestep: Timestep label of that frame, or None if the trajectory
             does not have a label for every frame.
-        atom: Index of the atom.
-        from_site: Index of the site the atom left.
-        to_site: Index of the site the atom moved to.
+        atom: ``Atom.index`` of the atom.
+        from_site: ``Site.index`` of the site the atom left.
+        to_site: ``Site.index`` of the site the atom moved to.
     """
 
     frame: int
@@ -40,19 +40,20 @@ class TransitionEvents:
     """Transitions of atoms between sites, one entry per transition.
 
     Each attribute is a read-only one-dimensional integer array, with one
-    entry per transition. Indexing with an integer gives a
-    ``TransitionEvent``; indexing with a slice, boolean mask or integer
-    array gives a new ``TransitionEvents``, so that, for example,
-    ``events[events.to_site == k]`` selects the transitions into site k.
+    entry per transition, except that ``timestep`` may be None. Indexing
+    with an integer gives a ``TransitionEvent``; indexing with a slice,
+    boolean mask or integer array gives a new ``TransitionEvents``, so
+    that, for example, ``events[events.to_site == k]`` selects the
+    transitions into site k. Equality (``==``) compares identity.
 
     Attributes:
         frame: Index of the frame, from 0, in which each atom is first
             counted in its new site.
         timestep: Timestep label of each event's frame, or None if the
             trajectory does not have a label for every frame.
-        atom: Index of the atom that moved.
-        from_site: Index of the site the atom left.
-        to_site: Index of the site the atom moved to.
+        atom: ``Atom.index`` of the atom that moved.
+        from_site: ``Site.index`` of the site the atom left.
+        to_site: ``Site.index`` of the site the atom moved to.
     """
 
     frame: np.ndarray
@@ -78,14 +79,10 @@ class TransitionEvents:
                     f"{field.name} must be one-dimensional, not {array.ndim}-dimensional")
             array.flags.writeable = False
             object.__setattr__(self, field.name, array)
-        lengths = {len(array) for array in self._arrays().values()}
+        lengths = {len(getattr(self, field.name)) for field in fields(self)
+                   if getattr(self, field.name) is not None}
         if len(lengths) > 1:
             raise ValueError("All fields of TransitionEvents must have the same length")
-
-    def _arrays(self) -> dict[str, np.ndarray]:
-        """The fields that are arrays, by name."""
-        return {field.name: getattr(self, field.name) for field in fields(self)
-                if getattr(self, field.name) is not None}
 
     def __len__(self) -> int:
         """Number of transitions."""

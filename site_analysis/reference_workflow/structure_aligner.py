@@ -8,15 +8,17 @@ sites defined in a reference structure onto the target.
 At the right translation, every reference atom of an alignment species
 lies near a target atom of that species. So the right translation lies
 near one of the translations that put a reference atom exactly on a
-chosen target atom (the anchor). The aligner screens all of these
+chosen target atom (the anchor). Candidates that differ by a
+translational symmetry of the reference's alignment atoms give equivalent
+alignments, so the aligner screens one from each set of equivalent
 candidates on a sample of atoms, then refines those that pass, best fit
 first, each to minimise the RMSD of same-species nearest-neighbour
 distances, and returns the first that brings every alignment atom within
 its species' threshold (half the shortest same-species spacing in the
-reference). Translations that differ by a translational symmetry of the
-alignment atoms fit equally well and only relabel the sites; any one of
-them is returned. The search is deterministic and finds origin offsets
-of any size, without symmetry information.
+reference). Equivalent translations fit equally well and only relabel
+the sites; any one of them is returned. The search is deterministic and
+finds origin offsets of any size, without symmetry information from the
+user.
 """
 
 import math
@@ -38,6 +40,11 @@ _SEED = 0
 # Candidate translations screened at a time, to bound memory.
 _SCREEN_BLOCK = 4096
 
+# A translation is a symmetry of the reference if it carries every sampled
+# reference atom to within this distance (A) of a reference atom of the
+# same species.
+_SYMMETRY_TOLERANCE = 0.01
+
 # Refinement stops after this many steps if the pairing still changes.
 _MAX_REFINEMENT_STEPS = 100
 
@@ -57,6 +64,7 @@ class _SpeciesGroup:
         reference: Fractional coordinates of the reference atoms, (N, 3).
         target: Fractional coordinates of the target atoms, (N, 3).
         index: Neighbour index over the target atoms.
+        reference_index: Neighbour index over the reference atoms.
         threshold: Half the shortest distance between two different
             reference atoms (infinite for a single atom). If every
             reference atom is within it of a target atom, no two share a
@@ -69,6 +77,7 @@ class _SpeciesGroup:
     reference: np.ndarray
     target: np.ndarray
     index: PeriodicNeighbourIndex
+    reference_index: PeriodicNeighbourIndex
     threshold: float
     sample: np.ndarray
 
@@ -111,6 +120,54 @@ def _sample_indices(n_atoms: int) -> np.ndarray:
     """
     rng = np.random.default_rng(_SEED)
     return np.sort(rng.choice(n_atoms, size=min(_SAMPLE_SIZE, n_atoms), replace=False))
+
+
+def _symmetries(anchor_group: _SpeciesGroup,
+        groups: list[_SpeciesGroup]) -> np.ndarray:
+    """Translational symmetries of the reference's alignment atoms.
+
+    Tries the shift from the first reference atom of the anchor species
+    to each reference atom of that species, keeping those that carry every
+    sampled reference atom of every alignment species to within
+    ``_SYMMETRY_TOLERANCE`` of a reference atom of the same species.
+
+    Args:
+        anchor_group: The species whose shifts are tried.
+        groups: The alignment species.
+
+    Returns:
+        The symmetries, fractional, shape (K, 3), including the zero shift.
+    """
+    shifts: np.ndarray = (anchor_group.reference - anchor_group.reference[0]) % 1.0
+    for group in groups:
+        for atom in group.sample:
+            _, distances = group.reference_index.query_nearest((atom + shifts) % 1.0)
+            shifts = shifts[distances < _SYMMETRY_TOLERANCE]
+    return shifts
+
+
+def _representatives(group: _SpeciesGroup, symmetries: np.ndarray) -> np.ndarray:
+    """One reference atom of a species from each set related by the symmetries.
+
+    Args:
+        group: The species.
+        symmetries: Translational symmetries, fractional, shape (K, 3).
+
+    Returns:
+        Indices of the reference atoms, in increasing order, each the
+        lowest index of its set.
+    """
+    if len(symmetries) == 1:
+        return np.arange(len(group.reference))
+    covered = np.zeros(len(group.reference), dtype=bool)
+    representatives = []
+    for i in range(len(group.reference)):
+        if covered[i]:
+            continue
+        representatives.append(i)
+        images, _ = group.reference_index.query_nearest((group.reference[i] + symmetries) % 1.0)
+        covered[images] = True
+    return np.array(representatives)
 
 
 def _screen(candidates: np.ndarray,
@@ -299,15 +356,16 @@ class StructureAligner:
             species: str | list[str] | None = None) -> tuple[np.ndarray, dict[str, float]]:
         """Find the translation that superimposes the reference on the target.
 
-        Screens candidate translations on a sample of atoms, then refines
-        those that pass, best fit first, and returns the first that
-        superimposes the structures: every reference atom of the alignment
-        species within half the shortest same-species spacing in the
-        reference of a target atom of that species. Translations that
-        differ by a translational symmetry of the alignment atoms fit
-        equally well; any one of them is returned. Atom order does not
-        matter. The reference workflow guide ("Alignment Errors") explains
-        what to do when no translation is found.
+        Screens candidate translations on a sample of atoms, one from each
+        set that differ by a translational symmetry of the reference's
+        alignment atoms, then refines those that pass, best fit first, and
+        returns the first that superimposes the structures: every reference
+        atom of the alignment species within half the shortest same-species
+        spacing in the reference of a target atom of that species.
+        Equivalent translations fit equally well; any one of them is
+        returned. Atom order does not matter. The reference workflow guide
+        ("Alignment Errors") explains what to do when no translation is
+        found.
 
         Args:
             reference_frac_coords: Fractional coordinates of the reference
@@ -358,6 +416,7 @@ class StructureAligner:
             groups.append(_SpeciesGroup(
                 name=name, reference=reference, target=target,
                 index=PeriodicNeighbourIndex(target, lattice_matrix),
+                reference_index=PeriodicNeighbourIndex(reference, lattice_matrix),
                 threshold=_threshold(reference, lattice_matrix),
                 sample=reference[_sample_indices(len(reference))]))
         for group in groups:
@@ -365,11 +424,12 @@ class StructureAligner:
                 raise ValueError(
                     f"The reference has coincident {group.name} atoms, so the "
                     f"{group.name} atoms cannot be matched one to one")
-        # The candidates put each reference atom of the species with the
-        # fewest atoms (ties broken by name) on the first target atom of
-        # that species.
+        # The candidates put reference atoms of the species with the fewest
+        # atoms (ties broken by name) on the first target atom of that
+        # species, one reference atom from each set related by a symmetry.
         anchor_group = min(groups, key=lambda group: (len(group.reference), group.name))
-        candidates = (anchor_group.target[0] - anchor_group.reference) % 1.0
+        representatives = _representatives(anchor_group, _symmetries(anchor_group, groups))
+        candidates = (anchor_group.target[0] - anchor_group.reference[representatives]) % 1.0
         passed, moved, rmsd = _screen(candidates, groups)
         survivors = moved[passed]
         # Best fit first: translations that only nearly superimpose the

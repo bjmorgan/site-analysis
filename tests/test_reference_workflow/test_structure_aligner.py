@@ -412,6 +412,16 @@ class TestCandidateSearch(unittest.TestCase):
         self.assert_superimposed(reference, target, found, 0.3)
         self.assertLess(metrics['rmsd'], 0.15)
 
+    def test_candidates_related_by_a_symmetry_are_screened_once(self):
+        """Two repeats of an irregular framework give two equivalent candidates per atom."""
+        reference = random_framework() * (2, 1, 1)
+        target = with_noise(reference, scale=0.05, seed=16, shift=(0.37, 0.12, 0.29))
+        with patch.object(aligner_module, "_screen", wraps=aligner_module._screen) as screen:
+            found, metrics = align_structures(reference, target)
+        self.assertEqual(len(screen.call_args.args[0]), 60)
+        self.assert_superimposed(reference, target, found, 0.3)
+        self.assertLess(metrics['rmsd'], 0.15)
+
     def test_a_symmetry_must_hold_for_every_alignment_species(self):
         """A shift that is a symmetry of the anchor species alone does not merge candidates."""
         reference = rock_salt()

@@ -41,8 +41,8 @@ _SEED = 0
 _SCREEN_BLOCK = 4096
 
 # A translation is a symmetry of the reference if it carries every sampled
-# reference atom to within this distance (A) of a reference atom of the
-# same species.
+# reference atom to within this distance (Angstroms) of a reference atom of
+# the same species.
 _SYMMETRY_TOLERANCE = 0.01
 
 # Refinement stops after this many steps if the pairing still changes.
@@ -357,13 +357,13 @@ class StructureAligner:
         """Find the translation that superimposes the reference on the target.
 
         Screens candidate translations on a sample of atoms, one from each
-        set that differ by a translational symmetry of the reference's
-        alignment atoms, then refines those that pass, best fit first, and
-        returns the first that superimposes the structures: every reference
-        atom of the alignment species within half the shortest same-species
-        spacing in the reference of a target atom of that species.
-        Equivalent translations fit equally well; any one of them is
-        returned. Atom order does not matter. The reference workflow guide
+        set of candidates related by a translational symmetry of the
+        reference's alignment atoms, then refines those that pass, best fit
+        first, and returns the first that superimposes the structures: every
+        reference atom of the alignment species within half the shortest
+        same-species spacing in the reference of a target atom of that
+        species. Equivalent translations fit equally well; any one of them
+        is returned. Atom order does not matter. The reference workflow guide
         ("Alignment Errors") explains what to do when no translation is
         found.
 

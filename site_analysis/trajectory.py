@@ -570,9 +570,11 @@ class Trajectory:
             counted in its new site. Timesteps are the labels in
             ``timesteps`` if every frame has one, and None otherwise.
         """
-        n_frames = len(self.atoms[0].trajectory)
+        # Atoms in index order, so that events within a frame come out sorted.
+        atoms = sorted(self.atoms, key=lambda atom: atom.index)
+        n_frames = len(atoms[0].trajectory)
         # Site of each atom in each frame, NaN where unassigned: (frames, atoms).
-        sites = np.array([atom.trajectory for atom in self.atoms], dtype=float).T
+        sites = np.array([atom.trajectory for atom in atoms], dtype=float).T
         # Carry each atom's last assigned site forward over unassigned frames.
         assigned = ~np.isnan(sites)
         last_assigned = np.where(assigned, np.arange(n_frames)[:, np.newaxis], 0)
@@ -584,10 +586,7 @@ class Trajectory:
         changed = (assigned[1:] & ~np.isnan(carried[:-1])
                    & (sites[1:] != carried[:-1]))
         previous_frame, column = np.nonzero(changed)
-        atom_index = np.array([atom.index for atom in self.atoms], dtype=np.int64)[column]
-        order = np.lexsort((atom_index, previous_frame))
-        previous_frame, column, atom_index = (
-            previous_frame[order], column[order], atom_index[order])
+        atom_index = np.array([atom.index for atom in atoms], dtype=np.int64)[column]
         frame = previous_frame + 1
         timestep = (np.asarray(self.timesteps, dtype=np.int64)[frame]
                     if len(self.timesteps) == n_frames else None)

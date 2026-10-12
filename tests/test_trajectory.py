@@ -15,7 +15,7 @@ from site_analysis.spherical_site_collection import SphericalSiteCollection
 from site_analysis.dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from site_analysis.atom import Atom
 from site_analysis.site import Site
-from site_analysis.transition_events import TransitionEvents, TransitionEvent
+from site_analysis.transition_events import TransitionEvents
 from unittest.mock import Mock, patch, PropertyMock
 
 import tempfile

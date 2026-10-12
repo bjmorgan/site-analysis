@@ -69,6 +69,7 @@ class TransitionEvents:
             ValueError: If a field is not one-dimensional, or the fields
                 differ in length.
         """
+        lengths: set[int] = set()
         for field in fields(self):
             value = getattr(self, field.name)
             if value is None and field.name == "timestep":
@@ -79,8 +80,7 @@ class TransitionEvents:
                     f"{field.name} must be one-dimensional, not {array.ndim}-dimensional")
             array.flags.writeable = False
             object.__setattr__(self, field.name, array)
-        lengths = {len(getattr(self, field.name)) for field in fields(self)
-                   if getattr(self, field.name) is not None}
+            lengths.add(len(array))
         if len(lengths) > 1:
             raise ValueError("All fields of TransitionEvents must have the same length")
 

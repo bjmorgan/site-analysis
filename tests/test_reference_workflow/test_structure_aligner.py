@@ -412,6 +412,18 @@ class TestCandidateSearch(unittest.TestCase):
         self.assert_superimposed(reference, target, found, 0.3)
         self.assertLess(metrics['rmsd'], 0.15)
 
+    def test_a_symmetry_must_hold_for_every_alignment_species(self):
+        """A shift that is a symmetry of the anchor species alone does not merge candidates."""
+        reference = rock_salt()
+        sodium = [i for i, site in enumerate(reference) if site.species_string == "Na"]
+        # Cl is the anchor (ties broken by name); moving a sampled Na breaks
+        # the Na symmetry that the Cl atoms keep.
+        moved = sodium[aligner_module._sample_indices(len(sodium))[0]]
+        reference.translate_sites([moved], [0.4, 0.0, 0.0], frac_coords=False, to_unit_cell=True)
+        target = with_noise(reference, scale=0.0, seed=15, shift=(0.37, 0.12, 0.29))
+        _, metrics = align_structures(reference, target)
+        self.assertLess(metrics['max_dist'], 0.1)
+
     def test_a_reference_without_symmetry_screens_every_candidate(self):
         """Noise in the reference above the symmetry tolerance leaves no candidates equivalent."""
         reference = with_noise(rock_salt(), scale=0.05, seed=13)

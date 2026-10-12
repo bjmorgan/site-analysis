@@ -74,7 +74,7 @@ For the Reference-Based Sites workflow to function correctly, the reference and 
 
 ### Structure Alignment
 
-When working with reference and target structures that have different numbers of mobile atoms (such as when analysing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species.
+When working with reference and target structures that have different numbers of mobile atoms (such as when analysing vacancies, interstitials, or defective structures), alignment can be performed using a subset of atomic species, leaving out those with defects.
 
 **Important**: Structure alignment is **enabled by default** for the reference-based workflow, even if not explicitly configured. To disable alignment, you must explicitly set `align=False`.
 
@@ -194,7 +194,7 @@ For optimal results:
 
 2. **Select appropriate alignment species**
    
-   Use immobile framework atoms for alignment to ensure reliable mapping between structures. Framework atoms typically maintain more consistent positions compared to mobile species being studied.
+   Use immobile framework atoms for alignment to ensure reliable mapping between structures. Framework atoms typically maintain more consistent positions compared to mobile species being studied. Leave out any species with a defect in the reference, such as a vacancy, a substitution or a displaced atom: alignment can fail if the alignment atoms are not the same in every repeat of a supercell.
 
 3. **Adjust cutoff parameters as needed**
    
@@ -229,6 +229,7 @@ Alignment looks for a translation that puts every reference atom of the alignmen
 - **A mobile species among the alignment species.** If neither `align_species` nor mapping species are set, every species is used, including mobile ions, which rarely sit on their reference sites. Align on framework species instead, for example `align_species=["O"]`.
 - **A different cell setting.** Alignment only translates. If the supercell differs (for example 2 x 1 x 1 against 1 x 2 x 1) or the axes are permuted or mirrored, usually no translation fits; build the reference in the same setting as the target. If the alignment atoms happen to look the same in both settings, alignment can succeed even though the other species do not line up, so make sure the two structures use the same setting.
 - **A strongly disordered target.** An alignment atom that has moved far from its site, for instance a framework atom in a hot MD frame, can exceed the limit. Try a different frame, or align on a stiffer species.
+- **A defect in an alignment species.** A vacancy, substitution or displaced atom of an alignment species in the reference can make alignment fail. Align on species without defects.
 - **A distorted reference.** The limit is set by the reference's single shortest same-species distance, so one short pair in a distorted reference tightens it for every atom. If the reference is not close to the target's average structure, for example a reference relaxed around a defect, an idealised or symmetrised reference can help.
 
 A species with a single atom has no such limit: aligning only on it always succeeds and rests on that one atom, so include a species with several atoms.

@@ -63,8 +63,10 @@ class Trajectory:
         """Initialise a Trajectory object for site analysis of simulation trajectories.
         
         This constructor ensures all sites are of the same type and initialises the
-        appropriate site collection based on the type of sites provided. Each atom's
-        committed site is cleared, so commitment starts afresh.
+        appropriate site collection based on the type of sites provided. The atoms
+        and sites are reset, so the analysis starts afresh: any trajectories, site
+        histories, committed sites and transition counts they hold from an earlier
+        analysis are cleared.
         
         Args:
             sites: list of Site objects (must all be of the same type).
@@ -120,8 +122,7 @@ class Trajectory:
                                    else commitment_radius)
         self._commitment_radii = self._resolve_commitment_radii(
             sites, self._commitment_radius)
-        for atom in atoms:
-            atom.committed_site = None
+        self.reset()
 
     @staticmethod
     def _resolve_commitment_radii(

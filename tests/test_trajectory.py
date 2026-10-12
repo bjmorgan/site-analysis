@@ -68,6 +68,29 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             Trajectory(atoms=[Atom(index=0)], sites=["foo"])
 
+    def test_init_resets_reused_atoms(self):
+        """Atoms that carry history from an earlier analysis start afresh."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        atom = Atom(index=0)
+        atom.trajectory = [0, 0]
+        atom.update_recent_site(0)
+        atom.committed_site = 0
+        Trajectory(atoms=[atom], sites=[site])
+        self.assertEqual(atom.trajectory, [])
+        self.assertIsNone(atom.most_recent_site)
+        self.assertIsNone(atom.committed_site)
+
+    def test_init_resets_reused_sites(self):
+        """Sites that carry history from an earlier analysis start afresh."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        site.trajectory = [[0], [0]]
+        site.contains_atoms = [0]
+        site.transitions[1] += 2
+        Trajectory(atoms=[Atom(index=0)], sites=[site])
+        self.assertEqual(site.trajectory, [])
+        self.assertEqual(site.contains_atoms, [])
+        self.assertEqual(site.transitions, Counter())
+
 
 class TrajectoryFunctionalityTestCase(unittest.TestCase):
     """Tests for Trajectory functionality using real pymatgen objects."""

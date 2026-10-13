@@ -27,15 +27,15 @@ class Atom:
 
     Attributes:
         index (int): Unique numeric index identifying this atom.
-        in_site (int): Site index of the site this atom is inside in the
+        in_site (int | None): Site index of the site this atom is inside in the
             most recently analysed structure, or None.
-        trajectory (list): list of site indices counted for this atom at
+        trajectory (list[int | None]): list of site indices counted for this atom at
             each appended timestep: its committed sites when a Trajectory
             uses commitment, otherwise the sites it was inside.
-        assigned_trajectory (list): list of site indices of the sites this
+        assigned_trajectory (list[int | None]): list of site indices of the sites this
             atom was inside at each appended timestep, recorded only when a
             Trajectory uses commitment.
-        committed_site (int): Site index of the site this atom is committed
+        committed_site (int | None): Site index of the site this atom is committed
             to when a Trajectory uses commitment, or None.
 
     Note:

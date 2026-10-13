@@ -89,7 +89,7 @@ After analysis, you can access results in several ways:
 
 ```python
 # Current state
-atom_sites = trajectory.atom_sites  # Which site each atom is in
+atom_sites = trajectory.atom_sites  # Site each atom is counted in (committed site with commitment)
 site_occupations = trajectory.site_occupations  # Which atoms each site contains
 
 # Site occupation counts

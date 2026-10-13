@@ -48,11 +48,11 @@ class TransitionEvents:
 
     Each attribute is a read-only one-dimensional integer array, with one
     element per transition, except that ``timestep`` and ``entry_timestep``
-    may be None. Indexing
-    with an integer gives a ``TransitionEvent``; indexing with a slice,
-    boolean mask or integer array gives a new ``TransitionEvents``, so
-    that, for example, ``events[events.to_site == k]`` selects the
-    transitions into site k. Equality (``==``) compares identity.
+    may be None. Indexing with an integer gives a ``TransitionEvent``;
+    indexing with a slice, boolean mask or integer array gives a new
+    ``TransitionEvents``, so that, for example,
+    ``events[events.to_site == k]`` selects the transitions into site k.
+    Equality (``==``) compares identity.
 
     Attributes:
         frame: Index of the frame, from 0, in which each atom is first

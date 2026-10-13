@@ -46,7 +46,7 @@ In the first timestep in which an atom is assigned to a site, it commits to that
 
 More than one atom can be committed to a site at once. For example, an atom can still be committed to a site it has left when a second atom commits to the same site.
 
-`site.points` holds the positions of the atoms inside each site, whatever their committed sites. `analyse_structure()` assigns atoms to the sites they are in, with or without commitment: `atom.in_site` is the site an atom is inside in the latest structure, and `trajectory.assigned_trajectory` gives the site each atom was inside at each timestep (`atom.assigned_trajectory` for one atom).
+`site.points` holds the positions of the atoms inside each site, whatever their committed sites. `analyse_structure()` assigns atoms to the sites they are in, with or without commitment: `atom.in_site` is the site an atom is inside in the latest structure, and `trajectory.assigned_trajectory` gives the site each atom was inside at each timestep (`atom.assigned_trajectory` for one atom, which is recorded only with commitment).
 
 Where sites overlap, the [site search](../concepts/site_collections.md#priority-based-assignment-spherical-and-polyhedral) checks an atom's recent sites first, then the sites that atoms have previously moved to from its most recent site. With commitment on, those previous moves are the committed transitions, so an atom in an overlapping region can be assigned to a different site than in an analysis without commitment.
 

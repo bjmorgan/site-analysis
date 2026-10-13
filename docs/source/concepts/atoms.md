@@ -14,8 +14,9 @@ The `Atom` class maintains several key attributes:
 - **species_string**: Chemical symbol of the atom (e.g., "Li", "Na")
 - **in_site**: Current site index that this atom occupies (or None if not in any site)
 - **frac_coords**: Current fractional coordinates in the crystal structure
-- **trajectory**: List of site indices (or None values) that this atom has occupied over time
+- **trajectory**: List of site indices (or None values) that this atom has occupied over time (its committed sites when the trajectory uses commitment)
 - **committed_site**: Site index of the site this atom is committed to when the trajectory uses commitment (or None)
+- **assigned_trajectory**: List of the sites this atom was inside at each timestep, recorded only when the trajectory uses commitment
 
 These properties provide the foundation for analysing how atoms move through the crystal structure during a simulation.
 
@@ -25,6 +26,8 @@ The relationship between atoms and sites is bidirectional:
 
 1. Each atom records which site it currently occupies via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
+
+With commitment, `contains_atoms` and an atom's trajectory record committed sites, so the matching atom attribute is `committed_site`; `in_site` is the site the atom is inside.
 
 When analysing a structure, the appropriate site collection determines which atoms belong to which sites.
 
@@ -64,6 +67,7 @@ The `Trajectory` class provides methods to analyse the collective behaviour of a
 
 - **atom_sites**: Returns the site each atom is counted in (its committed site with commitment)
 - **atoms_trajectory**: Returns the site occupation history for all atoms over time
+- **assigned_trajectory**: Returns the sites the atoms were inside at each timestep (the same as `atoms_trajectory` without commitment)
 
 These methods facilitate analysis of diffusion patterns, correlations between atom movements, and statistical properties of ion migration.
 

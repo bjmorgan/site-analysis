@@ -9,12 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`, with `TransitionEvent`): the frame (from 0) and timestep label at which it is counted in its new site, the frame and label at which it entered that site (earlier than its frame only with commitment), the atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they agree with it and with `site.transitions` (#90, #91).
-- `Trajectory.assigned_trajectory` gives the site each atom was inside at each timestep (`Atom.assigned_trajectory` for one atom). With commitment this can differ from `atoms_trajectory`, which holds the committed sites; without commitment the two are the same (#91).
+- `Trajectory.assigned_trajectory` gives the site each atom was inside at each timestep (`Atom.assigned_trajectory` for one atom, recorded only with commitment). With commitment this can differ from `atoms_trajectory`, which holds the committed sites; without commitment the two are the same (#91).
 
 ### Changed
 
 - A new `Trajectory` resets its atoms and sites, so any trajectories, recent-site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are unset until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared. Because the site search ranks candidate sites by their transition counts, reused overlapping sites may now be assigned differently.
-- With commitment, `atom.in_site` is now always the site the atom is inside in the most recently analysed structure. Previously `append_timestep()` replaced it with the committed site, which is `atom.committed_site`; `Trajectory.atom_sites` still gives the committed sites.
+- With commitment, `atom.in_site` is now always the site the atom is inside in the most recently analysed structure. Previously `append_timestep()` replaced it with the committed site, which is `atom.committed_site`. `Trajectory.atom_sites` gives the committed sites, including after `analyse_structure()` alone, where it previously gave the sites the atoms are inside.
 
 ## [1.10.0] - 2026-10-12
 

@@ -529,7 +529,7 @@ class Trajectory:
         
         Returns:
             A list of lists, where each inner list represents a timestep and
-            contains the site indices occupied by each atom at that timestep.
+            contains the site index of each atom at that timestep: its committed site with commitment, otherwise the site it is inside.
         """
         return list(map(list, zip(*[atom.trajectory for atom in self.atoms])))
 

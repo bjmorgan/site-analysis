@@ -38,7 +38,7 @@ atom.trajectory = [5, 5, 5, 12, 12, 12, 12, 15, 15, ...]
 
 In this example, the atom started in site 5, moved to site 12 after three timesteps, and then to site 15 after four more timesteps.
 
-If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site. With commitment on, an atom between sites keeps its committed site in both `in_site` and its trajectory; see the [commitment guide](../guides/commitment.md).
+If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site. With commitment on, an atom between sites keeps its committed site in `committed_site` and its trajectory, while `in_site` is `None`; see the [commitment guide](../guides/commitment.md).
 
 ## Creating and Managing Atoms
 
@@ -62,7 +62,7 @@ However, the package provides several utility functions for creating atoms in di
 
 The `Trajectory` class provides methods to analyse the collective behaviour of atoms:
 
-- **atom_sites**: Returns the current site for each atom
+- **atom_sites**: Returns the site each atom is counted in (its committed site with commitment)
 - **atoms_trajectory**: Returns the site occupation history for all atoms over time
 
 These methods facilitate analysis of diffusion patterns, correlations between atom movements, and statistical properties of ion migration.

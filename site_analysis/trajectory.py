@@ -589,12 +589,17 @@ class Trajectory:
         the number of events from site i to site j is
         ``self.site_by_index(i).transitions[j]``. The events are derived
         from the stored trajectory each time this is called.
+        Each event's entry frame is the frame from which the atom stayed
+        inside its new site, without leaving, up to the event's frame; with
+        commitment it is derived from ``assigned_trajectory``, and without
+        commitment it equals the event's frame.
 
         Returns:
             The transitions, sorted by frame and then by atom index. Each
             event's frame is the frame, from 0, in which the atom is first
-            counted in its new site. Timesteps are the labels in
-            ``timesteps`` if every frame has one, and None otherwise.
+            counted in its new site. Timesteps and entry timesteps are
+            the labels in ``timesteps`` if every frame has one, and None
+            otherwise.
         """
         # Atoms in index order, so that events within a frame come out sorted.
         atoms = sorted(self.atoms, key=lambda atom: atom.index)
@@ -614,11 +619,26 @@ class Trajectory:
         previous_frame, column = np.nonzero(changed)
         atom_index = np.array([atom.index for atom in atoms], dtype=np.int64)[column]
         frame = previous_frame + 1
-        timestep = (np.asarray(self.timesteps, dtype=np.int64)[frame]
-                    if len(self.timesteps) == n_frames else None)
+        if self._commitment_radii is None:
+            entry_frame = frame
+        else:
+            # Site each atom is inside in each frame. A frame starts a new
+            # run where the site differs from the previous frame's; NaN
+            # compares unequal to everything, so unassigned frames break
+            # runs. The entry frame is the start of the run at the event.
+            inside = np.array([atom.assigned_trajectory for atom in atoms], dtype=float).T
+            new_run = np.ones(inside.shape, dtype=bool)
+            new_run[1:] = inside[1:] != inside[:-1]
+            run_start = np.where(new_run, np.arange(n_frames)[:, np.newaxis], 0)
+            np.maximum.accumulate(run_start, axis=0, out=run_start)
+            entry_frame = run_start[frame, column]
+        labels = (np.asarray(self.timesteps, dtype=np.int64)
+                  if len(self.timesteps) == n_frames else None)
         return TransitionEvents(
             frame=frame,
-            timestep=timestep,
+            timestep=None if labels is None else labels[frame],
+            entry_frame=entry_frame,
+            entry_timestep=None if labels is None else labels[entry_frame],
             atom=atom_index,
             from_site=carried[previous_frame, column].astype(np.int64),
             to_site=sites[frame, column].astype(np.int64))

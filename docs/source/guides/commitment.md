@@ -50,6 +50,10 @@ More than one atom can be committed to a site at once. For example, an atom can 
 
 Where sites overlap, the [site search](../concepts/site_collections.md#priority-based-assignment-spherical-and-polyhedral) checks an atom's recent sites first, then the sites that atoms have previously moved to from its most recent site. With commitment on, those previous moves are the committed transitions, so an atom in an overlapping region can be assigned to a different site than in an analysis without commitment.
 
+### Entry Frames
+
+A committed transition is recorded at the frame in which the atom reaches its new site's core. The frame in which it entered the site is the event's `entry_frame` in [transition events](trajectories.md#transition-events): the earliest frame from which the atom stayed inside the new site, without leaving, up to the commit. A frame in another site, or in no site, breaks the run. For an atom that is inside sites A, B, A, B, B, B in frames 0 to 5, reaching B's core only at frame 5, the transition from A to B has `frame` 5 and `entry_frame` 3: the visit to B at frame 1 did not last.
+
 ## Choosing a Radius
 
 If the commitment radius covers the whole site, the core is the whole site, and an atom commits to that site as soon as it enters it.

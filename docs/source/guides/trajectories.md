@@ -162,10 +162,10 @@ for site in trajectory.sites:
 events = trajectory.transition_events()
 
 len(events)          # number of transitions
-events[0]            # TransitionEvent(frame=12, timestep=13, atom=3, from_site=7, to_site=15)
+events[0]            # TransitionEvent(frame=12, timestep=13, entry_frame=12, entry_timestep=13, atom=3, from_site=7, to_site=15)
 events[0].frame      # 12
 
-# Each field is an integer array with one entry per transition (timestep may be None)
+# Each field is an integer array with one element per transition (timesteps may be None)
 events.to_site                     # destination of every transition
 into_site = events[events.to_site == 15]   # transitions into site 15
 atom_3 = events[events.atom == 3]          # every transition of atom 3
@@ -177,6 +177,8 @@ for event in atom_3:
 Transitions follow the same rule as `site.transitions`: a transition is a change of site between consecutive assigned frames of an atom's trajectory, skipping frames in which the atom is unassigned, and its frame is the frame in which the atom is first counted in its new site. An atom whose trajectory is `[5, None, None, 12]` makes one transition, from site 5 to site 12, at frame 3. With [commitment](commitment.md), a transition is a change of committed site.
 
 `frame` counts frames from 0 and indexes `atoms_trajectory` and `sites_trajectory` directly. `timestep` gives the label passed for each frame (`trajectory_from_structures()` numbers frames from 1); it is `None` if some frames were appended without a label. `atom` is the atom's `index`, as in `site.contains_atoms` and `sites_trajectory`; its column in `atoms_trajectory` is `trajectory.atom_lookup[event.atom]`. `from_site` and `to_site` are site indices, the values stored in `atoms_trajectory`. Events are sorted by frame, then by atom index.
+
+`entry_frame` is the frame from which the atom stayed inside its new site, without leaving, up to `frame`, and `entry_timestep` is its label. Without commitment they equal `frame` and `timestep`. With [commitment](commitment.md#entry-frames), an atom is counted in a new site only once it reaches the site's core, so `entry_frame` can be earlier than `frame`.
 
 The events are derived from the stored trajectory each time `transition_events()` is called, so they agree with it, including after more frames are appended.
 

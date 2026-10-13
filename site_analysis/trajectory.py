@@ -399,12 +399,17 @@ class Trajectory:
 
     @property
     def atom_sites(self) -> list[int | None]:
-        """Return the sites that each atom currently occupies.
-        
+        """Return the site each atom is counted in.
+
+        With commitment this is each atom's committed site; otherwise it is
+        the site each atom is inside in the most recently analysed structure.
+
         Returns:
-            A list of site indices (or None for unoccupied atoms), one for each atom.
+            A list of site indices (or None for unassigned atoms), one for each atom.
         """
-        return [atom.in_site for atom in self.atoms]
+        if self._commitment_radii is None:
+            return [atom.in_site for atom in self.atoms]
+        return [atom.committed_site for atom in self.atoms]
         
     @property
     def site_occupations(self) -> list[list[int]]:
@@ -428,12 +433,13 @@ class Trajectory:
            history. Without commitment, a transition is recorded for each
            atom assigned to a different site from the last site it was
            assigned to in an appended timestep. With commitment, each atom's
-           site is replaced by its committed site, and a transition is
-           recorded when an atom's committed site changes from one site to
-           another. Site occupations are then rebuilt from the committed
-           sites, and each atom's recent-site history follows its assigned
-           site.
-        3. Updates the trajectory information for atoms and sites
+           committed site is updated, and a transition is recorded when it
+           changes from one site to another. Site occupations are then
+           rebuilt from the committed sites, and each atom's recent-site
+           history follows the site it is inside.
+        3. Updates the trajectory information for atoms and sites. With
+           commitment, each atom's trajectory records its committed site and
+           its assigned trajectory the site it is inside.
         4. Adds the timestep to the list of timesteps if provided
 
         Args:
@@ -443,10 +449,13 @@ class Trajectory:
         self.analyse_structure(structure)
         if self._commitment_radii is None:
             self._record_transitions()
+            for atom in self.atoms:
+                atom.trajectory.append(atom.in_site)
         else:
             self._apply_commitment(self._commitment_radii, structure.lattice.matrix)
-        for atom in self.atoms:
-            atom.trajectory.append(atom.in_site)
+            for atom in self.atoms:
+                atom.trajectory.append(atom.committed_site)
+                atom.assigned_trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)
         if t is not None:
@@ -469,7 +478,7 @@ class Trajectory:
     def _apply_commitment(self,
             radii: dict[int, float],
             lattice_matrix: np.ndarray) -> None:
-        """Replace each atom's assigned site with its committed site.
+        """Update each atom's committed site.
 
         An atom with no committed site commits to the site it is assigned to, if any.
         An atom assigned to a different site from its committed site commits
@@ -477,7 +486,8 @@ class Trajectory:
         site centre, and a transition is recorded. Otherwise the atom keeps
         its committed site. Site occupations are then rebuilt from the
         committed sites. Each atom's recent-site history follows the site it
-        is assigned to.
+        is assigned to. ``atom.in_site`` is left as the site the atom is
+        inside.
 
         Args:
             radii: Commitment radius for each site index.
@@ -497,11 +507,10 @@ class Trajectory:
                     self.site_by_index(committed).transitions[assigned] += 1
                     committed = assigned
             atom.committed_site = committed
-            atom.in_site = committed
         self.site_collection.reset_site_occupations()
         for atom in self.atoms:
-            if atom.in_site is not None:
-                self.site_by_index(atom.in_site).contains_atoms.append(atom.index)
+            if atom.committed_site is not None:
+                self.site_by_index(atom.committed_site).contains_atoms.append(atom.index)
 
     def reset(self) -> None:
         """Reset the trajectory.
@@ -515,7 +524,7 @@ class Trajectory:
         self.timesteps = []
 
     @property
-    def atoms_trajectory(self):
+    def atoms_trajectory(self) -> list[list[int | None]]:
         """Return the trajectory of all atoms.
         
         Returns:
@@ -533,6 +542,23 @@ class Trajectory:
             contains the atom indices occupying each site at that timestep.
         """
         return list(map(list, zip(*[site.trajectory for site in self.sites])))
+
+    @property
+    def assigned_trajectory(self) -> list[list[int | None]]:
+        """Return the site each atom was inside at each timestep.
+
+        With commitment this can differ from ``atoms_trajectory``, which
+        holds each atom's committed site; without commitment the two are
+        the same.
+
+        Returns:
+            A list of lists, where each inner list represents a timestep and
+            contains the index of the site each atom was inside (or None),
+            in the order of ``atoms``.
+        """
+        if self._commitment_radii is None:
+            return self.atoms_trajectory
+        return list(map(list, zip(*[atom.assigned_trajectory for atom in self.atoms])))
 
     @property
     def at(self):

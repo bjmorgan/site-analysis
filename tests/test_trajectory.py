@@ -1188,6 +1188,88 @@ class DynamicVoronoiCommitmentTestCase(unittest.TestCase):
         self.assertEqual(self.site_a.transitions, {1: 1})
 
 
+class CommitmentStateTestCase(unittest.TestCase):
+    """With commitment, the geometric and committed sites are kept separately."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.site_a = SphericalSite(frac_coords=np.array([0.3, 0.5, 0.5]), rcut=1.9, label="a")
+        self.site_b = SphericalSite(frac_coords=np.array([0.7, 0.5, 0.5]), rcut=1.9, label="b")
+        self.lattice = Lattice.cubic(10.0)
+        # Fractional x positions (y = z = 0.5), as in TrajectoryCommitmentTestCase:
+        # *_core is at a site centre, *_edge inside a site but outside a 0.5 A
+        # core, gap in neither site.
+        self.x = {"a_core": 0.30, "a_edge": 0.45, "gap": 0.50,
+                  "b_edge": 0.55, "b_core": 0.70}
+
+    def make_trajectory(self, commitment_radius=0.5):
+        return Trajectory(sites=[self.site_a, self.site_b], atoms=[Atom(index=0)],
+                          commitment_radius=commitment_radius)
+
+    def frames(self, *positions):
+        return [Structure(self.lattice, ["Li"], [[self.x[p], 0.5, 0.5]])
+                for p in positions]
+
+    def test_in_site_is_the_geometric_site_after_append(self):
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(self.frames("a_core", "b_edge"))
+        atom = trajectory.atoms[0]
+        self.assertEqual(atom.in_site, 1)
+        self.assertEqual(atom.committed_site, 0)
+        self.assertEqual(trajectory.atom_sites, [0])
+        self.assertEqual(atom.trajectory, [0, 0])
+        self.assertEqual(self.site_a.contains_atoms, [0])
+        self.assertEqual(self.site_b.contains_atoms, [])
+
+    def test_analyse_structure_after_append_keeps_the_committed_site(self):
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(self.frames("a_core"))
+        trajectory.analyse_structure(self.frames("b_edge")[0])
+        self.assertEqual(trajectory.atoms[0].in_site, 1)
+        self.assertEqual(trajectory.atom_sites, [0])
+
+    def test_assigned_trajectory_holds_the_geometric_sites(self):
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(
+            self.frames("a_core", "b_edge", "gap", "b_core"))
+        atom = trajectory.atoms[0]
+        self.assertEqual(atom.assigned_trajectory, [0, 1, None, 1])
+        self.assertEqual(atom.trajectory, [0, 0, 0, 1])
+        self.assertEqual(trajectory.assigned_trajectory, [[0], [1], [None], [1]])
+
+    def test_without_commitment_assigned_trajectory_is_the_trajectory(self):
+        trajectory = self.make_trajectory(commitment_radius=None)
+        trajectory.trajectory_from_structures(
+            self.frames("a_core", "b_edge", "gap", "b_core"))
+        self.assertEqual(trajectory.atoms[0].assigned_trajectory, [])
+        self.assertEqual(trajectory.assigned_trajectory, trajectory.atoms_trajectory)
+        self.assertEqual(trajectory.atom_sites, [1])
+
+    def test_assigned_trajectory_matches_an_analysis_without_commitment(self):
+        """Without overlapping sites, the geometric sites do not depend on commitment."""
+        sites = [SphericalSite(frac_coords=np.array([x, 0.5, 0.5]), rcut=1.0)
+                 for x in (0.125, 0.375, 0.625, 0.875)]
+        rng = np.random.default_rng(8)
+        frames = [Structure(self.lattice, ["Li"] * 3,
+                            [[x, 0.5, 0.5] for x in rng.random(3)])
+                  for _ in range(100)]
+        without = Trajectory(sites=sites, atoms=[Atom(index=i) for i in range(3)])
+        without.trajectory_from_structures(frames)
+        expected = without.atoms_trajectory
+        committed = Trajectory(sites=sites, atoms=[Atom(index=i) for i in range(3)],
+                               commitment_radius=0.5)
+        committed.trajectory_from_structures(frames)
+        self.assertEqual(committed.assigned_trajectory, expected)
+        self.assertNotEqual(committed.atoms_trajectory, expected)
+
+    def test_reset_clears_assigned_trajectory(self):
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(self.frames("a_core", "b_edge"))
+        trajectory.reset()
+        self.assertEqual(trajectory.atoms[0].assigned_trajectory, [])
+        self.assertEqual(trajectory.assigned_trajectory, [])
+
+
 class TransitionEventsDerivationTestCase(unittest.TestCase):
     """Transition events derived from hand-built atom trajectories."""
 

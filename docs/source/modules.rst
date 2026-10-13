@@ -23,6 +23,7 @@ Submodules
    modules/spherical_site_collection
    modules/tools
    modules/trajectory
+   modules/transition_events
    modules/transition_table
    modules/voronoi_site
    modules/voronoi_site_collection

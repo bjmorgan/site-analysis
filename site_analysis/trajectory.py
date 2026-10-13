@@ -38,6 +38,7 @@ from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
 
+from .transition_events import TransitionEvents
 from .transition_table import TransitionTable
 
 from .atom import Atom
@@ -63,8 +64,11 @@ class Trajectory:
         """Initialise a Trajectory object for site analysis of simulation trajectories.
         
         This constructor ensures all sites are of the same type and initialises the
-        appropriate site collection based on the type of sites provided. Each atom's
-        committed site is cleared, so commitment starts afresh.
+        appropriate site collection based on the type of sites provided. The atoms
+        and sites are reset, so the analysis starts afresh: any trajectories,
+        recent-site histories, committed sites and transition counts they hold
+        from an earlier analysis are cleared, and each atom's current site and
+        coordinates are unset until the first structure is analysed.
         
         Args:
             sites: list of Site objects (must all be of the same type).
@@ -120,8 +124,7 @@ class Trajectory:
                                    else commitment_radius)
         self._commitment_radii = self._resolve_commitment_radii(
             sites, self._commitment_radius)
-        for atom in atoms:
-            atom.committed_site = None
+        self.reset()
 
     @staticmethod
     def _resolve_commitment_radii(
@@ -548,6 +551,51 @@ class Trajectory:
             The sites_trajectory property.
         """
         return self.sites_trajectory
+
+    def transition_events(self) -> TransitionEvents:
+        """Return every transition of an atom from one site to another.
+
+        A transition is a change of site between consecutive assigned
+        frames of an atom's trajectory; frames in which the atom is
+        unassigned are skipped. With commitment, the trajectory holds each
+        atom's committed site, so a transition is a change of committed
+        site. These are the transitions counted in ``site.transitions``:
+        the number of events from site i to site j is
+        ``self.site_by_index(i).transitions[j]``. The events are derived
+        from the stored trajectory each time this is called.
+
+        Returns:
+            The transitions, sorted by frame and then by atom index. Each
+            event's frame is the frame, from 0, in which the atom is first
+            counted in its new site. Timesteps are the labels in
+            ``timesteps`` if every frame has one, and None otherwise.
+        """
+        # Atoms in index order, so that events within a frame come out sorted.
+        atoms = sorted(self.atoms, key=lambda atom: atom.index)
+        n_frames = len(atoms[0].trajectory)
+        # Site of each atom in each frame, NaN where unassigned: (frames, atoms).
+        sites = np.array([atom.trajectory for atom in atoms], dtype=float).T
+        # Carry each atom's last assigned site forward over unassigned frames.
+        assigned = ~np.isnan(sites)
+        last_assigned = np.where(assigned, np.arange(n_frames)[:, np.newaxis], 0)
+        np.maximum.accumulate(last_assigned, axis=0, out=last_assigned)
+        carried = np.take_along_axis(sites, last_assigned, axis=0)
+        # NaN compares unequal to everything, even NaN, so the two isnan
+        # tests are needed to exclude unassigned frames and atoms with no
+        # earlier site.
+        changed = (assigned[1:] & ~np.isnan(carried[:-1])
+                   & (sites[1:] != carried[:-1]))
+        previous_frame, column = np.nonzero(changed)
+        atom_index = np.array([atom.index for atom in atoms], dtype=np.int64)[column]
+        frame = previous_frame + 1
+        timestep = (np.asarray(self.timesteps, dtype=np.int64)[frame]
+                    if len(self.timesteps) == n_frames else None)
+        return TransitionEvents(
+            frame=frame,
+            timestep=timestep,
+            atom=atom_index,
+            from_site=carried[previous_frame, column].astype(np.int64),
+            to_site=sites[frame, column].astype(np.int64))
 
     def trajectory_from_structures(
         self,

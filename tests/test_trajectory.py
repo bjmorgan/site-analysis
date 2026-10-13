@@ -15,6 +15,7 @@ from site_analysis.spherical_site_collection import SphericalSiteCollection
 from site_analysis.dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from site_analysis.atom import Atom
 from site_analysis.site import Site
+from site_analysis.transition_events import TransitionEvents
 from unittest.mock import Mock, patch, PropertyMock
 
 import tempfile
@@ -67,6 +68,29 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
     def test_init_raises_type_error_if_passed_invalid_site_type(self):
         with self.assertRaises(TypeError):
             Trajectory(atoms=[Atom(index=0)], sites=["foo"])
+
+    def test_init_resets_reused_atoms(self):
+        """Atoms that carry history from an earlier analysis start afresh."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        atom = Atom(index=0)
+        atom.trajectory = [0, 0]
+        atom.update_recent_site(0)
+        atom.committed_site = 0
+        Trajectory(atoms=[atom], sites=[site])
+        self.assertEqual(atom.trajectory, [])
+        self.assertIsNone(atom.most_recent_site)
+        self.assertIsNone(atom.committed_site)
+
+    def test_init_resets_reused_sites(self):
+        """Sites that carry history from an earlier analysis start afresh."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)
+        site.trajectory = [[0], [0]]
+        site.contains_atoms = [0]
+        site.transitions[1] += 2
+        Trajectory(atoms=[Atom(index=0)], sites=[site])
+        self.assertEqual(site.trajectory, [])
+        self.assertEqual(site.contains_atoms, [])
+        self.assertEqual(site.transitions, Counter())
 
 
 class TrajectoryFunctionalityTestCase(unittest.TestCase):
@@ -1162,6 +1186,158 @@ class DynamicVoronoiCommitmentTestCase(unittest.TestCase):
         ])
         self.assertEqual(self.trajectory.atoms[0].trajectory, [0, 0, 1])
         self.assertEqual(self.site_a.transitions, {1: 1})
+
+
+class TransitionEventsDerivationTestCase(unittest.TestCase):
+    """Transition events derived from hand-built atom trajectories."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.sites = [SphericalSite(frac_coords=np.array([x, 0.5, 0.5]), rcut=1.0)
+                      for x in (0.1, 0.4, 0.7)]
+
+    def make_trajectory(self, atom_trajectories, atom_indices=None, timesteps=None):
+        """A trajectory whose atoms have the given stored trajectories."""
+        if atom_indices is None:
+            atom_indices = list(range(len(atom_trajectories)))
+        atoms = [Atom(index=i) for i in atom_indices]
+        trajectory = Trajectory(sites=self.sites, atoms=atoms)
+        for atom, sites in zip(atoms, atom_trajectories):
+            atom.trajectory = list(sites)
+        n_frames = len(atom_trajectories[0])
+        trajectory.timesteps = (list(range(1, n_frames + 1))
+                                if timesteps is None else list(timesteps))
+        return trajectory
+
+    def assert_events(self, events, expected):
+        """The events, as (frame, atom, from_site, to_site) tuples, in order."""
+        self.assertIsInstance(events, TransitionEvents)
+        self.assertEqual([(e.frame, e.atom, e.from_site, e.to_site) for e in events],
+                         expected)
+
+    def test_single_transition(self):
+        trajectory = self.make_trajectory([[0, 0, 1, 1]])
+        self.assert_events(trajectory.transition_events(), [(2, 0, 0, 1)])
+
+    def test_events_are_sorted_by_frame_then_atom_index(self):
+        """Atoms given out of index order are sorted by atom index within a frame."""
+        trajectory = self.make_trajectory(
+            [[0, 1, 1, 2], [1, 2, 2, 0]], atom_indices=[8, 4])
+        self.assert_events(trajectory.transition_events(),
+                           [(1, 4, 1, 2), (1, 8, 0, 1), (3, 4, 2, 0), (3, 8, 1, 2)])
+
+    def test_unassigned_gap_between_two_sites_gives_one_event_on_arrival(self):
+        trajectory = self.make_trajectory([[0, None, None, 2, 2]])
+        self.assert_events(trajectory.transition_events(), [(3, 0, 0, 2)])
+
+    def test_gap_returning_to_the_same_site_gives_no_event(self):
+        trajectory = self.make_trajectory([[1, None, 1, 1]])
+        self.assert_events(trajectory.transition_events(), [])
+
+    def test_first_assignment_is_not_a_transition(self):
+        trajectory = self.make_trajectory([[None, None, 1, 2]])
+        self.assert_events(trajectory.transition_events(), [(3, 0, 1, 2)])
+
+    def test_atom_never_assigned_gives_no_events(self):
+        trajectory = self.make_trajectory([[None, None, None], [0, 1, 1]])
+        self.assert_events(trajectory.transition_events(), [(1, 1, 0, 1)])
+
+    def test_several_transitions_of_one_atom(self):
+        trajectory = self.make_trajectory([[0, 1, None, 2, 0]])
+        self.assert_events(trajectory.transition_events(),
+                           [(1, 0, 0, 1), (3, 0, 1, 2), (4, 0, 2, 0)])
+
+    def test_timesteps_are_the_labels_of_each_event_frame(self):
+        trajectory = self.make_trajectory([[0, 0, 1, 2]], timesteps=[10, 20, 30, 40])
+        np.testing.assert_array_equal(trajectory.transition_events().timestep, [30, 40])
+
+    def test_no_frames_gives_no_events(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=0)])
+        events = trajectory.transition_events()
+        self.assertEqual(len(events), 0)
+        self.assertEqual(len(events.timestep), 0)
+
+
+class TransitionEventsFromAnalysisTestCase(unittest.TestCase):
+    """Transition events from analysed structures match the live transition counts."""
+
+    def setUp(self):
+        Site._newid = 0
+        self.lattice = Lattice.cubic(10.0)
+        # Four sites 2.5 A apart along x, radius 1.0 A: atoms between them are unassigned.
+        self.sites = [SphericalSite(frac_coords=np.array([x, 0.5, 0.5]), rcut=1.0)
+                      for x in (0.125, 0.375, 0.625, 0.875)]
+
+    def random_frames(self, n_frames, n_atoms, seed):
+        """Atoms at random positions along the line of sites."""
+        rng = np.random.default_rng(seed)
+        return [Structure(self.lattice, ["Li"] * n_atoms,
+                          [[x, 0.5, 0.5] for x in rng.random(n_atoms)])
+                for _ in range(n_frames)]
+
+    def assert_events_match_transition_counts(self, trajectory):
+        events = trajectory.transition_events()
+        from_events = Counter(zip(events.from_site.tolist(), events.to_site.tolist()))
+        live = Counter({(site.index, to_site): count
+                        for site in trajectory.sites
+                        for to_site, count in site.transitions.items()})
+        self.assertGreater(len(events), 0)
+        self.assertEqual(from_events, live)
+
+    def test_events_match_transition_counts_without_commitment(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=i) for i in range(3)])
+        trajectory.trajectory_from_structures(self.random_frames(200, 3, seed=1))
+        self.assert_events_match_transition_counts(trajectory)
+
+    def test_events_match_transition_counts_with_commitment(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=i) for i in range(3)],
+                                commitment_radius=0.5)
+        trajectory.trajectory_from_structures(self.random_frames(200, 3, seed=2))
+        self.assert_events_match_transition_counts(trajectory)
+
+    def test_each_event_matches_the_stored_trajectory(self):
+        """The atom is in from_site before the event's frame and in to_site at it."""
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=i) for i in range(3)])
+        trajectory.trajectory_from_structures(self.random_frames(100, 3, seed=3))
+        events = trajectory.transition_events()
+        frames = trajectory.atoms_trajectory
+        self.assertGreater(len(events), 0)
+        for event in events:
+            column = trajectory.atom_lookup[event.atom]
+            self.assertEqual(frames[event.frame][column], event.to_site)
+            earlier = [frames[f][column] for f in range(event.frame)]
+            self.assertEqual([s for s in earlier if s is not None][-1], event.from_site)
+
+    def test_timesteps_follow_trajectory_from_structures(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=0)])
+        trajectory.trajectory_from_structures(self.random_frames(50, 1, seed=4))
+        events = trajectory.transition_events()
+        np.testing.assert_array_equal(events.timestep, events.frame + 1)
+
+    def test_timestep_is_none_when_some_frames_have_no_label(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=0)])
+        frames = self.random_frames(40, 1, seed=5)
+        for t, structure in enumerate(frames):
+            trajectory.append_timestep(structure, t=t if t % 2 == 0 else None)
+        self.assertIsNone(trajectory.transition_events().timestep)
+
+    def test_later_frames_appear_in_a_later_call(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=i) for i in range(3)])
+        frames = self.random_frames(100, 3, seed=6)
+        trajectory.trajectory_from_structures(frames[:50])
+        first = trajectory.transition_events()
+        for t, structure in enumerate(frames[50:], start=51):
+            trajectory.append_timestep(structure, t=t)
+        second = trajectory.transition_events()
+        self.assertGreater(len(second), len(first))
+        np.testing.assert_array_equal(second.frame[:len(first)], first.frame)
+        self.assert_events_match_transition_counts(trajectory)
+
+    def test_reset_gives_no_events(self):
+        trajectory = Trajectory(sites=self.sites, atoms=[Atom(index=0)])
+        trajectory.trajectory_from_structures(self.random_frames(50, 1, seed=7))
+        trajectory.reset()
+        self.assertEqual(len(trajectory.transition_events()), 0)
 
 
 if __name__ == '__main__':

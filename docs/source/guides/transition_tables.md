@@ -2,6 +2,8 @@
 
 Transition tables summarise how atoms move between sites during a trajectory. The `Trajectory` class provides methods that return `TransitionTable` objects containing either raw hop counts or row-normalised probabilities.
 
+Transition tables count transitions. To find when each transition happened and which atom made it, see [Transition Events](trajectories.md#transition-events).
+
 ## Basic Usage
 
 After running a trajectory analysis, use the `_by_site` or `_by_label` methods:

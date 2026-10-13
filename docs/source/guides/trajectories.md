@@ -154,6 +154,32 @@ for site in trajectory.sites:
             print(f"  → Site {dest_site}: {count} transitions")
 ```
 
+### Transition Events
+
+`site.transitions` counts how many times atoms moved from one site to another. To know when each transition happened, and which atom made it, use `transition_events()`:
+
+```python
+events = trajectory.transition_events()
+
+len(events)          # number of transitions
+events[0]            # TransitionEvent(frame=12, timestep=13, atom=3, from_site=7, to_site=15)
+events[0].frame      # 12
+
+# Each field is an integer array with one entry per transition (timestep may be None)
+events.to_site                     # destination of every transition
+into_site = events[events.to_site == 15]   # transitions into site 15
+atom_3 = events[events.atom == 3]          # every transition of atom 3
+
+for event in atom_3:
+    print(event.frame, event.from_site, event.to_site)
+```
+
+Transitions follow the same rule as `site.transitions`: a transition is a change of site between consecutive assigned frames of an atom's trajectory, skipping frames in which the atom is unassigned, and its frame is the frame in which the atom is first counted in its new site. An atom whose trajectory is `[5, None, None, 12]` makes one transition, from site 5 to site 12, at frame 3. With [commitment](commitment.md), a transition is a change of committed site.
+
+`frame` counts frames from 0 and indexes `atoms_trajectory` and `sites_trajectory` directly. `timestep` gives the label passed for each frame (`trajectory_from_structures()` numbers frames from 1); it is `None` if some frames were appended without a label. `atom` is the atom's `index`, as in `site.contains_atoms` and `sites_trajectory`; its column in `atoms_trajectory` is `trajectory.atom_lookup[event.atom]`. `from_site` and `to_site` are site indices, the values stored in `atoms_trajectory`. Events are sorted by frame, then by atom index.
+
+The events are derived from the stored trajectory each time `transition_events()` is called, so they agree with it, including after more frames are appended.
+
 ### Summary Statistics
 
 Trajectory objects provide methods to extract and export summary statistics for all sites in a structured format:

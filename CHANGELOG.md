@@ -8,11 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`, with `TransitionEvent`): the frame (from 0), timestep label, atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they agree with it and with `site.transitions` (#90).
+- `Trajectory.transition_events()` returns every transition of an atom between sites, as a `TransitionEvents` (exported from `site_analysis`, with `TransitionEvent`): the frame (from 0) and timestep label at which it is counted in its new site, the earliest frame, and its label, from which it stayed in that site (earlier than its frame only with commitment), the atom index and the sites it left and entered, as integer arrays. Indexing with an integer gives one `TransitionEvent`; a slice or mask, such as `events[events.to_site == k]`, gives the selected transitions. The events are derived from the stored trajectory, so they agree with it and with `site.transitions` (#90, #91).
+- `Trajectory.geometric_trajectory` gives the site each atom was inside at each timestep (`Atom.geometric_trajectory` for one atom, recorded only with commitment). With commitment this can differ from `atoms_trajectory`, which holds the committed sites; without commitment the two are the same (#91).
+- `Trajectory.geometric_sites` and `Trajectory.committed_sites` give each atom's current geometric site (the site it is inside) and committed site, as lists (#91).
 
 ### Changed
 
 - A new `Trajectory` resets its atoms and sites, so any trajectories, recent-site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are unset until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared. Because the site search ranks candidate sites by their transition counts, reused overlapping sites may now be assigned differently.
+- With commitment, `atom.in_site` is now always the site the atom is inside in the most recently analysed structure. Previously `append_timestep()` replaced it with the committed site, which is `atom.committed_site`. `Trajectory.geometric_sites` gives `in_site` for every atom and `Trajectory.committed_sites` the committed sites.
+
+### Deprecated
+
+- `Trajectory.atom_sites` is deprecated in favour of `Trajectory.geometric_sites` (or `Trajectory.committed_sites`) and issues a `FutureWarning`. It keeps its previous values (the committed sites with commitment, otherwise the sites the atoms are inside) and will be removed in version 2.0.
 
 ## [1.10.0] - 2026-10-12
 

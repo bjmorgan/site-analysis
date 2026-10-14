@@ -48,6 +48,12 @@ class AtomTestCase(unittest.TestCase):
         atom.reset()
         self.assertIsNone(atom.committed_site)
 
+    def test_reset_clears_geometric_trajectory(self):
+        atom = Atom(index=12)
+        atom.geometric_trajectory = [1, None]
+        atom.reset()
+        self.assertEqual(atom.geometric_trajectory, [])
+
     def test___str__(self):
         atom = Atom(index=12)
         self.assertEqual(str(atom), 'Atom: 12')

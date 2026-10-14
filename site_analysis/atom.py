@@ -27,11 +27,15 @@ class Atom:
 
     Attributes:
         index (int): Unique numeric index identifying this atom.
-        in_site (int): Site index for the site this atom
-            currently occupies (its committed site after
-            Trajectory.append_timestep() when the Trajectory uses commitment).
-        trajectory (list): list of site indices occupied at each timestep.
-        committed_site (int): Site index of the site this atom is committed
+        in_site (int | None): Site index of the site this atom is inside in the
+            most recently analysed structure, or None.
+        trajectory (list[int | None]): list of site indices counted for this atom at
+            each appended timestep: its committed sites when a Trajectory
+            uses commitment, otherwise the sites it was inside.
+        geometric_trajectory (list[int | None]): list of site indices of the
+            sites this atom was inside at each appended timestep. Empty when
+            the trajectory does not use commitment.
+        committed_site (int | None): Site index of the site this atom is committed
             to when a Trajectory uses commitment, or None.
 
     Note:
@@ -55,6 +59,7 @@ class Atom:
         self.in_site: int | None = None
         self._frac_coords: np.ndarray | None = None
         self.trajectory: list[int|None] = []
+        self.geometric_trajectory: list[int | None] = []
         self._recent_sites: list[int | None] = [None, None]
         self.committed_site: int | None = None
         self.species_string = species_string
@@ -86,7 +91,7 @@ class Atom:
         """Reset the state of this Atom.
 
         Clears the `in_site`, `_frac_coords`, `trajectory`,
-        `committed_site` and `_recent_sites` attributes.
+        `geometric_trajectory`, `committed_site` and `_recent_sites` attributes.
 
         Returns:
             None
@@ -95,6 +100,7 @@ class Atom:
         self.in_site = None
         self._frac_coords = None
         self.trajectory = []
+        self.geometric_trajectory = []
         self._recent_sites = [None, None]
         self.committed_site = None
 

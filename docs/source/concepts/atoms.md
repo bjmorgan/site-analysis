@@ -12,10 +12,11 @@ The `Atom` class maintains several key attributes:
 
 - **index**: Unique numerical identifier that matches the atom's index in the source structure
 - **species_string**: Chemical symbol of the atom (e.g., "Li", "Na")
-- **in_site**: Current site index that this atom occupies (or None if not in any site)
+- **in_site**: Index of the site this atom is inside in the most recently analysed structure (or None if it is in no site)
 - **frac_coords**: Current fractional coordinates in the crystal structure
-- **trajectory**: List of site indices (or None values) that this atom has occupied over time
+- **trajectory**: List of site indices (or None values) that this atom has occupied over time (its committed sites when the trajectory uses commitment)
 - **committed_site**: Site index of the site this atom is committed to when the trajectory uses commitment (or None)
+- **geometric_trajectory**: List of the sites this atom was inside at each timestep, recorded only when the trajectory uses commitment
 
 These properties provide the foundation for analysing how atoms move through the crystal structure during a simulation.
 
@@ -23,8 +24,10 @@ These properties provide the foundation for analysing how atoms move through the
 
 The relationship between atoms and sites is bidirectional:
 
-1. Each atom records which site it currently occupies via its `in_site` attribute
+1. Each atom records which site it is inside via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
+
+With commitment, an atom's trajectory records committed sites, and `contains_atoms` holds the committed atoms after `append_timestep()` and the atoms inside each site after `analyse_structure()` alone. The matching atom attribute is `committed_site`; `in_site` is the site the atom is inside.
 
 When analysing a structure, the appropriate site collection determines which atoms belong to which sites.
 
@@ -38,7 +41,7 @@ atom.trajectory = [5, 5, 5, 12, 12, 12, 12, 15, 15, ...]
 
 In this example, the atom started in site 5, moved to site 12 after three timesteps, and then to site 15 after four more timesteps.
 
-If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site. With commitment on, an atom between sites keeps its committed site in both `in_site` and its trajectory; see the [commitment guide](../guides/commitment.md).
+If an atom is not in any site at a particular timestep (e.g., it's in a gap between sites), the trajectory will contain `None` for that timestep. The `in_site` attribute is also set to `None` when an atom is not in any site, ensuring that both the current state and the trajectory consistently represent periods when an atom is not assigned to any site. With commitment on, an atom between sites keeps its committed site in `committed_site` and its trajectory, while `in_site` is `None`; see the [commitment guide](../guides/commitment.md).
 
 ## Creating and Managing Atoms
 
@@ -62,8 +65,10 @@ However, the package provides several utility functions for creating atoms in di
 
 The `Trajectory` class provides methods to analyse the collective behaviour of atoms:
 
-- **atom_sites**: Returns the current site for each atom
-- **atoms_trajectory**: Returns the site occupation history for all atoms over time
+- **geometric_sites**: Returns the site each atom is inside
+- **committed_sites**: Returns each atom's committed site, with commitment
+- **atoms_trajectory**: Returns the site occupation history for all atoms over time (the committed sites with commitment)
+- **geometric_trajectory**: Returns the sites the atoms were inside at each timestep (the same as `atoms_trajectory` without commitment)
 
 These methods facilitate analysis of diffusion patterns, correlations between atom movements, and statistical properties of ion migration.
 

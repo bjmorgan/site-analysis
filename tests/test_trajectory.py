@@ -1047,22 +1047,21 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(atom.most_recent_site, 1)
 
     def test_analyse_structure_is_geometric(self):
-        """analyse_structure updates the geometric state and keeps the committed site."""
+        """analyse_structure updates only the geometric state."""
         trajectory = self.make_trajectory()
-        trajectory.trajectory_from_structures(
-            [self.frame("a_core"), self.frame("b_edge")])
-        self.assertEqual(trajectory.geometric_sites, [1])
-        self.assertEqual(trajectory.committed_sites, [0])
-        self.assertEqual(trajectory.site_occupations, [[0], []])
-        trajectory.analyse_structure(self.frame("b_edge"))
-        self.assertEqual(trajectory.atoms[0].in_site, 1)
+        trajectory.append_timestep(self.frame("a_core"))
+        trajectory.analyse_structure(self.frame("b_core"))
         self.assertEqual(trajectory.geometric_sites, [1])
         self.assertEqual(trajectory.committed_sites, [0])
         self.assertEqual(trajectory.site_occupations, [[], [0]])
         self.assertEqual(self.site_a.transitions, Counter())
+        trajectory.analyse_structure(self.frame("gap"))
+        self.assertEqual(trajectory.geometric_sites, [None])
+        self.assertEqual(trajectory.committed_sites, [0])
 
     def test_append_records_the_committed_site(self):
-        """After an append, in_site is geometric; the trajectory and occupations are committed."""
+        """After an append, in_site is geometric; the trajectory and
+        occupations are committed."""
         trajectory = self.make_trajectory()
         trajectory.trajectory_from_structures(
             [self.frame("a_core"), self.frame("b_edge")])
@@ -1074,7 +1073,8 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(self.site_b.contains_atoms, [])
 
     def test_geometric_trajectory_holds_the_geometric_sites(self):
-        """geometric_trajectory records the site the atom is inside at each timestep."""
+        """geometric_trajectory records the site the atom is inside at each
+        timestep."""
         trajectory = self.make_trajectory()
         trajectory.trajectory_from_structures(
             [self.frame(p) for p in ("a_core", "b_edge", "gap", "b_core")])
@@ -1084,7 +1084,8 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(trajectory.geometric_trajectory, [[0], [1], [None], [1]])
 
     def test_without_commitment_there_is_no_committed_site(self):
-        """Without commitment, committed_sites is None and the trajectory is geometric."""
+        """Without commitment, committed_sites is None and the trajectory is
+        geometric."""
         trajectory = self.make_trajectory(commitment_radius=None)
         trajectory.trajectory_from_structures(
             [self.frame(p) for p in ("a_core", "b_edge", "gap", "b_core")])
@@ -1094,7 +1095,8 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(trajectory.geometric_sites, [1])
 
     def test_geometric_trajectory_matches_an_analysis_without_commitment(self):
-        """Without overlapping sites, the geometric sites do not depend on commitment."""
+        """Without overlapping sites, the geometric sites do not depend on
+        commitment."""
         sites = [SphericalSite(frac_coords=np.array([x, 0.5, 0.5]), rcut=1.0)
                  for x in (0.125, 0.375, 0.625, 0.875)]
         rng = np.random.default_rng(8)

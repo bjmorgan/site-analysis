@@ -5,8 +5,10 @@ from pymatgen.core import Lattice, Structure
 from site_analysis.polyhedral_site_collection import (
     PolyhedralSiteCollection,
     construct_neighbouring_sites,
+    face_sharing_adjacency,
     _collect_reference_centres,
 )
+from scipy.sparse import csr_array
 from site_analysis.atom import atoms_from_structure
 from site_analysis.tools import get_coordination_indices
 from site_analysis.polyhedral_site import PolyhedralSite
@@ -70,18 +72,20 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         collection = PolyhedralSiteCollection(sites=self.sites)
         self.assertEqual(collection.sites, self.sites)
         
-        # Test with mock sites
+        # Test with mock sites: the neighbour map comes from the adjacency matrix
         mock_site_0 = Mock(spec=PolyhedralSite, index=0)
         mock_site_0.reference_center = None
         mock_site_1 = Mock(spec=PolyhedralSite, index=1)
         mock_site_1.reference_center = None
         sites = [mock_site_0, mock_site_1]
-        with patch('site_analysis.polyhedral_site_collection.construct_neighbouring_sites') as mock_neighbours:
-            mock_neighbours.return_value = 'mocked_neighbours'
+        adjacency = csr_array(np.array([[False, True], [True, False]]))
+        with patch('site_analysis.polyhedral_site_collection.face_sharing_adjacency',
+                   return_value=adjacency) as mock_adjacency:
             site_collection = PolyhedralSiteCollection(sites=sites)
             self.assertEqual(site_collection.sites, sites)
-            mock_neighbours.assert_called_with(site_collection.sites)
-            self.assertEqual(site_collection._neighbouring_sites, 'mocked_neighbours')
+            mock_adjacency.assert_called_once_with(site_collection.sites)
+            self.assertEqual(site_collection._neighbouring_sites,
+                             {0: [mock_site_1], 1: [mock_site_0]})
     
     def test_init_raises_type_error_with_non_polyhedral_sites(self):
         """Test that initialisation raises TypeError with non-PolyhedralSite objects."""
@@ -458,6 +462,62 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         # Site should have no neighbours
         self.assertEqual(len(neighbours[site.index]), 0)
                         
+
+class FaceSharingAdjacencyTestCase(unittest.TestCase):
+    """Tests for face_sharing_adjacency and PolyhedralSiteCollection.site_adjacency."""
+
+    def setUp(self):
+        Site._newid = 0
+        # The ConstructNeighbouringSitesTestCase fixture: sites 0 and 3 share
+        # (0, 1, 2), sites 2 and 3 share (0, 1, 4); site 2 shares only two
+        # vertices with site 0 and with site 1.
+        self.sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                      PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
+                      PolyhedralSite(vertex_indices=[0, 1, 4, 5]),
+                      PolyhedralSite(vertex_indices=[0, 1, 2, 4])]
+
+    def test_face_sharing_sites_are_adjacent(self):
+        expected = np.zeros((4, 4), dtype=bool)
+        for i, j in [(0, 3), (2, 3)]:
+            expected[i, j] = expected[j, i] = True
+        np.testing.assert_array_equal(face_sharing_adjacency(self.sites).toarray(), expected)
+
+    def test_matrix_is_symmetric_boolean_with_an_empty_diagonal(self):
+        adjacency = face_sharing_adjacency(self.sites)
+        self.assertEqual(adjacency.dtype, np.bool_)
+        self.assertEqual((adjacency != adjacency.T).nnz, 0)
+        self.assertFalse(adjacency.diagonal().any())
+
+    def test_sites_sharing_four_vertices_are_adjacent(self):
+        Site._newid = 0
+        octahedra = [PolyhedralSite(vertex_indices=[0, 1, 2, 3, 4, 5]),
+                     PolyhedralSite(vertex_indices=[0, 1, 2, 3, 6, 7])]
+        self.assertTrue(face_sharing_adjacency(octahedra)[0, 1])
+
+    def test_sites_sharing_an_edge_are_not_adjacent(self):
+        self.assertFalse(face_sharing_adjacency(self.sites)[0, 2])
+
+    def test_matrix_is_indexed_by_site_index(self):
+        Site._newid = 5
+        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                 PolyhedralSite(vertex_indices=[0, 1, 2, 4])]
+        adjacency = face_sharing_adjacency(sites)
+        self.assertEqual(adjacency.shape, (7, 7))
+        self.assertTrue(adjacency[5, 6])
+        self.assertEqual(adjacency.nnz, 2)
+
+    def test_no_sites_gives_an_empty_matrix(self):
+        self.assertEqual(face_sharing_adjacency([]).shape, (0, 0))
+
+    def test_collection_returns_independent_copies(self):
+        collection = PolyhedralSiteCollection(self.sites)
+        first = collection.site_adjacency()
+        first.data[:] = False
+        second = collection.site_adjacency()
+        self.assertTrue(second[0, 3])
+        np.testing.assert_array_equal(second.toarray(),
+                                      face_sharing_adjacency(self.sites).toarray())
+
 
 class TestCollectReferenceCentres(unittest.TestCase):
     """Tests for _collect_reference_centres."""

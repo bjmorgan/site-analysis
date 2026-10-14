@@ -334,6 +334,16 @@ class SiteCollection(ABC):
         raise NotImplementedError('neighbouring_sites should be implemented'
             'in the derived class')
 
+    def site_adjacency(self):
+        """Return which sites share a face.
+
+        Only polyhedral sites define adjacency.
+
+        Raises:
+            TypeError: Always, for collections other than polyhedral sites.
+        """
+        raise TypeError("Site adjacency is only available for polyhedral sites")
+
     def site_by_index(self, index):
         """Returns the site with a specific index.
         

@@ -15,12 +15,14 @@ The module also includes utility functions:
 
 - ``construct_neighbouring_sites``: analyses polyhedral sites to determine
   which ones are face-sharing neighbours (sharing three or more vertices).
+- ``face_sharing_adjacency``: the face-sharing sites as a sparse adjacency
+  matrix.
 - ``_collect_reference_centres``: extracts reference centres from polyhedral
   sites for distance-ranked ordering.
 """
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
@@ -28,6 +30,10 @@ from .atom import Atom
 from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
+from scipy.sparse import csr_array
+
+# Polyhedral sites that share at least this many vertex atoms share a face.
+_FACE_VERTICES = 3
 
 
 class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
@@ -73,7 +79,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 raise TypeError(f"Expected PolyhedralSite, got {type(s).__name__}")
         super().__init__(sites)
         self.sites: list[PolyhedralSite]
-        self._neighbouring_sites = construct_neighbouring_sites(self.sites)
+        self._adjacency = face_sharing_adjacency(self.sites)
+        self._neighbouring_sites = _neighbours_from_adjacency(self.sites, self._adjacency)
         centres, site_indices = _collect_reference_centres(self.sites)
         if centres is not None:
             self._init_priority_ranking(centres, site_indices)
@@ -135,6 +142,17 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     def neighbouring_sites(self,
             index: int) -> list[PolyhedralSite]:
         return self._neighbouring_sites[index] 
+
+    def site_adjacency(self) -> csr_array:
+        """Return which sites share a face.
+
+        Returns:
+            A copy of the symmetric boolean sparse matrix whose entry
+            ``(i, j)`` is True when the sites with indices ``i`` and ``j``
+            share three or more vertex atoms (see
+            ``face_sharing_adjacency``).
+        """
+        return self._adjacency.copy()
 
     def sites_contain_points(self,
             points: np.ndarray,
@@ -204,6 +222,62 @@ def _collect_reference_centres(
     return np.array(centres), site_indices
 
 
+def face_sharing_adjacency(sites: Sequence[PolyhedralSite]) -> csr_array:
+    """Find which polyhedral sites share a face.
+
+    Two sites share a face if they share three or more vertex atoms.
+
+    Args:
+        sites: Polyhedral sites.
+
+    Returns:
+        A symmetric boolean sparse matrix, indexed by ``site.index`` and of
+        shape ``(n, n)`` with ``n`` one more than the largest site index,
+        whose entry ``(i, j)`` is True when sites ``i`` and ``j`` share a
+        face. The diagonal is empty.
+    """
+    vertex_sets = [set(site.vertex_indices) for site in sites]
+    positions_by_vertex: defaultdict[int, list[int]] = defaultdict(list)
+    for position, vertices in enumerate(vertex_sets):
+        for vertex in vertices:
+            positions_by_vertex[vertex].append(position)
+    rows: list[int] = []
+    columns: list[int] = []
+    for position, vertices in enumerate(vertex_sets):
+        n_shared = Counter(
+            other for vertex in vertices for other in positions_by_vertex[vertex])
+        for other, count in n_shared.items():
+            if count >= _FACE_VERTICES and other != position:
+                rows.append(sites[position].index)
+                columns.append(sites[other].index)
+    n = max((site.index for site in sites), default=-1) + 1
+    return csr_array(
+        (np.ones(len(rows), dtype=bool),
+         (np.array(rows, dtype=np.int64), np.array(columns, dtype=np.int64))),
+        shape=(n, n))
+
+
+def _neighbours_from_adjacency(
+        sites: Sequence[PolyhedralSite],
+        adjacency: csr_array) -> dict[int, list[PolyhedralSite]]:
+    """The face-sharing neighbours of each site, from the adjacency matrix.
+
+    Args:
+        sites: Polyhedral sites.
+        adjacency: Their face-sharing adjacency matrix.
+
+    Returns:
+        For each site index, the neighbouring sites in the order they
+        appear in ``sites``.
+    """
+    position = {site.index: k for k, site in enumerate(sites)}
+    neighbours: dict[int, list[PolyhedralSite]] = {}
+    for site in sites:
+        row = adjacency.indices[adjacency.indptr[site.index]:adjacency.indptr[site.index + 1]]
+        neighbours[site.index] = [sites[k] for k in sorted(position[int(i)] for i in row)]
+    return neighbours
+
+
 def construct_neighbouring_sites(
         sites: list[PolyhedralSite]) -> dict[int, list[PolyhedralSite]]:
     """
@@ -221,18 +295,5 @@ def construct_neighbouring_sites(
             objects, in the order they appear in ``sites``.
 
     """
-    vertex_sets = [set(site.vertex_indices) for site in sites]
-    positions_by_vertex: defaultdict[int, list[int]] = defaultdict(list)
-    for position, vertices in enumerate(vertex_sets):
-        for vertex in vertices:
-            positions_by_vertex[vertex].append(position)
-    neighbours: dict[int, list[PolyhedralSite]] = {}
-    for site_i, vertices in zip(sites, vertex_sets):
-        n_shared_vertices = Counter(
-            position for vertex in vertices for position in positions_by_vertex[vertex])
-        # 3 or more common vertices indicate a shared face.
-        neighbours[site_i.index] = [
-            sites[position] for position in sorted(n_shared_vertices)
-            if n_shared_vertices[position] >= 3 and sites[position] is not site_i]
-    return neighbours
+    return _neighbours_from_adjacency(sites, face_sharing_adjacency(sites))
  

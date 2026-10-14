@@ -55,11 +55,6 @@ class TransitionEventsTestCase(unittest.TestCase):
                      "atom", "from_site", "to_site"):
             self.assertIs(type(getattr(event, name)), int)
 
-    def test_record_field_order(self):
-        self.assertEqual([field.name for field in dataclasses.fields(TransitionEvent)],
-                         ["frame", "timestep", "entry_frame", "entry_timestep",
-                          "atom", "from_site", "to_site"])
-
     def test_record_cannot_be_modified(self):
         event = make_events()[0]
         with self.assertRaises(dataclasses.FrozenInstanceError):

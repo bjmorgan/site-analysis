@@ -1,3 +1,4 @@
+import dataclasses
 import unittest
 
 import numpy as np
@@ -50,13 +51,23 @@ class TransitionEventsTestCase(unittest.TestCase):
         self.assertEqual(event, TransitionEvent(
             frame=2, timestep=20, entry_frame=1, entry_timestep=10,
             atom=3, from_site=15, to_site=7))
-        for value in event:
-            self.assertIs(type(value), int)
+        for name in ("frame", "timestep", "entry_frame", "entry_timestep",
+                     "atom", "from_site", "to_site"):
+            self.assertIs(type(getattr(event, name)), int)
 
     def test_record_field_order(self):
-        self.assertEqual(TransitionEvent._fields,
-                         ("frame", "timestep", "entry_frame", "entry_timestep",
-                          "atom", "from_site", "to_site"))
+        self.assertEqual([field.name for field in dataclasses.fields(TransitionEvent)],
+                         ["frame", "timestep", "entry_frame", "entry_timestep",
+                          "atom", "from_site", "to_site"])
+
+    def test_record_cannot_be_modified(self):
+        event = make_events()[0]
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            event.frame = 0
+
+    def test_records_with_equal_values_are_equal(self):
+        self.assertEqual(make_events()[0], make_events()[0])
+        self.assertNotEqual(make_events()[0], make_events()[1])
 
     def test_numpy_integer_index_gives_a_record(self):
         events = make_events()

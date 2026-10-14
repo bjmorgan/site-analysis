@@ -27,7 +27,7 @@ The relationship between atoms and sites is bidirectional:
 1. Each atom records which site it is inside via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
 
-With commitment, `contains_atoms` and an atom's trajectory record committed sites, so the matching atom attribute is `committed_site`; `in_site` is the site the atom is inside.
+With commitment, an atom's trajectory records committed sites, and `contains_atoms` holds the committed atoms after `append_timestep()` and the atoms inside each site after `analyse_structure()` alone. The matching atom attribute is `committed_site`; `in_site` is the site the atom is inside.
 
 When analysing a structure, the appropriate site collection determines which atoms belong to which sites.
 
@@ -67,7 +67,7 @@ The `Trajectory` class provides methods to analyse the collective behaviour of a
 
 - **geometric_sites**: Returns the site each atom is inside
 - **committed_sites**: Returns each atom's committed site, with commitment
-- **atoms_trajectory**: Returns the site occupation history for all atoms over time
+- **atoms_trajectory**: Returns the site occupation history for all atoms over time (the committed sites with commitment)
 - **geometric_trajectory**: Returns the sites the atoms were inside at each timestep (the same as `atoms_trajectory` without commitment)
 
 These methods facilitate analysis of diffusion patterns, correlations between atom movements, and statistical properties of ion migration.

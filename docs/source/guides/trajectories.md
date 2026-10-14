@@ -91,7 +91,7 @@ After analysis, you can access results in several ways:
 # Current state
 geometric_sites = trajectory.geometric_sites  # Site each atom is inside
 committed_sites = trajectory.committed_sites  # Committed site of each atom (with commitment)
-site_occupations = trajectory.site_occupations  # Atoms counted in each site (committed atoms with commitment)
+site_occupations = trajectory.site_occupations  # Atoms counted in each site (committed atoms after append_timestep() with commitment)
 
 # Site occupation counts
 for i, site in enumerate(trajectory.sites):

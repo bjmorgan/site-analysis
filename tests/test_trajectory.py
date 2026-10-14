@@ -278,7 +278,7 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
         self.assertEqual(geometric_sites[1], self.site2.index)
 
     def test_atom_sites_is_deprecated(self):
-        """atom_sites warns and gives the same value as geometric_sites."""
+        """atom_sites warns and gives the geometric sites without commitment."""
         self.atom1.in_site = self.site1.index
         self.atom2.in_site = None
         with self.assertWarns(FutureWarning):
@@ -1058,6 +1058,16 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         trajectory.analyse_structure(self.frame("gap"))
         self.assertEqual(trajectory.geometric_sites, [None])
         self.assertEqual(trajectory.committed_sites, [0])
+
+    def test_atom_sites_is_deprecated_and_gives_the_committed_sites(self):
+        """With commitment, atom_sites warns and gives the committed sites."""
+        trajectory = self.make_trajectory()
+        trajectory.trajectory_from_structures(
+            [self.frame("a_core"), self.frame("b_edge")])
+        with self.assertWarns(FutureWarning):
+            atom_sites = trajectory.atom_sites
+        self.assertEqual(atom_sites, trajectory.committed_sites)
+        self.assertEqual(atom_sites, [0])
 
     def test_append_records_the_committed_site(self):
         """After an append, in_site is geometric; the trajectory and

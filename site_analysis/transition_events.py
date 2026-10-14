@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, fields
-from typing import Any, NamedTuple, overload
+from typing import Any, overload
 
 import numpy as np
 
 
-class TransitionEvent(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TransitionEvent:
     """One transition of an atom from one site to another.
 
     Attributes:

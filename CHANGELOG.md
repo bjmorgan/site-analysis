@@ -15,11 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - A new `Trajectory` resets its atoms and sites, so any trajectories, recent-site histories, committed sites and transition counts they hold from an earlier analysis are cleared. Each atom's current site and coordinates are unset until the first structure is analysed, so `atom.frac_coords` is unavailable straight after `build()`. Previously only each atom's committed site was cleared. Because the site search ranks candidate sites by their transition counts, reused overlapping sites may now be assigned differently.
-- With commitment, `atom.in_site` is now always the site the atom is inside in the most recently analysed structure. Previously `append_timestep()` replaced it with the committed site, which is `atom.committed_site`. `Trajectory.geometric_sites` gives `in_site` for every atom and `Trajectory.committed_sites` the committed sites. `Trajectory.atom_sites`, which gave the committed sites after `append_timestep()` with commitment, now gives the sites the atoms are inside.
+- With commitment, `atom.in_site` is now always the site the atom is inside in the most recently analysed structure. Previously `append_timestep()` replaced it with the committed site, which is `atom.committed_site`. `Trajectory.geometric_sites` gives `in_site` for every atom and `Trajectory.committed_sites` the committed sites.
 
 ### Deprecated
 
-- `Trajectory.atom_sites` is deprecated in favour of `Trajectory.geometric_sites` (or `Trajectory.committed_sites`) and issues a `FutureWarning`. It will be removed in version 2.0.
+- `Trajectory.atom_sites` is deprecated in favour of `Trajectory.geometric_sites` (or `Trajectory.committed_sites`) and issues a `FutureWarning`. It keeps its previous values (the committed sites with commitment, otherwise the sites the atoms are inside) and will be removed in version 2.0.
 
 ## [1.10.0] - 2026-10-12
 

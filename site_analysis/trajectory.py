@@ -427,13 +427,15 @@ class Trajectory:
 
     @property
     def atom_sites(self) -> list[int | None]:
-        """Return the site each atom is inside.
+        """Return the site each atom is counted in.
 
-        Deprecated: use ``geometric_sites``, or ``committed_sites`` for the
-        committed sites.
+        Deprecated: use ``geometric_sites`` or ``committed_sites``. This gives
+        the committed sites with commitment and the geometric sites without,
+        as in version 1.10.0 after ``append_timestep()``.
 
         Returns:
-            The same list as ``geometric_sites``.
+            The same list as ``committed_sites`` with commitment, and as
+            ``geometric_sites`` without.
         """
         warnings.warn(
             "Trajectory.atom_sites is deprecated and will be removed in "
@@ -441,12 +443,18 @@ class Trajectory:
             "Trajectory.committed_sites).",
             FutureWarning,
             stacklevel=2)
-        return self.geometric_sites
+        if self._commitment_radii is None:
+            return self.geometric_sites
+        return self.committed_sites
 
     @property
     def site_occupations(self) -> list[list[int]]:
         """Return the atoms occupying each site.
-        
+
+        With commitment, after ``append_timestep()`` these are the atoms
+        committed to each site; after ``analyse_structure()`` alone they are
+        the atoms inside each site.
+
         Returns:
             A list of lists, where each inner list contains the indices of atoms
             occupying a site.
@@ -512,13 +520,13 @@ class Trajectory:
             lattice_matrix: np.ndarray) -> None:
         """Update each atom's committed site.
 
-        An atom with no committed site commits to the site it is assigned to, if any.
-        An atom assigned to a different site from its committed site commits
+        An atom with no committed site commits to the site it is inside, if
+        any. An atom inside a different site from its committed site commits
         to that site when it is within the site's commitment radius of the
         site centre, and a transition is recorded. Otherwise the atom keeps
         its committed site. Site occupations are then rebuilt from the
         committed sites. Each atom's recent-site history follows the site it
-        is assigned to. ``atom.in_site`` remains the site the atom is inside.
+        is inside. ``atom.in_site`` remains the site the atom is inside.
 
         Args:
             radii: Commitment radius for each site index.

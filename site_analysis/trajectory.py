@@ -34,6 +34,7 @@ from numbers import Real
 from typing import Sequence
 
 import numpy as np
+from scipy.sparse import csr_array
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
@@ -215,6 +216,22 @@ class Trajectory:
         """
         return self.sites[self.site_lookup[i]] 
 
+    def site_adjacency(self) -> csr_array:
+        """Return which sites share a face.
+
+        Two polyhedral sites share a face if they share three or more vertex
+        atoms. Each call returns a new matrix, so it may be modified.
+
+        Returns:
+            A symmetric boolean sparse matrix, indexed by ``site.index`` (as
+            in ``transition_events()``), whose entry ``(i, j)`` is True when
+            sites ``i`` and ``j`` share a face. Its shape is ``(n, n)`` with
+            ``n`` one more than the largest site index.
+
+        Raises:
+            TypeError: If the sites are not polyhedral sites.
+        """
+        return self.site_collection.site_adjacency()
     def analyse_structure(self,
             structure: Structure) -> None:
         """Analyse a structure to assign atoms to sites.

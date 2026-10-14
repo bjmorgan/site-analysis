@@ -19,6 +19,7 @@ from collections.abc import Generator, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar, TYPE_CHECKING
 
 import numpy as np
+from scipy.sparse import csr_array
 from .atom import Atom
 from .site import Site
 from .neighbour_search import PeriodicNeighbourIndex
@@ -334,7 +335,7 @@ class SiteCollection(ABC):
         raise NotImplementedError('neighbouring_sites should be implemented'
             'in the derived class')
 
-    def site_adjacency(self):
+    def site_adjacency(self) -> csr_array:
         """Return which sites share a face.
 
         Only polyhedral sites define adjacency.

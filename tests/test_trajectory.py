@@ -1555,5 +1555,45 @@ class EntryFramesFromAnalysisTestCase(unittest.TestCase):
             previous_frame[event.atom] = event.frame
 
 
+class SiteAdjacencyTestCase(unittest.TestCase):
+    """Trajectory.site_adjacency gives the face-sharing polyhedral sites."""
+
+    def setUp(self):
+        Site._newid = 0
+        # Two tetrahedra sharing the face (v0, v1, v2) in the plane x = 5 A,
+        # as in PolyhedralCommitmentTestCase; centres at x = 4.6 and 5.4 A.
+        self.vertices = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5),
+                         (3.4, 5.0, 5.0), (6.6, 5.0, 5.0)]
+        self.lattice = Lattice.cubic(10.0)
+        self.trajectory = Trajectory(
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                   PolyhedralSite(vertex_indices=[0, 1, 2, 4])],
+            atoms=[Atom(index=5)])
+
+    def frame(self, li):
+        return Structure(self.lattice, ["S"] * 5 + ["Li"],
+                         [*self.vertices, li], coords_are_cartesian=True)
+
+    def test_face_sharing_sites_are_adjacent(self):
+        adjacency = self.trajectory.site_adjacency()
+        np.testing.assert_array_equal(adjacency.toarray(),
+                                      [[False, True], [True, False]])
+
+    def test_transitions_join_with_the_adjacency(self):
+        self.trajectory.trajectory_from_structures(
+            [self.frame((4.6, 5.0, 5.0)), self.frame((5.4, 5.0, 5.0))])
+        events = self.trajectory.transition_events()
+        self.assertEqual(len(events), 1)
+        adjacency = self.trajectory.site_adjacency()
+        np.testing.assert_array_equal(adjacency[events.from_site, events.to_site], [True])
+
+    def test_other_site_types_raise(self):
+        trajectory = Trajectory(
+            sites=[SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)],
+            atoms=[Atom(index=0)])
+        with self.assertRaisesRegex(TypeError, "only available for polyhedral sites"):
+            trajectory.site_adjacency()
+
+
 if __name__ == '__main__':
     unittest.main()

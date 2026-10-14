@@ -170,6 +170,30 @@ This approach is useful when you have pre-identified coordination environments o
 
 For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 
+## Site Adjacency
+
+`trajectory.site_adjacency()` gives which polyhedral sites share a face (three or more vertex atoms), as a symmetric boolean `scipy.sparse.csr_array` indexed by `site.index`:
+
+```python
+adjacency = trajectory.site_adjacency()
+
+adjacency[3, 7]                       # True if sites 3 and 7 share a face
+neighbours = adjacency[[7]].indices   # indices of the sites sharing a face with site 7
+
+# Whether each transition was between face-sharing sites
+events = trajectory.transition_events()
+between_neighbours = adjacency[events.from_site, events.to_site]
+```
+
+Sites that share only an edge (two vertex atoms) are not adjacent: an atom moving between them must cross another region, so a transition recorded directly between them means the frames in between did not capture that region. To find the vertex atoms two sites share, for example to label a link by the species on its shared face, use their vertex indices:
+
+```python
+shared = (set(trajectory.site_by_index(3).vertex_indices)
+          & set(trajectory.site_by_index(7).vertex_indices))
+```
+
+The matrix can be used directly with `scipy.sparse.csgraph`, for example to find connected networks of sites.
+
 ## Containment Algorithms
 
 The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached face topology is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:

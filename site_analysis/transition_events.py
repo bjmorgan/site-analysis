@@ -23,9 +23,9 @@ class TransitionEvent(NamedTuple):
             counted in its new site.
         timestep: Timestep label of that frame, or None if the trajectory
             does not have a label for every frame.
-        entry_frame: Index of the frame, from 0, from which the atom stayed
-            inside its new site, without leaving, up to ``frame``. Equal to
-            ``frame`` without commitment.
+        entry_frame: Index of the frame, from 0, of the earliest frame from
+            which the atom stayed inside its new site, without leaving, up
+            to ``frame``. Equal to ``frame`` without commitment.
         entry_timestep: Timestep label of the entry frame, or None if the
             trajectory does not have a label for every frame.
         atom: ``Atom.index`` of the atom.
@@ -42,7 +42,7 @@ class TransitionEvent(NamedTuple):
     to_site: int
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True, eq=False, kw_only=True)
 class TransitionEvents:
     """Transitions of atoms between sites, one element per transition.
 
@@ -59,9 +59,9 @@ class TransitionEvents:
             counted in its new site.
         timestep: Timestep label of each event's frame, or None if the
             trajectory does not have a label for every frame.
-        entry_frame: Index of the frame, from 0, from which each atom stayed
-            inside its new site, without leaving, up to ``frame``. Equal to
-            ``frame`` without commitment.
+        entry_frame: Index of the frame, from 0, of the earliest frame from
+            which each atom stayed inside its new site, without leaving, up
+            to ``frame``. Equal to ``frame`` without commitment.
         entry_timestep: Timestep label of each entry frame, or None if the
             trajectory does not have a label for every frame.
         atom: ``Atom.index`` of the atom that moved.

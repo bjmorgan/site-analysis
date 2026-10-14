@@ -37,7 +37,7 @@ Every radius must be a positive number. A dict must give a radius for every site
 
 With commitment on, `append_timestep()` and `trajectory_from_structures()` use each atom's committed site:
 
-- `atom.committed_site` and `atom.trajectory` give each atom's committed site, and `trajectory.atom_sites` gives the committed site of every atom.
+- `atom.committed_site` and `atom.trajectory` give each atom's committed site, and `trajectory.committed_sites` gives the committed site of every atom.
 - `site.contains_atoms` and `site.trajectory` list the atoms committed to each site.
 - A transition is recorded each time an atom's committed site changes from one site to another, so each transition corresponds to a change from one site to another in an atom's trajectory.
 - Residence times and occupations are computed from the site trajectories, so they use the committed sites.
@@ -46,7 +46,7 @@ In the first timestep in which an atom is assigned to a site, it commits to that
 
 More than one atom can be committed to a site at once. For example, an atom can still be committed to a site it has left when a second atom commits to the same site.
 
-`site.points` holds the positions of the atoms inside each site, whatever their committed sites. `analyse_structure()` assigns atoms to the sites they are in, with or without commitment: `atom.in_site` is the site an atom is inside in the latest structure, and `trajectory.assigned_trajectory` gives the site each atom was inside at each timestep (`atom.assigned_trajectory` for one atom, which is recorded only with commitment).
+`site.points` holds the positions of the atoms inside each site, whatever their committed sites. `analyse_structure()` assigns atoms to the sites they are in, with or without commitment: `atom.in_site` is the site an atom is inside in the most recently analysed structure, `trajectory.geometric_sites` gives that site for every atom, and `trajectory.geometric_trajectory` gives the site each atom was inside at each timestep (`atom.geometric_trajectory` for one atom, which is recorded only with commitment).
 
 Where sites overlap, the [site search](../concepts/site_collections.md#priority-based-assignment-spherical-and-polyhedral) checks an atom's recent sites first, then the sites that atoms have previously moved to from its most recent site. With commitment on, those previous moves are the committed transitions, so an atom in an overlapping region can be assigned to a different site than in an analysis without commitment.
 

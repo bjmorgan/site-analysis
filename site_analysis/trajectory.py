@@ -398,19 +398,51 @@ class Trajectory:
         return self.transition_counts_by_label(keys=keys).normalise_rows()
 
     @property
-    def atom_sites(self) -> list[int | None]:
-        """Return the site each atom is counted in.
+    def geometric_sites(self) -> list[int | None]:
+        """Return the site each atom is inside.
 
-        With commitment this is each atom's committed site; otherwise it is
-        the site each atom is inside in the most recently analysed structure.
+        This is the site each atom is inside in the most recently analysed
+        structure (None if it is in no site), one for each atom in the order
+        of ``atoms``. With commitment it can differ from
+        ``committed_sites``.
 
         Returns:
-            A list of site indices (or None for unassigned atoms), one for each atom.
+            A list of site indices (or None), one for each atom.
         """
-        if self._commitment_radii is None:
-            return [atom.in_site for atom in self.atoms]
+        return [atom.in_site for atom in self.atoms]
+
+    @property
+    def committed_sites(self) -> list[int | None]:
+        """Return the committed site of each atom.
+
+        This is each atom's committed site as of the last appended
+        timestep, one for each atom in the order of ``atoms``. It is None
+        for every atom without commitment, and for an atom not yet
+        assigned.
+
+        Returns:
+            A list of site indices (or None), one for each atom.
+        """
         return [atom.committed_site for atom in self.atoms]
-        
+
+    @property
+    def atom_sites(self) -> list[int | None]:
+        """Return the site each atom is inside.
+
+        Deprecated: use ``geometric_sites``, or ``committed_sites`` for the
+        committed sites.
+
+        Returns:
+            The same list as ``geometric_sites``.
+        """
+        warnings.warn(
+            "Trajectory.atom_sites is deprecated and will be removed in "
+            "version 2.0; use Trajectory.geometric_sites (or "
+            "Trajectory.committed_sites).",
+            FutureWarning,
+            stacklevel=2)
+        return self.geometric_sites
+
     @property
     def site_occupations(self) -> list[list[int]]:
         """Return the atoms occupying each site.
@@ -439,7 +471,7 @@ class Trajectory:
            history follows the site it is inside.
         3. Updates the trajectory information for atoms and sites. With
            commitment, each atom's trajectory records its committed site and
-           its assigned trajectory the site it is inside.
+           its geometric trajectory the site it is inside.
         4. Adds the timestep to the list of timesteps if provided
 
         Args:
@@ -455,7 +487,7 @@ class Trajectory:
             self._apply_commitment(self._commitment_radii, structure.lattice.matrix)
             for atom in self.atoms:
                 atom.trajectory.append(atom.committed_site)
-                atom.assigned_trajectory.append(atom.in_site)
+                atom.geometric_trajectory.append(atom.in_site)
         for site in self.sites:
             site.trajectory.append(site.contains_atoms)
         if t is not None:
@@ -486,8 +518,7 @@ class Trajectory:
         site centre, and a transition is recorded. Otherwise the atom keeps
         its committed site. Site occupations are then rebuilt from the
         committed sites. Each atom's recent-site history follows the site it
-        is assigned to. ``atom.in_site`` is left as the site the atom is
-        inside.
+        is assigned to. ``atom.in_site`` remains the site the atom is inside.
 
         Args:
             radii: Commitment radius for each site index.
@@ -529,7 +560,8 @@ class Trajectory:
         
         Returns:
             A list of lists, where each inner list represents a timestep and
-            contains the site index of each atom at that timestep: its committed site with commitment, otherwise the site it is inside.
+            contains the site index of each atom at that timestep: its
+            committed site with commitment, otherwise the site it is inside.
         """
         return list(map(list, zip(*[atom.trajectory for atom in self.atoms])))
 
@@ -544,7 +576,7 @@ class Trajectory:
         return list(map(list, zip(*[site.trajectory for site in self.sites])))
 
     @property
-    def assigned_trajectory(self) -> list[list[int | None]]:
+    def geometric_trajectory(self) -> list[list[int | None]]:
         """Return the site each atom was inside at each timestep.
 
         With commitment this can differ from ``atoms_trajectory``, which
@@ -558,7 +590,7 @@ class Trajectory:
         """
         if self._commitment_radii is None:
             return self.atoms_trajectory
-        return list(map(list, zip(*[atom.assigned_trajectory for atom in self.atoms])))
+        return list(map(list, zip(*[atom.geometric_trajectory for atom in self.atoms])))
 
     @property
     def at(self):
@@ -581,18 +613,18 @@ class Trajectory:
     def transition_events(self) -> TransitionEvents:
         """Return every transition of an atom from one site to another.
 
-        A transition is a change of site between consecutive assigned
-        frames of an atom's trajectory; frames in which the atom is
-        unassigned are skipped. With commitment, the trajectory holds each
-        atom's committed site, so a transition is a change of committed
-        site. These are the transitions counted in ``site.transitions``:
-        the number of events from site i to site j is
-        ``self.site_by_index(i).transitions[j]``. The events are derived
-        from the stored trajectory each time this is called.
-        Each event's entry frame is the frame from which the atom stayed
-        inside its new site, without leaving, up to the event's frame; with
-        commitment it is derived from ``assigned_trajectory``, and without
-        commitment it equals the event's frame.
+        A transition is a change of site between consecutive frames in
+        which the atom has a site; frames in which it has none are skipped.
+        With commitment, the trajectory holds each atom's committed site, so
+        a transition is a change of committed site. These are the
+        transitions counted in ``site.transitions``: the number of events
+        from site i to site j is ``self.site_by_index(i).transitions[j]``.
+        The events are derived from the stored trajectory each time this is
+        called. Each event's entry frame is the earliest frame from which
+        the atom stayed inside its new site, without leaving, up to the
+        event's frame; with commitment it is derived from
+        ``geometric_trajectory``, and without commitment it equals the
+        event's frame.
 
         Returns:
             The transitions, sorted by frame and then by atom index. Each
@@ -604,15 +636,15 @@ class Trajectory:
         # Atoms in index order, so that events within a frame come out sorted.
         atoms = sorted(self.atoms, key=lambda atom: atom.index)
         n_frames = len(atoms[0].trajectory)
-        # Site of each atom in each frame, NaN where unassigned: (frames, atoms).
+        # Site of each atom in each frame, NaN where it has none: (frames, atoms).
         sites = np.array([atom.trajectory for atom in atoms], dtype=float).T
-        # Carry each atom's last assigned site forward over unassigned frames.
+        # Carry each atom's last site forward over frames in which it has none.
         assigned = ~np.isnan(sites)
         last_assigned = np.where(assigned, np.arange(n_frames)[:, np.newaxis], 0)
         np.maximum.accumulate(last_assigned, axis=0, out=last_assigned)
         carried = np.take_along_axis(sites, last_assigned, axis=0)
         # NaN compares unequal to everything, even NaN, so the two isnan
-        # tests are needed to exclude unassigned frames and atoms with no
+        # tests are needed to exclude frames with no site and atoms with no
         # earlier site.
         changed = (assigned[1:] & ~np.isnan(carried[:-1])
                    & (sites[1:] != carried[:-1]))
@@ -624,9 +656,9 @@ class Trajectory:
         else:
             # Site each atom is inside in each frame. A frame starts a new
             # run where the site differs from the previous frame's; NaN
-            # compares unequal to everything, so unassigned frames break
+            # compares unequal to everything, so frames with no site break
             # runs. The entry frame is the start of the run at the event.
-            inside = np.array([atom.assigned_trajectory for atom in atoms], dtype=float).T
+            inside = np.array([atom.geometric_trajectory for atom in atoms], dtype=float).T
             new_run = np.ones(inside.shape, dtype=bool)
             new_run[1:] = inside[1:] != inside[:-1]
             run_start = np.where(new_run, np.arange(n_frames)[:, np.newaxis], 0)

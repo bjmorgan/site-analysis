@@ -138,6 +138,10 @@ class TransitionEventsTestCase(unittest.TestCase):
                              entry_timestep=None, atom=[[3, 3]],
                              from_site=[[7, 15]], to_site=[[15, 7]])
 
+    def test_positional_arguments_are_rejected(self):
+        with self.assertRaises(TypeError):
+            TransitionEvents([1], None, [1], None, [3], [7], [15])
+
     def test_fields_cannot_be_reassigned(self):
         events = make_events()
         with self.assertRaises(AttributeError):

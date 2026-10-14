@@ -89,8 +89,9 @@ After analysis, you can access results in several ways:
 
 ```python
 # Current state
-atom_sites = trajectory.atom_sites  # Site each atom is counted in (committed site with commitment)
-site_occupations = trajectory.site_occupations  # Which atoms each site contains
+geometric_sites = trajectory.geometric_sites  # Site each atom is inside
+committed_sites = trajectory.committed_sites  # Committed site of each atom (with commitment)
+site_occupations = trajectory.site_occupations  # Atoms counted in each site (committed atoms with commitment)
 
 # Site occupation counts
 for i, site in enumerate(trajectory.sites):
@@ -174,11 +175,11 @@ for event in atom_3:
     print(event.frame, event.from_site, event.to_site)
 ```
 
-Transitions follow the same rule as `site.transitions`: a transition is a change of site between consecutive assigned frames of an atom's trajectory, skipping frames in which the atom is unassigned, and its frame is the frame in which the atom is first counted in its new site. An atom whose trajectory is `[5, None, None, 12]` makes one transition, from site 5 to site 12, at frame 3. With [commitment](commitment.md), a transition is a change of committed site.
+Transitions follow the same rule as `site.transitions`: a transition is a change of site between consecutive frames in which the atom has a site (those where its trajectory is not `None`), skipping the others, and its frame is the frame in which the atom is first counted in its new site. An atom whose trajectory is `[5, None, None, 12]` makes one transition, from site 5 to site 12, at frame 3. With [commitment](commitment.md), a transition is a change of committed site.
 
 `frame` counts frames from 0 and indexes `atoms_trajectory` and `sites_trajectory` directly. `timestep` gives the label passed for each frame (`trajectory_from_structures()` numbers frames from 1); it is `None` if some frames were appended without a label. `atom` is the atom's `index`, as in `site.contains_atoms` and `sites_trajectory`; its column in `atoms_trajectory` is `trajectory.atom_lookup[event.atom]`. `from_site` and `to_site` are site indices, the values stored in `atoms_trajectory`. Events are sorted by frame, then by atom index.
 
-`entry_frame` is the frame from which the atom stayed inside its new site, without leaving, up to `frame`, and `entry_timestep` is its label. Without commitment they equal `frame` and `timestep`. With [commitment](commitment.md#entry-frames), an atom is counted in a new site only once it reaches the site's core, so `entry_frame` can be earlier than `frame`.
+`entry_frame` is the earliest frame from which the atom stayed inside its new site, without leaving, up to `frame`, and `entry_timestep` is its label. Without commitment they equal `frame` and `timestep`. With [commitment](commitment.md#entry-frames), an atom is counted in a new site only once it reaches the site's core, so `entry_frame` can be earlier than `frame`.
 
 The events are derived from the stored trajectory each time `transition_events()` is called, so they agree with it, including after more frames are appended.
 

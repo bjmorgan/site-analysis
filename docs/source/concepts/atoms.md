@@ -12,11 +12,11 @@ The `Atom` class maintains several key attributes:
 
 - **index**: Unique numerical identifier that matches the atom's index in the source structure
 - **species_string**: Chemical symbol of the atom (e.g., "Li", "Na")
-- **in_site**: Current site index that this atom occupies (or None if not in any site)
+- **in_site**: Index of the site this atom is inside in the most recently analysed structure (or None if it is in no site)
 - **frac_coords**: Current fractional coordinates in the crystal structure
 - **trajectory**: List of site indices (or None values) that this atom has occupied over time (its committed sites when the trajectory uses commitment)
 - **committed_site**: Site index of the site this atom is committed to when the trajectory uses commitment (or None)
-- **assigned_trajectory**: List of the sites this atom was inside at each timestep, recorded only when the trajectory uses commitment
+- **geometric_trajectory**: List of the sites this atom was inside at each timestep, recorded only when the trajectory uses commitment
 
 These properties provide the foundation for analysing how atoms move through the crystal structure during a simulation.
 
@@ -24,7 +24,7 @@ These properties provide the foundation for analysing how atoms move through the
 
 The relationship between atoms and sites is bidirectional:
 
-1. Each atom records which site it currently occupies via its `in_site` attribute
+1. Each atom records which site it is inside via its `in_site` attribute
 2. Each site records which atoms it currently contains via its `contains_atoms` list
 
 With commitment, `contains_atoms` and an atom's trajectory record committed sites, so the matching atom attribute is `committed_site`; `in_site` is the site the atom is inside.
@@ -65,9 +65,10 @@ However, the package provides several utility functions for creating atoms in di
 
 The `Trajectory` class provides methods to analyse the collective behaviour of atoms:
 
-- **atom_sites**: Returns the site each atom is counted in (its committed site with commitment)
+- **geometric_sites**: Returns the site each atom is inside
+- **committed_sites**: Returns each atom's committed site, with commitment
 - **atoms_trajectory**: Returns the site occupation history for all atoms over time
-- **assigned_trajectory**: Returns the sites the atoms were inside at each timestep (the same as `atoms_trajectory` without commitment)
+- **geometric_trajectory**: Returns the sites the atoms were inside at each timestep (the same as `atoms_trajectory` without commitment)
 
 These methods facilitate analysis of diffusion patterns, correlations between atom movements, and statistical properties of ion migration.
 

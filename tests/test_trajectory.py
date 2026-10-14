@@ -1585,7 +1585,19 @@ class SiteAdjacencyTestCase(unittest.TestCase):
         events = self.trajectory.transition_events()
         self.assertEqual(len(events), 1)
         adjacency = self.trajectory.site_adjacency()
-        np.testing.assert_array_equal(adjacency[events.from_site, events.to_site], [True])
+        between = adjacency[events.from_site[:, None],
+                            events.to_site[:, None]].toarray().ravel()
+        np.testing.assert_array_equal(between, [True])
+
+    def test_join_with_no_transitions_gives_an_empty_boolean_array(self):
+        self.trajectory.trajectory_from_structures(
+            [self.frame((4.6, 5.0, 5.0)), self.frame((4.6, 5.0, 5.0))])
+        events = self.trajectory.transition_events()
+        adjacency = self.trajectory.site_adjacency()
+        between = adjacency[events.from_site[:, None],
+                            events.to_site[:, None]].toarray().ravel()
+        self.assertIsInstance(between, np.ndarray)
+        self.assertEqual(len(events[~between]), 0)
 
     def test_other_site_types_raise(self):
         trajectory = Trajectory(

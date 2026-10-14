@@ -182,8 +182,12 @@ neighbours = adjacency[[7]].indices   # indices of the sites sharing a face with
 
 # Whether each transition was between face-sharing sites
 events = trajectory.transition_events()
-between_neighbours = adjacency[events.from_site, events.to_site]
+between_neighbours = adjacency[events.from_site[:, None],
+                               events.to_site[:, None]].toarray().ravel()
+not_between_neighbours = events[~between_neighbours]
 ```
+
+Indexing with column vectors (`[:, None]`) gives a sparse matrix whether or not there are any transitions, so `.toarray().ravel()` always gives a boolean array with one element per transition. (Indexing with the flat arrays, `adjacency[events.from_site, events.to_site]`, gives a NumPy array when there are transitions but a sparse array when there are none.)
 
 Sites that share only an edge (two vertex atoms) are not adjacent: an atom moving between them must cross another region, so a transition recorded directly between them means the frames in between did not capture that region. To find the vertex atoms two sites share, for example to label a link by the species on its shared face, use their vertex indices:
 

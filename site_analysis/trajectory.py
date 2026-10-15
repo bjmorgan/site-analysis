@@ -37,12 +37,14 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
+from scipy.sparse import csr_array
 
 from .transition_events import TransitionEvents
 from .transition_table import TransitionTable
 
 from .atom import Atom
 from .distances import mic_distance
+from .faces import Face
 from .dynamic_voronoi_site import DynamicVoronoiSite
 from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -214,6 +216,53 @@ class Trajectory:
             The Site object with the specified index.
         """
         return self.sites[self.site_lookup[i]] 
+
+    def assign_faces(self, structure: Structure) -> None:
+        """Assign every site's faces from a structure, and find which faces sites share.
+
+        Replaces any faces assigned before. The structure's atoms must be in
+        the trajectory's atom order.
+
+        Args:
+            structure: Structure giving the positions of the vertex atoms.
+
+        Raises:
+            TypeError: If the sites are not polyhedral sites.
+            ValueError: If a site's vertices do not form a polyhedron.
+        """
+        self.site_collection.assign_faces(structure.frac_coords, structure.lattice.matrix)
+
+    def site_adjacency(self) -> csr_array:
+        """Return which sites share a face.
+
+        Returns:
+            A new symmetric boolean sparse matrix, indexed by ``site.index``
+            (as in ``transition_events()``), whose entry ``(i, j)`` is True
+            when sites ``i`` and ``j`` share a face. Its shape is ``(n, n)``
+            with ``n`` one more than the largest site index.
+
+        Raises:
+            TypeError: If the sites are not polyhedral sites.
+            ValueError: If faces have not been assigned.
+        """
+        return self.site_collection.site_adjacency()
+
+    def shared_faces(self, i: int, j: int) -> tuple[Face, ...]:
+        """Return the faces two sites share.
+
+        Args:
+            i: Index of one site.
+            j: Index of the other site.
+
+        Returns:
+            The shared faces, sorted by vertex indices; empty if the sites
+            share no face.
+
+        Raises:
+            TypeError: If the sites are not polyhedral sites.
+            ValueError: If faces have not been assigned.
+        """
+        return self.site_collection.shared_faces(i, j)
 
     def analyse_structure(self,
             structure: Structure) -> None:

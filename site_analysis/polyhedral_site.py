@@ -16,6 +16,7 @@ from scipy.spatial import ConvexHull, Delaunay, QhullError
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
+from site_analysis.faces import Face
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 
@@ -208,6 +209,8 @@ class PolyhedralSite(Site):
         vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
             Set using assign_vertex_coords() or notify_structure_changed().
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
+        faces (tuple[Face, ...] or None): The site's faces, sorted by vertex indices,
+            set by ``Trajectory.assign_faces``; None until assigned.
 
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
@@ -252,6 +255,7 @@ class PolyhedralSite(Site):
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
+        self.faces: tuple[Face, ...] | None = None
 
     def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('

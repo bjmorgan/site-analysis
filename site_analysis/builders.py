@@ -837,8 +837,7 @@ class TrajectoryBuilder:
         trajectory = Trajectory(sites=sites, atoms=self._atoms,
                                 commitment_radius=self._commitment_radius)
 
-        # Faces of polyhedral sites from the reference workflow, from the
-        # aligned reference geometry
+        # Assign faces to polyhedral sites from the aligned reference geometry
         collection = trajectory.site_collection
         if (isinstance(collection, PolyhedralSiteCollection)
                 and self._reference_structure is not None):

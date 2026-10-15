@@ -191,7 +191,7 @@ class ReferenceBasedSites:
         
         ref_coords = self._effective_ref_coords
         for site, ref_environment in zip(sites, ref_environments.values()):
-            site._reference_vertex_frac_coords = ref_coords[ref_environment].copy()
+            site._reference_vertex_frac_coords = ref_coords[ref_environment]
 
         return sites
     

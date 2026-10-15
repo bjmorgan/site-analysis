@@ -221,7 +221,12 @@ class Trajectory:
         """Assign every site's faces from a structure, and find which faces sites share.
 
         Replaces any faces assigned before. The structure's atoms must be in
-        the trajectory's atom order.
+        the trajectory's atom order. Faces are found from the convex hull of
+        each site's vertex atoms, merging hull triangles that lie in one
+        plane (to within 0.01 Angstrom). A polygon that is not planar to
+        within this tolerance gives separate triangular faces, which the
+        sites on either side of it divide differently, so they do not share
+        those faces.
 
         Args:
             structure: Structure giving the positions of the vertex atoms.

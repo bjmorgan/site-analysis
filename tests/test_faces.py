@@ -340,5 +340,40 @@ class BuilderFacesTestCase(unittest.TestCase):
         self.assertEqual([site.faces for site in trajectory.sites], faces)
 
 
+class BuilderReferenceGeometryFacesTestCase(unittest.TestCase):
+
+    def build_cubes(self):
+        unit = Structure(Lattice.cubic(3.0), ["O", "Li"],
+                         [[0, 0, 0], [0.5, 0.5, 0.5]])
+        reference = unit * (3, 3, 3)
+        target = reference.copy()
+        target.translate_sites(list(range(len(target))), [0.13, 0.07, -0.21],
+                               frac_coords=True, to_unit_cell=True)
+        oxygen = next(i for i, site in enumerate(target) if site.species_string == "O")
+        target.translate_sites([oxygen], [0.36, 0.0, 0.0],
+                               frac_coords=False, to_unit_cell=True)
+        target = Structure(Lattice.from_parameters(9.0 * 1.02, 9.0, 9.0, 90, 90, 90),
+            target.species, target.frac_coords)
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(target)
+                      .with_reference_structure(reference)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.8, n_vertices=8)
+                      .build())
+        return target, trajectory
+
+    def test_builder_assigns_square_faces_to_every_cube(self):
+        _, trajectory = self.build_cubes()
+        for site in trajectory.sites:
+            self.assertEqual([len(face.vertex_indices) for face in site.faces], [4] * 6)
+
+    def test_builder_faces_come_from_the_reference_geometry(self):
+        target, trajectory = self.build_cubes()
+        self.assertEqual(trajectory.site_adjacency().nnz // 2, 81)
+        trajectory.assign_faces(target)
+        self.assertLess(trajectory.site_adjacency().nnz // 2, 81)
+
+
 if __name__ == "__main__":
     unittest.main()

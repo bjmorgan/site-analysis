@@ -7,14 +7,15 @@ atoms to these sites based on their positions in a crystal structure.
 The PolyhedralSiteCollection extends the base SiteCollection class with
 specific functionality for polyhedral sites, including:
 
-- Maintaining a map of neighbouring polyhedral sites that share faces
+- Maintaining a map of neighbouring polyhedral sites that share three or
+  more vertex indices
 - Optimised atom assignment via the PriorityAssignmentMixin
 - Distance-ranked site ordering when reference centres are available
 
 The module also includes utility functions:
 
 - ``construct_neighbouring_sites``: analyses polyhedral sites to determine
-  which ones are face-sharing neighbours (sharing three or more vertices).
+  which ones share three or more vertex indices.
 - ``_collect_reference_centres``: extracts reference centres from polyhedral
   sites for distance-ranked ordering.
 """
@@ -38,8 +39,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     
     Extends the base SiteCollection class with specific functionality for
     polyhedral sites, including maintaining a map of neighbouring polyhedral
-    sites that share faces and implementing optimised atom assignment based
-    on spatial relationships and learned transition patterns.
+    sites that share three or more vertex indices and implementing optimised
+    atom assignment based on spatial relationships and learned transition
+    patterns.
 
     After an atom's recent sites and learned transitions, the remaining
     sites are searched in order of the distance of their reference centres
@@ -146,6 +148,12 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             lattice_matrix: np.ndarray) -> None:
         """Assign every site's faces, and find which faces sites share.
 
+        Faces are found from the convex hull of each site's vertices, merging
+        hull triangles that lie in one plane (to within 0.01 Angstrom). A
+        polygon that is not planar to within this tolerance gives separate
+        triangular faces, which the sites on either side of it divide
+        differently, so they do not share those faces.
+
         Args:
             frac_coords: Fractional coordinates of all atoms, indexed by
                 atom index.
@@ -163,10 +171,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             lattice_matrix: np.ndarray) -> None:
         """Assign faces from each site's vertex coordinates.
 
-        Vertex coordinates are wrapped into the unit cell first, so that
-        the result does not depend on which periodic image of an atom the
-        input gives. Two sites share a face when one lattice translation
-        maps the atoms of a face of one onto the atoms of a face of the other.
+        Vertex coordinates are wrapped into the unit cell first. Two sites
+        share a face when one lattice translation maps the atoms of a face of
+        one onto the atoms of a face of the other.
 
         Args:
             vertex_frac_coords: For each site, in the order of ``sites``,
@@ -320,13 +327,11 @@ def _collect_reference_centres(
 def construct_neighbouring_sites(
         sites: list[PolyhedralSite]) -> dict[int, list[PolyhedralSite]]:
     """
-    Find all polyhedral sites that are face-sharing neighbours.
-
-    Any polyhedral sites that share 3 or more vertices are considered
-    to share a face.
+    Find, for each polyhedral site, the other sites that share three or more
+    vertex indices with it.
 
     Args:
-        sites: List of PolyhedralSite objects to check for shared faces.
+        sites: List of PolyhedralSite objects to check for shared vertices.
 
     Returns:
         (dict): Dictionary of `int`: `list` entries.
@@ -343,7 +348,6 @@ def construct_neighbouring_sites(
     for site_i, vertices in zip(sites, vertex_sets):
         n_shared_vertices = Counter(
             position for vertex in vertices for position in positions_by_vertex[vertex])
-        # 3 or more common vertices indicate a shared face.
         neighbours[site_i.index] = [
             sites[position] for position in sorted(n_shared_vertices)
             if n_shared_vertices[position] >= 3 and sites[position] is not site_i]

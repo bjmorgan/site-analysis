@@ -172,7 +172,7 @@ For a comparison of all site types and guidance on choosing between them, see th
 
 ## Faces and Adjacency
 
-Each polyhedral site has a `faces` attribute: a tuple of `Face` objects, one for each face of the polyhedron. A face is a planar polygon of the polyhedron's surface; its `vertex_indices` are the indices of the atoms at its corners, in ascending order. Faces are found from the convex hull of the site's vertex atoms, merging hull triangles that lie in one plane (to within 0.01 Å), so a square face has four vertices.
+Each polyhedral site has a `faces` attribute: a tuple of `Face` objects, one for each face of the polyhedron, or `None` until faces are assigned. A face is a planar polygon of the polyhedron's surface; its `vertex_indices` are the indices of the atoms at its corners, in ascending order. Faces are found from the convex hull of the site's vertex atoms, merging hull triangles that lie in one plane (to within 0.01 Å), so a square face has four vertices. A polygon that is not planar to within this tolerance gives separate triangular faces, which the sites on either side of it divide differently, so they do not share those faces.
 
 Sites built with `TrajectoryBuilder` from a reference structure get their faces from the aligned reference geometry. For sites created directly, or to recompute faces from another structure, use `assign_faces`, which sets the faces of every site from one structure whose atoms are in the trajectory's order:
 

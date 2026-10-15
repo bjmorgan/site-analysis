@@ -21,3 +21,4 @@ from site_analysis.builders import (
 )
 from site_analysis.transition_table import TransitionTable
 from site_analysis.transition_events import TransitionEvent, TransitionEvents
+from site_analysis.faces import Face

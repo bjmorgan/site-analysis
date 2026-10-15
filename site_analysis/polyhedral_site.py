@@ -256,6 +256,7 @@ class PolyhedralSite(Site):
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
         self.faces: tuple[Face, ...] | None = None
+        self._reference_vertex_frac_coords: np.ndarray | None = None
 
     def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('

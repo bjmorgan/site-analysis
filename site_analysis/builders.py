@@ -46,6 +46,7 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
@@ -835,7 +836,21 @@ class TrajectoryBuilder:
         # Create trajectory
         trajectory = Trajectory(sites=sites, atoms=self._atoms,
                                 commitment_radius=self._commitment_radius)
-        
+
+        # Faces of polyhedral sites from the reference workflow, from the
+        # aligned reference geometry
+        collection = trajectory.site_collection
+        if (isinstance(collection, PolyhedralSiteCollection)
+                and self._reference_structure is not None):
+            vertex_frac_coords: list[np.ndarray] = []
+            for site in collection.sites:
+                if site._reference_vertex_frac_coords is None:
+                    break
+                vertex_frac_coords.append(site._reference_vertex_frac_coords)
+            else:
+                collection._assign_faces_from_vertex_coords(
+                    vertex_frac_coords, self._reference_structure.lattice.matrix)
+
         # Reset the builder state for future use
         self.reset()
         

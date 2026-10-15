@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
-from site_analysis import Face
+from site_analysis import Face, TrajectoryBuilder
 from site_analysis.atom import Atom
 from site_analysis.faces import _faces_and_keys
 from site_analysis.polyhedral_site import PolyhedralSite
@@ -96,10 +96,6 @@ class FacesAndKeysTestCase(unittest.TestCase):
         flat = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], float) + 5.0
         with self.assertRaises(ValueError):
             _faces_and_keys([0, 1, 2, 3], flat / 10.0, None, np.eye(3) * 10.0)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 def simple_cubic_cubes(n):
@@ -293,3 +289,56 @@ class TransitionsAcrossFacesTestCase(unittest.TestCase):
         between = self.between()
         self.assertIsInstance(between, np.ndarray)
         self.assertEqual(len(between), 0)
+
+
+def interstitial_structure(supercell=(2, 2, 2), a=4.0):
+    """An fcc O lattice with Na at every octahedral and Li at every tetrahedral hole."""
+    o = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
+    na = [[0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5]]
+    li = [[x, y, z] for x in (0.25, 0.75) for y in (0.25, 0.75) for z in (0.25, 0.75)]
+    unit = Structure(Lattice.cubic(a), ["O"] * 4 + ["Na"] * 4 + ["Li"] * 8, o + na + li)
+    return unit * supercell
+
+
+class BuilderFacesTestCase(unittest.TestCase):
+
+    def build(self):
+        structure = interstitial_structure()
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(structure)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.0, n_vertices=4, label="tet")
+                      .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                             cutoff=2.2, n_vertices=6, label="oct")
+                      .build())
+        return structure, trajectory
+
+    def test_builder_assigns_faces_to_every_site(self):
+        _, trajectory = self.build()
+        for site in trajectory.sites:
+            self.assertEqual(len(site.faces), 4 if site.label == "tet" else 8)
+            for face in site.faces:
+                self.assertTrue(set(face.vertex_indices) <= set(site.vertex_indices))
+
+    def test_tetrahedra_share_faces_with_octahedra_only(self):
+        _, trajectory = self.build()
+        adjacency = trajectory.site_adjacency().tocoo()
+        labels = {site.index: site.label for site in trajectory.sites}
+        pairs = {(int(i), int(j)) for i, j in zip(adjacency.row, adjacency.col) if i < j}
+        self.assertEqual({frozenset((labels[i], labels[j])) for i, j in pairs},
+                         {frozenset(("tet", "oct"))})
+        self.assertEqual(len(pairs), 64 * 4)
+
+    def test_builder_faces_match_faces_from_the_reference(self):
+        structure, trajectory = self.build()
+        adjacency = trajectory.site_adjacency().toarray()
+        faces = [site.faces for site in trajectory.sites]
+        trajectory.assign_faces(structure)
+        np.testing.assert_array_equal(trajectory.site_adjacency().toarray(), adjacency)
+        self.assertEqual([site.faces for site in trajectory.sites], faces)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -220,20 +220,22 @@ class Trajectory:
     def assign_faces(self, structure: Structure) -> None:
         """Assign every site's faces from a structure, and find which faces sites share.
 
-        Replaces any faces assigned before. The structure's atoms must be in
-        the trajectory's atom order. Faces are found from the convex hull of
-        each site's vertex atoms, merging hull triangles that lie in one
-        plane (to within 0.01 Angstrom). A polygon that is not planar to
-        within this tolerance gives separate triangular faces, which the
-        sites on either side of it divide differently, so they do not share
-        those faces.
+        Replaces any faces assigned before. Faces are found from the convex
+        hull of each site's vertex atoms. Neighbouring facets of the hull are
+        merged into one face when all their combined vertices lie within
+        0.01 Angstrom of their best-fit plane, repeating until no more facets
+        merge.
 
         Args:
-            structure: Structure giving the positions of the vertex atoms.
+            structure: Structure giving the positions of the vertex atoms,
+                with atoms in the same order as the structures the
+                trajectory analyses (the indices used by ``vertex_indices``).
 
         Raises:
             TypeError: If the sites are not polyhedral sites.
-            ValueError: If a site's vertices do not form a polyhedron.
+            ValueError: If a site's vertices do not form a polyhedron, are not
+                all corners of it, or form fewer than four faces. No faces
+                change if this is raised.
         """
         self.site_collection.assign_faces(structure.frac_coords, structure.lattice.matrix)
 
@@ -248,7 +250,10 @@ class Trajectory:
 
         Raises:
             TypeError: If the sites are not polyhedral sites.
-            ValueError: If faces have not been assigned.
+            ValueError: If faces have not been assigned, or if faces are
+                computed from the reference geometry on this call and a
+                site's vertices do not form a polyhedron, are not all corners
+                of it, or form fewer than four faces.
         """
         return self.site_collection.site_adjacency()
 
@@ -265,7 +270,11 @@ class Trajectory:
 
         Raises:
             TypeError: If the sites are not polyhedral sites.
-            ValueError: If faces have not been assigned.
+            ValueError: If faces have not been assigned, if ``i`` or ``j`` is
+                not the index of a site, or if faces are computed from the
+                reference geometry on this call and a site's vertices do not
+                form a polyhedron, are not all corners of it, or form fewer
+                than four faces.
         """
         return self.site_collection.shared_faces(i, j)
 

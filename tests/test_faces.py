@@ -151,6 +151,24 @@ class MergeRuleTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "corner"):
             _faces_and_keys(list(range(5)), cartesian / 10.0, None, np.eye(3) * 10.0)
 
+    def test_vertex_pushed_out_of_a_face_raises(self):
+        tetrahedron = regular_vertices("tetrahedron")
+        centroid = tetrahedron[:3].mean(axis=0)
+        outward = centroid - tetrahedron.mean(axis=0)
+        pushed = centroid + 0.002 * outward / np.linalg.norm(outward)
+        cartesian = np.vstack([tetrahedron, pushed])
+        with self.assertRaisesRegex(ValueError, "corner"):
+            _faces_and_keys(list(range(5)), cartesian / 10.0, None, np.eye(3) * 10.0)
+
+    def test_vertex_pushed_out_of_an_edge_raises(self):
+        tetrahedron = regular_vertices("tetrahedron")
+        midpoint = tetrahedron[:2].mean(axis=0)
+        outward = midpoint - tetrahedron.mean(axis=0)
+        pushed = midpoint + 0.001 * outward / np.linalg.norm(outward)
+        cartesian = np.vstack([tetrahedron, pushed])
+        with self.assertRaisesRegex(ValueError, "corner"):
+            _faces_and_keys(list(range(5)), cartesian / 10.0, None, np.eye(3) * 10.0)
+
     def test_vertex_inside_raises(self):
         cartesian = np.vstack([regular_vertices("octahedron"), [5.0, 5.0, 5.0]])
         with self.assertRaisesRegex(ValueError, "corner"):
@@ -161,6 +179,24 @@ class MergeRuleTestCase(unittest.TestCase):
                          [0.5, 0.5, 0.005]], float) + 5.0
         with self.assertRaisesRegex(ValueError, "four faces"):
             _faces_and_keys(list(range(5)), flat / 10.0, None, np.eye(3) * 10.0)
+
+
+def stacked_hexagonal_prisms(offsets):
+    """Two hexagonal prisms stacked on z, sharing a hexagon with the given z offsets (Angstrom)."""
+    hexagon = np.array([[np.cos(a), np.sin(a), 0.0] for a in np.arange(6) * np.pi / 3]) * 1.5
+    middle = hexagon.copy()
+    middle[:, 2] += offsets
+    cartesian = np.vstack([hexagon + [0, 0, -1.5], middle, hexagon + [0, 0, 1.5]]) + 10.0
+    structure = Structure(Lattice.cubic(20.0), ["O"] * 18, cartesian,
+                          coords_are_cartesian=True)
+    Site.reset_index(0)
+    below = PolyhedralSite(vertex_indices=list(range(12)),
+                           reference_center=np.array([10.0, 10.0, 9.25]) / 20.0)
+    above = PolyhedralSite(vertex_indices=list(range(6, 18)),
+                           reference_center=np.array([10.0, 10.0, 10.75]) / 20.0)
+    trajectory = Trajectory(sites=[below, above], atoms=[Atom(index=0)])
+    trajectory.assign_faces(structure)
+    return trajectory
 
 
 def simple_cubic_cubes(n):
@@ -247,6 +283,11 @@ class SharedFacesTestCase(unittest.TestCase):
         trajectory = Trajectory(sites=[left, right], atoms=[Atom(index=0)])
         trajectory.assign_faces(structure)
         self.assertEqual(trajectory.shared_faces(0, 1), (Face((4, 5, 6, 7)),))
+
+    def test_sites_agree_on_a_slightly_irregular_shared_hexagon(self):
+        trajectory = stacked_hexagonal_prisms(
+            [-0.0029, 0.0067, -0.0014, -0.0001, -0.0131, 0.0093])
+        self.assertEqual(trajectory.shared_faces(0, 1), (Face((6, 7, 8, 9, 10, 11)),))
 
     def test_sites_sharing_only_an_edge_are_not_adjacent(self):
         structure, sites = simple_cubic_cubes(3)

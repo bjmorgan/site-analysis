@@ -48,7 +48,8 @@ def _faces_and_keys(
 
     The vertices are unwrapped with ``correct_pbc``. Neighbouring facets of
     their convex hull are merged into one face when all their combined
-    vertices lie within ``_FACE_PLANE_TOLERANCE`` of their best-fit plane.
+    vertices lie within ``_FACE_PLANE_TOLERANCE`` of their best-fit plane,
+    repeating until no more facets merge.
 
     Args:
         vertex_indices: Atom index of each vertex.
@@ -62,8 +63,9 @@ def _faces_and_keys(
 
     Raises:
         ValueError: If the vertices do not form a polyhedron, if any vertex
-            is not a corner of their convex hull, or if the hull has fewer
-            than four faces.
+            is not a corner of their convex hull or does not belong to at
+            least three faces, or if the hull has
+            fewer than four faces.
     """
     unwrapped, image_shifts = correct_pbc(
         np.asarray(vertex_frac_coords, dtype=float), reference_center, lattice_matrix)
@@ -97,16 +99,30 @@ def _faces_and_keys(
             facet = group[facet]
         return facet
 
-    for facet, neighbours in enumerate(hull.neighbors):
-        for neighbour in neighbours:
-            a, b = root(facet), root(int(neighbour))
-            if a != b:
-                combined = group_vertices[a] | group_vertices[b]
-                if fits_one_plane(cartesian[sorted(combined)]):
-                    group[b] = a
-                    group_vertices[a] = combined
+    merged = True
+    while merged:
+        merged = False
+        for facet, neighbours in enumerate(hull.neighbors):
+            for neighbour in neighbours:
+                a, b = root(facet), root(int(neighbour))
+                if a != b:
+                    combined = group_vertices[a] | group_vertices[b]
+                    if fits_one_plane(cartesian[sorted(combined)]):
+                        group[b] = a
+                        group_vertices[a] = combined
+                        merged = True
 
     roots = {root(facet) for facet in range(len(group))}
+    if len(roots) < 4:
+        raise ValueError(
+            f"Vertices {list(vertex_indices)} form fewer than four faces")
+    face_counts = np.bincount(
+        [k for r in roots for k in group_vertices[r]], minlength=len(cartesian))
+    if (face_counts < 3).any():
+        missing = [int(vertex_indices[int(k)]) for k in np.flatnonzero(face_counts < 3)]
+        raise ValueError(
+            f"Vertices {missing} are not corners of the polyhedron "
+            f"with vertices {list(vertex_indices)}")
     faces = []
     for vertices in (group_vertices[r] for r in roots):
         pairs = sorted((int(vertex_indices[k]), *(int(s) for s in image_shifts[k]))
@@ -114,8 +130,5 @@ def _faces_and_keys(
         _, a0, b0, c0 = pairs[0]
         key = tuple((atom, a - a0, b - b0, c - c0) for atom, a, b, c in pairs)
         faces.append((Face(tuple(atom for atom, *_ in pairs)), key))
-    if len(faces) < 4:
-        raise ValueError(
-            f"Vertices {list(vertex_indices)} form fewer than four faces")
     return sorted(faces, key=lambda face_and_key: (face_and_key[0].vertex_indices,
                                                     face_and_key[1]))

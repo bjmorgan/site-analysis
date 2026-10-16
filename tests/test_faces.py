@@ -50,6 +50,10 @@ class FaceTestCase(unittest.TestCase):
         self.assertNotEqual(Face((1, 2, 3)), Face((1, 2, 4)))
         self.assertEqual(len({Face((1, 2, 3)), Face((1, 2, 3))}), 1)
 
+    def test_indices_are_sorted_on_construction(self):
+        self.assertEqual(Face((6, 4, 5, 7)).vertex_indices, (4, 5, 6, 7))
+        self.assertEqual(Face((6, 4, 5, 7)), Face((4, 5, 6, 7)))
+
     def test_face_is_frozen(self):
         with self.assertRaises(dataclasses.FrozenInstanceError):
             Face((1, 2, 3)).vertex_indices = (4, 5, 6)
@@ -76,7 +80,9 @@ class FacesAndKeysTestCase(unittest.TestCase):
         self.assertEqual(face_sizes("cube", displacement=[0.003, 0.003, 0.003]), [4] * 6)
 
     def test_distortion_beyond_the_tolerance_does_not_merge(self):
-        self.assertGreater(len(face_sizes("cube", displacement=[0.1, 0.1, 0.1])), 6)
+        # The displaced corner's three squares split into triangles.
+        self.assertEqual(face_sizes("cube", displacement=[0.1, 0.1, 0.1]),
+                         [3, 3, 3, 3, 3, 3, 4, 4, 4])
 
     def test_vertex_indices_are_atom_indices_in_ascending_order(self):
         cartesian = regular_vertices("tetrahedron")
@@ -98,13 +104,72 @@ class FacesAndKeysTestCase(unittest.TestCase):
             _faces_and_keys([0, 1, 2, 3], flat / 10.0, None, np.eye(3) * 10.0)
 
 
+def square_pyramid_faces(apex_z, raised):
+    """Faces of a square pyramid whose base corner 0 is raised by `raised` Angstrom."""
+    base = np.array([[1, 1, 0], [1, -1, 0], [-1, -1, 0], [-1, 1, 0]], float)
+    base[0, 2] += raised
+    cartesian = np.vstack([base, [0.0, 0.0, apex_z]]) + 5.0
+    faces = _faces_and_keys(list(range(5)), cartesian / 10.0,
+                            np.array([0.5, 0.5, 0.5 + apex_z / 30.0]), np.eye(3) * 10.0)
+    return [face.vertex_indices for face, _ in faces]
+
+
+class MergeRuleTestCase(unittest.TestCase):
+    """Facets merge by the best-fit plane of their combined vertices."""
+
+    def test_raised_corner_within_tolerance_merges_on_both_sides(self):
+        # Raising one corner of a square by h gives best-fit residuals of h/4.
+        for raised in (0.015, 0.03):
+            with self.subTest(raised=raised):
+                self.assertIn((0, 1, 2, 3), square_pyramid_faces(1.2, raised))
+                self.assertIn((0, 1, 2, 3), square_pyramid_faces(-1.2, raised))
+
+    def test_raised_corner_beyond_tolerance_merges_on_neither_side(self):
+        for apex_z in (1.2, -1.2):
+            with self.subTest(apex_z=apex_z):
+                faces = square_pyramid_faces(apex_z, 0.05)
+                self.assertNotIn((0, 1, 2, 3), faces)
+                self.assertEqual(len(faces), 6)
+
+    def test_every_merged_face_fits_its_plane_within_the_tolerance(self):
+        rng = np.random.default_rng(0)
+        cube = regular_vertices("hexagonal prism")
+        for _ in range(50):
+            cartesian = cube + rng.normal(scale=0.004, size=cube.shape)
+            faces = _faces_and_keys(list(range(12)), cartesian / 10.0,
+                                    np.array([0.5, 0.5, 0.5]), np.eye(3) * 10.0)
+            for face, _ in faces:
+                points = cartesian[list(face.vertex_indices)]
+                centred = points - points.mean(axis=0)
+                normal = np.linalg.svd(centred)[2][-1]
+                self.assertLess(np.abs(centred @ normal).max(), 0.01)
+
+    def test_vertex_on_a_face_raises(self):
+        tetrahedron = regular_vertices("tetrahedron")
+        on_face = tetrahedron[:3].mean(axis=0)
+        cartesian = np.vstack([tetrahedron, on_face])
+        with self.assertRaisesRegex(ValueError, "corner"):
+            _faces_and_keys(list(range(5)), cartesian / 10.0, None, np.eye(3) * 10.0)
+
+    def test_vertex_inside_raises(self):
+        cartesian = np.vstack([regular_vertices("octahedron"), [5.0, 5.0, 5.0]])
+        with self.assertRaisesRegex(ValueError, "corner"):
+            _faces_and_keys(list(range(7)), cartesian / 10.0, None, np.eye(3) * 10.0)
+
+    def test_polyhedron_flatter_than_the_tolerance_raises(self):
+        flat = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0],
+                         [0.5, 0.5, 0.005]], float) + 5.0
+        with self.assertRaisesRegex(ValueError, "four faces"):
+            _faces_and_keys(list(range(5)), flat / 10.0, None, np.eye(3) * 10.0)
+
+
 def simple_cubic_cubes(n):
     """Atoms on an n x n x n simple cubic grid (2 Angstrom spacing) and the cube sites between them."""
     points = list(itertools.product(range(n), repeat=3))
     index = {point: k for k, point in enumerate(points)}
     structure = Structure(Lattice.cubic(2.0 * n), ["O"] * len(points),
                           np.array(points, float) / n)
-    Site._newid = 0
+    Site.reset_index(0)
     sites = [PolyhedralSite(
         vertex_indices=[index[tuple((np.array(corner) + offset) % n)]
                         for offset in itertools.product((0, 1), repeat=3)],
@@ -174,7 +239,7 @@ class SharedFacesTestCase(unittest.TestCase):
         cartesian[4] += [0.004, 0.0, 0.0]   # corner (7, 5, 5)
         structure = Structure(lattice, ["O"] * len(corners), cartesian,
                               coords_are_cartesian=True)
-        Site._newid = 0
+        Site.reset_index(0)
         left = PolyhedralSite(vertex_indices=list(range(8)),
                               reference_center=np.array([6.0, 6.0, 6.0]) / 20.0)
         right = PolyhedralSite(vertex_indices=list(range(4, 12)),
@@ -191,7 +256,7 @@ class SharedFacesTestCase(unittest.TestCase):
 
     def test_matrix_is_indexed_by_site_index(self):
         structure, sites = simple_cubic_cubes(3)
-        Site._newid = 10
+        Site.reset_index(10)
         renumbered = [PolyhedralSite(vertex_indices=site.vertex_indices,
                                      reference_center=site.reference_center)
                       for site in sites]
@@ -254,7 +319,7 @@ class TransitionsAcrossFacesTestCase(unittest.TestCase):
     """Joining transition events with the adjacency matrix."""
 
     def setUp(self):
-        Site._newid = 0
+        Site.reset_index(0)
         # Two tetrahedra sharing the face (v0, v1, v2) in the plane x = 5 A;
         # centres at x = 4.6 and 5.4 A.
         self.vertices = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5),

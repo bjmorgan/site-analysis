@@ -30,7 +30,7 @@ This ordering means atoms that remain in or near their current site are resolved
 
 If no site contains the atom, it is left unassigned (`None`).
 
-For polyhedral sites, the collection also maintains information about face-sharing neighbouring polyhedra, which can be used for identifying connected diffusion pathways.
+Polyhedral sites have faces, and the trajectory can report which sites share a face; see [Faces and Adjacency](../guides/polyhedral_sites.md#faces-and-adjacency).
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 

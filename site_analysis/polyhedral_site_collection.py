@@ -182,8 +182,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Args:
             vertex_frac_coords: For each site, in the order of ``sites``,
-                the fractional coordinates of its vertices in the order of
-                its ``vertex_indices``.
+                a float array of the fractional coordinates of its vertices
+                in the order of its ``vertex_indices``.
             lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
 
         Raises:

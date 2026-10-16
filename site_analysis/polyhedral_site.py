@@ -10,14 +10,19 @@ from __future__ import annotations
 
 import itertools
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
 from site_analysis.site import Site
 from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
+from site_analysis.faces import Face
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
+
+if TYPE_CHECKING:
+    from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 
 
 if HAS_NUMBA:
@@ -252,6 +257,26 @@ class PolyhedralSite(Site):
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
+        self._faces: tuple[Face, ...] | None = None
+        self._face_source: PolyhedralSiteCollection | None = None
+
+    @property
+    def faces(self) -> tuple[Face, ...] | None:
+        """The site's faces, sorted by vertex indices, or None if not assigned.
+
+        Faces come from the reference geometry (aligned when alignment is on)
+        when every site of the trajectory was built by ``TrajectoryBuilder``
+        from a reference structure (computed the first time they are
+        needed), or from ``Trajectory.assign_faces``.
+
+        Raises:
+            ValueError: If faces are computed from the reference geometry on
+                this access and a site's vertices do not form a polyhedron,
+                are not all corners of it, or form fewer than four faces.
+        """
+        if self._faces is None and self._face_source is not None:
+            self._face_source._ensure_faces()
+        return self._faces
 
     def __repr__(self) -> str:
         string = ('site_analysis.PolyhedralSite('

@@ -242,6 +242,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Verify ReferenceBasedSites is not called yet
 			mock_rbs_class.assert_not_called()
@@ -294,6 +295,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Build should succeed despite unusual order
 			builder.build()
@@ -882,6 +884,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Call build to trigger site creation
 			builder.build()
@@ -938,6 +941,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Call build to trigger site creation
 			builder.build()
@@ -1038,6 +1042,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Call build to trigger site creation
 			builder.build()
@@ -1303,6 +1308,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
 			mock_rbs.create_polyhedral_sites.return_value = mock_sites
+			mock_rbs.last_vertex_frac_coords = []
 			
 			# Call build to trigger site creation
 			builder.build()

@@ -12,6 +12,7 @@ Submodules
    modules/distances
    modules/dynamic_voronoi_site
    modules/dynamic_voronoi_site_collection
+   modules/faces
    modules/neighbour_search
    modules/pbc_utils
    modules/polyhedral_site

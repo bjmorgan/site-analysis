@@ -128,9 +128,9 @@ class MergeRuleTestCase(unittest.TestCase):
 
     def test_every_merged_face_fits_its_plane_within_the_tolerance(self):
         rng = np.random.default_rng(0)
-        cube = regular_vertices("hexagonal prism")
+        prism = regular_vertices("hexagonal prism")
         for _ in range(50):
-            cartesian = cube + rng.normal(scale=0.004, size=cube.shape)
+            cartesian = prism + rng.normal(scale=0.004, size=prism.shape)
             faces = _faces_and_keys(list(range(12)), cartesian / 10.0,
                                     np.array([0.5, 0.5, 0.5]), np.eye(3) * 10.0)
             for face, _ in faces:
@@ -330,8 +330,10 @@ class SharedFacesTestCase(unittest.TestCase):
 
     def test_unknown_site_index_raises(self):
         _, trajectory = self.cube_trajectory(3)
-        with self.assertRaisesRegex(ValueError, "site"):
-            trajectory.shared_faces(0, 999)
+        for i, j in [(0, 999), (999, 0)]:
+            with self.subTest(i=i, j=j):
+                with self.assertRaisesRegex(ValueError, "No site with index"):
+                    trajectory.shared_faces(i, j)
 
     def test_failed_assignment_leaves_earlier_faces_and_names_the_site(self):
         structure, trajectory = self.cube_trajectory(3)
@@ -491,6 +493,23 @@ class BuilderFacesTestCase(unittest.TestCase):
         self.assertEqual([site.faces for site in trajectory.sites], faces)
 
 
+class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
+
+    def test_as_dict_does_not_include_faces(self):
+        structure = interstitial_structure()
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(structure)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.0, n_vertices=4, label="tet")
+                      .build())
+        trajectory.assign_faces(structure)
+        site = trajectory.sites[0]
+        self.assertIsNotNone(site.faces)
+        self.assertNotIn("faces", site.as_dict())
+
+
 class LazyFacesTestCase(unittest.TestCase):
 
     def build(self, extra_sites=None):
@@ -512,6 +531,9 @@ class LazyFacesTestCase(unittest.TestCase):
             self.assertEqual(faces_and_keys.call_count, 0)
             trajectory.site_adjacency()
             self.assertEqual(faces_and_keys.call_count, len(trajectory.sites))
+            trajectory.site_adjacency()
+            trajectory.sites[0].faces
+            self.assertEqual(faces_and_keys.call_count, len(trajectory.sites))
 
     def test_reading_a_site_s_faces_computes_them_for_all_sites(self):
         trajectory = self.build()
@@ -530,7 +552,30 @@ class LazyFacesTestCase(unittest.TestCase):
         structure = interstitial_structure()
         trajectory = self.build()
         trajectory.assign_faces(structure)
-        self.assertIsNone(trajectory.site_collection._face_source)
+        self.assertIsNone(trajectory.site_collection._pending_vertex_coords)
+
+    def test_unknown_site_index_does_not_compute_pending_faces(self):
+        trajectory = self.build()
+        with patch.object(collection_module, "_faces_and_keys") as faces_and_keys:
+            with self.assertRaisesRegex(ValueError, "No site with index"):
+                trajectory.shared_faces(0, 999)
+            self.assertEqual(faces_and_keys.call_count, 0)
+
+    def test_failed_computation_stays_pending_and_raises_again(self):
+        structure = interstitial_structure()
+        trajectory = self.build()
+        collection = trajectory.site_collection
+        vertex_coords = [structure.frac_coords[site.vertex_indices]
+                         for site in collection.sites]
+        failing = collection.sites[1]
+        vertex_coords[1] = vertex_coords[1].copy()
+        vertex_coords[1][:, 2] = 0.5
+        collection._set_face_source(vertex_coords, structure.lattice.matrix)
+        for _ in range(2):
+            with self.assertRaisesRegex(ValueError, f"Site {failing.index}"):
+                trajectory.site_adjacency()
+            self.assertIsNotNone(collection._pending_vertex_coords)
+            self.assertTrue(all(site._faces is None for site in collection.sites))
 
 
 class BuilderReferenceGeometryFacesTestCase(unittest.TestCase):

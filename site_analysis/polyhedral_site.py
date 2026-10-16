@@ -213,8 +213,6 @@ class PolyhedralSite(Site):
         vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
             Set using assign_vertex_coords() or notify_structure_changed().
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
-        faces (tuple[Face, ...] or None): The site's faces, sorted by vertex
-            indices, or None if not assigned. Read-only.
 
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
@@ -266,10 +264,10 @@ class PolyhedralSite(Site):
     def faces(self) -> tuple[Face, ...] | None:
         """The site's faces, sorted by vertex indices, or None if not assigned.
 
-        Faces come from the reference geometry when every site of the
-        trajectory was built by ``TrajectoryBuilder`` from a reference
-        structure (computed the first time they are needed), or from
-        ``Trajectory.assign_faces``.
+        Faces come from the reference geometry (aligned when alignment is on)
+        when every site of the trajectory was built by ``TrajectoryBuilder``
+        from a reference structure (computed the first time they are
+        needed), or from ``Trajectory.assign_faces``.
 
         Raises:
             ValueError: If faces are computed from the reference geometry on

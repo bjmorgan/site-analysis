@@ -68,7 +68,7 @@ def _faces_and_keys(
             fewer than four faces.
     """
     unwrapped, image_shifts = correct_pbc(
-        np.asarray(vertex_frac_coords, dtype=float), reference_center, lattice_matrix)
+        vertex_frac_coords, reference_center, lattice_matrix)
     cartesian = unwrapped @ lattice_matrix
     try:
         hull = ConvexHull(cartesian)
@@ -103,13 +103,13 @@ def _faces_and_keys(
     while merged:
         merged = False
         for facet, neighbours in enumerate(hull.neighbors):
-            for neighbour in neighbours:
-                a, b = root(facet), root(int(neighbour))
-                if a != b:
-                    combined = group_vertices[a] | group_vertices[b]
+            for neighbour in neighbours[neighbours > facet]:
+                kept, absorbed = root(facet), root(int(neighbour))
+                if kept != absorbed:
+                    combined = group_vertices[kept] | group_vertices[absorbed]
                     if fits_one_plane(cartesian[sorted(combined)]):
-                        group[b] = a
-                        group_vertices[a] = combined
+                        group[absorbed] = kept
+                        group_vertices[kept] = combined
                         merged = True
 
     roots = {root(facet) for facet in range(len(group))}

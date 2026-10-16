@@ -81,7 +81,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
         self._adjacency: csr_array | None = None
         self._shared_faces: dict[tuple[int, int], tuple[Face, ...]] = {}
-        self._face_source: tuple[list[np.ndarray], np.ndarray] | None = None
+        self._pending_vertex_coords: tuple[list[np.ndarray], np.ndarray] | None = None
         centres, site_indices = _collect_reference_centres(self.sites)
         if centres is not None:
             self._init_priority_ranking(centres, site_indices)
@@ -194,8 +194,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         sites_by_key: defaultdict[FaceKey, list[tuple[int, Face]]] = defaultdict(list)
         site_faces = []
         for site, coords in zip(self.sites, vertex_frac_coords, strict=True):
-            wrapped = np.asarray(coords, dtype=float)
-            wrapped = wrapped - np.floor(wrapped)
+            wrapped = coords - np.floor(coords)
             try:
                 faces_and_keys = _faces_and_keys(
                     site.vertex_indices, wrapped, site.reference_center, lattice_matrix)
@@ -211,7 +210,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         for site, faces in zip(self.sites, site_faces, strict=True):
             site._faces = faces
             site._face_source = None
-        self._face_source = None
+        self._pending_vertex_coords = None
         self._shared_faces = {
             pair: tuple(sorted(faces, key=lambda face: face.vertex_indices))
             for pair, faces in shared.items()}
@@ -234,7 +233,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 its ``vertex_indices``.
             lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
         """
-        self._face_source = (list(vertex_frac_coords), np.asarray(lattice_matrix))
+        self._pending_vertex_coords = (
+            [np.asarray(coords, dtype=float) for coords in vertex_frac_coords],
+            np.asarray(lattice_matrix))
         for site in self.sites:
             site._face_source = self
 
@@ -245,8 +246,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             ValueError: If a site's vertices do not form a polyhedron, are not
                 all corners of it, or form fewer than four faces.
         """
-        if self._face_source is not None:
-            vertex_frac_coords, lattice_matrix = self._face_source
+        if self._pending_vertex_coords is not None:
+            vertex_frac_coords, lattice_matrix = self._pending_vertex_coords
             self._assign_faces_from_vertex_coords(vertex_frac_coords, lattice_matrix)
 
     def _check_faces_assigned(self) -> csr_array:
@@ -296,10 +297,10 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 site's vertices do not form a polyhedron, are not all corners
                 of it, or form fewer than four faces.
         """
-        self._ensure_faces()
-        self._check_faces_assigned()
         self.site_by_index(i)
         self.site_by_index(j)
+        self._ensure_faces()
+        self._check_faces_assigned()
         return self._shared_faces.get((min(i, j), max(i, j)), ())
 
     def sites_contain_points(self,

@@ -172,9 +172,9 @@ For a comparison of all site types and guidance on choosing between them, see th
 
 ## Faces and Adjacency
 
-Each polyhedral site has a `faces` attribute: a tuple of `Face` objects, one for each face of the polyhedron, or `None` until faces are assigned. A face is a planar polygon of the polyhedron's surface; its `vertex_indices` are the indices of the atoms at its corners, in ascending order. Faces are found from the convex hull of the site's vertex atoms, merging hull triangles that lie in one plane (to within 0.01 Å), so a square face has four vertices. A polygon that is not planar to within this tolerance gives separate triangular faces, which the sites on either side of it divide differently, so they do not share those faces.
+Each polyhedral site has a `faces` attribute: a tuple of `Face` objects, one for each face of the polyhedron, or `None` until faces are assigned. A face is a polygon of the polyhedron's surface; its `vertex_indices` are the indices of the atoms at its corners, in ascending order. Faces are found from the convex hull of the site's vertex atoms. Hull triangles are combined into one face when all their vertices lie within 0.01 Å of a common best-fit plane, so a square face has four vertices; a polygon that is not planar to within 0.01 Å gives separate triangular faces.
 
-Sites built with `TrajectoryBuilder` from a reference structure get their faces from the aligned reference geometry. For sites created directly, or to recompute faces from another structure, use `assign_faces`, which sets the faces of every site from one structure whose atoms are in the trajectory's order:
+When every site in the trajectory comes from the `TrajectoryBuilder` reference workflow, the faces come from the reference geometry (aligned when alignment is on) and are computed the first time `site.faces`, `site_adjacency()` or `shared_faces()` is used. If the builder also adds sites with `with_existing_sites`, no faces are set and `assign_faces` must be called. `assign_faces` sets the faces of every site from one structure, whose atoms are in the same order as the structures the trajectory analyses, and can also be used to recompute faces from another structure:
 
 ```python
 trajectory.assign_faces(reference_structure)
@@ -184,7 +184,9 @@ for face in site.faces:
     species = [reference_structure[i].species_string for i in face.vertex_indices]
 ```
 
-Two sites share a face when one lattice translation maps the atoms of a face of one onto the atoms of a face of the other. `site_adjacency()` gives which sites share a face, as a symmetric boolean `scipy.sparse.csr_array` indexed by `site.index`, and `shared_faces(i, j)` gives the faces two sites share:
+`assign_faces`, and the first use of faces from the builder, raise `ValueError` if a site's vertex atoms do not form a polyhedron, are not all corners of their convex hull, or form fewer than four faces.
+
+Two sites share a face when one lattice translation maps the atoms of a face of one onto the atoms of a face of the other. If a shared polygon is not planar to within 0.01 Å, the two sites' faces for it differ, so they do not share a face there even though they share its atoms; for a polygon of five or more vertices bent close to this tolerance, the two sites can group its triangles differently, so the polygon may not be shared. `site_adjacency()` gives which sites share a face, as a symmetric boolean `scipy.sparse.csr_array` indexed by `site.index`, and `shared_faces(i, j)` gives the faces two sites share:
 
 ```python
 adjacency = trajectory.site_adjacency()
@@ -202,7 +204,7 @@ not_between_neighbours = events[~between_neighbours]
 
 Indexing with column vectors (`[:, None]`) gives a sparse matrix whether or not there are any transitions, so `.toarray().ravel()` always gives a boolean array with one element per transition.
 
-The matrix can be used directly with `scipy.sparse.csgraph`, for example to find connected networks of sites.
+`site_adjacency()` and `shared_faces()` raise `ValueError` before faces are assigned, and `shared_faces()` raises `ValueError` for an index that is not a site.
 
 ## Containment Algorithms
 

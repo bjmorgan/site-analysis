@@ -266,9 +266,10 @@ class PolyhedralSite(Site):
     def faces(self) -> tuple[Face, ...] | None:
         """The site's faces, sorted by vertex indices, or None if not assigned.
 
-        Faces come from the reference geometry when the site was built by
-        ``TrajectoryBuilder`` from a reference structure (computed the first
-        time they are needed), or from ``Trajectory.assign_faces``.
+        Faces come from the reference geometry when every site of the
+        trajectory was built by ``TrajectoryBuilder`` from a reference
+        structure (computed the first time they are needed), or from
+        ``Trajectory.assign_faces``.
 
         Raises:
             ValueError: If faces are computed from the reference geometry on

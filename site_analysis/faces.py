@@ -42,6 +42,24 @@ class Face:
         object.__setattr__(self, "vertex_indices", tuple(sorted(self.vertex_indices)))
 
 
+def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:
+    """Describe the narrow-cell cause of a face error that has no reference centres.
+
+    Args:
+        first: One of the two sites in the error.
+        second: The other site in the error.
+
+    Returns:
+        A suffix for the error message, or an empty string when either site
+        has a reference centre.
+    """
+    if first.reference_center is None and second.reference_center is None:
+        return ("; neither site has a reference centre, so this can come "
+                "from ambiguous unwrapping in a narrow cell: "
+                "set reference centres")
+    return ""
+
+
 def _find_shared_faces(
         sites: Sequence[PolyhedralSite],
         frac_coords: np.ndarray,
@@ -111,20 +129,15 @@ def _find_shared_faces(
         first, second = sites_by_index[i], sites_by_index[j]
         in_first = atoms == set(first.vertex_indices)
         in_second = atoms == set(second.vertex_indices)
-        hint = ""
-        if first.reference_center is None and second.reference_center is None:
-            hint = ("; neither site has a reference centre, so this can come "
-                    "from ambiguous unwrapping in a narrow cell: "
-                    "set reference centres")
         if in_first and in_second:
             raise ValueError(
                 f"Sites {i} and {j} coincide: they have the same vertex "
-                f"atoms at the same positions{hint}")
+                f"atoms at the same positions{_narrow_cell_hint(first, second)}")
         if in_first or in_second:
             inner, outer = (i, j) if in_first else (j, i)
             raise ValueError(
                 f"Site {inner} lies inside site {outer}: all its vertex atoms "
-                f"are vertices of site {outer}{hint}")
+                f"are vertices of site {outer}{_narrow_cell_hint(first, second)}")
         if len(atoms) >= 3:
             faces.append(Face((i, j), tuple(atoms)))
     return tuple(sorted(faces))

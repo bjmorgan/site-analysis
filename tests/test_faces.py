@@ -1,14 +1,18 @@
 import dataclasses
 import itertools
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
 from site_analysis import Face, TrajectoryBuilder
+from site_analysis.atom import Atom
 from site_analysis.faces import _find_shared_faces
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.site import Site
+from site_analysis.spherical_site import SphericalSite
+from site_analysis.trajectory import Trajectory
 
 
 def simple_cubic_cubes(n):
@@ -286,3 +290,181 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedFacesApiTestCase(unittest.TestCase):
+
+    @staticmethod
+    def cube_trajectory(n=3):
+        structure, sites = simple_cubic_cubes(n)
+        return structure, Trajectory(sites=sites, atoms=[Atom(index=0)])
+
+    def test_shared_faces_and_adjacency_agree(self):
+        structure, trajectory = self.cube_trajectory()
+        trajectory.find_shared_faces(structure)
+        self.assertEqual(adjacent_pairs(trajectory),
+                         {face.site_indices for face in trajectory.shared_faces()})
+        self.assertEqual(len(adjacent_pairs(trajectory)), 81)
+        matrix = trajectory.site_adjacency().toarray()
+        np.testing.assert_array_equal(matrix, matrix.T)
+        self.assertFalse(matrix.diagonal().any())
+
+    def test_sites_sharing_two_faces_are_one_adjacent_pair(self):
+        structure, trajectory = self.cube_trajectory(2)
+        trajectory.find_shared_faces(structure)
+        self.assertEqual(len(trajectory.shared_faces()), 24)
+        self.assertEqual(len(adjacent_pairs(trajectory)), 12)
+        self.assertTrue(trajectory.site_adjacency().data.all())
+
+    def test_shared_faces_are_sorted(self):
+        structure, trajectory = self.cube_trajectory()
+        trajectory.find_shared_faces(structure)
+        faces = trajectory.shared_faces()
+        self.assertEqual(list(faces),
+                         sorted(faces, key=lambda f: (f.site_indices, f.vertex_indices)))
+        self.assertTrue(all(len(face.site_indices) == 2 for face in faces))
+
+    def test_matrix_is_indexed_by_site_index(self):
+        Site.reset_index(5)
+        first = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        Site.reset_index(8)
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 4])
+        trajectory = Trajectory(sites=[first, second], atoms=[Atom(index=0)])
+        trajectory.find_shared_faces(tetrahedra_structure())
+        matrix = trajectory.site_adjacency().toarray()
+        self.assertEqual(matrix.shape, (9, 9))
+        expected = np.zeros((9, 9), dtype=bool)
+        expected[5, 8] = expected[8, 5] = True
+        np.testing.assert_array_equal(matrix, expected)
+
+    def test_no_shared_faces_gives_an_empty_matrix(self):
+        Site.reset_index(0)
+        structure = Structure(
+            Lattice.cubic(10.0), ["S"] * 7,
+            [(1, 1, 1), (2, 1, 1), (1, 2, 1), (1, 1, 2), (4, 4, 4), (5, 4, 4), (4, 5, 4)],
+            coords_are_cartesian=True)
+        trajectory = Trajectory(
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                   PolyhedralSite(vertex_indices=[3, 4, 5, 6])],
+            atoms=[Atom(index=0)])
+        trajectory.find_shared_faces(structure)
+        self.assertEqual(trajectory.shared_faces(), ())
+        matrix = trajectory.site_adjacency().toarray()
+        self.assertEqual(matrix.shape, (2, 2))
+        self.assertFalse(matrix.any())
+
+    def test_finding_again_replaces_the_result(self):
+        structure, trajectory = self.cube_trajectory(2)
+        results = [(Face((0, 1), (0, 1, 2)),), (Face((0, 1), (1, 2, 3)),)]
+        with patch("site_analysis.polyhedral_site_collection._find_shared_faces",
+                   side_effect=results):
+            trajectory.find_shared_faces(structure)
+            trajectory.find_shared_faces(structure)
+        self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (1, 2, 3)),))
+
+    def test_failed_finding_leaves_the_earlier_result(self):
+        structure, trajectory = self.cube_trajectory()
+        trajectory.find_shared_faces(structure)
+        faces = trajectory.shared_faces()
+        coords = structure.frac_coords.copy()
+        coords[0] = np.nan
+        broken = Structure(structure.lattice, structure.species, coords)
+        with self.assertRaises(ValueError):
+            trajectory.find_shared_faces(broken)
+        self.assertEqual(trajectory.shared_faces(), faces)
+
+    def test_adjacency_copies_are_independent(self):
+        structure, trajectory = self.cube_trajectory()
+        trajectory.find_shared_faces(structure)
+        first = trajectory.site_adjacency()
+        first.data[:] = False
+        self.assertTrue(trajectory.site_adjacency().data.all())
+        self.assertGreater(trajectory.site_adjacency().nnz, 0)
+
+    def test_reset_keeps_shared_faces(self):
+        structure, trajectory = self.cube_trajectory(2)
+        trajectory.find_shared_faces(structure)
+        faces = trajectory.shared_faces()
+        trajectory.reset()
+        self.assertEqual(trajectory.shared_faces(), faces)
+
+    def test_before_finding_raises(self):
+        _, trajectory = self.cube_trajectory(2)
+        for call in (trajectory.shared_faces, trajectory.site_adjacency):
+            with self.subTest(call=call.__name__):
+                with self.assertRaisesRegex(ValueError, "find_shared_faces"):
+                    call()
+
+    def test_other_site_types_raise(self):
+        trajectory = Trajectory(
+            sites=[SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)],
+            atoms=[Atom(index=0)])
+        structure = Structure(Lattice.cubic(5.0), ["Li"], [[0.5, 0.5, 0.5]])
+        for call in (lambda: trajectory.find_shared_faces(structure),
+                     trajectory.shared_faces,
+                     trajectory.site_adjacency):
+            with self.assertRaisesRegex(TypeError, "not SphericalSiteCollection"):
+                call()
+
+
+class TransitionsAcrossFacesTestCase(unittest.TestCase):
+    """Joining transition events with the adjacency matrix."""
+
+    def setUp(self):
+        Site.reset_index(0)
+        # Two tetrahedra sharing the face (v0, v1, v2) in the plane x = 5 A;
+        # centres at x = 4.6 and 5.4 A.
+        self.vertices = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5),
+                         (3.4, 5.0, 5.0), (6.6, 5.0, 5.0)]
+        self.lattice = Lattice.cubic(10.0)
+        self.trajectory = Trajectory(
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                   PolyhedralSite(vertex_indices=[0, 1, 2, 4])],
+            atoms=[Atom(index=5)])
+        self.trajectory.find_shared_faces(self.frame((4.6, 5.0, 5.0)))
+
+    def frame(self, li):
+        return Structure(self.lattice, ["S"] * 5 + ["Li"],
+                         [*self.vertices, li], coords_are_cartesian=True)
+
+    def between(self):
+        events = self.trajectory.transition_events()
+        adjacency = self.trajectory.site_adjacency()
+        return adjacency[events.from_site[:, None], events.to_site[:, None]].toarray().ravel()
+
+    def test_face_sharing_tetrahedra_share_one_face(self):
+        self.assertEqual(self.trajectory.shared_faces(), (Face((0, 1), (0, 1, 2)),))
+
+    def test_a_transition_between_them_is_between_adjacent_sites(self):
+        self.trajectory.trajectory_from_structures(
+            [self.frame((4.6, 5.0, 5.0)), self.frame((5.4, 5.0, 5.0))])
+        np.testing.assert_array_equal(self.between(), [True])
+
+    def test_no_transitions_gives_an_empty_boolean_array(self):
+        self.trajectory.trajectory_from_structures(
+            [self.frame((4.6, 5.0, 5.0)), self.frame((4.6, 5.0, 5.0))])
+        between = self.between()
+        self.assertIsInstance(between, np.ndarray)
+        self.assertEqual(len(between), 0)
+
+
+class FccInterstitialsTestCase(unittest.TestCase):
+
+    def test_tetrahedra_share_triangles_with_octahedra_only(self):
+        structure = interstitial_structure()
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(structure)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.0, n_vertices=4, label="tet")
+                      .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                             cutoff=2.2, n_vertices=6, label="oct")
+                      .build())
+        trajectory.find_shared_faces(structure)
+        faces = trajectory.shared_faces()
+        labels = {site.index: site.label for site in trajectory.sites}
+        self.assertEqual(len(faces), 256)
+        self.assertTrue(all(len(face.vertex_indices) == 3 for face in faces))
+        self.assertTrue(all(sorted(labels[i] for i in face.site_indices) == ["oct", "tet"]
+                            for face in faces))

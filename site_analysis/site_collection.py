@@ -19,7 +19,9 @@ from collections.abc import Generator, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar, TYPE_CHECKING
 
 import numpy as np
+from scipy.sparse import csr_array
 from .atom import Atom
+from .faces import Face
 from .site import Site
 from .neighbour_search import PeriodicNeighbourIndex
 
@@ -352,6 +354,50 @@ class SiteCollection(ABC):
         if site is None:
             raise ValueError(f'No site with index {index} found')
         return site
+
+    def _shared_faces_unavailable(self) -> TypeError:
+        """Return the error raised by the shared-face methods of non-polyhedral collections."""
+        return TypeError(
+            f"Shared faces are only available for polyhedral sites, not {type(self).__name__}")
+
+    def find_shared_faces(self, frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> None:
+        """Find the faces shared by pairs of sites.
+
+        Only implemented by collections of polyhedral sites.
+
+        Args:
+            frac_coords: Fractional coordinates of the atoms, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Raises:
+            TypeError: Always, for collections that are not of polyhedral
+                sites.
+        """
+        raise self._shared_faces_unavailable()
+
+    def shared_faces(self) -> tuple[Face, ...]:
+        """Return the faces shared by pairs of sites.
+
+        Only implemented by collections of polyhedral sites.
+
+        Raises:
+            TypeError: Always, for collections that are not of polyhedral
+                sites.
+        """
+        raise self._shared_faces_unavailable()
+
+    def site_adjacency(self) -> csr_array:
+        """Return which sites share a face.
+
+        Only implemented by collections of polyhedral sites.
+
+        Raises:
+            TypeError: Always, for collections that are not of polyhedral
+                sites.
+        """
+        raise self._shared_faces_unavailable()
 
     def update_occupation(self, site, atom):
         """Updates site and atom attributes for this atom occupying this site.

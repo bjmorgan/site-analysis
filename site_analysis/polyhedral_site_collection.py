@@ -23,12 +23,14 @@ The module also includes utility functions:
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 
+from .faces import Face, _find_shared_faces
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
+from scipy.sparse import csr_array
 
 
 class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
@@ -76,6 +78,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         super().__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
+        self._shared_faces: tuple[Face, ...] | None = None
         centres, site_indices = _collect_reference_centres(self.sites)
         if centres is not None:
             self._init_priority_ranking(centres, site_indices)
@@ -137,6 +140,66 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     def neighbouring_sites(self,
             index: int) -> list[PolyhedralSite]:
         return self._neighbouring_sites[index] 
+
+    def find_shared_faces(self,
+            frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> None:
+        """Find the faces shared by pairs of sites.
+
+        Two sites share a face when they share three or more vertex atoms
+        under one lattice translation. The result replaces any earlier one,
+        and is kept when the collection is reset. If the search raises an
+        error, the earlier result is kept.
+
+        Args:
+            frac_coords: Fractional coordinates of the atoms, shape
+                ``(n_atoms, 3)``, indexed by atom index.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Raises:
+            ValueError: If a site index is negative, a vertex index is
+                beyond the atoms, the coordinates are not finite, or two
+                sites coincide or one lies within another.
+        """
+        self._shared_faces = _find_shared_faces(
+            self.sites,
+            np.asarray(frac_coords, dtype=float),
+            np.asarray(lattice_matrix, dtype=float))
+
+    def shared_faces(self) -> tuple[Face, ...]:
+        """Return the faces shared by pairs of sites.
+
+        Returns:
+            The shared faces, sorted by site indices then vertex indices.
+
+        Raises:
+            ValueError: If the shared faces have not been found.
+        """
+        if self._shared_faces is None:
+            raise ValueError(
+                "Shared faces have not been found: call Trajectory.find_shared_faces(structure)")
+        return self._shared_faces
+
+    def site_adjacency(self) -> csr_array:
+        """Return which sites share a face.
+
+        Returns:
+            A new symmetric boolean matrix of shape ``(n, n)``, where ``n``
+            is one more than the largest site index. Entry ``(i, j)`` is
+            True when the sites with indices ``i`` and ``j`` share a face.
+
+        Raises:
+            ValueError: If the shared faces have not been found.
+        """
+        faces = self.shared_faces()
+        n = max((site.index for site in self.sites), default=-1) + 1
+        rows = np.array([face.site_indices[0] for face in faces], dtype=int)
+        columns = np.array([face.site_indices[1] for face in faces], dtype=int)
+        return csr_array(
+            (np.ones(2 * len(faces), dtype=bool),
+             (np.concatenate([rows, columns]), np.concatenate([columns, rows]))),
+            shape=(n, n))
 
     def sites_contain_points(self,
             points: np.ndarray,

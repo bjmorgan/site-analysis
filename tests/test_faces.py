@@ -466,5 +466,85 @@ class FccInterstitialsTestCase(unittest.TestCase):
                             for face in faces))
 
 
+class BuilderSharedFacesTestCase(unittest.TestCase):
+
+    def test_builder_finds_shared_faces_from_the_reference(self):
+        structure = interstitial_structure()
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(structure)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.0, n_vertices=4)
+                      .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                             cutoff=2.2, n_vertices=6)
+                      .build())
+        from_reference = trajectory.shared_faces()
+        self.assertEqual(len(from_reference), 256)
+        trajectory.find_shared_faces(structure)
+        self.assertEqual(trajectory.shared_faces(), from_reference)
+
+    def test_distorted_target(self):
+        target, trajectory = build_cubes()
+        from_reference = trajectory.shared_faces()
+        self.assertEqual(len(pairs(from_reference)), 81)
+        trajectory.find_shared_faces(target)
+        self.assertEqual(trajectory.shared_faces(), from_reference)
+
+    def test_target_atoms_in_a_different_order_from_the_reference(self):
+        trajectory = reversed_order_cubes()
+        faces = trajectory.shared_faces()
+        self.assertEqual(len(pairs(faces)), 81)
+        vertices = {site.index: set(site.vertex_indices) for site in trajectory.sites}
+        for face in faces:
+            for site_index in face.site_indices:
+                self.assertTrue(set(face.vertex_indices) <= vertices[site_index])
+
+    def test_cubes_in_a_cell_two_sites_wide_are_not_duplicates(self):
+        _, trajectory = build_cubes((2, 2, 2))
+        self.assertEqual(len(trajectory.sites), 8)
+        self.assertEqual(len(trajectory.shared_faces()), 24)
+
+    def test_conflicting_coordinates_between_generators_raise(self):
+        unit = Structure(Lattice.cubic(3.0), ["O", "Li"],
+                         [[0, 0, 0], [0.5, 0.5, 0.5]])
+        structure = unit * (2, 2, 2)
+        site_a = PolyhedralSite(vertex_indices=[0, 2, 4])
+        site_b = PolyhedralSite(vertex_indices=[0, 2, 6])
+        builder = (TrajectoryBuilder()
+                   .with_structure(structure)
+                   .with_reference_structure(structure)
+                   .with_mobile_species("Li")
+                   .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                          cutoff=2.8, n_vertices=8)
+                   .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                          cutoff=2.8, n_vertices=8))
+        with patch("site_analysis.builders.ReferenceBasedSites."
+                   "_create_polyhedral_sites_and_vertex_coords",
+                   side_effect=[([site_a], {0: np.zeros(3)}),
+                                ([site_b], {0: np.full(3, 0.5)})]):
+            with self.assertRaisesRegex(ValueError,
+                                        "Atom 0 has different reference coordinates"):
+                builder.build()
+
+    def test_mixing_with_existing_sites_finds_none(self):
+        unit = Structure(Lattice.cubic(3.0), ["O", "Li"],
+                         [[0, 0, 0], [0.5, 0.5, 0.5]])
+        structure = unit * (3, 3, 3)
+        lithium = [i for i, site in enumerate(structure) if site.species_string == "Li"]
+        Site.reset_index(1000)
+        existing = PolyhedralSite(vertex_indices=lithium[:4])
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(structure)
+                      .with_mobile_species("Li")
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.8, n_vertices=8)
+                      .with_existing_sites([existing])
+                      .build())
+        with self.assertRaisesRegex(ValueError, "find_shared_faces"):
+            trajectory.shared_faces()
+
+
 if __name__ == "__main__":
     unittest.main()

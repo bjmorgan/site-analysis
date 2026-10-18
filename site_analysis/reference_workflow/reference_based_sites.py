@@ -156,6 +156,51 @@ class ReferenceBasedSites:
             ValueError: If coordination environments cannot be found or mapped,
                 or if both label and labels are provided.
         """
+        return self._create_polyhedral_sites_and_vertex_coords(
+            center_species=center_species,
+            vertex_species=vertex_species,
+            cutoff=cutoff,
+            n_vertices=n_vertices,
+            label=label,
+            labels=labels,
+            target_species=target_species,
+            use_reference_centers=use_reference_centers
+        )[0]
+
+    def _create_polyhedral_sites_and_vertex_coords(self,
+                            center_species: str, 
+                            vertex_species: str | list[str], 
+                            cutoff: float, 
+                            n_vertices: int,
+                            label: str | None = None, 
+                            labels: list[str] | None = None, 
+                            target_species: str | list[str] | None = None,
+                            use_reference_centers: bool = True
+                            ) -> tuple[list[PolyhedralSite], dict[int, np.ndarray]]:
+        """Create PolyhedralSite objects and the reference coordinates of their vertex atoms.
+        
+        Args:
+            center_species: Species at the centre of coordination environments
+            vertex_species: Species at vertices of coordination environments
+            cutoff: Cutoff distance for coordination environment (required)
+            n_vertices: Number of vertices per environment (required)
+            label: Label to apply to all created sites. Default is None.
+            labels: List of labels for each site. Default is None.
+            target_species: Species to map to in the target structure. Default is None.
+            use_reference_centers: Whether to use reference centres for 
+                PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+                Default is True.
+            
+        Returns:
+            A tuple of the list of PolyhedralSite objects, and a dict mapping
+            each target atom index that is a vertex of a created site to the
+            fractional coordinates of the reference atom mapped to it. The
+            coordinates are the aligned ones when alignment is on.
+            
+        Raises:
+            ValueError: If coordination environments cannot be found or mapped,
+                or if both label and labels are provided.
+        """
         # Find coordination environments in reference structure
         ref_environments = self._find_coordination_environments(
             center_species=center_species,
@@ -188,8 +233,17 @@ class ReferenceBasedSites:
             label=label,
             labels=labels
         )
-        
-        return sites
+
+        # The reference coordinates of each target atom that is a vertex
+        ref_coords = self._effective_ref_coords
+        vertex_coords = {
+            target_atom: ref_coords[ref_atom]
+            for ref_environment, mapped_environment
+            in zip(ref_environments.values(), mapped_environments)
+            for ref_atom, target_atom in zip(ref_environment, mapped_environment)
+        }
+
+        return sites, vertex_coords
     
     def create_dynamic_voronoi_sites(self, 
                                 center_species: str, 

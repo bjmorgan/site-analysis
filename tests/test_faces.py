@@ -288,10 +288,6 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
             shared_faces_of(tetrahedra_structure(), sites)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SharedFacesApiTestCase(unittest.TestCase):
 
     @staticmethod
@@ -369,7 +365,7 @@ class SharedFacesApiTestCase(unittest.TestCase):
         coords = structure.frac_coords.copy()
         coords[0] = np.nan
         broken = Structure(structure.lattice, structure.species, coords)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "non-finite"):
             trajectory.find_shared_faces(broken)
         self.assertEqual(trajectory.shared_faces(), faces)
 
@@ -468,3 +464,7 @@ class FccInterstitialsTestCase(unittest.TestCase):
         self.assertTrue(all(len(face.vertex_indices) == 3 for face in faces))
         self.assertTrue(all(sorted(labels[i] for i in face.site_indices) == ["oct", "tet"]
                             for face in faces))
+
+
+if __name__ == "__main__":
+    unittest.main()

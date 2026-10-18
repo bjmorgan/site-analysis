@@ -19,11 +19,13 @@ from collections.abc import Generator, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar, TYPE_CHECKING
 
 import numpy as np
-from scipy.sparse import csr_array
 from .atom import Atom
-from .faces import Face
 from .site import Site
 from .neighbour_search import PeriodicNeighbourIndex
+
+if TYPE_CHECKING:
+    from scipy.sparse import csr_array
+    from .faces import Face
 
 # Sites within this relative margin beyond the reach are also ranked, so
 # that rounding cannot leave out a site whose containment test would

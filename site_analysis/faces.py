@@ -46,8 +46,9 @@ def _find_shared_faces(
         lattice_matrix: np.ndarray) -> tuple[Face, ...]:
     """Find the faces that pairs of sites share.
 
-    Each site's vertex atoms are unwrapped with ``correct_pbc``, which
-    gives each atom an integer image shift. Two sites share the atoms they
+    Each site's vertex coordinates are wrapped into the unit cell, then
+    unwrapped around the site with ``correct_pbc``, which gives each atom an
+    integer image shift. Two sites share the atoms they
     have in common that differ by the same lattice translation, that is,
     whose image shifts differ by the same amount. When three or more atoms
     share a translation, they form a shared face of the two sites.

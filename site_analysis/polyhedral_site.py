@@ -227,8 +227,8 @@ class PolyhedralSite(Site):
             None
         
         Raises:
-            ValueError: If vertex_indices is empty or lists an atom more than
-                once.
+            ValueError: If vertex_indices is empty, contains a negative index,
+                or lists an atom more than once.
             TypeError: If any element in vertex_indices is not an integer.
         """
         if isinstance(vertex_indices, np.ndarray):
@@ -240,9 +240,13 @@ class PolyhedralSite(Site):
         if not all(isinstance(idx, int) for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")
 
+        seen: set[int] = set()
         for k in vertex_indices:
-            if vertex_indices.count(k) > 1:
+            if k < 0:
+                raise ValueError(f"vertex_indices contains negative atom index {k}")
+            if k in seen:
                 raise ValueError(f"vertex_indices lists atom {k} more than once")
+            seen.add(k)
         
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices

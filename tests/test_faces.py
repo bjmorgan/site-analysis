@@ -140,7 +140,9 @@ class FindSharedFacesTestCase(unittest.TestCase):
 
     def test_sites_sharing_an_edge_or_a_vertex_share_no_face(self):
         structure = Structure(Lattice.cubic(10.0), ["S"] * 8,
-                              np.random.default_rng(1).uniform(3.0, 7.0, (8, 3)),
+                              [(5.0, 5.0, 5.0), (6.0, 5.0, 5.0), (5.0, 6.0, 5.0),
+                               (5.0, 5.0, 6.0), (4.0, 5.0, 5.0), (5.0, 4.0, 5.0),
+                               (5.0, 5.0, 4.0), (6.0, 6.0, 6.0)],
                               coords_are_cartesian=True)
         for second in ([0, 1, 4, 5], [0, 4, 5, 6]):
             with self.subTest(shared=len({0, 1, 2, 3} & set(second))):

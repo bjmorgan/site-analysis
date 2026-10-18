@@ -30,7 +30,7 @@ This ordering means atoms that remain in or near their current site are resolved
 
 If no site contains the atom, it is left unassigned (`None`).
 
-Polyhedral sites have faces, and the trajectory can report which sites share a face; see [Faces and Adjacency](../guides/polyhedral_sites.md#faces-and-adjacency).
+Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency).
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 

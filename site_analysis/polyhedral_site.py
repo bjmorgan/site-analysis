@@ -26,11 +26,12 @@ if HAS_NUMBA:
         vertex_coords: np.ndarray,
         face_simplices: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """JIT-compiled face normal and centre sign computation.
+        """JIT-compiled hull triangle normal and centre sign computation.
 
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
-            face_simplices: (N_faces, 3) array of vertex indices per face.
+            face_simplices: (N_faces, 3) array of vertex indices per hull
+                triangle.
 
         Returns:
             Tuple of (face_normals, face_ref_points, centre_signs).
@@ -88,14 +89,14 @@ if HAS_NUMBA:
         """JIT-compiled containment check using surface normals.
 
         For each PBC image point, checks whether the point lies on the
-        same side as the polyhedron centre for every face. Uses early
-        exit on first failing face for efficiency.
+        same side as the polyhedron centre for every hull triangle. Uses early
+        exit on first failing triangle for efficiency.
 
         Args:
             x_pbc_points: (N, 3) array of periodic boundary images.
-            face_normals: (N_faces, 3) precomputed outward face normals.
-            face_ref_points: (N_faces, 3) reference vertex per face.
-            centre_signs: (N_faces,) sign of centre dot product per face.
+            face_normals: (N_faces, 3) precomputed outward triangle normals.
+            face_ref_points: (N_faces, 3) reference vertex per triangle.
+            centre_signs: (N_faces,) sign of centre dot product per triangle.
 
         Returns:
             True if any PBC image is inside the polyhedron.
@@ -122,24 +123,25 @@ if HAS_NUMBA:
 
 
 class FaceTopologyCache:
-    """Cached face topology and surface normal data for polyhedral containment.
+    """Cached hull triangle topology and surface normal data for containment.
 
-    The face topology (which vertex triples form each face) is computed
+    The topology (which vertex triples form each hull triangle) is computed
     once from an initial ``ConvexHull`` and cached permanently -- it depends
     only on vertex connectivity, not on coordinates. Per-timestep, the
-    face normals, reference points, and centre signs are recomputed from
+    triangle normals, reference points, and centre signs are recomputed from
     new vertex coordinates using the cached topology.
 
     Attributes:
-        face_simplices: (N_faces, 3) array of vertex indices per face.
+        face_simplices: (N_faces, 3) array of vertex indices per hull
+            triangle.
     """
 
     def __init__(self, vertex_coords: np.ndarray) -> None:
-        """Compute face topology from initial vertex coordinates.
+        """Compute hull triangle topology from initial vertex coordinates.
 
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
-                Used to build a ConvexHull and extract face connectivity.
+                Used to build a ConvexHull and extract triangle connectivity.
 
         Raises:
             RuntimeError: If numba is not installed.
@@ -157,7 +159,7 @@ class FaceTopologyCache:
         self.update(vertex_coords)
 
     def update(self, vertex_coords: np.ndarray) -> None:
-        """Recompute face normals from cached topology and new coordinates.
+        """Recompute triangle normals from cached topology and new coordinates.
 
         Called once per timestep after vertex coordinates are assigned.
 
@@ -193,7 +195,7 @@ class PolyhedralSite(Site):
     constructing a convex polyhedron from the vertex atoms and checking whether
     points lie within this polyhedron. The containment algorithm is selected
     automatically: when numba is available, a JIT-compiled surface normal method
-    with cached face topology is used; otherwise, falls back to Delaunay
+    with cached hull triangle topology is used; otherwise, falls back to Delaunay
     tessellation via scipy.
 
     The polyhedron vertices are defined using atom indices in a structure, and
@@ -273,7 +275,7 @@ class PolyhedralSite(Site):
 
         Clears the occupation data as in ``Site.reset``, and unsets the
         vertex coordinates, Delaunay tessellation, and PBC shift caches. The
-        face topology cache is preserved as it depends only on vertex
+        hull triangle topology cache is preserved as it depends only on vertex
         indices, which are immutable.
         """
         super(PolyhedralSite, self).reset()
@@ -393,7 +395,7 @@ class PolyhedralSite(Site):
         (jumps of ~1.0), avoiding the expensive 27-image distance search.
 
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
-        marks the face topology cache as stale.
+        marks the hull triangle topology cache as stale.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,

@@ -5,4 +5,4 @@ site\_analysis.faces
     :members:
     :undoc-members:
     :show-inheritance:
-    :exclude-members: vertex_indices
+    :exclude-members: site_indices, vertex_indices

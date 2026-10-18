@@ -1542,6 +1542,21 @@ class TestBuilderValidation(unittest.TestCase):
 			builder.build()
 		self.assertIn("coincide", str(ctx.exception))
 
+	def test_duplicate_existing_polyhedral_sites_raises(self):
+		"""Polyhedral sites without reference coordinates are checked by vertex indices."""
+		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])
+		target = self._make_target(ref)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_mobile_species("Li")
+			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+				PolyhedralSite(vertex_indices=[0, 1, 2, 3])]))
+
+		with self.assertRaises(ValueError) as ctx:
+			builder.build()
+		self.assertIn("Duplicate sites", str(ctx.exception))
+
 	def test_duplicate_dynamic_voronoi_sites_raises(self):
 		"""Post-build check rejects duplicate dynamic voronoi sites."""
 		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])

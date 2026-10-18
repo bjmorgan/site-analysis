@@ -750,18 +750,12 @@ class TrajectoryBuilder:
     def _validate_unique_sites(self, sites: list[Site]) -> None:
         """Check that no two sites share the same defining indices.
 
-        Applies to DynamicVoronoiSite (reference_indices), and to
-        PolyhedralSite (vertex_indices) unless the reference coordinates
-        of all the vertices are known, when coincident polyhedral sites
-        are instead found as shared faces are. Skipped for VoronoiSite
+        Applies to PolyhedralSite (vertex_indices) unless the builder has
+        reference coordinates for every vertex atom, and to
+        DynamicVoronoiSite (reference_indices). Skipped for VoronoiSite
         and SphericalSite where duplicate detection based on coordinates
         is unreliable.
         """
-        from site_analysis.polyhedral_site import PolyhedralSite
-        from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
-        from site_analysis.voronoi_site import VoronoiSite
-        from site_analysis.spherical_site import SphericalSite
-
         if not sites:
             return
 
@@ -771,10 +765,8 @@ class TrajectoryBuilder:
             index_attr = "vertex_indices"
         elif isinstance(sites[0], DynamicVoronoiSite):
             index_attr = "reference_indices"
-        elif isinstance(sites[0], (VoronoiSite, SphericalSite)):
-            return
         else:
-            return  # Unknown site type — skip gracefully
+            return  # VoronoiSite, SphericalSite or an unknown site type
 
         seen: dict[frozenset[int], int] = {}
         for site in sites:

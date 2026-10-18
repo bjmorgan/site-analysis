@@ -178,28 +178,14 @@ class ReferenceBasedSites:
                             use_reference_centers: bool = True
                             ) -> tuple[list[PolyhedralSite], dict[int, np.ndarray]]:
         """Create PolyhedralSite objects and the reference coordinates of their vertex atoms.
-        
-        Args:
-            center_species: Species at the centre of coordination environments
-            vertex_species: Species at vertices of coordination environments
-            cutoff: Cutoff distance for coordination environment (required)
-            n_vertices: Number of vertices per environment (required)
-            label: Label to apply to all created sites. Default is None.
-            labels: List of labels for each site. Default is None.
-            target_species: Species to map to in the target structure. Default is None.
-            use_reference_centers: Whether to use reference centres for 
-                PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
-                Default is True.
-            
+
+        Takes the same arguments and raises the same errors as
+        ``create_polyhedral_sites``.
+
         Returns:
-            A tuple of the list of PolyhedralSite objects, and a dict mapping
-            each target atom index that is a vertex of a created site to the
-            fractional coordinates of the reference atom mapped to it. The
-            coordinates are the aligned ones when alignment is on.
-            
-        Raises:
-            ValueError: If coordination environments cannot be found or mapped,
-                or if both label and labels are provided.
+            A tuple of the PolyhedralSite objects, and the reference
+            fractional coordinates of each vertex atom keyed by target atom
+            index.
         """
         # Find coordination environments in reference structure
         ref_environments = self._find_coordination_environments(

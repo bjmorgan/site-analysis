@@ -178,7 +178,7 @@ No tolerance is involved, so distortion of the structure does not change the fac
 
 In a cell two sites wide, two neighbouring sites share two faces, one on each side.
 
-When every site comes from the `TrajectoryBuilder` reference workflow, `build()` finds the shared faces from the reference geometry (aligned when alignment is on). If the sites are created directly (for example `Trajectory(sites=..., atoms=...)`), or the builder also adds sites with `with_existing_sites`, the faces are not found by `build()`, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure's atoms must be in the same order as the structures the trajectory analyses.
+When every site is polyhedral and every vertex atom of every site is a vertex of a site created by `with_polyhedral_sites`, `build()` finds the shared faces from the reference geometry (aligned when alignment is on). Otherwise (for example if the sites are created directly with `Trajectory(sites=..., atoms=...)`, or the builder also adds sites with `with_existing_sites` that have other vertex atoms), `build()` does not find the faces, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure's atoms must be in the same order as the structures the trajectory analyses.
 
 `find_shared_faces` raises `ValueError`, keeping the faces found before, for sites that coincide or lie inside one another, for vertex indices beyond the structure's atoms, for non-finite vertex coordinates and for negative site indices. `shared_faces()` and `site_adjacency()` raise `ValueError` before the shared faces are found. `find_shared_faces`, `shared_faces()` and `site_adjacency()` raise `TypeError` for sites that are not polyhedral.
 
@@ -190,7 +190,7 @@ from collections import Counter
 faces = trajectory.shared_faces()
 faces_of_site_7 = [face for face in faces if 7 in face.site_indices]
 
-species = [site.species_string for site in structure]
+species = [atom.species_string for atom in structure]
 faces_by_species = Counter(
     tuple(sorted(species[i] for i in face.vertex_indices)) for face in faces)
 ```

@@ -552,13 +552,25 @@ trajectory = builder.build()
 builder.with_min_atom_distance(0)
 ```
 
-**Duplicate sites**: After generating sites, the builder checks that no two polyhedral sites share the same vertex indices and no two dynamic Voronoi sites share the same reference indices. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+**Duplicate sites**: After generating sites, the builder checks that no two sites are duplicates. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+
+For polyhedral sites whose vertex atoms all come from `with_polyhedral_sites`, the builder finds duplicates by position. Two sites with the same vertex atoms under one lattice translation raise a `ValueError` that they coincide, and a site all of whose vertex atoms are vertices of another site raises a `ValueError` that it lies inside that site. Sites with the same vertex atoms in different periodic images (for example cubes in a cell two sites wide) are distinct.
 
 ```python
 # Even with the distance check disabled, duplicate sites are caught
 builder.with_min_atom_distance(0)
        .with_polyhedral_sites(...)
 trajectory = builder.build()
+# ValueError: Sites 0 and 1 coincide: they have the same vertex atoms
+# at the same positions
+
+# ValueError: Site 2 lies inside site 0: all its vertex atoms are
+# vertices of site 0
+```
+
+For dynamic Voronoi sites, and for polyhedral sites without reference coordinates for all their vertex atoms (for example sites added with `with_existing_sites`), the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral):
+
+```python
 # ValueError: Duplicate sites: site 0 and site 1 share the same
 # vertex_indices [3, 7, 12, 15]. ...
 ```

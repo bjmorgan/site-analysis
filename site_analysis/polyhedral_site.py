@@ -195,8 +195,8 @@ class PolyhedralSite(Site):
     constructing a convex polyhedron from the vertex atoms and checking whether
     points lie within this polyhedron. The containment algorithm is selected
     automatically: when numba is available, a JIT-compiled surface normal method
-    with cached hull triangle topology is used; otherwise, falls back to Delaunay
-    tessellation via scipy.
+    with cached hull triangle topology is used; otherwise, falls back to
+    Delaunay tessellation via scipy.
 
     The polyhedron vertices are defined using atom indices in a structure, and
     their coordinates are assigned from the structure when needed. This allows the

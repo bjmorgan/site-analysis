@@ -172,11 +172,15 @@ For a comparison of all site types and guidance on choosing between them, see th
 
 ## Shared Faces and Adjacency
 
-Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation, that is, the same atoms placed in the same periodic images relative to each site. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order. No tolerance is involved, so distortion of the structure does not change the faces while each vertex atom stays nearest the periodic image its site uses; displacements of about half a site's width can change them, so find the faces from the reference or another undistorted structure. In a cell two sites wide, two neighbouring sites share two faces, one on each side.
+Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order.
+
+No tolerance is involved, so distortion of the structure does not change the faces while each vertex atom stays nearest the periodic image its site uses. Displacements of about half a site's width can change them, so find the faces from the reference or another undistorted structure.
+
+In a cell two sites wide, two neighbouring sites share two faces, one on each side.
 
 When every site comes from the `TrajectoryBuilder` reference workflow, `build()` finds the shared faces from the reference geometry (aligned when alignment is on). If the sites are created directly (for example `Trajectory(sites=..., atoms=...)`), or the builder also adds sites with `with_existing_sites`, the faces are not found by `build()`, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure's atoms must be in the same order as the structures the trajectory analyses.
 
-`find_shared_faces` raises `ValueError`, keeping the faces found before, for sites that coincide or lie inside one another, for vertex indices beyond the structure's atoms, for non-finite vertex coordinates and for negative site indices. `shared_faces()` and `site_adjacency()` raise `ValueError` before the shared faces are found.
+`find_shared_faces` raises `ValueError`, keeping the faces found before, for sites that coincide or lie inside one another, for vertex indices beyond the structure's atoms, for non-finite vertex coordinates and for negative site indices. `shared_faces()` and `site_adjacency()` raise `ValueError` before the shared faces are found. `find_shared_faces`, `shared_faces()` and `site_adjacency()` raise `TypeError` for sites that are not polyhedral.
 
 `shared_faces()` returns every shared face as a tuple of `Face` objects sorted by `site_indices` and then `vertex_indices`:
 

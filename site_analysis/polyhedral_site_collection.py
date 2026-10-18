@@ -21,17 +21,14 @@ The module also includes utility functions:
 """
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
-from itertools import combinations
+from collections.abc import Iterable
 
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
 from .tools import x_pbc
-from .faces import Face, FaceKey, _faces_and_keys
 from pymatgen.core import Structure
 import numpy as np
-from scipy.sparse import csr_array
 
 
 class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
@@ -79,9 +76,6 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         super().__init__(sites)
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
-        self._adjacency: csr_array | None = None
-        self._shared_faces: dict[tuple[int, int], tuple[Face, ...]] = {}
-        self._pending_vertex_coords: tuple[list[np.ndarray], np.ndarray] | None = None
         centres, site_indices = _collect_reference_centres(self.sites)
         if centres is not None:
             self._init_priority_ranking(centres, site_indices)
@@ -143,165 +137,6 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     def neighbouring_sites(self,
             index: int) -> list[PolyhedralSite]:
         return self._neighbouring_sites[index] 
-
-    def assign_faces(self,
-            frac_coords: np.ndarray,
-            lattice_matrix: np.ndarray) -> None:
-        """Assign every site's faces, and find which faces sites share.
-
-        Replaces any faces assigned before. Faces are found from the convex
-        hull of each site's vertices. Neighbouring facets of the hull are
-        merged into one face when all their combined vertices lie within
-        0.01 Angstrom of their best-fit plane, repeating until no more facets
-        merge.
-
-        Args:
-            frac_coords: Fractional coordinates of all atoms, indexed by
-                atom index (the indices used by ``vertex_indices``), with
-                atoms in the same order as the structures the trajectory
-                analyses.
-            lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
-
-        Raises:
-            ValueError: If a site's vertices do not form a polyhedron, are not
-                all corners of it, or form fewer than four faces. No faces
-                change if this is raised.
-        """
-        coords = np.asarray(frac_coords, dtype=float)
-        self._assign_faces_from_vertex_coords(
-            [coords[site.vertex_indices] for site in self.sites], lattice_matrix)
-
-    def _assign_faces_from_vertex_coords(self,
-            vertex_frac_coords: Sequence[np.ndarray],
-            lattice_matrix: np.ndarray) -> None:
-        """Assign faces from each site's vertex coordinates.
-
-        Vertex coordinates are wrapped into the unit cell first. Two sites
-        share a face when one lattice translation maps the atoms of a face of
-        one onto the atoms of a face of the other.
-
-        Args:
-            vertex_frac_coords: For each site, in the order of ``sites``,
-                a float array of the fractional coordinates of its vertices
-                in the order of its ``vertex_indices``.
-            lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
-
-        Raises:
-            ValueError: If a site's vertices do not form a polyhedron, are not
-                all corners of it, or form fewer than four faces. No faces
-                change if this is raised.
-        """
-        sites_by_key: defaultdict[FaceKey, list[tuple[int, Face]]] = defaultdict(list)
-        site_faces = []
-        for site, coords in zip(self.sites, vertex_frac_coords, strict=True):
-            wrapped = coords - np.floor(coords)
-            try:
-                faces_and_keys = _faces_and_keys(
-                    site.vertex_indices, wrapped, site.reference_center, lattice_matrix)
-            except ValueError as error:
-                raise ValueError(f"Site {site.index}: {error}") from error
-            site_faces.append(tuple(face for face, _ in faces_and_keys))
-            for face, key in faces_and_keys:
-                sites_by_key[key].append((site.index, face))
-        shared: defaultdict[tuple[int, int], set[Face]] = defaultdict(set)
-        for entries in sites_by_key.values():
-            for (i, face), (j, _) in combinations(entries, 2):
-                shared[(min(i, j), max(i, j))].add(face)
-        for site, faces in zip(self.sites, site_faces, strict=True):
-            site._faces = faces
-            site._face_source = None
-        self._pending_vertex_coords = None
-        self._shared_faces = {
-            pair: tuple(sorted(faces, key=lambda face: face.vertex_indices))
-            for pair, faces in shared.items()}
-        rows = [i for i, j in shared] + [j for i, j in shared]
-        columns = [j for i, j in shared] + [i for i, j in shared]
-        n = max((site.index for site in self.sites), default=-1) + 1
-        self._adjacency = csr_array(
-            (np.ones(len(rows), dtype=bool),
-             (np.array(rows, dtype=np.int64), np.array(columns, dtype=np.int64))),
-            shape=(n, n))
-
-    def _set_face_source(self,
-            vertex_frac_coords: Sequence[np.ndarray],
-            lattice_matrix: np.ndarray) -> None:
-        """Record coordinates from which faces are computed when first needed.
-
-        Args:
-            vertex_frac_coords: For each site, in the order of ``sites``,
-                the fractional coordinates of its vertices in the order of
-                its ``vertex_indices``.
-            lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
-        """
-        self._pending_vertex_coords = (
-            [np.asarray(coords, dtype=float) for coords in vertex_frac_coords],
-            np.asarray(lattice_matrix))
-        for site in self.sites:
-            site._face_source = self
-
-    def _ensure_faces(self) -> None:
-        """Compute faces from the recorded coordinates, if any are pending.
-
-        Raises:
-            ValueError: If a site's vertices do not form a polyhedron, are not
-                all corners of it, or form fewer than four faces.
-        """
-        if self._pending_vertex_coords is not None:
-            vertex_frac_coords, lattice_matrix = self._pending_vertex_coords
-            self._assign_faces_from_vertex_coords(vertex_frac_coords, lattice_matrix)
-
-    def _check_faces_assigned(self) -> csr_array:
-        """The adjacency matrix, if faces have been assigned.
-
-        Raises:
-            ValueError: If faces have not been assigned.
-        """
-        if self._adjacency is None:
-            raise ValueError(
-                "Faces have not been assigned: call Trajectory.assign_faces(structure)")
-        return self._adjacency
-
-    def site_adjacency(self) -> csr_array:
-        """Return which sites share a face.
-
-        Returns:
-            A copy of the symmetric boolean sparse matrix, indexed by
-            ``site.index``, whose entry ``(i, j)`` is True when sites ``i``
-            and ``j`` share a face. Its shape is ``(n, n)`` with ``n`` one
-            more than the largest site index.
-
-        Raises:
-            ValueError: If faces have not been assigned, or if faces are
-                computed from the reference geometry on this call and a
-                site's vertices do not form a polyhedron, are not all corners
-                of it, or form fewer than four faces.
-        """
-        self._ensure_faces()
-        return self._check_faces_assigned().copy()
-
-    def shared_faces(self, i: int, j: int) -> tuple[Face, ...]:
-        """Return the faces two sites share.
-
-        Args:
-            i: Index of one site.
-            j: Index of the other site.
-
-        Returns:
-            The shared faces, sorted by vertex indices; empty if the sites
-            share no face.
-
-        Raises:
-            ValueError: If faces have not been assigned, if ``i`` or ``j`` is
-                not the index of a site in the collection, or if faces are
-                computed from the reference geometry on this call and a
-                site's vertices do not form a polyhedron, are not all corners
-                of it, or form fewer than four faces.
-        """
-        self.site_by_index(i)
-        self.site_by_index(j)
-        self._ensure_faces()
-        self._check_faces_assigned()
-        return self._shared_faces.get((min(i, j), max(i, j)), ())
 
     def sites_contain_points(self,
             points: np.ndarray,

@@ -55,10 +55,6 @@ class ReferenceBasedSites:
             (None if align=False).
         alignment_metrics: Alignment quality, with keys 'rmsd', 'max_dist'
             and 'mean_dist' in Angstrom (None if align=False).
-        last_vertex_frac_coords: Reference fractional coordinates (aligned
-            when alignment is on) of the vertices of each site from the most
-            recent ``create_polyhedral_sites`` call, in ``vertex_indices``
-            order.
     """
     
     def __init__(self, 
@@ -122,8 +118,6 @@ class ReferenceBasedSites:
         self._coord_finder: CoordinationEnvironmentFinder | None = None
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
-
-        self.last_vertex_frac_coords: list[np.ndarray] = []
         
     @property
     def _effective_ref_coords(self) -> np.ndarray:
@@ -195,11 +189,6 @@ class ReferenceBasedSites:
             labels=labels
         )
         
-        ref_coords = self._effective_ref_coords
-        self.last_vertex_frac_coords = [
-            ref_coords[ref_environment]
-            for ref_environment in ref_environments.values()]
-
         return sites
     
     def create_dynamic_voronoi_sites(self, 

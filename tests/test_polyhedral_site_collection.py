@@ -407,14 +407,6 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         neighbours = construct_neighbouring_sites([site, first, second])
         self.assertEqual(neighbours[site.index], [first, second])
 
-    def test_construct_neighbouring_sites_counts_each_vertex_once(self):
-        """A vertex repeated within a site counts once towards a shared face."""
-        site1 = PolyhedralSite(vertex_indices=[0, 0, 0, 1])
-        site2 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        neighbours = construct_neighbouring_sites([site1, site2])
-        self.assertEqual(neighbours[site1.index], [])
-        self.assertEqual(neighbours[site2.index], [])
-
     def test_construct_neighbouring_sites_no_neighbours(self):
         """Test construct_neighbouring_sites with sites that have no neighbours."""
         # Create isolated sites that don't share vertices

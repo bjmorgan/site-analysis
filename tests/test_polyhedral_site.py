@@ -388,6 +388,13 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         
         self.assertIn("vertex_indices cannot be empty", str(context.exception))
     
+    def test_init_with_repeated_vertex_indices(self):
+        """Test that PolyhedralSite raises ValueError with a repeated vertex index."""
+        with self.assertRaises(ValueError) as context:
+            PolyhedralSite(vertex_indices=[1, 2, 3, 2])
+
+        self.assertIn("vertex_indices lists atom 2 more than once", str(context.exception))
+
     def test_init_with_non_integer_vertex_indices(self):
         """Test that PolyhedralSite raises TypeError with non-integer vertex_indices."""
         with self.assertRaises(TypeError) as context:

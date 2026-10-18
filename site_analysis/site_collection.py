@@ -19,9 +19,7 @@ from collections.abc import Generator, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar, TYPE_CHECKING
 
 import numpy as np
-from scipy.sparse import csr_array
 from .atom import Atom
-from .faces import Face
 from .site import Site
 from .neighbour_search import PeriodicNeighbourIndex
 
@@ -335,30 +333,6 @@ class SiteCollection(ABC):
         """
         raise NotImplementedError('neighbouring_sites should be implemented'
             'in the derived class')
-
-    def assign_faces(self, frac_coords: np.ndarray, lattice_matrix: np.ndarray) -> None:
-        """Assign every site's faces.
-
-        Raises:
-            TypeError: Always, for collections other than polyhedral sites.
-        """
-        raise TypeError("Faces are only available for polyhedral sites")
-
-    def site_adjacency(self) -> csr_array:
-        """Return which sites share a face.
-
-        Raises:
-            TypeError: Always, for collections other than polyhedral sites.
-        """
-        raise TypeError("Faces are only available for polyhedral sites")
-
-    def shared_faces(self, i: int, j: int) -> tuple[Face, ...]:
-        """Return the faces two sites share.
-
-        Raises:
-            TypeError: Always, for collections other than polyhedral sites.
-        """
-        raise TypeError("Faces are only available for polyhedral sites")
 
     def site_by_index(self, index):
         """Returns the site with a specific index.

@@ -74,19 +74,20 @@ def build_cubes(supercell=(3, 3, 3)):
 
 
 def reversed_order_cubes():
-    """A trajectory of cube sites whose target atoms are in the reverse order of the reference."""
+    """The target structure and trajectory of cube sites whose target atoms are in the reverse order of the reference."""
     unit = Structure(Lattice.cubic(3.0), ["O", "Li"],
                      [[0, 0, 0], [0.5, 0.5, 0.5]])
     reference = unit * (3, 3, 3)
     target = Structure(reference.lattice, reference.species[::-1],
                        reference.frac_coords[::-1])
-    return (TrajectoryBuilder()
-            .with_structure(target)
-            .with_reference_structure(reference)
-            .with_mobile_species("Li")
-            .with_polyhedral_sites(centre_species="Li", vertex_species="O",
-                                   cutoff=2.8, n_vertices=8)
-            .build())
+    trajectory = (TrajectoryBuilder()
+                  .with_structure(target)
+                  .with_reference_structure(reference)
+                  .with_mobile_species("Li")
+                  .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                         cutoff=2.8, n_vertices=8)
+                  .build())
+    return target, trajectory
 
 
 def shared_faces_of(structure, sites):
@@ -125,6 +126,13 @@ class FaceTestCase(unittest.TestCase):
         face = Face((5, 2), (7, 3, 4))
         self.assertEqual(face.site_indices, (2, 5))
         self.assertEqual(face.vertex_indices, (3, 4, 7))
+
+    def test_faces_sort_by_site_indices_then_vertex_indices(self):
+        faces = [Face((1, 2), (0, 1, 2)), Face((0, 3), (4, 5, 6)),
+                 Face((0, 3), (1, 2, 3)), Face((0, 1), (7, 8, 9))]
+        self.assertEqual(sorted(faces),
+                         [Face((0, 1), (7, 8, 9)), Face((0, 3), (1, 2, 3)),
+                          Face((0, 3), (4, 5, 6)), Face((1, 2), (0, 1, 2))])
 
     def test_faces_compare_and_hash_by_both_fields(self):
         self.assertEqual(Face((0, 1), (2, 3, 4)), Face((1, 0), (4, 3, 2)))
@@ -180,9 +188,7 @@ class FindSharedFacesTestCase(unittest.TestCase):
     def test_faces_are_sorted_by_sites_then_vertices(self):
         structure, sites = simple_cubic_cubes(2)
         faces = shared_faces_of(structure, sites)
-        self.assertEqual(
-            list(faces),
-            sorted(faces, key=lambda face: (face.site_indices, face.vertex_indices)))
+        self.assertEqual(list(faces), sorted(faces))
 
     def test_noise_does_not_change_shared_faces(self):
         for n in (2, 3):
@@ -254,8 +260,17 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
         centre = np.array([0.5, 0.5, 0.5])
         sites = [PolyhedralSite(vertex_indices=list(range(8)), reference_center=centre),
                  PolyhedralSite(vertex_indices=[0, 3, 5, 6], reference_center=centre)]
-        with self.assertRaisesRegex(ValueError, "Site 1 lies inside site 0"):
+        with self.assertRaisesRegex(ValueError, "Site 1 lies inside site 0") as context:
             shared_faces_of(self.cube_structure(), sites)
+        self.assertNotIn("reference centre", str(context.exception))
+
+    def test_nested_site_without_reference_centres_raises_with_a_hint(self):
+        Site.reset_index(0)
+        sites = [PolyhedralSite(vertex_indices=list(range(8))),
+                 PolyhedralSite(vertex_indices=[0, 3, 5, 6])]
+        with self.assertRaisesRegex(ValueError, "Site 1 lies inside site 0") as context:
+            shared_faces_of(self.cube_structure(), sites)
+        self.assertIn("neither site has a reference centre", str(context.exception))
 
     def test_coincident_sites_in_a_narrow_cell_without_reference_centres_raise(self):
         structure, sites = simple_cubic_cubes(2)
@@ -316,8 +331,7 @@ class SharedFacesApiTestCase(unittest.TestCase):
         structure, trajectory = self.cube_trajectory()
         trajectory.find_shared_faces(structure)
         faces = trajectory.shared_faces()
-        self.assertEqual(list(faces),
-                         sorted(faces, key=lambda f: (f.site_indices, f.vertex_indices)))
+        self.assertEqual(list(faces), sorted(faces))
         self.assertTrue(all(len(face.site_indices) == 2 for face in faces))
 
     def test_matrix_is_indexed_by_site_index(self):
@@ -492,13 +506,15 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
         self.assertEqual(trajectory.shared_faces(), from_reference)
 
     def test_target_atoms_in_a_different_order_from_the_reference(self):
-        trajectory = reversed_order_cubes()
+        target, trajectory = reversed_order_cubes()
         faces = trajectory.shared_faces()
         self.assertEqual(len(pairs(faces)), 81)
         vertices = {site.index: set(site.vertex_indices) for site in trajectory.sites}
         for face in faces:
             for site_index in face.site_indices:
                 self.assertTrue(set(face.vertex_indices) <= vertices[site_index])
+        trajectory.find_shared_faces(target)
+        self.assertEqual(trajectory.shared_faces(), faces)
 
     def test_cubes_in_a_cell_two_sites_wide_are_not_duplicates(self):
         _, trajectory = build_cubes((2, 2, 2))

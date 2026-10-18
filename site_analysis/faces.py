@@ -20,9 +20,11 @@ if TYPE_CHECKING:
     from .polyhedral_site import PolyhedralSite
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, order=True)
 class Face:
     """A face of polyhedral sites.
+
+    Faces compare and sort by site indices, then vertex indices.
 
     Attributes:
         site_indices: Indices of the sites the face bounds (two for a shared
@@ -109,19 +111,20 @@ def _find_shared_faces(
         first, second = sites_by_index[i], sites_by_index[j]
         in_first = atoms == set(first.vertex_indices)
         in_second = atoms == set(second.vertex_indices)
+        hint = ""
+        if first.reference_center is None and second.reference_center is None:
+            hint = ("; neither site has a reference centre, so this can come "
+                    "from ambiguous unwrapping in a narrow cell: "
+                    "set reference centres")
         if in_first and in_second:
-            message = (f"Sites {i} and {j} coincide: they have the same vertex "
-                       f"atoms at the same positions")
-            if first.reference_center is None and second.reference_center is None:
-                message += ("; neither site has a reference centre, so this can come "
-                            "from ambiguous unwrapping in a narrow cell: "
-                            "set reference centres")
-            raise ValueError(message)
+            raise ValueError(
+                f"Sites {i} and {j} coincide: they have the same vertex "
+                f"atoms at the same positions{hint}")
         if in_first or in_second:
             inner, outer = (i, j) if in_first else (j, i)
             raise ValueError(
                 f"Site {inner} lies inside site {outer}: all its vertex atoms "
-                f"are vertices of site {outer}")
+                f"are vertices of site {outer}{hint}")
         if len(atoms) >= 3:
             faces.append(Face((i, j), tuple(atoms)))
-    return tuple(sorted(faces, key=lambda face: (face.site_indices, face.vertex_indices)))
+    return tuple(sorted(faces))

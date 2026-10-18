@@ -284,15 +284,15 @@ def construct_neighbouring_sites(
             objects, in the order they appear in ``sites``.
 
     """
-    vertex_sets = [set(site.vertex_indices) for site in sites]
     positions_by_vertex: defaultdict[int, list[int]] = defaultdict(list)
-    for position, vertices in enumerate(vertex_sets):
-        for vertex in vertices:
+    for position, site in enumerate(sites):
+        for vertex in site.vertex_indices:
             positions_by_vertex[vertex].append(position)
     neighbours: dict[int, list[PolyhedralSite]] = {}
-    for site_i, vertices in zip(sites, vertex_sets):
+    for site_i in sites:
         n_shared_vertices = Counter(
-            position for vertex in vertices for position in positions_by_vertex[vertex])
+            position for vertex in site_i.vertex_indices
+            for position in positions_by_vertex[vertex])
         neighbours[site_i.index] = [
             sites[position] for position in sorted(n_shared_vertices)
             if n_shared_vertices[position] >= 3 and sites[position] is not site_i]

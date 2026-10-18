@@ -408,6 +408,20 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             PolyhedralSite(vertex_indices=[1, 2, "three"])
         
         self.assertIn("All vertex indices must be integers", str(context.exception))
+
+    def test_init_with_bool_vertex_indices(self):
+        """Test that PolyhedralSite raises TypeError with bool vertex indices."""
+        with self.assertRaises(TypeError) as context:
+            PolyhedralSite(vertex_indices=[1, 2, True])
+
+        self.assertIn("All vertex indices must be integers", str(context.exception))
+
+    def test_init_with_numpy_integer_vertex_indices(self):
+        """Test that numpy integers in a list are accepted and stored as Python ints."""
+        site = PolyhedralSite(vertex_indices=[np.int64(1), np.int64(2), np.int64(3)])
+
+        self.assertEqual(site.vertex_indices, [1, 2, 3])
+        self.assertTrue(all(type(idx) is int for idx in site.vertex_indices))
     
     def test_emptiness_check_with_non_empty_numpy_array(self):
         """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""

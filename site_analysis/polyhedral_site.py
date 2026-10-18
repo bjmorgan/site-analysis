@@ -222,6 +222,7 @@ class PolyhedralSite(Site):
         
         Args:
             vertex_indices: List of integer indices for the vertex atoms (counting from 0).
+                Numpy integers are accepted and stored as Python ``int``.
             label: Optional label for this site.
             reference_center: Optional reference centre for PBC handling.
         
@@ -231,7 +232,8 @@ class PolyhedralSite(Site):
         Raises:
             ValueError: If vertex_indices is empty, contains a negative index,
                 or lists an atom more than once.
-            TypeError: If any element in vertex_indices is not an integer.
+            TypeError: If any element in vertex_indices is not an integer
+                (a ``bool`` is not accepted).
         """
         if isinstance(vertex_indices, np.ndarray):
             vertex_indices = vertex_indices.tolist()
@@ -239,8 +241,10 @@ class PolyhedralSite(Site):
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
 
-        if not all(isinstance(idx, int) for idx in vertex_indices):
+        if not all(isinstance(idx, (int, np.integer)) and not isinstance(idx, bool)
+                   for idx in vertex_indices):
             raise TypeError("All vertex indices must be integers")
+        vertex_indices = [int(idx) for idx in vertex_indices]
 
         seen: set[int] = set()
         for k in vertex_indices:

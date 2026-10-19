@@ -52,7 +52,7 @@ from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
 import numpy as np
-from typing import Callable, Sequence, Any
+from typing import Callable, Sequence, Any, cast
 
 
 class TrajectoryBuilder:
@@ -505,9 +505,6 @@ class TrajectoryBuilder:
         def create_polyhedral_sites() -> Sequence[PolyhedralSite]:
             rbs = self._get_reference_based_sites()
 
-            # Determine mapping species (use alignment species if mapping species not specified)
-            target_species = self._mapping_species if self._mapping_species is not None else self._align_species
-            
             # Create sites
             sites = rbs.create_polyhedral_sites(
                         center_species=centre_species,
@@ -515,7 +512,7 @@ class TrajectoryBuilder:
                         cutoff=cutoff,
                         n_vertices=n_vertices,
                         label=label,
-                        target_species=target_species,
+                        target_species=self._target_species,
                         use_reference_centers=use_reference_centers
                     )
             
@@ -613,9 +610,6 @@ class TrajectoryBuilder:
         def create_dynamic_voronoi_sites() -> Sequence[DynamicVoronoiSite]:
             rbs = self._get_reference_based_sites()
 
-            # Determine mapping species (use alignment species if mapping species not specified)
-            target_species = self._mapping_species if self._mapping_species is not None else self._align_species
-            
             # Create sites
             sites = rbs.create_dynamic_voronoi_sites(
                         center_species=centre_species,
@@ -623,7 +617,7 @@ class TrajectoryBuilder:
                         cutoff=cutoff,
                         n_reference=n_reference,
                         label=label,
-                        target_species=target_species,
+                        target_species=self._target_species,
                         use_reference_centers=use_reference_centers
                     )
             
@@ -732,6 +726,40 @@ class TrajectoryBuilder:
             )
         return self._reference_based_sites
 
+    @property
+    def _target_species(self) -> list[str] | None:
+        """Species that reference-based sites map to.
+
+        The mapping species if set, otherwise the alignment species.
+        """
+        if self._mapping_species is not None:
+            return self._mapping_species
+        return self._align_species
+
+    def _reference_vertex_coords(self,
+            sites: list[Site],
+            site_type: type[Site] | None) -> np.ndarray | None:
+        """Reference coordinates of the target atoms, if every vertex atom has one.
+
+        Args:
+            sites: The sites of the build.
+            site_type: The type of the sites, or None if there are none.
+
+        Returns:
+            ``mapped_reference_frac_coords()`` of the build's
+            ReferenceBasedSites if the sites are polyhedral and every vertex
+            atom's row is finite, otherwise None.
+        """
+        if (self._reference_based_sites is None or site_type is None
+                or not issubclass(site_type, PolyhedralSite)):
+            return None
+        coords = self._reference_based_sites.mapped_reference_frac_coords()
+        vertex_indices = np.concatenate(
+            [site.vertex_indices for site in cast(list[PolyhedralSite], sites)])
+        if not np.isfinite(coords[vertex_indices]).all():
+            return None
+        return coords
+
     def _validate_unique_sites(self, sites: list[Site], use_positions: bool) -> None:
         """Check that no two sites share the same defining indices.
 
@@ -814,7 +842,7 @@ class TrajectoryBuilder:
 
         # Generate all sites
         sites: list[Site] = []
-        site_type = None
+        site_type: type[Site] | None = None
 
         for generator in self._site_generators:
             generated_sites = generator()
@@ -829,19 +857,11 @@ class TrajectoryBuilder:
             
             sites.extend(generated_sites)
 
-        # Reference coordinates of the vertex atoms, if the sites are all
-        # polyhedral and every vertex atom has one
-        rbs = self._reference_based_sites
-        vertex_frac_coords: np.ndarray | None = None
-        if (rbs is not None and sites
-                and all(isinstance(site, PolyhedralSite) for site in sites)):
-            mapped_frac_coords = rbs.mapped_reference_frac_coords()
-            if all(np.isfinite(mapped_frac_coords[site.vertex_indices]).all()
-                   for site in sites):
-                vertex_frac_coords = mapped_frac_coords
+        coords = self._reference_vertex_coords(sites, site_type)
+        self._reference_based_sites = None
 
         # Post-build: check for duplicate sites
-        self._validate_unique_sites(sites, use_positions=vertex_frac_coords is not None)
+        self._validate_unique_sites(sites, use_positions=coords is not None)
 
         # Create atoms if not already set
         if not self._atoms:
@@ -860,13 +880,12 @@ class TrajectoryBuilder:
                                 commitment_radius=self._commitment_radius)
 
         # Find shared faces from the reference geometry
-        # The last two conditions only narrow types: vertex_frac_coords implies both.
-        site_collection = trajectory.site_collection
-        if (vertex_frac_coords is not None
-                and rbs is not None
-                and isinstance(site_collection, PolyhedralSiteCollection)):
+        if coords is not None:
+            site_collection = trajectory.site_collection
+            assert isinstance(site_collection, PolyhedralSiteCollection)
+            assert self._reference_structure is not None
             site_collection.find_shared_faces(
-                vertex_frac_coords, rbs.reference_structure.lattice.matrix)
+                coords, self._reference_structure.lattice.matrix)
 
         # Reset the builder state for future use
         self.reset()

@@ -956,8 +956,11 @@ class ReferenceMappingTestCase(unittest.TestCase):
         self.species = np.array([site.species_string for site in self.structure])
         self.rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
 
+    def _hold_pairs(self, ref_atoms, target_atoms):
+        self.rbs._target_of_ref[ref_atoms] = target_atoms
+        self.rbs._ref_of_target[target_atoms] = ref_atoms
+
     def test_mapping_is_empty_after_init(self):
-        self.assertEqual(self.rbs._mapping, {})
         coords = self.rbs.mapped_reference_frac_coords()
         self.assertEqual(coords.shape, (len(self.structure), 3))
         self.assertTrue(np.isnan(coords).all())
@@ -977,7 +980,6 @@ class ReferenceMappingTestCase(unittest.TestCase):
             self.rbs.create_polyhedral_sites(
                 center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4,
                 label="tet", labels=["tet"] * 64)
-        self.assertEqual(self.rbs._mapping, {})
         self.assertTrue(np.isnan(self.rbs.mapped_reference_frac_coords()).all())
 
     def test_mapped_rows_hold_the_aligned_reference_coordinates(self):
@@ -996,38 +998,28 @@ class ReferenceMappingTestCase(unittest.TestCase):
         self.assertTrue(np.isnan(coords[~oxygen]).all())
 
     def test_mapped_reference_frac_coords_returns_a_new_array(self):
-        self.rbs._mapping = {0: 0}
+        self._hold_pairs([0], [0])
         self.rbs.mapped_reference_frac_coords()[0] = 9.0
         np.testing.assert_array_equal(self.rbs.mapped_reference_frac_coords()[0],
                                       self.structure.frac_coords[0])
 
-    def test_merged_mapping_adds_new_pairs_and_accepts_repeated_pairs(self):
-        self.rbs._mapping = {0: 0, 1: 1}
-        merged = self.rbs._merged_mapping([[1, 2], [2, 3]], [[1, 2], [2, 3]])
-        self.assertEqual(merged, {0: 0, 1: 1, 2: 2, 3: 3})
-        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1})
+    def test_check_pairs_accepts_held_and_new_pairs(self):
+        self._hold_pairs([0, 1], [0, 1])
+        self.rbs._check_pairs(np.array([1, 2]), np.array([1, 2]))
 
     def test_target_atom_already_mapped_raises(self):
-        self.rbs._mapping = {0: 0, 1: 1}
+        self._hold_pairs([0, 1], [0, 1])
         with self.assertRaisesRegex(
                 ValueError, r"^1:1 mapping violation: target atom 1 is mapped "
                             r"from reference atoms 1 and 2$"):
-            self.rbs._merged_mapping([[5, 2]], [[5, 1]])
-        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1})
+            self.rbs._check_pairs(np.array([2, 5]), np.array([1, 5]))
 
     def test_reference_atom_already_mapped_raises(self):
-        self.rbs._mapping = {0: 0, 1: 1}
+        self._hold_pairs([0, 1], [0, 1])
         with self.assertRaisesRegex(
                 ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
                             r"to target atoms 1 and 3$"):
-            self.rbs._merged_mapping([[5, 1]], [[5, 3]])
-        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1})
-
-    def test_conflict_within_one_call_raises(self):
-        with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: target atom 2 is mapped "
-                            r"from reference atoms 0 and 1$"):
-            self.rbs._merged_mapping([[0], [1]], [[2], [2]])
+            self.rbs._check_pairs(np.array([1, 5]), np.array([3, 5]))
 
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):

@@ -750,7 +750,8 @@ class TrajectoryBuilder:
 
         Returns:
             True if the shared faces were found: the sites are polyhedral,
-            ``rbs`` is not None, and every vertex atom has a row of
+            ``rbs`` is not None, and every vertex atom is an atom of the
+            target structure with a row of
             ``rbs.mapped_reference_frac_coords()`` that is finite. False
             otherwise.
 
@@ -762,6 +763,8 @@ class TrajectoryBuilder:
         coords = rbs.mapped_reference_frac_coords()
         vertex_indices = np.concatenate(
             [site.vertex_indices for site in site_collection.sites])
+        if not (vertex_indices < len(coords)).all():
+            return False
         if not np.isfinite(coords[vertex_indices]).all():
             return False
         site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
@@ -837,29 +840,15 @@ class TrajectoryBuilder:
         if self._reference_structure is not None and self._min_atom_distance > 0:
             self._validate_reference_atom_distances()
 
-        # Reset the site index counter
+        # Reset the site index counter and clear the ReferenceBasedSites
+        # left by a failed build
         Site.reset_index()
         self._reference_based_sites = None
 
         # Generate all sites
         sites: list[Site] = []
-        site_type: type[Site] | None = None
-
         for generator in self._site_generators:
-            generated_sites = generator()
-
-            # Verify site type consistency
-            if generated_sites:
-                current_type = type(generated_sites[0])
-                if site_type is None:
-                    site_type = current_type
-                elif site_type != current_type:
-                    raise TypeError(f"Cannot mix site types: {site_type.__name__} and {current_type.__name__}")
-            
-            sites.extend(generated_sites)
-
-        rbs = self._reference_based_sites
-        self._reference_based_sites = None
+            sites.extend(generator())
 
         # Create atoms if not already set
         if not self._atoms:
@@ -879,7 +868,8 @@ class TrajectoryBuilder:
 
         # Find shared faces from the reference geometry, which also rejects
         # coincident sites; otherwise check for duplicate sites by index
-        if not self._find_reference_shared_faces(rbs, trajectory.site_collection):
+        if not self._find_reference_shared_faces(
+                self._reference_based_sites, trajectory.site_collection):
             self._validate_unique_sites(sites)
 
         # Reset the builder state for future use

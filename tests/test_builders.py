@@ -334,13 +334,15 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder = (TrajectoryBuilder()
 			.with_structure(self.structure)
 			.with_reference_structure(self.reference_structure)
+			.with_mobile_species("Li")
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4))
 
 		with self._patched_reference_build() as mock_rbs_class:
-			mock_rbs_class.return_value.create_polyhedral_sites.return_value = [Mock()]
-			with self.assertRaisesRegex(ValueError, "Mobile species must be set"):
+			mock_rbs_class.return_value.create_polyhedral_sites.side_effect = [
+				ValueError("x"), [Mock()]]
+			with self.assertRaisesRegex(ValueError, "^x$"):
 				builder.build()
-			builder.with_mobile_species("Li").build()
+			builder.build()
 
 		self.assertEqual(mock_rbs_class.call_count, 2)
 
@@ -1605,6 +1607,22 @@ class TestBuilderValidation(unittest.TestCase):
 
 		with self.assertRaisesRegex(TypeError, "mixed Site types"):
 			builder.build()
+
+	def test_existing_site_with_vertex_beyond_structure_after_reference_based_sites(self):
+		"""An existing polyhedral site with a vertex index beyond the structure's atoms builds."""
+		structure = interstitial_structure()
+		existing_site = PolyhedralSite(vertex_indices=[130, 131, 132, 133])
+		existing_site.index = 64  # follows the 64 reference-based sites
+		builder = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_reference_structure(structure)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
+			.with_existing_sites([existing_site]))
+
+		trajectory = builder.build()
+
+		self.assertEqual(len(trajectory.sites), 65)
 
 	def test_duplicate_dynamic_voronoi_sites_raises(self):
 		"""Post-build check rejects duplicate dynamic voronoi sites."""

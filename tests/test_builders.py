@@ -1687,7 +1687,7 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_polyhedral_sites(centre_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4))
 
 		with self.assertRaisesRegex(ValueError, "^Failed to map coordination environments "
-			"for centre species Na and O: 1:1 mapping violation: target atom 6 "
+			"for Na centres and O coordinating atoms: 1:1 mapping violation: target atom 6 "
 			"is mapped from reference atoms 2 and 6$"):
 			builder.build()
 
@@ -1704,7 +1704,7 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_dynamic_voronoi_sites(centre_species="Na", reference_species="O", cutoff=1.5, n_reference=4))
 
 		with self.assertRaisesRegex(ValueError, "^Failed to map coordination environments "
-			"for centre species Na and O: 1:1 mapping violation: target atom 6 "
+			"for Na centres and O coordinating atoms: 1:1 mapping violation: target atom 6 "
 			"is mapped from reference atoms 2 and 6$"):
 			builder.build()
 

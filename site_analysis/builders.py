@@ -748,7 +748,9 @@ class TrajectoryBuilder:
         Args:
             rbs: The ReferenceBasedSites that created the build's
                 reference-based sites, or None if there are none.
-            site_collection: The site collection of the built trajectory.
+            site_collection: The site collection of the built trajectory,
+                whose sites' vertex indices are atoms of the structure
+                (``build()`` checks this before calling this method).
 
         Returns:
             True if the shared faces were found: the sites are polyhedral,
@@ -841,12 +843,11 @@ class TrajectoryBuilder:
                 different reference atoms to the same target atom (a 1:1
                 mapping violation), if a polyhedral site has a vertex index
                 that is not an atom of the structure, if duplicate sites are
-                detected, or if
-                polyhedral sites coincide or one lies within another, or if
-                a commitment radius is not positive, or a dict of radii does
-                not cover every site label or is given while some sites have
-                no label, or if a spherical site's centre is not three finite
-                numbers or its radius is negative or NaN.
+                detected, or if polyhedral sites coincide or one lies within
+                another, or if a commitment radius is not positive, or a dict
+                of radii does not cover every site label or is given while
+                some sites have no label, or if a spherical site's centre is
+                not three finite numbers or its radius is negative or NaN.
             TypeError: If site types are mixed, or if a commitment radius is
                 not a number.
         """

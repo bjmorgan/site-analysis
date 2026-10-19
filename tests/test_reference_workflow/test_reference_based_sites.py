@@ -473,31 +473,15 @@ class TestReferenceBasedSites(unittest.TestCase):
             with self.assertRaises(ValueError) as context:
                 rbs._find_coordination_environments(
                     center_species='Mg',  # Not in the structure
-                    coordination_species='Cl',
+                    coordination_species=['Cl', 'O'],
                     cutoff=3.0,
                     n_coord=6
                 )
             
-            # Check error message
-            self.assertIn("Species not found", str(context.exception))
-    
-    def test_error_handling_in_map_environments(self):
-        """Test error handling in _map_environments method."""
-        with self.index_mapper_patch:
-            # Make map_coordinating_atoms raise an error
-            self.mock_index_mapper.map_coordinating_atoms.side_effect = ValueError("Mapping violation")
-            
-            rbs = ReferenceBasedSites(self.reference, self.target, align=False)
-            
-            # Check that the error is propagated with additional context
-            with self.assertRaises(ValueError) as context:
-                rbs._map_environments(
-                    ref_environments=self.ref_environments,
-                    target_species='O'  # Not in the structure
-                )
-            
-            # Check error message
-            self.assertIn("Mapping violation", str(context.exception))
+            self.assertEqual(
+                str(context.exception),
+                "Failed to find coordination environments for Mg centres and "
+                "Cl, O coordinating atoms: Species not found")
     
     def test_site_factory_initialisation(self):
         """Test that SiteFactory is initialised with the correct structure."""
@@ -1008,8 +992,8 @@ class ReferenceMappingTestCase(unittest.TestCase):
             target_species="O")
         mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^Failed to map coordination environments for centre "
-                            r"species Na and O: 1:1 mapping violation: target atom 6 "
+                ValueError, r"^Failed to map coordination environments for Na centres "
+                            r"and O coordinating atoms: 1:1 mapping violation: target atom 6 "
                             r"is mapped from reference atoms 2 and 6$"):
             rbs.create_polyhedral_sites(
                 center_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4,
@@ -1030,12 +1014,30 @@ class ReferenceMappingTestCase(unittest.TestCase):
             target_species="O")
         mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^Failed to map coordination environments for centre "
-                            r"species Na and O: 1:1 mapping violation: reference atom 0 "
+                ValueError, r"^Failed to map coordination environments for Na centres "
+                            r"and O coordinating atoms: 1:1 mapping violation: reference atom 0 "
                             r"is mapped to target atoms 0 and 64$"):
             rbs.create_polyhedral_sites(
                 center_species="Na", vertex_species="O", cutoff=2.1, n_vertices=6)
         np.testing.assert_array_equal(rbs.mapped_reference_frac_coords(), mapped)
+
+    def test_two_atoms_of_one_definition_mapped_to_one_target_atom_raise(self):
+        reference, _ = one_target_atom_for_two_reference_atoms()
+        # Atom 2 moves away and atom 3 moves to the midpoint of reference
+        # atoms 2 and 3, so both are nearest to target atom 3.
+        coords = reference.cart_coords
+        coords[3] = (coords[2] + coords[3]) / 2
+        coords[2] = [0.5, 0.5, 0.5]
+        target = Structure(reference.lattice, reference.species, coords,
+                           coords_are_cartesian=True)
+        rbs = ReferenceBasedSites(reference, target, align=False)
+        with self.assertRaisesRegex(
+                ValueError, r"^Failed to map coordination environments for Li centres "
+                            r"and Na, O coordinating atoms: 1:1 mapping violation: "
+                            r"target atom 3 is mapped from reference atoms 2 and 3$"):
+            rbs.create_polyhedral_sites(
+                center_species="Li", vertex_species=["Na", "O"], cutoff=1.5, n_vertices=4,
+                target_species="O")
 
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):

@@ -37,6 +37,18 @@ from site_analysis.site import Site
 SiteT = TypeVar('SiteT', bound=Site)
 
 
+def _format_species(species: str | list[str]) -> str:
+    """Format one species, or a list of species joined with ", ", for a message.
+
+    Args:
+        species: A species string or a list of species strings.
+
+    Returns:
+        The species as a string.
+    """
+    return species if isinstance(species, str) else ", ".join(species)
+
+
 class ReferenceBasedSites:
     """Main orchestrator for defining sites using a reference structure approach.
     
@@ -265,15 +277,16 @@ class ReferenceBasedSites:
         else:
             reference_centers = None
         ref_environment_list = list(ref_environments.values())
-        mapped_environments = self._map_environments(ref_environment_list, target_species)
         ref_atoms = np.array(ref_environment_list, dtype=int).reshape(-1)
-        target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
         try:
+            mapped_environments = self._map_environments(ref_environment_list, target_species)
+            target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
             self._check_pairs(ref_atoms, target_atoms)
         except ValueError as error:
             raise ValueError(
-                f"Failed to map coordination environments for centre species "
-                f"{center_species} and {coordination_species}: {error}") from error
+                f"Failed to map coordination environments for {center_species} centres "
+                f"and {_format_species(coordination_species)} coordinating atoms: "
+                f"{error}") from error
         sites = create(
             mapped_environments,
             reference_centers=reference_centers,
@@ -377,8 +390,8 @@ class ReferenceBasedSites:
         except ValueError as e:
             # Re-raise with more context
             raise ValueError(
-                f"Failed to find coordination environments for {center_species} centers "
-                f"and {coordination_species} coordinating atoms: {str(e)}"
+                f"Failed to find coordination environments for {center_species} centres "
+                f"and {_format_species(coordination_species)} coordinating atoms: {e}"
             ) from e
     
     def _map_environments(self, 
@@ -400,33 +413,19 @@ class ReferenceBasedSites:
         if not ref_environments:
             return []
         
-        try:
-            # Create index mapper if not already initialised
-            if self._index_mapper is None:
-                self._index_mapper = IndexMapper()
+        # Create index mapper if not already initialised
+        if self._index_mapper is None:
+            self._index_mapper = IndexMapper()
 
-            ref_coords = self._effective_ref_coords
-            lattice_matrix = self._ref_lattice_matrix
+        return self._index_mapper.map_coordinating_atoms(
+            ref_frac_coords=self._effective_ref_coords,
+            target_frac_coords=self._target_frac_coords,
+            lattice_matrix=self._ref_lattice_matrix,
+            ref_coordinating=ref_environments,
+            target_species=self._target_species,
+            species_filter=target_species,
+        )
 
-            # Map environments
-            mapped_environments = self._index_mapper.map_coordinating_atoms(
-                ref_frac_coords=ref_coords,
-                target_frac_coords=self._target_frac_coords,
-                lattice_matrix=lattice_matrix,
-                ref_coordinating=ref_environments,
-                target_species=self._target_species,
-                species_filter=target_species,
-            )
-            
-            return mapped_environments
-            
-        except ValueError as e:
-            # Re-raise with more context
-            species_str = f" for {target_species} species" if target_species else ""
-            raise ValueError(
-                f"Failed to map coordination environments{species_str}: {str(e)}"
-            ) from e
-            
     def _check_pairs(self, ref_atoms: np.ndarray, target_atoms: np.ndarray) -> None:
         """Check that reference-target atom pairs and the held mapping are one-to-one.
 

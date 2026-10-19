@@ -46,7 +46,6 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
-from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
@@ -736,9 +735,9 @@ class TrajectoryBuilder:
             return self._mapping_species
         return self._align_species
 
-    def _reference_vertex_coords(self,
+    def _reference_vertex_geometry(self,
             sites: list[Site],
-            site_type: type[Site] | None) -> np.ndarray | None:
+            site_type: type[Site] | None) -> tuple[np.ndarray, np.ndarray] | None:
         """Reference coordinates of the target atoms, if every vertex atom has one.
 
         Args:
@@ -747,8 +746,9 @@ class TrajectoryBuilder:
 
         Returns:
             ``mapped_reference_frac_coords()`` of the build's
-            ReferenceBasedSites if the sites are polyhedral and every vertex
-            atom's row is finite, otherwise None.
+            ReferenceBasedSites and its reference lattice matrix, if the
+            sites are polyhedral and every vertex atom's row is finite,
+            otherwise None.
         """
         if (self._reference_based_sites is None or site_type is None
                 or not issubclass(site_type, PolyhedralSite)):
@@ -758,7 +758,7 @@ class TrajectoryBuilder:
             [site.vertex_indices for site in cast(list[PolyhedralSite], sites)])
         if not np.isfinite(coords[vertex_indices]).all():
             return None
-        return coords
+        return coords, self._reference_based_sites.reference_structure.lattice.matrix
 
     def _validate_unique_sites(self, sites: list[Site], use_positions: bool) -> None:
         """Check that no two sites share the same defining indices.
@@ -857,11 +857,11 @@ class TrajectoryBuilder:
             
             sites.extend(generated_sites)
 
-        coords = self._reference_vertex_coords(sites, site_type)
+        reference_geometry = self._reference_vertex_geometry(sites, site_type)
         self._reference_based_sites = None
 
         # Post-build: check for duplicate sites
-        self._validate_unique_sites(sites, use_positions=coords is not None)
+        self._validate_unique_sites(sites, use_positions=reference_geometry is not None)
 
         # Create atoms if not already set
         if not self._atoms:
@@ -880,12 +880,8 @@ class TrajectoryBuilder:
                                 commitment_radius=self._commitment_radius)
 
         # Find shared faces from the reference geometry
-        if coords is not None:
-            site_collection = trajectory.site_collection
-            assert isinstance(site_collection, PolyhedralSiteCollection)
-            assert self._reference_structure is not None
-            site_collection.find_shared_faces(
-                coords, self._reference_structure.lattice.matrix)
+        if reference_geometry is not None:
+            trajectory._polyhedral_site_collection().find_shared_faces(*reference_geometry)
 
         # Reset the builder state for future use
         self.reset()

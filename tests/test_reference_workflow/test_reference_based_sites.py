@@ -1021,6 +1021,15 @@ class ReferenceMappingTestCase(unittest.TestCase):
                 center_species="Na", vertex_species="O", cutoff=2.1, n_vertices=6)
         np.testing.assert_array_equal(rbs.mapped_reference_frac_coords(), mapped)
 
+    def test_mapping_to_a_species_absent_from_the_target_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^Failed to map coordination environments for Li centres "
+                            r"and O coordinating atoms: No atoms of species \['K'\] "
+                            r"found in target structure$"):
+            self.rbs.create_polyhedral_sites(
+                center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4,
+                target_species="K")
+
     def test_two_atoms_of_one_definition_mapped_to_one_target_atom_raise(self):
         reference, _ = one_target_atom_for_two_reference_atoms()
         # Atom 2 moves away and atom 3 moves to the midpoint of reference

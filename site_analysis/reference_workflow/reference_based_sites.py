@@ -21,7 +21,7 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
 from pymatgen.core import Structure
 
@@ -37,16 +37,29 @@ from site_analysis.site import Site
 SiteT = TypeVar('SiteT', bound=Site)
 
 
-def _format_species(species: str | list[str]) -> str:
-    """Format one species, or a list of species joined with ", ", for a message.
+def _environment_error(
+        verb: Literal["find", "map"],
+        centre_species: str,
+        coordination_species: str | list[str],
+        error: Exception) -> ValueError:
+    """Create the error for coordination environments that could not be found or mapped.
 
     Args:
-        species: A species string or a list of species strings.
+        verb: What failed, ``"find"`` or ``"map"``.
+        centre_species: The species at the centres of the environments.
+        coordination_species: The coordinating species, a string or a list
+            of strings (joined with ", " in the message).
+        error: The error that caused the failure.
 
     Returns:
-        The species as a string.
+        A ValueError whose message names the verb, the species and
+        ``error``.
     """
-    return species if isinstance(species, str) else ", ".join(species)
+    species = (coordination_species if isinstance(coordination_species, str)
+               else ", ".join(coordination_species))
+    return ValueError(
+        f"Failed to {verb} coordination environments for {centre_species} centres "
+        f"and {species} coordinating atoms: {error}")
 
 
 class ReferenceBasedSites:
@@ -288,10 +301,8 @@ class ReferenceBasedSites:
             target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
             self._check_pairs(ref_atoms, target_atoms)
         except ValueError as error:
-            raise ValueError(
-                f"Failed to map coordination environments for {center_species} centres "
-                f"and {_format_species(coordination_species)} coordinating atoms: "
-                f"{error}") from error
+            raise _environment_error(
+                "map", center_species, coordination_species, error) from error
         sites = create(
             mapped_environments,
             reference_centers=reference_centers,
@@ -394,11 +405,8 @@ class ReferenceBasedSites:
             return environments_dict
             
         except ValueError as e:
-            # Re-raise with more context
-            raise ValueError(
-                f"Failed to find coordination environments for {center_species} centres "
-                f"and {_format_species(coordination_species)} coordinating atoms: {e}"
-            ) from e
+            raise _environment_error(
+                "find", center_species, coordination_species, e) from e
     
     def _map_environments(self, 
         ref_environments: list[list[int]], 

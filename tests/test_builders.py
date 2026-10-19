@@ -1605,7 +1605,7 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
 				SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.0)]))
 
-		with self.assertRaisesRegex(TypeError, "mixed Site types"):
+		with self.assertRaisesRegex(TypeError, "mixed Site types: PolyhedralSite, SphericalSite"):
 			builder.build()
 
 	def test_existing_site_with_vertex_beyond_structure_after_reference_based_sites(self):

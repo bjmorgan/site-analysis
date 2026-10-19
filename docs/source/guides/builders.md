@@ -528,12 +528,21 @@ trajectory = builder.build()  # Raises ValueError
 # Mixing different site types
 builder.with_spherical_sites(centres=centres1, radii=1.5)
        .with_voronoi_sites(centres=centres2)  # Error: can't mix site types
-trajectory = builder.build()  # Raises TypeError
+trajectory = builder.build()
+# TypeError: A Trajectory cannot be initialised with mixed Site types:
+# SphericalSite, VoronoiSite
 
 # Missing reference structure
 builder.with_polyhedral_sites(...)  # Without with_reference_structure()
 trajectory = builder.build()  # Raises ValueError
+
+# A polyhedral site (from with_existing_sites) with a vertex index
+# beyond the structure
+trajectory = builder.build()
+# ValueError: Site 3 has vertex index 96, but the structure has 96 atoms
 ```
+
+The mixed site types error is raised after the atoms are created, so a build with mixed site types and no mobile species reports the missing mobile species first.
 
 ### Reference Structure Validation
 
@@ -556,7 +565,7 @@ builder.with_min_atom_distance(0)
 
 **Duplicate sites**: After generating sites, the builder checks that no two sites are duplicates. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
 
-When every site is polyhedral and every vertex atom of every site comes from `with_polyhedral_sites`, the builder finds duplicates by position. Two sites with the same vertex atoms under one lattice translation raise a `ValueError` that they coincide, and a site all of whose vertex atoms are vertices of another site under one lattice translation raises a `ValueError` that it lies inside that site. Sites with the same vertex atoms in different periodic images (for example cubes in a cell two sites wide) are distinct.
+When every site is polyhedral and every vertex atom of every site is a vertex of a site created by `with_polyhedral_sites`, the builder finds duplicates by position. Two sites with the same vertex atoms under one lattice translation raise a `ValueError` that they coincide, and a site all of whose vertex atoms are vertices of another site under one lattice translation raises a `ValueError` that it lies inside that site. Sites with the same vertex atoms in different periodic images (for example cubes in a cell two sites wide) are distinct.
 
 ```python
 # Even with the distance check disabled, duplicate sites are caught
@@ -570,7 +579,7 @@ trajectory = builder.build()
 # vertices of site 0
 ```
 
-For dynamic Voronoi sites, and for polyhedral sites whenever the position-based check does not apply, the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral). The position-based check is used only when every site is polyhedral and every vertex atom of every site has a reference coordinate; if any site has a vertex atom without one (for example, sites added with `with_existing_sites`), the vertex-index check is used for all polyhedral sites:
+For dynamic Voronoi sites, and for polyhedral sites whenever the position-based check does not apply, the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral). The position-based check is used only when every site is polyhedral and every vertex atom of every site is a vertex of a site created by `with_polyhedral_sites`; if any site has a vertex atom that is not (for example, sites added with `with_existing_sites`), the vertex-index check is used for all polyhedral sites:
 
 ```python
 # ValueError: Duplicate sites: site 0 and site 1 share the same

@@ -60,6 +60,9 @@ class ReferenceBasedSites:
     3. IndexMapper - to map environments from reference to target structure
     4. SiteFactory - to create appropriate site objects
     
+    All ``create_*`` calls on an instance share one reference-to-target
+    mapping, which each call checks and extends.
+
     Attributes:
         reference_structure: Reference structure defining ideal coordination environments.
         target_structure: Target structure where sites will be created.
@@ -174,9 +177,10 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                if an atom of an environment maps differently from the
-                mapping held from earlier calls (a 1:1 mapping violation),
-                or if both label and labels are provided.
+                if a target atom is mapped from two different reference
+                atoms, or a reference atom to two different target atoms,
+                counting the mapping held from earlier calls (a 1:1 mapping
+                violation), or if both label and labels are provided.
         """
         return self._create_sites(
             self._initialise_site_factory().create_polyhedral_sites,
@@ -217,9 +221,10 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                if an atom of an environment maps differently from the
-                mapping held from earlier calls (a 1:1 mapping violation),
-                or if both label and labels are provided.
+                if a target atom is mapped from two different reference
+                atoms, or a reference atom to two different target atoms,
+                counting the mapping held from earlier calls (a 1:1 mapping
+                violation), or if both label and labels are provided.
         """
         return self._create_sites(
             self._initialise_site_factory().create_dynamic_voronoi_sites,
@@ -297,11 +302,12 @@ class ReferenceBasedSites:
         return sites
 
     def mapped_reference_frac_coords(self) -> np.ndarray:
-        """Fractional coordinates of the reference atom mapped to each target atom.
+        """Return the fractional coordinates of the reference atom mapped to each target atom.
 
-        The mapping holds the atoms of the sites created by
-        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``;
-        a call that raises adds none.
+        The mapping holds the coordinating atoms of the sites created by
+        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``
+        (the centre atoms are not mapped, so their rows are NaN); a call
+        that raises adds none.
 
         Returns:
             A new array of shape ``(n_target_atoms, 3)``. Row ``t`` holds the

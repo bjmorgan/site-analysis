@@ -1,8 +1,8 @@
 """Faces shared by polyhedral sites.
 
 This module provides ``Face``, a face shared by two polyhedral sites, and finds
-the faces that polyhedral sites share: the vertex atoms two sites have in common under
-one lattice translation.
+the faces that polyhedral sites share: the vertex atoms two sites have in
+common under one lattice translation.
 """
 
 from __future__ import annotations

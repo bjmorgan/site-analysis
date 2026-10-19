@@ -274,7 +274,7 @@ class Trajectory:
             TypeError: If the sites are not polyhedral.
             ValueError: If a vertex index is beyond the structure's atoms,
                 the coordinates are not finite, or two sites coincide or
-                one lies within another. The earlier result is then kept.
+                one lies inside another. The earlier result is then kept.
         """
         self._polyhedral_site_collection().find_shared_faces(
             structure.frac_coords, structure.lattice.matrix)

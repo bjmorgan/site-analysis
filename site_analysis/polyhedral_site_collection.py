@@ -173,7 +173,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         Raises:
             ValueError: If a vertex index is beyond the atoms, the
                 coordinates are not finite, or two sites coincide or one
-                lies within another.
+                lies inside another.
         """
         self._shared_faces = _find_shared_faces(
             self.sites,

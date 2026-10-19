@@ -482,7 +482,9 @@ class TrajectoryBuilder:
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
-                or if required structures are not set.
+                if required structures are not set, or if site definitions map
+                different reference atoms to the same target atom (a 1:1
+                mapping violation).
 
         Example::
 
@@ -588,7 +590,9 @@ class TrajectoryBuilder:
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
-                or if required structures are not set.
+                if required structures are not set, or if site definitions map
+                different reference atoms to the same target atom (a 1:1
+                mapping violation).
 
         Example::
 
@@ -759,7 +763,7 @@ class TrajectoryBuilder:
             finite. False otherwise.
 
         Raises:
-            ValueError: If two sites coincide or one lies within another.
+            ValueError: If two sites coincide or one lies inside another.
         """
         if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
             return False
@@ -827,29 +831,36 @@ class TrajectoryBuilder:
         """Build and return the Trajectory object.
         
         This method validates all required parameters and generates sites
-        using the previously configured site generator. When the sites are
-        polyhedral and every vertex atom has a reference coordinate, it
-        also finds the faces the sites share from the reference geometry;
-        otherwise the shared faces are not found until
-        ``Trajectory.find_shared_faces`` is called.
+        using the previously configured site generators. When every site is
+        polyhedral and every vertex atom of every site is a vertex of a site
+        created by ``with_polyhedral_sites``, it also finds the faces the
+        sites share from the reference geometry; otherwise the shared faces
+        are not found until ``Trajectory.find_shared_faces`` is called.
         
         Returns:
             The constructed Trajectory object.
 
         Raises:
-            ValueError: If required parameters are missing, if the
-                reference structure has same-species atom pairs closer
-                than ``min_atom_distance``, if site definitions map
-                different reference atoms to the same target atom (a 1:1
-                mapping violation), if a polyhedral site has a vertex index
-                that is not an atom of the structure, if duplicate sites are
-                detected, or if polyhedral sites coincide or one lies within
-                another, or if a commitment radius is not positive, or a dict
-                of radii does not cover every site label or is given while
-                some sites have no label, or if a spherical site's centre is
-                not three finite numbers or its radius is negative or NaN.
-            TypeError: If site types are mixed, or if a commitment radius is
-                not a number.
+            ValueError: If the structure is not set, if no site generator
+                has been configured, if reference-based sites are requested
+                without a reference structure, if structure alignment fails,
+                if the reference structure has same-species atom pairs closer
+                than ``min_atom_distance``, if no sites are found, if a
+                polyhedral site has a vertex index that is not an atom of the
+                structure, if there are no atoms and no mobile species is
+                set or no atoms of it are found, if site definitions map different
+                reference atoms to the same target atom (a 1:1 mapping
+                violation, within one definition or across definitions), if
+                duplicate sites are detected, if polyhedral sites coincide or
+                one lies inside another, if a commitment radius is not
+                positive, or a dict of radii does not cover every site label
+                or is given while some sites have no label, or if a spherical
+                site's centre is not three finite numbers or its radius is
+                negative or NaN.
+            TypeError: If site types are mixed (the message names the types;
+                this is raised after the atoms are created, so a build
+                without a mobile species reports the missing species first),
+                or if a commitment radius is not a number.
         """
         # Validate basic requirements
         if not self._structure:
@@ -898,7 +909,7 @@ class TrajectoryBuilder:
                                 commitment_radius=self._commitment_radius)
 
         # Find shared faces from the reference geometry, which also rejects
-        # coincident sites; otherwise check for duplicate sites by index
+        # coincident and nested sites; otherwise check for duplicate sites by index
         if not self._find_reference_shared_faces(
                 reference_based_sites, trajectory.site_collection):
             self._validate_unique_sites(sites)

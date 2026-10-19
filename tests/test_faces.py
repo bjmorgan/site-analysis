@@ -565,7 +565,7 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                        for i in oxygen}
         face = [by_position[(1, y, z)] for y in (0, 1) for z in (0, 1)]
         Site.reset_index(1000)
-        existing = PolyhedralSite(vertex_indices=[*face, by_position[(1, 2, 2)]])
+        existing = PolyhedralSite(vertex_indices=[*face, by_position[(2, 2, 2)]])
         trajectory = (TrajectoryBuilder()
                       .with_structure(structure)
                       .with_reference_structure(structure)

@@ -214,8 +214,9 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		expected_centre = centre_before_wrap % 1.0  # DynamicVoronoiSite wraps back
 		np.testing.assert_array_almost_equal(site.centre, expected_centre, decimal=7)
 
-	def test_polyhedral_site_negative_coordinates_no_correction(self):
-		"""Test negative coordinates that don't require PBC correction."""
+	def test_polyhedral_site_negative_coordinates_translated_into_unit_cell(self):
+		"""Test negative coordinates that don't require spread correction are
+		translated by whole cells into the unit cell."""
 		species = ["Re"] * 4
 		coords = [
 			[0.2, -0.1, 0.2],    # Negative y-coordinate
@@ -228,8 +229,9 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
-		# Should remain unchanged (spread < 0.5, no correction needed)
-		expected_coords = np.array(coords)
+		# Spread < 0.5, so no spread correction; the vertices are only
+		# translated by a whole cell in y so the lowest y coordinate is in [0, 1)
+		expected_coords = np.array(coords) + np.array([0.0, 1.0, 0.0])
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
 
 	def test_dynamic_voronoi_site_negative_coordinates_no_correction(self):
@@ -376,7 +378,7 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		# coords = raw + shifts + uniform, so (coords - uniform) - raw = shifts
 		shifted_raw = vertex_coords + shifts
 		min_coords = np.min(shifted_raw, axis=0)
-		uniform = np.maximum(0, np.ceil(-min_coords))
+		uniform = -np.floor(min_coords)
 		np.testing.assert_array_almost_equal(coords, shifted_raw + uniform)
 
 	def test_unwrap_vertices_empty_input(self):
@@ -507,7 +509,120 @@ class TestNumpyUpdatePbcShifts(unittest.TestCase):
 		np.testing.assert_array_equal(new_shifts, shifts)
 		expected = new + shifts
 		min_coords = np.min(expected, axis=0)
-		uniform = np.maximum(0, np.ceil(-min_coords))
+		uniform = -np.floor(min_coords)
+		np.testing.assert_array_almost_equal(coords, expected + uniform)
+
+	def test_cache_hit_with_wrapping(self):
+		"""Vertex wrapping from 0.99 to 0.01 is detected and shifts adjusted."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.99, 0.5, 0.5],
+						   [0.5, 0.5, 0.5]])
+		new = np.array([[0.01, 0.5, 0.5],   # wrapped across boundary
+						[0.5, 0.5, 0.5]])
+		shifts = np.array([[0, 0, 0],
+						   [0, 0, 0]], dtype=np.int64)
+		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertTrue(valid)
+		# Wrapping of -0.98 rounds to -1, so shift gains +1
+		np.testing.assert_array_equal(new_shifts[0], [1, 0, 0])
+		np.testing.assert_array_equal(new_shifts[1], [0, 0, 0])
+
+	def test_cache_miss_large_displacement(self):
+		"""Large physical displacement invalidates cache."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.4  # too large
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		valid, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertFalse(valid)
+
+	def test_minimum_coordinate_translated_into_the_unit_cell(self):
+		"""Whole-cell translation puts the lowest coordinate along each axis in [0, 1)."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		for translation in ([2, 0, -2], [-1, 3, 0]):
+			with self.subTest(translation=translation):
+				coords = unwrap_vertices_to_reference_center(
+					vertex_coords, reference_center + translation, self.lattice.matrix)
+				np.testing.assert_array_almost_equal(coords.min(axis=0), [0.4, 0.4, 0.4])
+
+
+class TestCorrectPbc(unittest.TestCase):
+	"""Tests for the correct_pbc dispatch function."""
+
+	def setUp(self):
+		self.lattice = Lattice.cubic(10.0)
+
+	def test_delegates_to_legacy_when_no_reference_center(self):
+		"""With no reference centre, delegates to apply_legacy_pbc_correction."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		with patch('site_analysis.pbc_utils.apply_legacy_pbc_correction',
+				   return_value=frac_coords.copy()) as mock_legacy:
+			correct_pbc(frac_coords, None, self.lattice.matrix)
+			mock_legacy.assert_called_once()
+
+	def test_delegates_to_unwrap_when_reference_center_provided(self):
+		"""With a reference centre, delegates to unwrap_vertices_to_reference_center."""
+		frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+		ref = np.array([0.15, 0.15, 0.15])
+		with patch('site_analysis.pbc_utils.unwrap_vertices_to_reference_center',
+				   return_value=(frac_coords.copy(), np.zeros((2, 3), dtype=np.int64))) as mock_unwrap:
+			correct_pbc(frac_coords, ref, self.lattice.matrix)
+			mock_unwrap.assert_called_once()
+			self.assertTrue(mock_unwrap.call_args.kwargs.get('return_image_shifts'))
+
+	def test_returns_int64_shifts_legacy_path(self):
+		"""Image shifts have int64 dtype for the legacy path."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		_, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
+		self.assertEqual(shifts.dtype, np.int64)
+
+	def test_returns_int64_shifts_reference_centre_path(self):
+		"""Image shifts have int64 dtype for the reference-centre path."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		ref = np.array([0.15, 0.15, 0.5])
+		_, shifts = correct_pbc(frac_coords, ref, self.lattice.matrix)
+		self.assertTrue(np.issubdtype(shifts.dtype, np.integer))
+
+	def test_empty_input_returns_empty_arrays(self):
+		"""Empty input should return empty arrays without error."""
+		frac_coords = np.array([]).reshape(0, 3)
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
+		self.assertEqual(corrected.shape, (0, 3))
+		self.assertEqual(shifts.shape, (0, 3))
+		self.assertEqual(shifts.dtype, np.int64)
+
+	def test_legacy_path_returns_consistent_shifts(self):
+		"""Shifts from the legacy path satisfy corrected = original + shifts."""
+		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
+		corrected, shifts = correct_pbc(frac_coords, None, self.lattice.matrix)
+		expected_shifts = np.round(corrected - frac_coords).astype(np.int64)
+		np.testing.assert_array_equal(shifts, expected_shifts)
+
+
+class TestNumpyUpdatePbcShifts(unittest.TestCase):
+	"""Tests for _numpy_update_pbc_shifts."""
+
+	def test_cache_hit_small_displacement(self):
+		"""Small physical displacement returns valid cache."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01  # small vibration
+		shifts = np.array([[0, 0, 1],
+						   [0, 1, 0]], dtype=np.int64)
+		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
+		self.assertTrue(valid)
+		np.testing.assert_array_equal(new_shifts, shifts)
+		expected = new + shifts
+		min_coords = np.min(expected, axis=0)
+		uniform = -np.floor(min_coords)
 		np.testing.assert_array_almost_equal(coords, expected + uniform)
 
 	def test_cache_hit_with_wrapping(self):

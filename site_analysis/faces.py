@@ -27,20 +27,28 @@ class Face:
     Faces compare and sort by site indices, then vertex indices.
 
     Attributes:
-        site_indices: Indices of the two sites that share the face, in
-            ascending order (sorted on construction).
-        vertex_indices: Indices of the atoms at the face's vertices, in
-            ascending order (sorted on construction).
+        site_indices: Indices of the two sites that share the face, as ints
+            in ascending order (converted and sorted on construction).
+        vertex_indices: Indices of the atoms at the face's vertices, as ints
+            in ascending order (converted and sorted on construction).
     """
 
     site_indices: tuple[int, int]
     vertex_indices: tuple[int, ...]
 
     def __post_init__(self) -> None:
-        """Store the site indices and vertex indices in ascending order."""
-        first, second = sorted(self.site_indices)
-        object.__setattr__(self, "site_indices", (first, second))
-        object.__setattr__(self, "vertex_indices", tuple(sorted(self.vertex_indices)))
+        """Store the site indices and vertex indices as ints in ascending order.
+
+        Raises:
+            ValueError: If there are not two site indices.
+        """
+        if len(self.site_indices) != 2:
+            raise ValueError(
+                f"A face is shared by two sites, got site_indices {self.site_indices!r}")
+        object.__setattr__(
+            self, "site_indices", tuple(sorted(int(i) for i in self.site_indices)))
+        object.__setattr__(
+            self, "vertex_indices", tuple(sorted(int(i) for i in self.vertex_indices)))
 
 
 def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:

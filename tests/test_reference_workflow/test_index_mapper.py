@@ -574,6 +574,12 @@ class CheckOneToOneTestCase(unittest.TestCase):
                             r"from reference atoms 0 and 2$"):
             _check_one_to_one(np.array([2, 1, 0]), np.array([3, 4, 3]))
 
+    def test_lowest_of_two_violating_reference_atoms_is_reported(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
+                            r"to target atoms 5 and 6$"):
+            _check_one_to_one(np.array([3, 3, 1, 1]), np.array([8, 7, 6, 5]))
+
 
 if __name__ == '__main__':
     unittest.main()

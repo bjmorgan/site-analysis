@@ -118,6 +118,21 @@ class FaceTestCase(unittest.TestCase):
         self.assertEqual(face.site_indices, (2, 5))
         self.assertEqual(face.vertex_indices, (3, 4, 7))
 
+    def test_numpy_integer_fields_are_stored_as_ints(self):
+        face = Face((np.int64(5), np.int64(2)), (np.int64(7), np.int64(3), np.int64(4)))
+        self.assertEqual(face, Face((2, 5), (3, 4, 7)))
+        self.assertTrue(all(type(i) is int for i in face.site_indices + face.vertex_indices))
+
+    def test_one_site_index_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^A face is shared by two sites, got site_indices \(1,\)$"):
+            Face((1,), (0, 1, 2))
+
+    def test_three_site_indices_raise(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^A face is shared by two sites, got site_indices \(1, 2, 3\)$"):
+            Face((1, 2, 3), (0, 1, 2))
+
     def test_faces_sort_by_site_indices_then_vertex_indices(self):
         faces = [Face((1, 2), (0, 1, 2)), Face((0, 3), (4, 5, 6)),
                  Face((0, 3), (1, 2, 3)), Face((0, 1), (7, 8, 9))]
@@ -480,7 +495,6 @@ class FccInterstitialsTestCase(unittest.TestCase):
                       .with_polyhedral_sites(centre_species="Na", vertex_species="O",
                                              cutoff=2.2, n_vertices=6, label="oct")
                       .build())
-        trajectory.find_shared_faces(structure)
         faces = trajectory.shared_faces()
         labels = {site.index: site.label for site in trajectory.sites}
         self.assertEqual(len(faces), 256)

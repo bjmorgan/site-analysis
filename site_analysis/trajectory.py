@@ -97,11 +97,11 @@ class Trajectory:
             raise ValueError("Cannot initialise Trajectory with empty atoms list")
         
         # ensure that all sites are of the same type
-        site_types = sorted({type(site).__name__ for site in sites})
+        site_types = {type(site) for site in sites}
         if len(site_types) > 1:
             raise TypeError(
                 "A Trajectory cannot be initialised with mixed Site types: "
-                f"{', '.join(site_types)}")
+                f"{', '.join(sorted(site_type.__name__ for site_type in site_types))}")
         
         # Map site types to their corresponding collection classes
         site_collection_map: dict[type[Site], type[SiteCollection]] = {

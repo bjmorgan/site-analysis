@@ -46,6 +46,7 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.faces import _check_vertex_indices
 from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.site_collection import SiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
@@ -646,7 +647,25 @@ class TrajectoryBuilder:
         return self
         
     def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
-        """Use existing site objects."""
+        """Use existing site objects.
+
+        The sites are used as given. They are checked when ``build()`` is
+        called, not here.
+
+        Args:
+            sites: The site objects to use, for example ``PolyhedralSite``
+                or ``SphericalSite`` objects. All the sites of a build must
+                be of one type.
+
+        Returns:
+            self: For method chaining
+
+        Raises:
+            ValueError: At ``build()``, if a polyhedral site has a vertex
+                index that is not an atom of the structure.
+            TypeError: At ``build()``, if the sites of the build (these and
+                those from other site definitions) are of mixed site types.
+        """
         # Define a simple function that returns the provided sites
         def return_existing_sites(_: _ReferenceBasedSitesGetter) -> list[Site]:
             return sites
@@ -775,25 +794,6 @@ class TrajectoryBuilder:
         site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
         return True
 
-    @staticmethod
-    def _validate_vertex_indices(sites: list[Site], n_atoms: int) -> None:
-        """Check that every vertex index of a polyhedral site is an atom of the structure.
-
-        Args:
-            sites: The sites to check.
-            n_atoms: The number of atoms in the structure.
-
-        Raises:
-            ValueError: If a polyhedral site has a vertex index that is not
-                less than ``n_atoms``. The message names the first such site
-                and its largest vertex index.
-        """
-        for site in sites:
-            if isinstance(site, PolyhedralSite) and max(site.vertex_indices) >= n_atoms:
-                raise ValueError(
-                    f"Site {site.index} has vertex index {max(site.vertex_indices)}, "
-                    f"but the structure has {n_atoms} atoms")
-
     def _validate_unique_sites(self, sites: list[Site]) -> None:
         """Check that no two sites share the same defining indices.
 
@@ -889,7 +889,9 @@ class TrajectoryBuilder:
         sites: list[Site] = []
         for generator in self._site_generators:
             sites.extend(generator(get_reference_based_sites))
-        self._validate_vertex_indices(sites, len(self._structure))
+        _check_vertex_indices(
+            [site for site in sites if isinstance(site, PolyhedralSite)],
+            len(self._structure))
 
         # Use the existing atoms if set, otherwise create them
         atoms = self._atoms

@@ -520,29 +520,45 @@ The builder validates your configuration when you call `build()`. Common errors 
 
 ```python
 # Missing required components
-builder = TrajectoryBuilder()
-builder.with_structure(structure)
-# Forgot mobile_species and sites
-trajectory = builder.build()  # Raises ValueError
+builder = TrajectoryBuilder().with_structure(structure)
+# Forgot the mobile species and the sites
+trajectory = builder.build()
+# ValueError: Site type must be defined using one of the with_*_sites methods
 
 # Mixing different site types
-builder.with_spherical_sites(centres=centres1, radii=1.5)
-       .with_voronoi_sites(centres=centres2)  # Error: can't mix site types
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_spherical_sites(centres=centres1, radii=1.5)
+    .with_voronoi_sites(centres=centres2))  # Error at build: can't mix site types
 trajectory = builder.build()
 # TypeError: A Trajectory cannot be initialised with mixed Site types:
 # SphericalSite, VoronoiSite
 
 # Missing reference structure
-builder.with_polyhedral_sites(...)  # Without with_reference_structure()
-trajectory = builder.build()  # Raises ValueError
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_polyhedral_sites(
+        centre_species="Li", vertex_species="O", cutoff=3.0, n_vertices=4))
+# Without with_reference_structure()
+trajectory = builder.build()
+# ValueError: Both structure and reference_structure must be set for
+# polyhedral and dynamic Voronoi sites
 
 # A polyhedral site (from with_existing_sites) with a vertex index
-# beyond the structure
+# that is not an atom of the structure, here one with 96 atoms
+from site_analysis.polyhedral_site import PolyhedralSite
+
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 96])]))
 trajectory = builder.build()
-# ValueError: Site 3 has vertex index 96, but the structure has 96 atoms
+# ValueError: Site 0 has vertex index 96, but the structure has 96 atoms
 ```
 
-The mixed site types error is raised after the atoms are created, so a build with mixed site types and no mobile species reports the missing mobile species first.
+The mixed site types error is raised after the atoms are created, so the mixed site types example, with the mobile species left out, would report the missing mobile species instead. In the last example the site's index is the one it was given when it was created.
 
 ### Reference Structure Validation
 

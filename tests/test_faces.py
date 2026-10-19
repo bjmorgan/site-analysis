@@ -123,6 +123,14 @@ class FaceTestCase(unittest.TestCase):
         self.assertEqual(face, Face((2, 5), (3, 4, 7)))
         self.assertTrue(all(type(i) is int for i in face.site_indices + face.vertex_indices))
 
+    def test_float_site_index_raises(self):
+        with self.assertRaises(TypeError):
+            Face((1.0, 2), (0, 1, 2))
+
+    def test_float_vertex_index_raises(self):
+        with self.assertRaises(TypeError):
+            Face((1, 2), (0, 1, 2.0))
+
     def test_one_site_index_raises(self):
         with self.assertRaisesRegex(
                 ValueError, r"^A face is shared by two sites, got site_indices \(1,\)$"):

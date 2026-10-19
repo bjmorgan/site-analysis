@@ -249,7 +249,7 @@ This error occurs when the mapping cannot establish a one-to-one correspondence 
 - Within one site definition, two reference atoms are nearest to the same target atom.
 - Two site definitions conflict: a definition maps a reference atom to a target atom that an earlier definition in the same build mapped from a different reference atom.
 
-With `ReferenceBasedSites` used directly, the message can also read `1:1 mapping violation: reference atom 3 is mapped to target atoms 12 and 15`, when a call maps a reference atom to a different target atom from an earlier call because the calls use different `target_species`. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
+With `ReferenceBasedSites` used directly, the part of the message after the prefix can also read `1:1 mapping violation: reference atom 3 is mapped to target atoms 12 and 15`, when a call maps a reference atom to a different target atom from an earlier call because the calls use different `target_species`. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
 
 ## Advanced Implementation
 

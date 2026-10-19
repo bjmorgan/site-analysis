@@ -389,6 +389,40 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		# Should return empty array with correct shape
 		self.assertEqual(result.shape, (0, 3))
 
+	def test_reference_centre_several_cells_away(self):
+		"""Moving the reference centre by whole cells moves the image shifts by the same amount."""
+		vertex_coords = np.array([
+			[0.1, 0.5, 0.5],
+			[0.95, 0.5, 0.5],
+			[0.05, 0.6, 0.5],
+			[0.05, 0.4, 0.5],
+		])
+		reference_center = np.array([0.05, 0.5, 0.5])
+		translation = np.array([2, -3, 1])
+		_, shifts = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
+		_, shifts_translated = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center + translation, self.lattice.matrix,
+			return_image_shifts=True)
+		np.testing.assert_array_equal(shifts_translated - shifts, np.tile(translation, (4, 1)))
+
+	def test_vertices_several_cells_away(self):
+		"""Image shifts undo whole-cell translations of the vertices relative to the centre."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		translation = np.array([-2, 0, 3])
+		coords, shifts = unwrap_vertices_to_reference_center(
+			vertex_coords + translation, reference_center, self.lattice.matrix,
+			return_image_shifts=True)
+		np.testing.assert_array_equal(shifts, np.tile(-translation, (4, 1)))
+		np.testing.assert_array_almost_equal(coords, vertex_coords)
+
+
 class TestCorrectPbc(unittest.TestCase):
 	"""Tests for the correct_pbc dispatch function."""
 

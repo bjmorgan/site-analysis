@@ -398,6 +398,10 @@ class PolyhedralSite(Site):
         image shifts incrementally by detecting coordinate wraps
         (jumps of ~1.0), avoiding the expensive 27-image distance search.
 
+        The stored vertex coordinates are translated by whole cells so that
+        the lowest coordinate along each axis is below 1, within the periodic
+        images of an atom that containment searches.
+
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
         marks the hull triangle topology cache as stale.
 
@@ -422,6 +426,11 @@ class PolyhedralSite(Site):
         # Full computation — first call only (or after anomalous displacement)
         corrected, image_shifts = correct_pbc(
             frac_coords, self.reference_center, lattice_matrix)
+        # Translate whole cells down so the lowest coordinate along each axis
+        # is below 1, where the periodic images of an atom are searched.
+        cell_shifts = np.maximum(0, np.floor(np.min(corrected, axis=0)))
+        corrected = corrected - cell_shifts
+        image_shifts = image_shifts - cell_shifts.astype(np.int64)
         self._pbc_image_shifts = image_shifts
         self._pbc_cached_raw_frac = frac_coords.copy()
         self.vertex_coords = corrected

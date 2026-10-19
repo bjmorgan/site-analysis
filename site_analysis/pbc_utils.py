@@ -70,12 +70,15 @@ def unwrap_vertices_to_reference_center(
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
 
+    The vertices and the reference centre may lie in any periodic images,
+    however many cells apart.
+
     Args:
         frac_coords: Array of fractional coordinates with shape (n, 3).
         reference_center: Reference centre position for unwrapping.
         lattice_matrix: (3, 3) lattice matrix where rows are lattice vectors.
         return_image_shifts: If True, also return the per-vertex integer
-            image shifts (from ``_PERIODIC_SHIFTS``), separate from the
+            image shifts, relative to ``frac_coords`` and separate from the
             uniform non-negative shift.
 
     Returns:
@@ -89,7 +92,10 @@ def unwrap_vertices_to_reference_center(
         return frac_coords
 
     n_vertices = len(frac_coords)
-    vertex_images = frac_coords[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
+    # Move each vertex to the image nearest the centre in fractional
+    # coordinates, then search the 27 images around it.
+    base_shifts = np.round(reference_center - frac_coords).astype(np.int64)
+    vertex_images = (frac_coords + base_shifts)[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
 
     ref_cart = frac_to_cart(reference_center, lattice_matrix)
     vertex_images_cart = frac_to_cart(vertex_images.reshape(n_vertices * 27, 3), lattice_matrix)
@@ -97,7 +103,7 @@ def unwrap_vertices_to_reference_center(
         vertex_images_cart - ref_cart, axis=1).reshape(n_vertices, 27)
 
     best_indices = np.argmin(distances, axis=1)
-    image_shifts: np.ndarray = _PERIODIC_SHIFTS[best_indices]
+    image_shifts: np.ndarray = base_shifts + _PERIODIC_SHIFTS[best_indices]
     result = frac_coords + image_shifts
 
     min_coords = np.min(result, axis=0)

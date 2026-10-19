@@ -6,6 +6,7 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.atom import Atom
+from tests.test_faces import interstitial_structure
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -1673,6 +1674,24 @@ class TestBuilderAlignment(unittest.TestCase):
 		expected = site_vertices(reference)
 		self.assertEqual(len(expected), 8)
 		self.assertEqual(site_vertices(offset_reference), expected)
+
+
+	def test_reference_with_coordinates_outside_the_cell_assigns_every_atom(self):
+		"""With alignment off, a reference outside the unit cell still contains every atom."""
+		structure = interstitial_structure()
+		coords = structure.frac_coords + np.random.default_rng(3).integers(
+			-2, 3, size=structure.frac_coords.shape)
+		reference = Structure(structure.lattice, structure.species, coords)
+		trajectory = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_reference_structure(reference)
+			.with_mobile_species("Li")
+			.with_structure_alignment(align=False)
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O",
+								   cutoff=2.0, n_vertices=4)
+			.build())
+		trajectory.analyse_structure(structure)
+		self.assertTrue(all(atom.in_site is not None for atom in trajectory.atoms))
 
 
 if __name__ == '__main__':

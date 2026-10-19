@@ -458,6 +458,22 @@ class TransitionsAcrossFacesTestCase(unittest.TestCase):
         self.assertEqual(len(between), 0)
 
 
+class ReferenceCentresOutsideTheCellTestCase(unittest.TestCase):
+
+    def test_reference_centres_outside_the_cell(self):
+        rng = np.random.default_rng(0)
+        for n in (3, 4):
+            structure, sites = simple_cubic_cubes(n)
+            expected = shared_faces_of(structure, sites)
+            self.assertEqual(len(expected), 3 * n ** 3)
+            Site.reset_index(0)
+            shifted = [PolyhedralSite(vertex_indices=site.vertex_indices,
+                                      reference_center=site.reference_center
+                                      + rng.integers(-3, 4, size=3))
+                       for site in sites]
+            self.assertEqual(shared_faces_of(structure, shifted), expected)
+
+
 class FccInterstitialsTestCase(unittest.TestCase):
 
     def test_tetrahedra_share_triangles_with_octahedra_only(self):
@@ -497,6 +513,23 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
         self.assertEqual(len(from_reference), 256)
         trajectory.find_shared_faces(structure)
         self.assertEqual(trajectory.shared_faces(), from_reference)
+
+    def test_reference_with_coordinates_outside_the_cell_and_no_alignment(self):
+        structure = interstitial_structure()
+        coords = structure.frac_coords + np.random.default_rng(3).integers(
+            -2, 3, size=structure.frac_coords.shape)
+        reference = Structure(structure.lattice, structure.species, coords)
+        trajectory = (TrajectoryBuilder()
+                      .with_structure(structure)
+                      .with_reference_structure(reference)
+                      .with_mobile_species("Li")
+                      .with_structure_alignment(align=False)
+                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                             cutoff=2.0, n_vertices=4)
+                      .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                             cutoff=2.2, n_vertices=6)
+                      .build())
+        self.assertEqual(len(trajectory.shared_faces()), 256)
 
     def test_distorted_target(self):
         target, trajectory = build_cubes()

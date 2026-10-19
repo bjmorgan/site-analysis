@@ -281,7 +281,7 @@ atoms = atoms_from_structure(target_structure, "Li")
 trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
 ```
 
-The sites created by successive `create_polyhedral_sites` and `create_dynamic_voronoi_sites` calls share one reference-to-target mapping, which raises `ValueError` ("1:1 mapping violation") if a call would map a different reference atom to a target atom that is already mapped, or the same reference atom to a different target atom. `mapped_reference_frac_coords()` returns the fractional coordinates of the reference atom mapped to each target atom (aligned to the target when alignment is on), as an array of shape `(n_target_atoms, 3)` with NaN for target atoms that no site uses:
+The sites created by successive `create_polyhedral_sites` and `create_dynamic_voronoi_sites` calls share one reference-to-target mapping; a call that conflicts with it raises `ValueError` ("1:1 mapping violation", see [Mapping Conflicts](#mapping-conflicts)). `mapped_reference_frac_coords()` returns the fractional coordinates of the reference atom mapped to each target atom (aligned to the target when alignment is on), as an array of shape `(n_target_atoms, 3)` with NaN for target atoms that no site uses:
 
 ```python
 reference_coords = rbs.mapped_reference_frac_coords()

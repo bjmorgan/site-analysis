@@ -8,7 +8,8 @@ from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
-from tests.test_helpers import interstitial_structure, one_target_atom_for_two_reference_atoms
+from tests.test_helpers import (interstitial_structure, li_na_structure,
+	one_target_atom_for_two_reference_atoms)
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -353,10 +354,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 
 	def test_build_after_a_failed_build_uses_the_current_mobile_species(self):
 		"""Atoms built after a failed build are of the current mobile species."""
-		structure = Structure(Lattice.cubic(10.0), ["Li", "Na"],
-			[[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
 		builder = (TrajectoryBuilder()
-			.with_structure(structure)
+			.with_structure(li_na_structure())
 			.with_mobile_species("Li")
 			.with_spherical_sites(centres=[[0.1, 0.1, 0.1]], radii=1.0)
 			.with_commitment(radius=-1.0))
@@ -1627,34 +1626,17 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaisesRegex(TypeError, "mixed Site types: PolyhedralSite, SphericalSite"):
 			builder.build()
 
-	def test_existing_site_with_vertex_beyond_structure_after_reference_based_sites_raises(self):
-		"""An existing polyhedral site with a vertex index beyond the structure's atoms raises."""
-		structure = interstitial_structure()
-		existing_site = PolyhedralSite(vertex_indices=[130, 131, 132, 133])
-		existing_site.index = 64  # follows the 64 reference-based sites
-		builder = (TrajectoryBuilder()
-			.with_structure(structure)
-			.with_reference_structure(structure)
-			.with_mobile_species("Li")
-			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
-			.with_existing_sites([existing_site]))
-
-		with self.assertRaisesRegex(ValueError,
-			"^Site 64 has vertex index 133, but the structure has 128 atoms$"):
-			builder.build()
-
 	def test_existing_site_with_vertex_beyond_structure_raises(self):
 		"""A polyhedral site with a vertex index beyond the structure's atoms raises."""
-		structure = interstitial_structure()
-		existing_site = PolyhedralSite(vertex_indices=[0, 1, 2, 128])
+		existing_site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		existing_site.index = 0
 		builder = (TrajectoryBuilder()
-			.with_structure(structure)
+			.with_structure(li_na_structure())
 			.with_mobile_species("Li")
 			.with_existing_sites([existing_site]))
 
 		with self.assertRaisesRegex(ValueError,
-			"^Site 0 has vertex index 128, but the structure has 128 atoms$"):
+			"^Site 0 has vertex index 3, but the structure has 2 atoms$"):
 			builder.build()
 
 	def test_duplicate_dynamic_voronoi_sites_raises(self):

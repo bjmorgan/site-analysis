@@ -123,23 +123,24 @@ class FaceTestCase(unittest.TestCase):
         self.assertEqual(face, Face((2, 5), (3, 4, 7)))
         self.assertTrue(all(type(i) is int for i in face.site_indices + face.vertex_indices))
 
-    def test_float_site_index_raises(self):
-        with self.assertRaises(TypeError):
-            Face((1.0, 2), (0, 1, 2))
+    def test_non_integer_indices_raise(self):
+        cases = [
+            ((1.0, 2), (0, 1, 2), "^site index must be an integer, got float 1.0$"),
+            ((1, 2), (0, 1, 2.0), "^vertex index must be an integer, got float 2.0$"),
+            ((True, 2), (0, 1, 2), "^site index must be an integer, got bool True$"),
+            ((1, 2), (0, 1, True), "^vertex index must be an integer, got bool True$"),
+        ]
+        for site_indices, vertex_indices, message in cases:
+            with self.subTest(site_indices=site_indices, vertex_indices=vertex_indices):
+                with self.assertRaisesRegex(TypeError, message):
+                    Face(site_indices, vertex_indices)
 
-    def test_float_vertex_index_raises(self):
-        with self.assertRaises(TypeError):
-            Face((1, 2), (0, 1, 2.0))
-
-    def test_one_site_index_raises(self):
-        with self.assertRaisesRegex(
-                ValueError, r"^A face is shared by two sites, got site_indices \(1,\)$"):
-            Face((1,), (0, 1, 2))
-
-    def test_three_site_indices_raise(self):
-        with self.assertRaisesRegex(
-                ValueError, r"^A face is shared by two sites, got site_indices \(1, 2, 3\)$"):
-            Face((1, 2, 3), (0, 1, 2))
+    def test_not_two_site_indices_raises(self):
+        for site_indices, shown in [((1,), r"\(1,\)"), ((1, 2, 3), r"\(1, 2, 3\)")]:
+            with self.subTest(site_indices=site_indices):
+                with self.assertRaisesRegex(
+                        ValueError, f"^A face is shared by two sites, got site_indices {shown}$"):
+                    Face(site_indices, (0, 1, 2))
 
     def test_faces_sort_by_site_indices_then_vertex_indices(self):
         faces = [Face((1, 2), (0, 1, 2)), Face((0, 3), (4, 5, 6)),
@@ -314,12 +315,6 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "coincide") as context:
             shared_faces_of(structure, sites)
         self.assertIn("neither site has a reference centre", str(context.exception))
-
-    def test_vertex_index_beyond_the_atoms_raises(self):
-        Site.reset_index(0)
-        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 5])]
-        with self.assertRaisesRegex(ValueError, "Site 0 has vertex index 5, but the structure has 5 atoms"):
-            shared_faces_of(tetrahedra_structure(), sites)
 
     def test_non_finite_vertex_coordinates_raise(self):
         structure = tetrahedra_structure()

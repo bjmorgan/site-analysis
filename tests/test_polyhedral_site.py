@@ -407,14 +407,16 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with self.assertRaises(TypeError) as context:
             PolyhedralSite(vertex_indices=[1, 2, "three"])
         
-        self.assertIn("All vertex indices must be integers", str(context.exception))
+        self.assertEqual(str(context.exception),
+                         "vertex index must be an integer, got str 'three'")
 
     def test_init_with_bool_vertex_indices(self):
         """Test that PolyhedralSite raises TypeError with bool vertex indices."""
         with self.assertRaises(TypeError) as context:
             PolyhedralSite(vertex_indices=[1, 2, True])
 
-        self.assertIn("All vertex indices must be integers", str(context.exception))
+        self.assertEqual(str(context.exception),
+                         "vertex index must be an integer, got bool True")
 
     def test_init_with_numpy_integer_vertex_indices(self):
         """Test that numpy integers in a list are accepted and stored as Python ints."""

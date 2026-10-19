@@ -112,7 +112,7 @@ class Trajectory:
         }
         
         # Find the appropriate site collection class
-        site_type = type(sites[0])
+        (site_type,) = site_types
         try:
             collection_class = site_collection_map[site_type]
         except KeyError:
@@ -228,6 +228,10 @@ class Trajectory:
         
         Args:
             structure: A pymatgen Structure object to be analysed.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of the structure.
         """
         self.site_collection.analyse_structure(self.atoms, structure)
         
@@ -272,9 +276,10 @@ class Trajectory:
 
         Raises:
             TypeError: If the sites are not polyhedral.
-            ValueError: If a vertex index is beyond the structure's atoms,
-                the coordinates are not finite, or two sites coincide or
-                one lies inside another. The earlier result is then kept.
+            ValueError: If a site has a vertex index that is not an atom of
+                the structure, the vertex coordinates are not finite, or two
+                sites coincide or one lies inside another. The earlier result
+                is then kept.
         """
         self._polyhedral_site_collection().find_shared_faces(
             structure.frac_coords, structure.lattice.matrix)
@@ -561,6 +566,10 @@ class Trajectory:
         Args:
             structure: A pymatgen Structure object for this timestep.
             t: Optional timestep index to record. If None, no timestep is recorded.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of the structure.
         """
         self.analyse_structure(structure)
         if self._commitment_radii is None:
@@ -770,6 +779,10 @@ class Trajectory:
             structures: The structures to analyse, one per timestep.
             progress: Show a progress bar. Automatically selects the
                 appropriate widget for terminal or notebook environments.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of a structure.
         """
         generator: Iterable[tuple[int, Structure]] = enumerate(structures, 1)
         if progress:

@@ -39,6 +39,11 @@ def interstitial_structure(supercell=(2, 2, 2), a=4.0):
 	return unit * supercell
 
 
+def li_na_structure():
+	"""A Li atom and a Na atom in a 10 Angstrom cubic cell."""
+	return Structure(Lattice.cubic(10.0), ["Li", "Na"], [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
+
+
 def one_target_atom_for_two_reference_atoms():
 	"""A Li and a Na tetrahedron of O atoms whose vertices map to one target atom.
 

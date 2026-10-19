@@ -13,7 +13,7 @@ from collections.abc import Iterable
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
-from site_analysis.site import Site
+from site_analysis.site import Site, _as_index
 from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
@@ -242,10 +242,7 @@ class PolyhedralSite(Site):
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
 
-        if not all(isinstance(idx, (int, np.integer)) and not isinstance(idx, bool)
-                   for idx in vertex_indices):
-            raise TypeError("All vertex indices must be integers")
-        vertex_indices = [int(idx) for idx in vertex_indices]
+        vertex_indices = [_as_index(idx, "vertex index") for idx in vertex_indices]
 
         seen: set[int] = set()
         for k in vertex_indices:

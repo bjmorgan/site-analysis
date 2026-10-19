@@ -81,6 +81,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         self.sites: list[PolyhedralSite]
         self._neighbouring_sites = construct_neighbouring_sites(self.sites)
         self._shared_faces: tuple[Face, ...] | None = None
+        self._largest_vertex_index = max(
+            (max(site.vertex_indices) for site in self.sites), default=-1)
         centres, site_indices = _collect_reference_centres(self.sites)
         if centres is not None:
             self._init_priority_ranking(centres, site_indices)
@@ -96,8 +98,13 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         Args:
             atoms: List of Atom objects to be assigned to sites.
             structure: Pymatgen Structure containing atom positions.
+
+        Raises:
+            ValueError: If a site has a vertex index that is not an atom of
+                the structure.
         """
         all_frac_coords = structure.frac_coords
+        self.validate_atom_count(len(all_frac_coords))
         for a in atoms:
             a.assign_coords(all_frac_coords)
         lattice_matrix = structure.lattice.matrix
@@ -139,6 +146,25 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                     self.update_occupation(site, atom)
                     break
     
+    def validate_atom_count(self, n_atoms: int) -> None:
+        """Check that every vertex index of every site is an atom of a structure.
+
+        Args:
+            n_atoms: The number of atoms in the structure.
+
+        Raises:
+            ValueError: If a site has a vertex index that is not less than
+                ``n_atoms``. The message names the first such site in index
+                order, and its largest vertex index.
+        """
+        if self._largest_vertex_index < n_atoms:
+            return
+        site = min((site for site in self.sites if max(site.vertex_indices) >= n_atoms),
+                   key=lambda site: site.index)
+        raise ValueError(
+            f"Site {site.index} has vertex index {max(site.vertex_indices)}, "
+            f"but the structure has {n_atoms} atoms")
+
     def neighbouring_sites(self,
             index: int) -> list[PolyhedralSite]:
         """Return the sites that share three or more vertex indices with a site.
@@ -171,14 +197,15 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 vectors.
 
         Raises:
-            ValueError: If a vertex index is beyond the atoms, the
+            ValueError: If a site has a vertex index that is not an atom of
+                the structure (see ``validate_atom_count``), the vertex
                 coordinates are not finite, or two sites coincide or one
                 lies inside another.
         """
+        frac_coords = np.asarray(frac_coords, dtype=float)
+        self.validate_atom_count(len(frac_coords))
         self._shared_faces = _find_shared_faces(
-            self.sites,
-            np.asarray(frac_coords, dtype=float),
-            np.asarray(lattice_matrix, dtype=float))
+            self.sites, frac_coords, np.asarray(lattice_matrix, dtype=float))
 
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of sites.

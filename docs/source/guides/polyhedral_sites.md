@@ -168,11 +168,13 @@ trajectory = Trajectory(sites=sites, atoms=atoms)
 
 This approach is useful when you have pre-identified coordination environments or need to work with non-standard polyhedra.
 
+Vertex indices are Python or numpy integers; `PolyhedralSite` raises `TypeError` for any other value, including a `bool`. Every structure the trajectory analyses must have an atom for every vertex index: `analyse_structure()` (and so `append_timestep()`) and `TrajectoryBuilder.build()` raise `ValueError` ("Site {index} has vertex index {k}, but the structure has {n} atoms") naming the first such site in index order. `PolyhedralSiteCollection.validate_atom_count(n_atoms)` makes the same check.
+
 For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 
 ## Shared Faces and Adjacency
 
-Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order.
+Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order. Creating a `Face` stores its indices as `int` and raises `TypeError` for an index that is not a Python or numpy integer, including a `bool`.
 
 No tolerance is involved. The faces depend on which periodic image of each vertex atom is nearest its site's reference centre (or, for a site without a reference centre, on the spread-based unwrapping of its vertices), so a structure distorted enough to change that image changes the faces.
 

@@ -7,7 +7,6 @@ common under one lattice translation.
 
 from __future__ import annotations
 
-import operator
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from .pbc_utils import correct_pbc
+from .site import _as_index
 
 if TYPE_CHECKING:
     from .polyhedral_site import PolyhedralSite
@@ -43,15 +43,15 @@ class Face:
         Raises:
             ValueError: If there are not two site indices.
             TypeError: If a site index or vertex index is not an integer
-                (numpy integers are accepted; floats and strings are not).
+                (numpy integers are accepted; bools and floats are not).
         """
         if len(self.site_indices) != 2:
             raise ValueError(
                 f"A face is shared by two sites, got site_indices {self.site_indices!r}")
         object.__setattr__(
-            self, "site_indices", tuple(sorted(operator.index(i) for i in self.site_indices)))
+            self, "site_indices", tuple(sorted(_as_index(i, "site index") for i in self.site_indices)))
         object.__setattr__(
-            self, "vertex_indices", tuple(sorted(operator.index(i) for i in self.vertex_indices)))
+            self, "vertex_indices", tuple(sorted(_as_index(i, "vertex index") for i in self.vertex_indices)))
 
 
 def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:
@@ -72,25 +72,6 @@ def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:
     return ""
 
 
-def _check_vertex_indices(sites: Sequence[PolyhedralSite], n_atoms: int) -> None:
-    """Check that every vertex index of every site is an atom of the structure.
-
-    Args:
-        sites: The sites to check.
-        n_atoms: The number of atoms in the structure.
-
-    Raises:
-        ValueError: If a site has a vertex index that is not less than
-            ``n_atoms``. The message names the first such site, in the order
-            of ``sites``, and its largest vertex index.
-    """
-    for site in sites:
-        if max(site.vertex_indices) >= n_atoms:
-            raise ValueError(
-                f"Site {site.index} has vertex index {max(site.vertex_indices)}, "
-                f"but the structure has {n_atoms} atoms")
-
-
 def _find_shared_faces(
         sites: Sequence[PolyhedralSite],
         frac_coords: np.ndarray,
@@ -107,15 +88,15 @@ def _find_shared_faces(
     Args:
         sites: The sites to compare.
         frac_coords: Fractional coordinates of the atoms, shape
-            ``(n_atoms, 3)``, indexed by atom index.
+            ``(n_atoms, 3)``, indexed by atom index, with a row for every
+            vertex index of every site.
         lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
 
     Returns:
         Every shared face, sorted by site indices then vertex indices.
 
     Raises:
-        ValueError: If a site has a vertex index that is not an atom of the
-            structure or non-finite vertex coordinates;
+        ValueError: If a site has non-finite vertex coordinates;
             if two sites coincide (have the same vertex atoms at the same
             positions); or if the vertex atoms of one site are all vertex
             atoms of another site at the same positions, so that it lies
@@ -126,9 +107,7 @@ def _find_shared_faces(
         defaultdict(list))
     # Sites are processed in index order, so each pair's translation is the
     # shift of the lower-index site minus that of the higher-index site.
-    ordered_sites = sorted(sites, key=lambda site: site.index)
-    _check_vertex_indices(ordered_sites, len(frac_coords))
-    for site in ordered_sites:
+    for site in sorted(sites, key=lambda site: site.index):
         coords = frac_coords[site.vertex_indices]
         if not np.isfinite(coords).all():
             raise ValueError(f"Site {site.index} has non-finite vertex coordinates")

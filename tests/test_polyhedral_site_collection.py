@@ -71,9 +71,9 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(collection.sites, self.sites)
         
         # Test with mock sites
-        mock_site_0 = Mock(spec=PolyhedralSite, index=0)
+        mock_site_0 = Mock(spec=PolyhedralSite, index=0, vertex_indices=[0, 1, 2, 3])
         mock_site_0.reference_center = None
-        mock_site_1 = Mock(spec=PolyhedralSite, index=1)
+        mock_site_1 = Mock(spec=PolyhedralSite, index=1, vertex_indices=[4, 5, 6, 7])
         mock_site_1.reference_center = None
         sites = [mock_site_0, mock_site_1]
         with patch('site_analysis.polyhedral_site_collection.construct_neighbouring_sites') as mock_neighbours:
@@ -130,6 +130,35 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             self.assertIs(args[0], self.atoms)
             np.testing.assert_array_equal(args[1], self.structure.lattice.matrix)
     
+    def test_analyse_structure_with_too_few_atoms_raises(self):
+        """A structure without an atom for every vertex index is rejected."""
+        structure = Structure(self.lattice, self.structure.species[:7],
+                              self.structure.frac_coords[:7])
+        with self.assertRaisesRegex(
+                ValueError, "^Site 1 has vertex index 7, but the structure has 7 atoms$"):
+            self.collection.analyse_structure(self.atoms, structure)
+
+    def test_find_shared_faces_with_too_few_atoms_raises(self):
+        """Coordinates without a row for every vertex index are rejected."""
+        with self.assertRaisesRegex(
+                ValueError, "^Site 1 has vertex index 7, but the structure has 7 atoms$"):
+            self.collection.find_shared_faces(
+                self.structure.frac_coords[:7], self.lattice.matrix)
+
+    def test_validate_atom_count_accepts_an_atom_for_every_vertex_index(self):
+        """No error is raised when every vertex index is an atom."""
+        self.collection.validate_atom_count(8)
+
+    def test_validate_atom_count_names_the_first_site_in_index_order(self):
+        """The error names the lowest-index site with a vertex index beyond the atoms."""
+        Site._newid = 0
+        first = PolyhedralSite(vertex_indices=[0, 1, 2, 8])
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 9])
+        collection = PolyhedralSiteCollection([second, first])
+        with self.assertRaisesRegex(
+                ValueError, "^Site 0 has vertex index 8, but the structure has 8 atoms$"):
+            collection.validate_atom_count(8)
+
     def test_assign_site_occupations_atom_in_site(self):
         """Test assign_site_occupations when atoms are already in sites."""
         # Setup: assign atoms to sites

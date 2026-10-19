@@ -266,7 +266,7 @@ builder.with_structure_alignment(align=False)
 #### `with_site_mapping(mapping_species)`
 Sets species to use for mapping sites between reference and target structures.
 
-Every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in a build uses the same reference-to-target mapping. If two definitions map different reference atoms to the same target atom, `build()` raises `ValueError` ("1:1 mapping violation").
+Every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in a build uses the same reference-to-target mapping; a conflict raises `ValueError` ("1:1 mapping violation", see [Mapping Conflicts](reference_workflow.md#mapping-conflicts)).
 
 **Parameters:**
 - `mapping_species`: Species to use for mapping (string or list of strings)
@@ -558,7 +558,7 @@ trajectory = builder.build()
 # ValueError: Site 0 has vertex index 96, but the structure has 96 atoms
 ```
 
-The mixed site types error is raised after the atoms are created, so the mixed site types example, with the mobile species left out, would report the missing mobile species instead. In the last example the site's index is the one it was given when it was created.
+In the last example the site's index is the one it was given when it was created.
 
 ### Reference Structure Validation
 

@@ -46,7 +46,6 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
-from site_analysis.faces import _check_vertex_indices
 from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.site_collection import SiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
@@ -61,6 +60,23 @@ _ReferenceBasedSitesGetter = Callable[[], ReferenceBasedSites]
 
 # Creates the sites of one with_*_sites definition during build()
 _SiteGenerator = Callable[[_ReferenceBasedSitesGetter], Sequence[Site]]
+
+
+def _check_sites_found(sites: Sequence[Site], kind: str, parameters: str) -> None:
+    """Check that a reference-based site definition found sites.
+
+    Args:
+        sites: The sites the definition created.
+        kind: The kind of site, such as ``"polyhedral"``.
+        parameters: The definition's parameters, for the error message.
+
+    Raises:
+        ValueError: If ``sites`` is empty.
+    """
+    if not sites:
+        raise ValueError(
+            f"No {kind} sites found for {parameters}. Try adjusting these "
+            f"parameters or verify that the specified species exist in the structure.")
 
 
 class TrajectoryBuilder:
@@ -483,9 +499,9 @@ class TrajectoryBuilder:
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
-                if required structures are not set, or if site definitions map
-                different reference atoms to the same target atom (a 1:1
-                mapping violation).
+                if required structures are not set, or if the mapping to the
+                target structure is not one-to-one (see "Mapping Conflicts" in
+                the reference workflow guide).
 
         Example::
 
@@ -522,16 +538,10 @@ class TrajectoryBuilder:
                         target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
-            
-            # Check if any sites were found
-            if not sites:
-                raise ValueError(
-                    f"No polyhedral sites found for centre_species='{centre_species}', "
-                    f"vertex_species='{vertex_species}', cutoff={cutoff}, n_vertices={n_vertices}. "
-                    f"Try adjusting these parameters or verify that the specified species exist "
-                    f"in the structure."
-                )
-
+            _check_sites_found(
+                sites, "polyhedral",
+                f"centre_species='{centre_species}', vertex_species='{vertex_species}', "
+                f"cutoff={cutoff}, n_vertices={n_vertices}")
             return sites
             
         # Store the function for later execution
@@ -591,9 +601,9 @@ class TrajectoryBuilder:
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
-                if required structures are not set, or if site definitions map
-                different reference atoms to the same target atom (a 1:1
-                mapping violation).
+                if required structures are not set, or if the mapping to the
+                target structure is not one-to-one (see "Mapping Conflicts" in
+                the reference workflow guide).
 
         Example::
 
@@ -630,16 +640,10 @@ class TrajectoryBuilder:
                         target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
-            
-            # Check if any sites were found
-            if not sites:
-                raise ValueError(
-                    f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
-                    f"reference_species='{reference_species}', cutoff={cutoff}, n_reference={n_reference}. "
-                    f"Try adjusting these parameters or verify that the specified species exist "
-                    f"in the structure."
-                )
-            
+            _check_sites_found(
+                sites, "dynamic Voronoi",
+                f"centre_species='{centre_species}', reference_species='{reference_species}', "
+                f"cutoff={cutoff}, n_reference={n_reference}")
             return sites
             
         # Store the function for later execution
@@ -837,30 +841,31 @@ class TrajectoryBuilder:
         sites share from the reference geometry; otherwise the shared faces
         are not found until ``Trajectory.find_shared_faces`` is called.
         
+        Sites are created first, then the atoms, then the trajectory, so a
+        missing mobile species is reported before mixed site types, an
+        invalid commitment radius or a vertex index that is not an atom of
+        the structure.
+
         Returns:
             The constructed Trajectory object.
 
         Raises:
-            ValueError: If the structure is not set, if no site generator
-                has been configured, if reference-based sites are requested
-                without a reference structure, if structure alignment fails,
-                if the reference structure has same-species atom pairs closer
-                than ``min_atom_distance``, if no sites are found, if a
-                polyhedral site has a vertex index that is not an atom of the
-                structure, if there are no atoms and no mobile species is
-                set or no atoms of it are found, if site definitions map different
-                reference atoms to the same target atom (a 1:1 mapping
-                violation, within one definition or across definitions), if
-                duplicate sites are detected, if polyhedral sites coincide or
-                one lies inside another, if a commitment radius is not
-                positive, or a dict of radii does not cover every site label
-                or is given while some sites have no label, or if a spherical
-                site's centre is not three finite numbers or its radius is
-                negative or NaN.
-            TypeError: If site types are mixed (the message names the types;
-                this is raised after the atoms are created, so a build
-                without a mobile species reports the missing species first),
-                or if a commitment radius is not a number.
+            ValueError: Missing or invalid configuration: no structure, no
+                site definition, no reference structure for reference-based
+                sites, no mobile species or no atoms of it, reference atoms of
+                one species closer than ``min_atom_distance``, a failed
+                structure alignment, or commitment radii that are not
+                positive or do not cover every site label.
+            ValueError: Invalid sites: no sites found for a definition, a
+                spherical site whose centre is not three finite numbers or
+                whose radius is negative or NaN, a polyhedral site with a
+                vertex index that is not an atom of the structure, or
+                duplicate, coincident or nested sites.
+            ValueError: Mapping failures: coordination environments that
+                cannot be found or mapped one-to-one to the target structure
+                (see "Mapping Conflicts" in the reference workflow guide).
+            TypeError: Mixed site types (the message names the types), or a
+                commitment radius that is not a number.
         """
         # Validate basic requirements
         if not self._structure:
@@ -889,9 +894,6 @@ class TrajectoryBuilder:
         sites: list[Site] = []
         for generator in self._site_generators:
             sites.extend(generator(get_reference_based_sites))
-        _check_vertex_indices(
-            [site for site in sites if isinstance(site, PolyhedralSite)],
-            len(self._structure))
 
         # Use the existing atoms if set, otherwise create them
         atoms = self._atoms
@@ -909,6 +911,8 @@ class TrajectoryBuilder:
         # Create trajectory
         trajectory = Trajectory(sites=sites, atoms=atoms,
                                 commitment_radius=self._commitment_radius)
+        if isinstance(trajectory.site_collection, PolyhedralSiteCollection):
+            trajectory.site_collection.validate_atom_count(len(self._structure))
 
         # Find shared faces from the reference geometry, which also rejects
         # coincident and nested sites; otherwise check for duplicate sites by index

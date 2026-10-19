@@ -121,6 +121,22 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
             expected_centre = centre_before_wrap % 1.0
             np.testing.assert_array_almost_equal(site._centre_coords, expected_centre)
         
+    def test_calculate_centre_with_reference_centre_several_cells_away(self):
+        """The centre is the mean of the reference atoms' images nearest a
+        reference centre lying several cells from the atoms."""
+        site = DynamicVoronoiSite(
+            reference_indices=[0, 1, 2, 3],
+            reference_center=np.array([2.05, 0.5, 0.5]))
+        frac_coords = np.array([[0.95, 0.45, 0.45],
+                                [0.15, 0.55, 0.45],
+                                [0.15, 0.45, 0.55],
+                                [0.95, 0.55, 0.55]])
+
+        site.calculate_centre(frac_coords, Lattice.cubic(10.0).matrix)
+
+        np.testing.assert_array_almost_equal(
+            site.centre, [0.05, 0.5, 0.5])
+
     def test_centre_method(self):
         """Test that the centre method returns the calculated centre coordinates."""
         reference_indices = [0, 1, 2, 3]

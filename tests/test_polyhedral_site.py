@@ -554,6 +554,26 @@ class TestStoreVertexCoords(unittest.TestCase):
         # Shift for vertex 0 should have changed to account for wrapping
         self.assertEqual(site._pbc_image_shifts[0, 0], original_shifts[0, 0] + 1)
 
+    def test_legacy_site_contains_centre_with_vertices_outside_the_cell(self):
+        """A site without a reference centre contains its centre on the
+        first frame and on later frames when its vertices lie whole cells
+        outside the unit cell."""
+        tetrahedron = np.array([[0.4, 0.4, 0.4],
+                                [0.4, 0.6, 0.6],
+                                [0.6, 0.6, 0.4],
+                                [0.6, 0.4, 0.6]])
+        centre = np.array([0.5, 0.5, 0.5])
+        for offset in (2, -2):
+            for frame in (1, 2):
+                with self.subTest(offset=offset, frame=frame):
+                    site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                    site._store_vertex_coords(
+                        tetrahedron + offset, self.lattice_matrix)
+                    if frame == 2:
+                        site._store_vertex_coords(
+                            tetrahedron + offset + 0.005, self.lattice_matrix)
+                    self.assertTrue(site.contains_point(centre))
+
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_cache_stale_triggers_update_after_store_vertex_coords(self):
         """After _store_vertex_coords sets _cache_stale, the next

@@ -40,6 +40,22 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
     
     return corrected_coords
 
+def _translate_into_unit_cell(coords: np.ndarray) -> np.ndarray:
+    """Translate coordinates by whole cells so their lowest value is in [0, 1).
+
+    The same integer translation is applied to every row, separately along
+    each axis, so the relative positions of the coordinates are unchanged.
+
+    Args:
+        coords: Array of fractional coordinates with shape (n, 3), n > 0.
+
+    Returns:
+        Translated fractional coordinates with the same shape.
+    """
+    translated: np.ndarray = coords - np.floor(np.min(coords, axis=0))
+    return translated
+
+
 # Generate all 27 possible shifts: [-1,0,1] for each dimension
 _PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
                                           for dy in [-1, 0, 1]
@@ -84,8 +100,8 @@ def unwrap_vertices_to_reference_center(
     Returns:
         Unwrapped fractional coordinates with the same shape, translated by
         whole cells so the lowest coordinate along each axis is in [0, 1).
-        If ``return_image_shifts`` is True,
-        returns a tuple of (unwrapped_coords, image_shifts).
+        If ``return_image_shifts`` is True, returns a tuple of
+        ``(unwrapped_coords, image_shifts)``.
     """
     if frac_coords.size == 0:
         if return_image_shifts:
@@ -105,15 +121,11 @@ def unwrap_vertices_to_reference_center(
 
     best_indices = np.argmin(distances, axis=1)
     image_shifts: np.ndarray = base_shifts + _PERIODIC_SHIFTS[best_indices]
-    result = frac_coords + image_shifts
-
-    min_coords = np.min(result, axis=0)
-    uniform_shift = -np.floor(min_coords)
-    result = result + uniform_shift
+    result = _translate_into_unit_cell(frac_coords + image_shifts)
 
     if return_image_shifts:
         return result, image_shifts
-    return np.asarray(result)  # no-op; satisfies mypy no-any-return
+    return result
 
 
 def correct_pbc(
@@ -127,7 +139,8 @@ def correct_pbc(
     reference centre is provided. When a reference centre is given,
     vertices are unwrapped to their closest periodic images relative
     to that centre. Otherwise, the legacy spread-based correction is
-    applied.
+    applied. In both cases the corrected coordinates are translated by
+    whole cells so the lowest coordinate along each axis is in [0, 1).
 
     Args:
         frac_coords: Fractional coordinates, shape ``(n, 3)``.
@@ -139,7 +152,9 @@ def correct_pbc(
 
     Returns:
         Tuple of ``(corrected_coords, image_shifts)`` where both have
-        shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype.
+        shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype. The
+        image shifts are relative to ``frac_coords`` and exclude the
+        whole-cell translation applied to ``corrected_coords``.
     """
     if frac_coords.size == 0:
         return frac_coords, np.zeros((0, 3), dtype=np.int64)
@@ -149,7 +164,7 @@ def correct_pbc(
             return_image_shifts=True)
     corrected = apply_legacy_pbc_correction(frac_coords)
     image_shifts = np.round(corrected - frac_coords).astype(np.int64)
-    return corrected, image_shifts
+    return _translate_into_unit_cell(corrected), image_shifts
 
 
 def _numpy_update_pbc_shifts(
@@ -188,10 +203,7 @@ def _numpy_update_pbc_shifts(
     if not np.all(np.abs(physical_diff) < 0.3):
         return False, frac_coords, image_shifts
     new_shifts = image_shifts - wrapping
-    shifted = frac_coords + new_shifts
-    min_coords = np.min(shifted, axis=0)
-    uniform = -np.floor(min_coords)
-    return True, shifted + uniform, new_shifts
+    return True, _translate_into_unit_cell(frac_coords + new_shifts), new_shifts
 
 
 update_pbc_shifts: Callable[

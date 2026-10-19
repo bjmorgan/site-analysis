@@ -242,6 +242,9 @@ class Trajectory:
     def _polyhedral_site_collection(self) -> PolyhedralSiteCollection:
         """Return the site collection, which must be of polyhedral sites.
 
+        Returns:
+            The site collection.
+
         Raises:
             TypeError: If the sites are not polyhedral.
         """

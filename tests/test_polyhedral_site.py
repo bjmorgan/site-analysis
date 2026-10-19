@@ -80,7 +80,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertIsNone(site._pbc_cached_raw_frac)
 
     def test_reset_sets_cache_stale(self):
-        """reset() marks the cached hull triangles as stale."""
+        """reset() marks the cached hull triangle normals as stale."""
         site = self.site
         site._cache_stale = False
         site.reset()
@@ -557,7 +557,7 @@ class TestStoreVertexCoords(unittest.TestCase):
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_cache_stale_triggers_update_after_store_vertex_coords(self):
         """After _store_vertex_coords sets _cache_stale, the next
-        contains_point call should update the cached hull triangles."""
+        contains_point call should update the cached hull triangles' normals."""
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         frac = np.array([[0.4, 0.4, 0.4],
                          [0.4, 0.6, 0.6],

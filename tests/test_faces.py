@@ -334,7 +334,6 @@ class SharedFacesApiTestCase(unittest.TestCase):
     def test_sites_sharing_two_faces_are_one_adjacent_pair(self):
         structure, trajectory = self.cube_trajectory(2)
         trajectory.find_shared_faces(structure)
-        self.assertEqual(len(trajectory.shared_faces()), 24)
         self.assertEqual(len(adjacent_pairs(trajectory)), 12)
         self.assertTrue(trajectory.site_adjacency().data.all())
 

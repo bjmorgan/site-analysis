@@ -93,6 +93,8 @@ def _find_shared_faces(
     sites_by_index: dict[int, PolyhedralSite] = {}
     shifts_by_atom: defaultdict[int, list[tuple[PolyhedralSite, tuple[int, ...]]]] = (
         defaultdict(list))
+    # Sites are processed in index order, so each pair's translation is the
+    # shift of the lower-index site minus that of the higher-index site.
     for site in sorted(sites, key=lambda site: site.index):
         if max(site.vertex_indices) >= len(frac_coords):
             raise ValueError(

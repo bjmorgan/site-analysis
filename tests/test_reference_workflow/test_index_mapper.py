@@ -565,20 +565,26 @@ class CheckOneToOneTestCase(unittest.TestCase):
     def test_reference_atom_with_two_target_atoms_raises(self):
         with self.assertRaisesRegex(
                 ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
-                            r"to target atoms 3 and 4$"):
+                            r"to target atoms 4 and 3$"):
             _check_one_to_one(np.array([1, 0, 1]), np.array([4, 5, 3]))
 
     def test_target_atom_with_two_reference_atoms_raises(self):
         with self.assertRaisesRegex(
                 ValueError, r"^1:1 mapping violation: target atom 3 is mapped "
-                            r"from reference atoms 0 and 2$"):
+                            r"from reference atoms 2 and 0$"):
             _check_one_to_one(np.array([2, 1, 0]), np.array([3, 4, 3]))
 
-    def test_lowest_of_two_violating_reference_atoms_is_reported(self):
+    def test_first_conflict_in_pair_order_is_reported(self):
         with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
-                            r"to target atoms 5 and 6$"):
+                ValueError, r"^1:1 mapping violation: reference atom 3 is mapped "
+                            r"to target atoms 8 and 7$"):
             _check_one_to_one(np.array([3, 3, 1, 1]), np.array([8, 7, 6, 5]))
+
+    def test_repeated_pairs_do_not_hide_later_conflict(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 5 is mapped "
+                            r"from reference atoms 0 and 2$"):
+            _check_one_to_one(np.array([0, 0, 2]), np.array([5, 5, 5]))
 
 
 if __name__ == '__main__':

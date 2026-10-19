@@ -34,26 +34,21 @@ def _check_one_to_one(ref_atoms: np.ndarray, target_atoms: np.ndarray) -> None:
 
     Raises:
         ValueError: If a reference atom is paired with two target atoms, or
-            a target atom with two reference atoms. The message names the
-            lowest such reference atom, or if there is none the lowest such
-            target atom, and its two lowest partners.
+            a target atom with two reference atoms. The pairs are checked in
+            order and the message describes the first conflict found, naming
+            the earlier partner first.
     """
-    pairs = np.unique(np.column_stack([ref_atoms, target_atoms]), axis=0)
-    refs, targets = pairs.T
-    repeated = np.flatnonzero(refs[1:] == refs[:-1])
-    if repeated.size:
-        i = repeated[0]
-        raise ValueError(
-            f"1:1 mapping violation: reference atom {refs[i]} is mapped "
-            f"to target atoms {targets[i]} and {targets[i + 1]}")
-    order = np.lexsort((refs, targets))
-    refs, targets = refs[order], targets[order]
-    repeated = np.flatnonzero(targets[1:] == targets[:-1])
-    if repeated.size:
-        i = repeated[0]
-        raise ValueError(
-            f"1:1 mapping violation: target atom {targets[i]} is mapped "
-            f"from reference atoms {refs[i]} and {refs[i + 1]}")
+    target_of_ref: dict[int, int] = {}
+    ref_of_target: dict[int, int] = {}
+    for ref, target in zip(ref_atoms.tolist(), target_atoms.tolist()):
+        if target_of_ref.setdefault(ref, target) != target:
+            raise ValueError(
+                f"1:1 mapping violation: reference atom {ref} is mapped "
+                f"to target atoms {target_of_ref[ref]} and {target}")
+        if ref_of_target.setdefault(target, ref) != ref:
+            raise ValueError(
+                f"1:1 mapping violation: target atom {target} is mapped "
+                f"from reference atoms {ref_of_target[target]} and {ref}")
 
 
 class IndexMapper:

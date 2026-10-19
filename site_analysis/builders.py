@@ -62,23 +62,6 @@ _ReferenceBasedSitesGetter = Callable[[], ReferenceBasedSites]
 _SiteGenerator = Callable[[_ReferenceBasedSitesGetter], Sequence[Site]]
 
 
-def _check_sites_found(sites: Sequence[Site], kind: str, parameters: str) -> None:
-    """Check that a reference-based site definition found sites.
-
-    Args:
-        sites: The sites the definition created.
-        kind: The kind of site, such as ``"polyhedral"``.
-        parameters: The definition's parameters, for the error message.
-
-    Raises:
-        ValueError: If ``sites`` is empty.
-    """
-    if not sites:
-        raise ValueError(
-            f"No {kind} sites found for {parameters}. Try adjusting these "
-            f"parameters or verify that the specified species exist in the structure.")
-
-
 class TrajectoryBuilder:
     """Builder for creating Trajectory objects for site analysis.
 
@@ -538,10 +521,12 @@ class TrajectoryBuilder:
                         target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
-            _check_sites_found(
-                sites, "polyhedral",
-                f"centre_species='{centre_species}', vertex_species='{vertex_species}', "
-                f"cutoff={cutoff}, n_vertices={n_vertices}")
+            if not sites:
+                raise ValueError(
+                    f"No polyhedral sites found for centre_species='{centre_species}', "
+                    f"vertex_species='{vertex_species}', cutoff={cutoff}, "
+                    f"n_vertices={n_vertices}. Try adjusting these parameters or verify "
+                    f"that the specified species exist in the structure.")
             return sites
             
         # Store the function for later execution
@@ -640,10 +625,12 @@ class TrajectoryBuilder:
                         target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
-            _check_sites_found(
-                sites, "dynamic Voronoi",
-                f"centre_species='{centre_species}', reference_species='{reference_species}', "
-                f"cutoff={cutoff}, n_reference={n_reference}")
+            if not sites:
+                raise ValueError(
+                    f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
+                    f"reference_species='{reference_species}', cutoff={cutoff}, "
+                    f"n_reference={n_reference}. Try adjusting these parameters or verify "
+                    f"that the specified species exist in the structure.")
             return sites
             
         # Store the function for later execution

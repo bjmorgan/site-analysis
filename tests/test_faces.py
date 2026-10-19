@@ -369,18 +369,19 @@ class SharedFacesApiTestCase(unittest.TestCase):
 
     def test_finding_again_replaces_the_result(self):
         Site.reset_index(0)
-        coords = tetrahedra_structure().frac_coords
+        structure = tetrahedra_structure()
+        coords = structure.frac_coords.copy()
         trajectory = Trajectory(
             sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3],
                                   reference_center=coords[[0, 1, 2, 3]].mean(axis=0)),
                    PolyhedralSite(vertex_indices=[0, 1, 2, 4],
                                   reference_center=coords[[0, 1, 2, 4]].mean(axis=0))],
             atoms=[Atom(index=0)])
-        trajectory.find_shared_faces(tetrahedra_structure())
+        trajectory.find_shared_faces(structure)
         self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (0, 1, 2)),))
         # Atom 0 moves half a cell, so each site unwraps it to a different image.
         coords[0, 0] += 0.5
-        trajectory.find_shared_faces(Structure(Lattice.cubic(10.0), ["S"] * 5, coords))
+        trajectory.find_shared_faces(Structure(structure.lattice, structure.species, coords))
         self.assertEqual(trajectory.shared_faces(), ())
 
     def test_failed_finding_leaves_the_earlier_result(self):

@@ -1200,7 +1200,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._align_species = ["Na"]
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
-		builder._reference_based_sites = Mock()
 
 		# Mock the methods called within build (including validation)
 		with patch('site_analysis.builders.atoms_from_structure'), \
@@ -1221,7 +1220,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			self.assertIsNone(builder._align_species)
 			self.assertIsNone(builder._mapping_species)
 			self.assertEqual(builder._site_generators, [])
-			self.assertIsNone(builder._reference_based_sites)
 			
 	def test_reset(self):
 		"""Test that the reset() method returns all builder attributes to default values."""

@@ -119,8 +119,8 @@ class ReferenceBasedSites:
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
 
-        # Reference atom index -> target atom index, for the atoms of every
-        # environment mapped by the create_* methods
+        # Reference atom index -> target atom index, for the atoms of the
+        # sites created by the create_* methods
         self._mapping: dict[int, int] = {}
         
     @property
@@ -185,7 +185,7 @@ class ReferenceBasedSites:
             list(ref_environments.values()),
             target_species
         )
-        self._add_mapping(list(ref_environments.values()), mapped_environments)
+        mapping = self._merged_mapping(list(ref_environments.values()), mapped_environments)
 
         # Create polyhedral sites
         site_factory = self._initialise_site_factory()
@@ -195,6 +195,7 @@ class ReferenceBasedSites:
             label=label,
             labels=labels
         )
+        self._mapping = mapping
 
         return sites
     
@@ -250,7 +251,7 @@ class ReferenceBasedSites:
             list(ref_environments.values()),
             target_species
         )
-        self._add_mapping(list(ref_environments.values()), mapped_environments)
+        mapping = self._merged_mapping(list(ref_environments.values()), mapped_environments)
 
         # Create dynamic Voronoi sites
         site_factory = self._initialise_site_factory()
@@ -260,14 +261,16 @@ class ReferenceBasedSites:
             label=label,
             labels=labels
         )
+        self._mapping = mapping
         
         return sites
 
     def mapped_reference_frac_coords(self) -> np.ndarray:
         """Reference fractional coordinates of the mapped target atoms.
 
-        The mapping holds the atoms of every environment mapped by
-        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``.
+        The mapping holds the atoms of the sites created by
+        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``;
+        a call that raises adds none.
 
         Returns:
             A new array of shape ``(n_target_atoms, 3)``. Row ``t`` holds the
@@ -397,23 +400,25 @@ class ReferenceBasedSites:
                 f"Failed to map coordination environments{species_str}: {str(e)}"
             ) from e
             
-    def _add_mapping(self,
+    def _merged_mapping(self,
             ref_environments: list[list[int]],
-            mapped_environments: list[list[int]]) -> None:
-        """Add the atom pairs of mapped environments to the held mapping.
+            mapped_environments: list[list[int]]) -> dict[int, int]:
+        """The held mapping with the atom pairs of mapped environments added.
 
-        Every pair is checked, against the mapping and against the other
-        pairs, before any is added.
+        Each pair is checked against the held mapping and the other pairs.
+        The held mapping is not changed.
 
         Args:
             ref_environments: Environments as reference atom indices.
             mapped_environments: The same environments as target atom
                 indices.
 
+        Returns:
+            A new dict mapping reference atom indices to target atom indices.
+
         Raises:
             ValueError: If a target atom would be mapped from two reference
-                atoms, or a reference atom to two target atoms. The mapping
-                is then unchanged.
+                atoms, or a reference atom to two target atoms.
         """
         mapping = dict(self._mapping)
         sources = {target: ref for ref, target in mapping.items()}
@@ -430,7 +435,7 @@ class ReferenceBasedSites:
                         f"from reference atoms {sources[target]} and {ref}")
                 mapping[ref] = target
                 sources[target] = ref
-        self._mapping = mapping
+        return mapping
 
     def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.

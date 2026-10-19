@@ -788,9 +788,8 @@ class TrajectoryBuilder:
             ValueError: If required parameters are missing, if the
                 reference structure has same-species atom pairs closer
                 than ``min_atom_distance``, if site definitions map
-                different reference atoms to the same target atom, or one
-                reference atom to different target atoms (a 1:1 mapping
-                violation), if duplicate sites are detected, or if
+                different reference atoms to the same target atom (a 1:1
+                mapping violation), if duplicate sites are detected, or if
                 polyhedral sites coincide or one lies within another, or if
                 a commitment radius is not positive, or a dict of radii does
                 not cover every site label or is given while some sites have

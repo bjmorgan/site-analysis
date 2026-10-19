@@ -260,13 +260,15 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Raises:
             ValueError: If the number of points does not match the number
-                of sites.
+                of sites, or a site has a vertex index that is not an atom
+                of the structure.
         """
         if len(points) != len(self.sites):
             raise ValueError(
                 f"Expected {len(self.sites)} points (one per site), "
                 f"got {len(points)}"
             )
+        self.validate_atom_count(len(all_frac_coords))
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))

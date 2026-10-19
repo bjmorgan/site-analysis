@@ -354,6 +354,12 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
             self.collection.sites_contain_points(
                 points, self.structure.frac_coords, self.lattice.matrix)
 
+    def test_sites_contain_points_with_too_few_atoms_raises(self):
+        """Coordinates without a row for every vertex index are rejected."""
+        with self.assertRaisesRegex(ValueError, "^Site 1 has vertex index 7, but the structure has 7 atoms$"):
+            self.collection.sites_contain_points(
+                np.zeros((3, 3)), self.structure.frac_coords[:7], self.lattice.matrix)
+
     def test_checks_recent_site_via_priority_heuristic(self):
         """Test that assign_site_occupations uses _recent_sites for priority."""
         mock_structure = Mock(spec=Structure)

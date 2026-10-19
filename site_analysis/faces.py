@@ -1,7 +1,7 @@
 """Faces shared by polyhedral sites.
 
-This module provides ``Face``, a face of polyhedral sites, and finds the faces
-that polyhedral sites share: the vertex atoms two sites have in common under
+This module provides ``Face``, a face shared by two polyhedral sites, and finds
+the faces that polyhedral sites share: the vertex atoms two sites have in common under
 one lattice translation.
 """
 
@@ -22,23 +22,24 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True, order=True)
 class Face:
-    """A face of polyhedral sites.
+    """A face shared by two polyhedral sites.
 
     Faces compare and sort by site indices, then vertex indices.
 
     Attributes:
-        site_indices: Indices of the sites the face bounds, in ascending
-            order (sorted on construction).
+        site_indices: Indices of the two sites that share the face, in
+            ascending order (sorted on construction).
         vertex_indices: Indices of the atoms at the face's vertices, in
             ascending order (sorted on construction).
     """
 
-    site_indices: tuple[int, ...]
+    site_indices: tuple[int, int]
     vertex_indices: tuple[int, ...]
 
     def __post_init__(self) -> None:
         """Store the site indices and vertex indices in ascending order."""
-        object.__setattr__(self, "site_indices", tuple(sorted(self.site_indices)))
+        first, second = sorted(self.site_indices)
+        object.__setattr__(self, "site_indices", (first, second))
         object.__setattr__(self, "vertex_indices", tuple(sorted(self.vertex_indices)))
 
 

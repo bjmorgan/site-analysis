@@ -1,7 +1,6 @@
 import dataclasses
 import itertools
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 from pymatgen.core import Lattice, Structure
@@ -182,11 +181,6 @@ class FindSharedFacesTestCase(unittest.TestCase):
         self.assertEqual(shared_faces_of(structure, sites[::-1]),
                          shared_faces_of(structure, sites))
 
-    def test_faces_are_sorted_by_sites_then_vertices(self):
-        structure, sites = simple_cubic_cubes(2)
-        faces = shared_faces_of(structure, sites)
-        self.assertEqual(list(faces), sorted(faces))
-
     def test_noise_does_not_change_shared_faces(self):
         for n in (2, 3):
             structure, sites = simple_cubic_cubes(n)
@@ -343,7 +337,6 @@ class SharedFacesApiTestCase(unittest.TestCase):
         trajectory.find_shared_faces(structure)
         faces = trajectory.shared_faces()
         self.assertEqual(list(faces), sorted(faces))
-        self.assertTrue(all(len(face.site_indices) == 2 for face in faces))
 
     def test_adjacency_is_indexed_by_site_index(self):
         Site.reset_index(5)
@@ -375,13 +368,20 @@ class SharedFacesApiTestCase(unittest.TestCase):
         self.assertFalse(matrix.any())
 
     def test_finding_again_replaces_the_result(self):
-        structure, trajectory = self.cube_trajectory(2)
-        results = [(Face((0, 1), (0, 1, 2)),), (Face((0, 1), (1, 2, 3)),)]
-        with patch("site_analysis.polyhedral_site_collection._find_shared_faces",
-                   side_effect=results):
-            trajectory.find_shared_faces(structure)
-            trajectory.find_shared_faces(structure)
-        self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (1, 2, 3)),))
+        Site.reset_index(0)
+        coords = tetrahedra_structure().frac_coords
+        trajectory = Trajectory(
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                  reference_center=coords[[0, 1, 2, 3]].mean(axis=0)),
+                   PolyhedralSite(vertex_indices=[0, 1, 2, 4],
+                                  reference_center=coords[[0, 1, 2, 4]].mean(axis=0))],
+            atoms=[Atom(index=0)])
+        trajectory.find_shared_faces(tetrahedra_structure())
+        self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (0, 1, 2)),))
+        # Atom 0 moves half a cell, so each site unwraps it to a different image.
+        coords[0, 0] += 0.5
+        trajectory.find_shared_faces(Structure(Lattice.cubic(10.0), ["S"] * 5, coords))
+        self.assertEqual(trajectory.shared_faces(), ())
 
     def test_failed_finding_leaves_the_earlier_result(self):
         structure, trajectory = self.cube_trajectory()

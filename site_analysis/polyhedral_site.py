@@ -399,7 +399,7 @@ class PolyhedralSite(Site):
         (jumps of ~1.0), avoiding the expensive 27-image distance search.
 
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
-        marks the hull triangle topology cache as stale.
+        marks the cached hull triangle normals to be recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,

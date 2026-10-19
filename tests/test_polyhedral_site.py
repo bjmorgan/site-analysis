@@ -729,7 +729,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
             np.testing.assert_array_equal(mock_pbc.call_args[0][1], reference_center)
 
 
-# Vertex fixtures for face topology tests
+# Vertex fixtures for hull triangle tests
 
 _TETRAHEDRON = np.array([
     [0.4, 0.4, 0.4],

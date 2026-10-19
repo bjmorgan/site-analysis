@@ -8,7 +8,7 @@ from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
-from tests.test_helpers import interstitial_structure
+from tests.test_helpers import interstitial_structure, one_target_atom_for_two_reference_atoms
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -1643,18 +1643,7 @@ class TestBuilderValidation(unittest.TestCase):
 
 	def test_reference_atoms_of_different_definitions_mapped_to_one_target_atom_raises(self):
 		"""Two site definitions may not map different reference atoms to the same target atom."""
-		li, na = np.array([3.0, 5.0, 5.0]), np.array([7.0, 5.0, 5.0])
-		tetrahedron = 0.6 * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
-		coords = [li, na, *(li + tetrahedron), *(na + tetrahedron * [-1, 1, 1])]
-		reference = Structure(Lattice.cubic(10.0), ["Li", "Na"] + ["O"] * 8, coords,
-			coords_are_cartesian=True)
-		# Atom 2 moves away and atom 6 moves to between reference atoms 2 and 6,
-		# so both are nearest to target atom 6.
-		coords[2] = np.array([0.5, 0.5, 0.5])
-		coords[6] = np.array([5.0, 5.6, 5.6])
-		target = Structure(reference.lattice, reference.species, coords,
-			coords_are_cartesian=True)
-
+		reference, target = one_target_atom_for_two_reference_atoms()
 		builder = (TrajectoryBuilder()
 			.with_structure(target)
 			.with_reference_structure(reference)
@@ -1664,7 +1653,25 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=1.5, n_vertices=4)
 			.with_polyhedral_sites(centre_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4))
 
-		with self.assertRaisesRegex(ValueError, "^1:1 mapping violation: target atom 6 "
+		with self.assertRaisesRegex(ValueError, "^Failed to map coordination environments "
+			"for centre species Na and O: 1:1 mapping violation: target atom 6 "
+			"is mapped from reference atoms 2 and 6$"):
+			builder.build()
+
+	def test_dynamic_voronoi_definitions_share_the_mapping(self):
+		"""Two dynamic Voronoi definitions may not map different reference atoms to the same target atom."""
+		reference, target = one_target_atom_for_two_reference_atoms()
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(reference)
+			.with_mobile_species("Li")
+			.with_structure_alignment(align=False)
+			.with_site_mapping("O")
+			.with_dynamic_voronoi_sites(centre_species="Li", reference_species="O", cutoff=1.5, n_reference=4)
+			.with_dynamic_voronoi_sites(centre_species="Na", reference_species="O", cutoff=1.5, n_reference=4))
+
+		with self.assertRaisesRegex(ValueError, "^Failed to map coordination environments "
+			"for centre species Na and O: 1:1 mapping violation: target atom 6 "
 			"is mapped from reference atoms 2 and 6$"):
 			builder.build()
 

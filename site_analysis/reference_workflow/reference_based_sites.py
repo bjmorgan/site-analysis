@@ -268,7 +268,12 @@ class ReferenceBasedSites:
         mapped_environments = self._map_environments(ref_environment_list, target_species)
         ref_atoms = np.array(ref_environment_list, dtype=int).reshape(-1)
         target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
-        self._check_pairs(ref_atoms, target_atoms)
+        try:
+            self._check_pairs(ref_atoms, target_atoms)
+        except ValueError as error:
+            raise ValueError(
+                f"Failed to map coordination environments for centre species "
+                f"{center_species} and {coordination_species}: {error}") from error
         sites = create(
             mapped_environments,
             reference_centers=reference_centers,
@@ -292,9 +297,19 @@ class ReferenceBasedSites:
             atom ``t`` is not mapped.
         """
         coords = np.full((len(self._target_frac_coords), 3), np.nan)
-        refs = np.flatnonzero(self._target_of_ref != -1)
-        coords[self._target_of_ref[refs]] = self._effective_ref_coords[refs]
+        refs, targets = self._held_pairs()
+        coords[targets] = self._effective_ref_coords[refs]
         return coords
+
+    def _held_pairs(self) -> tuple[np.ndarray, np.ndarray]:
+        """The reference-target atom pairs of the held mapping.
+
+        Returns:
+            The mapped reference atom indices, in ascending order, and the
+            target atom index paired with each.
+        """
+        refs = np.flatnonzero(self._target_of_ref != -1)
+        return refs, self._target_of_ref[refs]
 
     def _align_structures(self, align_species: list[str] | None = None) -> None:
         """Align the reference structure to the target structure.
@@ -425,10 +440,10 @@ class ReferenceBasedSites:
                 reference atom with two target atoms, or a target atom with
                 two reference atoms (a 1:1 mapping violation).
         """
-        held_refs = np.flatnonzero(self._target_of_ref != -1)
+        held_refs, held_targets = self._held_pairs()
         _check_one_to_one(
             np.concatenate([held_refs, ref_atoms]),
-            np.concatenate([self._target_of_ref[held_refs], target_atoms]))
+            np.concatenate([held_targets, target_atoms]))
 
     def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.

@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
-from tests.test_helpers import interstitial_structure
+from tests.test_helpers import interstitial_structure, one_target_atom_for_two_reference_atoms
 
 
 class TestReferenceBasedSites(unittest.TestCase):
@@ -1001,25 +1001,16 @@ class ReferenceMappingTestCase(unittest.TestCase):
                                       self.structure.frac_coords[0])
 
     def test_target_atom_already_mapped_raises(self):
-        li, na = np.array([3.0, 5.0, 5.0]), np.array([7.0, 5.0, 5.0])
-        tetrahedron = 0.6 * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
-        coords = [li, na, *(li + tetrahedron), *(na + tetrahedron * [-1, 1, 1])]
-        reference = Structure(Lattice.cubic(10.0), ["Li", "Na"] + ["O"] * 8, coords,
-                              coords_are_cartesian=True)
-        # Atom 2 moves away and atom 6 moves to between reference atoms 2
-        # and 6, so both are nearest to target atom 6.
-        coords[2] = np.array([0.5, 0.5, 0.5])
-        coords[6] = np.array([5.0, 5.6, 5.6])
-        target = Structure(reference.lattice, reference.species, coords,
-                           coords_are_cartesian=True)
+        reference, target = one_target_atom_for_two_reference_atoms()
         rbs = ReferenceBasedSites(reference, target, align=False)
         rbs.create_polyhedral_sites(
             center_species="Li", vertex_species="O", cutoff=1.5, n_vertices=4,
             target_species="O")
         mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: target atom 6 is mapped "
-                            r"from reference atoms 2 and 6$"):
+                ValueError, r"^Failed to map coordination environments for centre "
+                            r"species Na and O: 1:1 mapping violation: target atom 6 "
+                            r"is mapped from reference atoms 2 and 6$"):
             rbs.create_polyhedral_sites(
                 center_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4,
                 target_species="O")
@@ -1039,8 +1030,9 @@ class ReferenceMappingTestCase(unittest.TestCase):
             target_species="O")
         mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: reference atom 0 is mapped "
-                            r"to target atoms 0 and 64$"):
+                ValueError, r"^Failed to map coordination environments for centre "
+                            r"species Na and O: 1:1 mapping violation: reference atom 0 "
+                            r"is mapped to target atoms 0 and 64$"):
             rbs.create_polyhedral_sites(
                 center_species="Na", vertex_species="O", cutoff=2.1, n_vertices=6)
         np.testing.assert_array_equal(rbs.mapped_reference_frac_coords(), mapped)

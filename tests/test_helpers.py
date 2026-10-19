@@ -37,3 +37,26 @@ def interstitial_structure(supercell=(2, 2, 2), a=4.0):
 	li = [[x, y, z] for x in (0.25, 0.75) for y in (0.25, 0.75) for z in (0.25, 0.75)]
 	unit = Structure(Lattice.cubic(a), ["O"] * 4 + ["Na"] * 4 + ["Li"] * 8, o + na + li)
 	return unit * supercell
+
+
+def one_target_atom_for_two_reference_atoms():
+	"""A Li and a Na tetrahedron of O atoms whose vertices map to one target atom.
+
+	In the reference, O atoms 2-5 surround Li atom 0 and O atoms 6-9
+	surround Na atom 1. In the target, atom 2 moves away and atom 6 moves
+	to between reference atoms 2 and 6, so both are nearest to target
+	atom 6.
+
+	Returns:
+		tuple: The reference and target Structures.
+	"""
+	li, na = np.array([3.0, 5.0, 5.0]), np.array([7.0, 5.0, 5.0])
+	tetrahedron = 0.6 * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
+	coords = [li, na, *(li + tetrahedron), *(na + tetrahedron * [-1, 1, 1])]
+	reference = Structure(Lattice.cubic(10.0), ["Li", "Na"] + ["O"] * 8, coords,
+		coords_are_cartesian=True)
+	coords[2] = np.array([0.5, 0.5, 0.5])
+	coords[6] = np.array([5.0, 5.6, 5.6])
+	target = Structure(reference.lattice, reference.species, coords,
+		coords_are_cartesian=True)
+	return reference, target

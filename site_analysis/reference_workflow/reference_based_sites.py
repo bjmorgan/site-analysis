@@ -123,10 +123,9 @@ class ReferenceBasedSites:
         self._site_factory: SiteFactory | None = None
 
         # The mapping between the atoms of the sites created by the
-        # create_* methods: the target atom index of each reference atom
-        # and the reference atom index of each target atom, or -1 if unmapped
+        # create_* methods: the target atom index of each reference atom,
+        # or -1 if unmapped
         self._target_of_ref = np.full(len(self._ref_frac_coords), -1)
-        self._ref_of_target = np.full(len(self._target_frac_coords), -1)
         
     @property
     def _effective_ref_coords(self) -> np.ndarray:
@@ -169,8 +168,14 @@ class ReferenceBasedSites:
         """
         return self._create_sites(
             self._initialise_site_factory().create_polyhedral_sites,
-            center_species, vertex_species, cutoff, n_vertices,
-            label, labels, target_species, use_reference_centers)
+            center_species=center_species,
+            coordination_species=vertex_species,
+            cutoff=cutoff,
+            n_coord=n_vertices,
+            label=label,
+            labels=labels,
+            target_species=target_species,
+            use_reference_centers=use_reference_centers)
 
     def create_dynamic_voronoi_sites(self, 
                                 center_species: str, 
@@ -206,8 +211,14 @@ class ReferenceBasedSites:
         """
         return self._create_sites(
             self._initialise_site_factory().create_dynamic_voronoi_sites,
-            center_species, reference_species, cutoff, n_reference,
-            label, labels, target_species, use_reference_centers)
+            center_species=center_species,
+            coordination_species=reference_species,
+            cutoff=cutoff,
+            n_coord=n_reference,
+            label=label,
+            labels=labels,
+            target_species=target_species,
+            use_reference_centers=use_reference_centers)
 
     def _create_sites(self,
             create: Callable[..., list[SiteT]],
@@ -265,11 +276,10 @@ class ReferenceBasedSites:
             labels=labels
         )
         self._target_of_ref[ref_atoms] = target_atoms
-        self._ref_of_target[target_atoms] = ref_atoms
         return sites
 
     def mapped_reference_frac_coords(self) -> np.ndarray:
-        """Reference fractional coordinates of the mapped target atoms.
+        """Fractional coordinates of the reference atom mapped to each target atom.
 
         The mapping holds the atoms of the sites created by
         ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``;
@@ -281,9 +291,9 @@ class ReferenceBasedSites:
             (aligned to the target when alignment is on), or NaN if target
             atom ``t`` is not mapped.
         """
-        coords = np.full((len(self._ref_of_target), 3), np.nan)
-        mapped = self._ref_of_target != -1
-        coords[mapped] = self._effective_ref_coords[self._ref_of_target[mapped]]
+        coords = np.full((len(self._target_frac_coords), 3), np.nan)
+        refs = np.flatnonzero(self._target_of_ref != -1)
+        coords[self._target_of_ref[refs]] = self._effective_ref_coords[refs]
         return coords
 
     def _align_structures(self, align_species: list[str] | None = None) -> None:

@@ -956,10 +956,6 @@ class ReferenceMappingTestCase(unittest.TestCase):
         self.species = np.array([site.species_string for site in self.structure])
         self.rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
 
-    def _hold_pairs(self, ref_atoms, target_atoms):
-        self.rbs._target_of_ref[ref_atoms] = target_atoms
-        self.rbs._ref_of_target[target_atoms] = ref_atoms
-
     def test_mapping_is_empty_after_init(self):
         coords = self.rbs.mapped_reference_frac_coords()
         self.assertEqual(coords.shape, (len(self.structure), 3))
@@ -998,34 +994,56 @@ class ReferenceMappingTestCase(unittest.TestCase):
         self.assertTrue(np.isnan(coords[~oxygen]).all())
 
     def test_mapped_reference_frac_coords_returns_a_new_array(self):
-        self._hold_pairs([0], [0])
+        self.rbs.create_polyhedral_sites(
+            center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
         self.rbs.mapped_reference_frac_coords()[0] = 9.0
         np.testing.assert_array_equal(self.rbs.mapped_reference_frac_coords()[0],
                                       self.structure.frac_coords[0])
 
-    def test_check_pairs_accepts_held_and_new_pairs(self):
-        self._hold_pairs([0, 1], [0, 1])
-        self.rbs._check_pairs(np.array([1, 2]), np.array([1, 2]))
-
     def test_target_atom_already_mapped_raises(self):
-        self._hold_pairs([0, 1], [0, 1])
+        li, na = np.array([3.0, 5.0, 5.0]), np.array([7.0, 5.0, 5.0])
+        tetrahedron = 0.6 * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
+        coords = [li, na, *(li + tetrahedron), *(na + tetrahedron * [-1, 1, 1])]
+        reference = Structure(Lattice.cubic(10.0), ["Li", "Na"] + ["O"] * 8, coords,
+                              coords_are_cartesian=True)
+        # Atom 2 moves away and atom 6 moves to between reference atoms 2
+        # and 6, so both are nearest to target atom 6.
+        coords[2] = np.array([0.5, 0.5, 0.5])
+        coords[6] = np.array([5.0, 5.6, 5.6])
+        target = Structure(reference.lattice, reference.species, coords,
+                           coords_are_cartesian=True)
+        rbs = ReferenceBasedSites(reference, target, align=False)
+        rbs.create_polyhedral_sites(
+            center_species="Li", vertex_species="O", cutoff=1.5, n_vertices=4,
+            target_species="O")
+        mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: target atom 1 is mapped "
-                            r"from reference atoms 1 and 2$"):
-            self.rbs._check_pairs(np.array([2, 5]), np.array([1, 5]))
+                ValueError, r"^1:1 mapping violation: target atom 6 is mapped "
+                            r"from reference atoms 2 and 6$"):
+            rbs.create_polyhedral_sites(
+                center_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4,
+                target_species="O")
+        np.testing.assert_array_equal(rbs.mapped_reference_frac_coords(), mapped)
 
     def test_reference_atom_already_mapped_raises(self):
-        self._hold_pairs([0, 1], [0, 1])
+        # The O atom at the origin moves 1.9 Angstrom along x, so it is
+        # the nearest O atom to reference atom 0 but Li atom 64 is the
+        # nearest atom of any species.
+        coords = self.structure.cart_coords
+        coords[0] += [1.9, 0.0, 0.0]
+        target = Structure(self.structure.lattice, self.structure.species, coords,
+                           coords_are_cartesian=True)
+        rbs = ReferenceBasedSites(self.structure, target, align=False)
+        rbs.create_polyhedral_sites(
+            center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4,
+            target_species="O")
+        mapped = rbs.mapped_reference_frac_coords()
         with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
-                            r"to target atoms 1 and 3$"):
-            self.rbs._check_pairs(np.array([1, 5]), np.array([3, 5]))
-
-    def test_conflict_within_the_pairs_raises(self):
-        with self.assertRaisesRegex(
-                ValueError, r"^1:1 mapping violation: target atom 2 is mapped "
-                            r"from reference atoms 0 and 1$"):
-            self.rbs._check_pairs(np.array([0, 1]), np.array([2, 2]))
+                ValueError, r"^1:1 mapping violation: reference atom 0 is mapped "
+                            r"to target atoms 0 and 64$"):
+            rbs.create_polyhedral_sites(
+                center_species="Na", vertex_species="O", cutoff=2.1, n_vertices=6)
+        np.testing.assert_array_equal(rbs.mapped_reference_frac_coords(), mapped)
 
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):

@@ -30,7 +30,7 @@ This ordering means atoms that remain in or near their current site are resolved
 
 If no site contains the atom, it is left unassigned (`None`).
 
-Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency).
+Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency). Polyhedral sites may overlap partially. A site that lies wholly inside another, or coincides with it, raises a `ValueError` when shared faces are found, by `TrajectoryBuilder.build()` or `Trajectory.find_shared_faces()`.
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 

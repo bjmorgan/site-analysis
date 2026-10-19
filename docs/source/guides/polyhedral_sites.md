@@ -174,13 +174,13 @@ For a comparison of all site types and guidance on choosing between them, see th
 
 Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order.
 
-No tolerance is involved, so distortion of the structure does not change the faces while each vertex atom stays nearest the periodic image its site uses. Displacements of about half a site's width can change them, so find the faces from the reference or another undistorted structure.
+No tolerance is involved. The faces depend on which periodic image of each vertex atom is nearest its site's reference centre (or, for a site without a reference centre, on the spread-based unwrapping of its vertices), so a structure distorted enough to change that image changes the faces.
 
 In a cell two sites wide, two neighbouring sites share two faces, one on each side.
 
-When every site is polyhedral and every vertex atom of every site is a vertex of a site created by `with_polyhedral_sites`, `build()` finds the shared faces from the reference geometry (aligned when alignment is on). Otherwise (for example if the sites are created directly with `Trajectory(sites=..., atoms=...)`, or the builder also adds sites with `with_existing_sites` that have other vertex atoms), `build()` does not find the faces, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure's atoms must be in the same order as the structures the trajectory analyses.
+When every site is polyhedral and every vertex atom of every site is a vertex of a site created by `with_polyhedral_sites`, `build()` finds the shared faces from the reference geometry (aligned when alignment is on), mapped to the target structure's atom indices. Otherwise (for example if the sites are created directly with `Trajectory(sites=..., atoms=...)`, or the builder also adds sites with `with_existing_sites` that have other vertex atoms), `build()` does not find the faces, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure must have its atoms in the same order as the structures the trajectory analyses, because the sites' vertex indices refer to that order.
 
-`find_shared_faces` raises `ValueError`, keeping the faces found before, for sites that coincide or lie inside one another, for vertex indices beyond the structure's atoms, for non-finite vertex coordinates and for negative site indices. `shared_faces()` and `site_adjacency()` raise `ValueError` before the shared faces are found. `find_shared_faces`, `shared_faces()` and `site_adjacency()` raise `TypeError` for sites that are not polyhedral.
+Polyhedral sites may overlap partially. `find_shared_faces` raises `ValueError`, keeping the faces found before, for two sites that coincide (they have the same vertex atoms at the same positions), for a site that lies inside another (all its vertex atoms are vertices of the other site under one lattice translation), for a vertex index not less than the number of atoms in the structure, and for non-finite vertex coordinates. `shared_faces()` and `site_adjacency()` raise `RuntimeError` before the shared faces are found. `find_shared_faces`, `shared_faces()` and `site_adjacency()` raise `TypeError` for sites that are not polyhedral.
 
 `shared_faces()` returns every shared face as a tuple of `Face` objects sorted by `site_indices` and then `vertex_indices`:
 
@@ -210,13 +210,13 @@ between_neighbours = adjacency[events.from_site[:, None],
 not_between_neighbours = events[~between_neighbours]
 ```
 
-Indexing with column vectors (`[:, None]`) gives a sparse matrix whether or not there are any transitions, so `.toarray().ravel()` always gives a boolean array with one element per transition.
+Indexing with column vectors (`[:, None]`) gives a sparse array whether or not there are any transitions, so `.toarray().ravel()` always gives a boolean array with one element per transition.
 
 Transitions record the sites an atom left and entered, not faces, so in a cell two sites wide a transition between neighbouring sites cannot be matched to one of their two faces.
 
 ## Containment Algorithms
 
-The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached face topology is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:
+The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached hull triangles is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:
 
 ```bash
 pip install site-analysis[fast]  # installs numba

@@ -118,6 +118,10 @@ class ReferenceBasedSites:
         self._coord_finder: CoordinationEnvironmentFinder | None = None
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
+
+        # Reference atom index -> target atom index, for the atoms of every
+        # environment mapped by the create_* methods
+        self._mapping: dict[int, int] = {}
         
     @property
     def _effective_ref_coords(self) -> np.ndarray:
@@ -154,38 +158,9 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
+                if an atom of an environment maps differently from the
+                mapping held from earlier calls (a 1:1 mapping violation),
                 or if both label and labels are provided.
-        """
-        return self._create_polyhedral_sites_and_vertex_coords(
-            center_species=center_species,
-            vertex_species=vertex_species,
-            cutoff=cutoff,
-            n_vertices=n_vertices,
-            label=label,
-            labels=labels,
-            target_species=target_species,
-            use_reference_centers=use_reference_centers
-        )[0]
-
-    def _create_polyhedral_sites_and_vertex_coords(self,
-                            center_species: str, 
-                            vertex_species: str | list[str], 
-                            cutoff: float, 
-                            n_vertices: int,
-                            label: str | None = None, 
-                            labels: list[str] | None = None, 
-                            target_species: str | list[str] | None = None,
-                            use_reference_centers: bool = True
-                            ) -> tuple[list[PolyhedralSite], dict[int, np.ndarray]]:
-        """Create PolyhedralSite objects and the reference coordinates of their vertex atoms.
-
-        Takes the same arguments and raises the same errors as
-        ``create_polyhedral_sites``.
-
-        Returns:
-            A tuple of the PolyhedralSite objects, and the reference
-            fractional coordinates of each vertex atom keyed by target atom
-            index.
         """
         # Find coordination environments in reference structure
         ref_environments = self._find_coordination_environments(
@@ -210,7 +185,8 @@ class ReferenceBasedSites:
             list(ref_environments.values()),
             target_species
         )
-        
+        self._add_mapping(list(ref_environments.values()), mapped_environments)
+
         # Create polyhedral sites
         site_factory = self._initialise_site_factory()
         sites = site_factory.create_polyhedral_sites(
@@ -220,17 +196,7 @@ class ReferenceBasedSites:
             labels=labels
         )
 
-        # The reference coordinates of each target atom that is a vertex
-        ref_coords = self._effective_ref_coords
-        vertex_coords = {
-            target_atom: ref_coords[ref_atom]
-            for ref_environment, mapped_environment
-            in zip(ref_environments.values(), mapped_environments, strict=True)
-            for ref_atom, target_atom in zip(ref_environment, mapped_environment,
-                                             strict=True)
-        }
-
-        return sites, vertex_coords
+        return sites
     
     def create_dynamic_voronoi_sites(self, 
                                 center_species: str, 
@@ -260,6 +226,8 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
+                if an atom of an environment maps differently from the
+                mapping held from earlier calls (a 1:1 mapping violation),
                 or if both label and labels are provided.
         """
         # Find coordination environments in reference structure
@@ -282,7 +250,8 @@ class ReferenceBasedSites:
             list(ref_environments.values()),
             target_species
         )
-        
+        self._add_mapping(list(ref_environments.values()), mapped_environments)
+
         # Create dynamic Voronoi sites
         site_factory = self._initialise_site_factory()
         sites = site_factory.create_dynamic_voronoi_sites(
@@ -293,7 +262,25 @@ class ReferenceBasedSites:
         )
         
         return sites
-    
+
+    def mapped_reference_frac_coords(self) -> np.ndarray:
+        """Reference fractional coordinates of the mapped target atoms.
+
+        The mapping holds the atoms of every environment mapped by
+        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``.
+
+        Returns:
+            A new array of shape ``(n_target_atoms, 3)``. Row ``t`` holds the
+            coordinates of the reference atom mapped to target atom ``t``
+            (aligned to the target when alignment is on), or NaN if target
+            atom ``t`` is not mapped.
+        """
+        coords = np.full((len(self._target_frac_coords), 3), np.nan)
+        ref_atoms = np.fromiter(self._mapping.keys(), dtype=int, count=len(self._mapping))
+        target_atoms = np.fromiter(self._mapping.values(), dtype=int, count=len(self._mapping))
+        coords[target_atoms] = self._effective_ref_coords[ref_atoms]
+        return coords
+
     def _align_structures(self, align_species: list[str] | None = None) -> None:
         """Align the reference structure to the target structure.
 
@@ -410,6 +397,41 @@ class ReferenceBasedSites:
                 f"Failed to map coordination environments{species_str}: {str(e)}"
             ) from e
             
+    def _add_mapping(self,
+            ref_environments: list[list[int]],
+            mapped_environments: list[list[int]]) -> None:
+        """Add the atom pairs of mapped environments to the held mapping.
+
+        Every pair is checked, against the mapping and against the other
+        pairs, before any is added.
+
+        Args:
+            ref_environments: Environments as reference atom indices.
+            mapped_environments: The same environments as target atom
+                indices.
+
+        Raises:
+            ValueError: If a target atom would be mapped from two reference
+                atoms, or a reference atom to two target atoms. The mapping
+                is then unchanged.
+        """
+        mapping = dict(self._mapping)
+        sources = {target: ref for ref, target in mapping.items()}
+        for ref_environment, mapped_environment in zip(
+                ref_environments, mapped_environments, strict=True):
+            for ref, target in zip(ref_environment, mapped_environment, strict=True):
+                if mapping.get(ref, target) != target:
+                    raise ValueError(
+                        f"1:1 mapping violation: reference atom {ref} is mapped "
+                        f"to target atoms {mapping[ref]} and {target}")
+                if sources.get(target, ref) != ref:
+                    raise ValueError(
+                        f"1:1 mapping violation: target atom {target} is mapped "
+                        f"from reference atoms {sources[target]} and {ref}")
+                mapping[ref] = target
+                sources[target] = ref
+        self._mapping = mapping
+
     def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.
         

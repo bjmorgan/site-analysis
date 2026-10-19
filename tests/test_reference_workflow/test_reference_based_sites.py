@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
+from tests.test_helpers import interstitial_structure
 
 
 class TestReferenceBasedSites(unittest.TestCase):
@@ -945,6 +946,81 @@ class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
         structure_value = self.reference_structure[0].frac_coords[0]
         self.assertEqual(structure_value, original_value)
         self.assertNotEqual(structure_value, 0.9)    
+
+
+class ReferenceMappingTestCase(unittest.TestCase):
+    """Tests for the reference-to-target mapping held across create calls."""
+
+    def setUp(self):
+        self.structure = interstitial_structure()
+        self.species = np.array([site.species_string for site in self.structure])
+        self.rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
+
+    def test_mapping_is_empty_after_init(self):
+        self.assertEqual(self.rbs._mapping, {})
+        coords = self.rbs.mapped_reference_frac_coords()
+        self.assertEqual(coords.shape, (len(self.structure), 3))
+        self.assertTrue(np.isnan(coords).all())
+
+    def test_mapping_accumulates_across_create_calls(self):
+        self.rbs.create_polyhedral_sites(
+            center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
+        self.rbs.create_dynamic_voronoi_sites(
+            center_species="Li", reference_species="Na", cutoff=2.0, n_reference=4)
+        coords = self.rbs.mapped_reference_frac_coords()
+        mapped = self.species != "Li"
+        np.testing.assert_array_equal(coords[mapped], self.structure.frac_coords[mapped])
+        self.assertTrue(np.isnan(coords[~mapped]).all())
+
+    def test_mapped_rows_hold_the_aligned_reference_coordinates(self):
+        # The target is the reference translated, with its atoms in reverse
+        # order, so each aligned reference atom lies on the target atom it
+        # maps to.
+        target = Structure(self.structure.lattice, self.structure.species[::-1],
+                           (self.structure.frac_coords[::-1] + 0.1) % 1.0)
+        rbs = ReferenceBasedSites(self.structure, target)
+        rbs.create_polyhedral_sites(
+            center_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
+        coords = rbs.mapped_reference_frac_coords()
+        oxygen = self.species[::-1] == "O"
+        difference = coords[oxygen] - target.frac_coords[oxygen]
+        np.testing.assert_allclose(difference - np.round(difference), 0.0, atol=1e-8)
+        self.assertTrue(np.isnan(coords[~oxygen]).all())
+
+    def test_mapped_reference_frac_coords_returns_a_new_array(self):
+        self.rbs._add_mapping([[0]], [[0]])
+        self.rbs.mapped_reference_frac_coords()[0] = 9.0
+        np.testing.assert_array_equal(self.rbs.mapped_reference_frac_coords()[0],
+                                      self.structure.frac_coords[0])
+
+    def test_repeated_pairs_are_accepted(self):
+        self.rbs._add_mapping([[0, 1], [1, 2]], [[0, 1], [1, 2]])
+        self.rbs._add_mapping([[2, 3]], [[2, 3]])
+        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1, 2: 2, 3: 3})
+
+    def test_target_atom_already_mapped_raises_and_leaves_mapping_unchanged(self):
+        self.rbs._add_mapping([[0, 1]], [[0, 1]])
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 1 is mapped "
+                            r"from reference atoms 1 and 2$"):
+            self.rbs._add_mapping([[5, 2]], [[5, 1]])
+        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1})
+
+    def test_reference_atom_already_mapped_raises_and_leaves_mapping_unchanged(self):
+        self.rbs._add_mapping([[0, 1]], [[0, 1]])
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
+                            r"to target atoms 1 and 3$"):
+            self.rbs._add_mapping([[5, 1]], [[5, 3]])
+        self.assertEqual(self.rbs._mapping, {0: 0, 1: 1})
+
+    def test_conflict_within_one_call_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 2 is mapped "
+                            r"from reference atoms 0 and 1$"):
+            self.rbs._add_mapping([[0], [1]], [[2], [2]])
+        self.assertEqual(self.rbs._mapping, {})
+
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):
     """Test that reference workflow classes can be imported at package level."""

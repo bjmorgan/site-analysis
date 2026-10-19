@@ -242,7 +242,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Verify ReferenceBasedSites is not called yet
 			mock_rbs_class.assert_not_called()
@@ -254,7 +254,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			mock_rbs_class.assert_called_once()
 			
 			# Verify the correct parameters were used
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.assert_called_once_with(
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
 				center_species="Li",
 				vertex_species="O",
 				cutoff=2.0,
@@ -294,14 +294,50 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Build should succeed despite unusual order
 			builder.build()
 			
 			# Verify the correct parameters were used
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.assert_called_once()
+			mock_rbs.create_polyhedral_sites.assert_called_once()
 	
+	def test_one_reference_based_sites_per_build(self):
+		"""Every reference-based site generator in a build uses one ReferenceBasedSites."""
+		builder = (TrajectoryBuilder()
+			.with_structure(self.structure)
+			.with_reference_structure(self.reference_structure)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
+			.with_polyhedral_sites(centre_species="O", vertex_species="Li", cutoff=2.0, n_vertices=4))
+
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			mock_rbs = mock_rbs_class.return_value
+			mock_rbs.create_polyhedral_sites.return_value = [Mock()]
+			builder.build()
+
+		mock_rbs_class.assert_called_once()
+		self.assertEqual(mock_rbs.create_polyhedral_sites.call_count, 2)
+
+	def test_failed_build_does_not_reuse_reference_based_sites(self):
+		"""A build after a failed build creates a new ReferenceBasedSites."""
+		builder = (TrajectoryBuilder()
+			.with_structure(self.structure)
+			.with_reference_structure(self.reference_structure)
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4))
+
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			mock_rbs_class.return_value.create_polyhedral_sites.return_value = [Mock()]
+			with self.assertRaisesRegex(ValueError, "Mobile species must be set"):
+				builder.build()
+			builder.with_mobile_species("Li").build()
+
+		self.assertEqual(mock_rbs_class.call_count, 2)
+
 	def test_build_checks_required_parameters(self):
 		"""Test that build validates required parameters."""
 		# Configure without setting structure
@@ -438,7 +474,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class:
 			mock_rbs = Mock()
 			mock_rbs_class.return_value = mock_rbs
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = ([], {})
+			mock_rbs.create_polyhedral_sites.return_value = []
 			
 			# Build should fail when no sites are found
 			with self.assertRaises(ValueError) as context:
@@ -882,7 +918,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Call build to trigger site creation
 			builder.build()
@@ -895,8 +931,8 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				align_species=["O"]
 			)
 			
-			# Verify _create_polyhedral_sites_and_vertex_coords was called with the correct mapping parameters
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.assert_called_once_with(
+			# Verify create_polyhedral_sites was called with the correct mapping parameters
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
 				center_species="Li",
 				vertex_species="O",
 				cutoff=2.0,
@@ -938,13 +974,13 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Call build to trigger site creation
 			builder.build()
 			
-			# Verify _create_polyhedral_sites_and_vertex_coords was called with the alignment species as target_species
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.assert_called_once_with(
+			# Verify create_polyhedral_sites was called with the alignment species as target_species
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
 				center_species="Li",
 				vertex_species="O",
 				cutoff=2.0,
@@ -1038,7 +1074,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Call build to trigger site creation
 			builder.build()
@@ -1164,6 +1200,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._align_species = ["Na"]
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
+		builder._reference_based_sites = Mock()
 
 		# Mock the methods called within build (including validation)
 		with patch('site_analysis.builders.atoms_from_structure'), \
@@ -1184,6 +1221,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			self.assertIsNone(builder._align_species)
 			self.assertIsNone(builder._mapping_species)
 			self.assertEqual(builder._site_generators, [])
+			self.assertIsNone(builder._reference_based_sites)
 			
 	def test_reset(self):
 		"""Test that the reset() method returns all builder attributes to default values."""
@@ -1199,6 +1237,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._align_species = ["Na"]
 		builder._mapping_species = ["Cl"]
 		builder._site_generators = [lambda: []]
+		builder._reference_based_sites = Mock()
 		
 		# Call reset and verify it returns self for chaining
 		result = builder.reset()
@@ -1213,6 +1252,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertIsNone(builder._align_species)
 		self.assertIsNone(builder._mapping_species)
 		self.assertEqual(builder._site_generators, [])
+		self.assertIsNone(builder._reference_based_sites)
 		
 	def test_initialization_calls_reset(self):
 		"""Test that TrajectoryBuilder.__init__() calls reset()."""
@@ -1303,13 +1343,13 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			
 			# Configure mock to return site objects
 			mock_sites = [Mock(), Mock()]
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.return_value = (mock_sites, {})
+			mock_rbs.create_polyhedral_sites.return_value = mock_sites
 			
 			# Call build to trigger site creation
 			builder.build()
 			
-			# Verify _create_polyhedral_sites_and_vertex_coords was called with use_reference_centers=False
-			mock_rbs._create_polyhedral_sites_and_vertex_coords.assert_called_once_with(
+			# Verify create_polyhedral_sites was called with use_reference_centers=False
+			mock_rbs.create_polyhedral_sites.assert_called_once_with(
 				center_species="Li",
 				vertex_species="O",
 				cutoff=2.0,
@@ -1574,6 +1614,33 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaises(ValueError) as ctx:
 			builder.build()
 		self.assertIn("Duplicate sites", str(ctx.exception))
+
+	def test_reference_atoms_of_different_definitions_mapped_to_one_target_atom_raises(self):
+		"""Two site definitions may not map different reference atoms to the same target atom."""
+		li, na = np.array([3.0, 5.0, 5.0]), np.array([7.0, 5.0, 5.0])
+		tetrahedron = 0.6 * np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]])
+		coords = [li, na, *(li + tetrahedron), *(na + tetrahedron * [-1, 1, 1])]
+		reference = Structure(Lattice.cubic(10.0), ["Li", "Na"] + ["O"] * 8, coords,
+			coords_are_cartesian=True)
+		# Atom 2 moves away and atom 6 moves to between reference atoms 2 and 6,
+		# so both are nearest to target atom 6.
+		coords[2] = np.array([0.5, 0.5, 0.5])
+		coords[6] = np.array([5.0, 5.6, 5.6])
+		target = Structure(reference.lattice, reference.species, coords,
+			coords_are_cartesian=True)
+
+		builder = (TrajectoryBuilder()
+			.with_structure(target)
+			.with_reference_structure(reference)
+			.with_mobile_species("Li")
+			.with_structure_alignment(align=False)
+			.with_site_mapping("O")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=1.5, n_vertices=4)
+			.with_polyhedral_sites(centre_species="Na", vertex_species="O", cutoff=1.5, n_vertices=4))
+
+		with self.assertRaisesRegex(ValueError, "^1:1 mapping violation: target atom 6 "
+			"is mapped from reference atoms 2 and 6$"):
+			builder.build()
 
 	def test_non_duplicate_sites_pass(self):
 		"""Non-duplicate polyhedral sites pass the post-build check."""

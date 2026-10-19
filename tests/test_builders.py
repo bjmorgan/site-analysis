@@ -6,6 +6,7 @@ import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
 from tests.test_helpers import interstitial_structure
 
@@ -1590,6 +1591,20 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaises(ValueError) as ctx:
 			builder.build()
 		self.assertIn("Duplicate sites", str(ctx.exception))
+
+	def test_mixed_site_types_after_reference_based_sites_raise_type_error(self):
+		"""Existing sites of mixed types after reference-based polyhedral sites raise TypeError."""
+		structure = interstitial_structure()
+		builder = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_reference_structure(structure)
+			.with_mobile_species("Li")
+			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
+			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+				SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.0)]))
+
+		with self.assertRaisesRegex(TypeError, "mixed Site types"):
+			builder.build()
 
 	def test_duplicate_dynamic_voronoi_sites_raises(self):
 		"""Post-build check rejects duplicate dynamic voronoi sites."""

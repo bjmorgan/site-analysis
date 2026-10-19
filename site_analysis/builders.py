@@ -46,12 +46,14 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
+from site_analysis.site_collection import SiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
 import numpy as np
-from typing import Callable, Sequence, Any, cast
+from typing import Callable, Sequence, Any
 
 
 class TrajectoryBuilder:
@@ -511,7 +513,7 @@ class TrajectoryBuilder:
                         cutoff=cutoff,
                         n_vertices=n_vertices,
                         label=label,
-                        target_species=self._target_species,
+                        target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
             
@@ -616,7 +618,7 @@ class TrajectoryBuilder:
                         cutoff=cutoff,
                         n_reference=n_reference,
                         label=label,
-                        target_species=self._target_species,
+                        target_species=self._effective_mapping_species,
                         use_reference_centers=use_reference_centers
                     )
             
@@ -726,7 +728,7 @@ class TrajectoryBuilder:
         return self._reference_based_sites
 
     @property
-    def _target_species(self) -> list[str] | None:
+    def _effective_mapping_species(self) -> list[str] | None:
         """Species that reference-based sites map to.
 
         The mapping species if set, otherwise the alignment species.
@@ -735,51 +737,50 @@ class TrajectoryBuilder:
             return self._mapping_species
         return self._align_species
 
-    def _reference_vertex_geometry(self,
-            sites: list[Site],
-            site_type: type[Site] | None) -> tuple[np.ndarray, np.ndarray] | None:
-        """Reference coordinates of the target atoms, if every vertex atom has one.
+    @staticmethod
+    def _find_reference_shared_faces(
+            rbs: ReferenceBasedSites | None,
+            site_collection: SiteCollection) -> bool:
+        """Find the shared faces of polyhedral sites from the reference geometry.
 
         Args:
-            sites: The sites of the build.
-            site_type: The type of the sites, or None if there are none.
+            rbs: The ReferenceBasedSites that created the build's
+                reference-based sites, or None if there are none.
+            site_collection: The site collection of the built trajectory.
 
         Returns:
-            ``mapped_reference_frac_coords()`` of the build's
-            ReferenceBasedSites and its reference lattice matrix, if the
-            sites are polyhedral and every vertex atom's row is finite,
-            otherwise None.
-        """
-        if (self._reference_based_sites is None or site_type is None
-                or not issubclass(site_type, PolyhedralSite)):
-            return None
-        coords = self._reference_based_sites.mapped_reference_frac_coords()
-        vertex_indices = np.concatenate(
-            [site.vertex_indices for site in cast(list[PolyhedralSite], sites)])
-        if not np.isfinite(coords[vertex_indices]).all():
-            return None
-        return coords, self._reference_based_sites.reference_structure.lattice.matrix
+            True if the shared faces were found: the sites are polyhedral,
+            ``rbs`` is not None, and every vertex atom has a row of
+            ``rbs.mapped_reference_frac_coords()`` that is finite. False
+            otherwise.
 
-    def _validate_unique_sites(self, sites: list[Site], use_positions: bool) -> None:
+        Raises:
+            ValueError: If two sites coincide or one lies within another.
+        """
+        if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
+            return False
+        coords = rbs.mapped_reference_frac_coords()
+        vertex_indices = np.concatenate(
+            [site.vertex_indices for site in site_collection.sites])
+        if not np.isfinite(coords[vertex_indices]).all():
+            return False
+        site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
+        return True
+
+    def _validate_unique_sites(self, sites: list[Site]) -> None:
         """Check that no two sites share the same defining indices.
 
-        Applies to PolyhedralSite (vertex_indices) unless ``use_positions``
-        is True, in which case the shared-face search checks for duplicates
-        by position, and to DynamicVoronoiSite (reference_indices). Skipped
-        for VoronoiSite and SphericalSite where duplicate detection based on
-        coordinates is unreliable.
+        Applies to PolyhedralSite (vertex_indices) and DynamicVoronoiSite
+        (reference_indices). Skipped for VoronoiSite and SphericalSite where
+        duplicate detection based on coordinates is unreliable.
 
         Args:
             sites: The sites to check.
-            use_positions: Whether the sites' vertex atoms all have reference
-                coordinates.
         """
         if not sites:
             return
 
         if isinstance(sites[0], PolyhedralSite):
-            if use_positions:
-                return
             index_attr = "vertex_indices"
         elif isinstance(sites[0], DynamicVoronoiSite):
             index_attr = "reference_indices"
@@ -857,11 +858,8 @@ class TrajectoryBuilder:
             
             sites.extend(generated_sites)
 
-        reference_geometry = self._reference_vertex_geometry(sites, site_type)
+        rbs = self._reference_based_sites
         self._reference_based_sites = None
-
-        # Post-build: check for duplicate sites
-        self._validate_unique_sites(sites, use_positions=reference_geometry is not None)
 
         # Create atoms if not already set
         if not self._atoms:
@@ -879,9 +877,10 @@ class TrajectoryBuilder:
         trajectory = Trajectory(sites=sites, atoms=self._atoms,
                                 commitment_radius=self._commitment_radius)
 
-        # Find shared faces from the reference geometry
-        if reference_geometry is not None:
-            trajectory._polyhedral_site_collection().find_shared_faces(*reference_geometry)
+        # Find shared faces from the reference geometry, which also rejects
+        # coincident sites; otherwise check for duplicate sites by index
+        if not self._find_reference_shared_faces(rbs, trajectory.site_collection):
+            self._validate_unique_sites(sites)
 
         # Reset the builder state for future use
         self.reset()

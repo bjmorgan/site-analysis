@@ -1,5 +1,6 @@
 import unittest
 import warnings
+from contextlib import contextmanager
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
@@ -44,6 +45,18 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Create builder instance for tests
 		self.builder = TrajectoryBuilder()
 	
+	@contextmanager
+	def _patched_reference_build(self):
+		"""Patch ReferenceBasedSites, atoms_from_structure and Trajectory in the builders module.
+
+		Yields:
+			The mock ReferenceBasedSites class.
+		"""
+		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
+			patch('site_analysis.builders.atoms_from_structure'), \
+			patch('site_analysis.builders.Trajectory'):
+			yield mock_rbs_class
+
 	def test_initialization(self):
 		"""Test that TrajectoryBuilder initializes with empty state."""
 		builder = TrajectoryBuilder()
@@ -232,9 +245,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder.with_reference_structure(self.reference_structure)
 		
 		# Mock ReferenceBasedSites to verify when it's called
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -284,9 +295,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder.with_mobile_species("Li")
 		
 		# Mock to avoid actual site creation
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -311,9 +320,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
 			.with_polyhedral_sites(centre_species="O", vertex_species="Li", cutoff=2.0, n_vertices=4))
 
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			mock_rbs = mock_rbs_class.return_value
 			mock_rbs.create_polyhedral_sites.return_value = [Mock()]
 			builder.build()
@@ -328,9 +335,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 			.with_reference_structure(self.reference_structure)
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4))
 
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			mock_rbs_class.return_value.create_polyhedral_sites.return_value = [Mock()]
 			with self.assertRaisesRegex(ValueError, "Mobile species must be set"):
 				builder.build()
@@ -908,9 +913,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -964,9 +967,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -1064,9 +1065,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -1331,9 +1330,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()
@@ -1376,9 +1373,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
-		with patch('site_analysis.builders.ReferenceBasedSites') as mock_rbs_class, \
-			patch('site_analysis.builders.atoms_from_structure'), \
-			patch('site_analysis.builders.Trajectory'):
+		with self._patched_reference_build() as mock_rbs_class:
 			
 			# Configure mock to return a mock RBS instance
 			mock_rbs = Mock()

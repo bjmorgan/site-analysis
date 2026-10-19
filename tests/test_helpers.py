@@ -1,7 +1,7 @@
 """Helper functions for testing."""
 
 import numpy as np
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 
 
 def apply_random_displacement(structure, magnitude=0.1, seed=None):
@@ -28,3 +28,12 @@ def apply_random_displacement(structure, magnitude=0.1, seed=None):
 		displaced.translate_sites(i, displacement, frac_coords=False)
 	
 	return displaced
+
+
+def interstitial_structure(supercell=(2, 2, 2), a=4.0):
+	"""An fcc O lattice with Na at every octahedral and Li at every tetrahedral hole."""
+	o = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
+	na = [[0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5]]
+	li = [[x, y, z] for x in (0.25, 0.75) for y in (0.25, 0.75) for z in (0.25, 0.75)]
+	unit = Structure(Lattice.cubic(a), ["O"] * 4 + ["Na"] * 4 + ["Li"] * 8, o + na + li)
+	return unit * supercell

@@ -79,11 +79,12 @@ def unwrap_vertices_to_reference_center(
         lattice_matrix: (3, 3) lattice matrix where rows are lattice vectors.
         return_image_shifts: If True, also return the per-vertex integer
             image shifts, relative to ``frac_coords`` and separate from the
-            uniform non-negative shift.
+            whole-cell translation applied to the returned coordinates.
 
     Returns:
-        Unwrapped fractional coordinates with the same shape, shifted to
-        ensure all coordinates >= 0. If ``return_image_shifts`` is True,
+        Unwrapped fractional coordinates with the same shape, translated by
+        whole cells so the lowest coordinate along each axis is in [0, 1).
+        If ``return_image_shifts`` is True,
         returns a tuple of (unwrapped_coords, image_shifts).
     """
     if frac_coords.size == 0:
@@ -107,7 +108,7 @@ def unwrap_vertices_to_reference_center(
     result = frac_coords + image_shifts
 
     min_coords = np.min(result, axis=0)
-    uniform_shift = np.maximum(0, np.ceil(-min_coords))
+    uniform_shift = -np.floor(min_coords)
     result = result + uniform_shift
 
     if return_image_shifts:
@@ -189,7 +190,7 @@ def _numpy_update_pbc_shifts(
     new_shifts = image_shifts - wrapping
     shifted = frac_coords + new_shifts
     min_coords = np.min(shifted, axis=0)
-    uniform = np.maximum(0, np.ceil(-min_coords))
+    uniform = -np.floor(min_coords)
     return True, shifted + uniform, new_shifts
 
 
@@ -232,9 +233,7 @@ if HAS_NUMBA:
             for i in range(1, n):
                 if shifted[i, k] < min_val:
                     min_val = shifted[i, k]
-            u = 0.0
-            if min_val < 0.0:
-                u = np.ceil(-min_val)
+            u = -np.floor(min_val)
             for i in range(n):
                 shifted[i, k] += u
         return True, shifted, new_shifts

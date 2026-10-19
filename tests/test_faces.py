@@ -13,6 +13,7 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.trajectory import Trajectory
+from tests.test_helpers import interstitial_structure
 
 
 def simple_cubic_cubes(n):
@@ -33,15 +34,6 @@ def simple_cubic_cubes(n):
 def adjacent_pairs(trajectory):
     adjacency = trajectory.site_adjacency().tocoo()
     return {(int(i), int(j)) for i, j in zip(adjacency.row, adjacency.col) if i < j}
-
-
-def interstitial_structure(supercell=(2, 2, 2), a=4.0):
-    """An fcc O lattice with Na at every octahedral and Li at every tetrahedral hole."""
-    o = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
-    na = [[0.5, 0.5, 0.5], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5]]
-    li = [[x, y, z] for x in (0.25, 0.75) for y in (0.25, 0.75) for z in (0.25, 0.75)]
-    unit = Structure(Lattice.cubic(a), ["O"] * 4 + ["Na"] * 4 + ["Li"] * 8, o + na + li)
-    return unit * supercell
 
 
 def build_cubes(supercell=(3, 3, 3)):
@@ -236,6 +228,19 @@ class FindSharedFacesTestCase(unittest.TestCase):
                                      reference_center=np.array([0.7, 0.5, 0.5]))
         self.assertEqual(shared_faces_of(structure, [cube, tetrahedron]),
                          (Face((0, 1), (4, 5, 6)),))
+
+    def test_reference_centres_outside_the_cell(self):
+        rng = np.random.default_rng(0)
+        for n in (3, 4):
+            structure, sites = simple_cubic_cubes(n)
+            expected = shared_faces_of(structure, sites)
+            self.assertEqual(len(expected), 3 * n ** 3)
+            Site.reset_index(0)
+            shifted = [PolyhedralSite(vertex_indices=site.vertex_indices,
+                                      reference_center=site.reference_center
+                                      + rng.integers(-3, 4, size=3))
+                       for site in sites]
+            self.assertEqual(shared_faces_of(structure, shifted), expected)
 
 
 class FindSharedFacesErrorsTestCase(unittest.TestCase):
@@ -458,22 +463,6 @@ class TransitionsAcrossFacesTestCase(unittest.TestCase):
         self.assertEqual(len(between), 0)
 
 
-class ReferenceCentresOutsideTheCellTestCase(unittest.TestCase):
-
-    def test_reference_centres_outside_the_cell(self):
-        rng = np.random.default_rng(0)
-        for n in (3, 4):
-            structure, sites = simple_cubic_cubes(n)
-            expected = shared_faces_of(structure, sites)
-            self.assertEqual(len(expected), 3 * n ** 3)
-            Site.reset_index(0)
-            shifted = [PolyhedralSite(vertex_indices=site.vertex_indices,
-                                      reference_center=site.reference_center
-                                      + rng.integers(-3, 4, size=3))
-                       for site in sites]
-            self.assertEqual(shared_faces_of(structure, shifted), expected)
-
-
 class FccInterstitialsTestCase(unittest.TestCase):
 
     def test_tetrahedra_share_triangles_with_octahedra_only(self):
@@ -519,17 +508,22 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
         coords = structure.frac_coords + np.random.default_rng(3).integers(
             -2, 3, size=structure.frac_coords.shape)
         reference = Structure(structure.lattice, structure.species, coords)
-        trajectory = (TrajectoryBuilder()
-                      .with_structure(structure)
-                      .with_reference_structure(reference)
-                      .with_mobile_species("Li")
-                      .with_structure_alignment(align=False)
-                      .with_polyhedral_sites(centre_species="Li", vertex_species="O",
-                                             cutoff=2.0, n_vertices=4)
-                      .with_polyhedral_sites(centre_species="Na", vertex_species="O",
-                                             cutoff=2.2, n_vertices=6)
-                      .build())
-        self.assertEqual(len(trajectory.shared_faces()), 256)
+
+        def build(reference_structure):
+            return (TrajectoryBuilder()
+                    .with_structure(structure)
+                    .with_reference_structure(reference_structure)
+                    .with_mobile_species("Li")
+                    .with_structure_alignment(align=False)
+                    .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                           cutoff=2.0, n_vertices=4)
+                    .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                           cutoff=2.2, n_vertices=6)
+                    .build())
+
+        expected = build(structure).shared_faces()
+        self.assertEqual(len(expected), 256)
+        self.assertEqual(build(reference).shared_faces(), expected)
 
     def test_distorted_target(self):
         target, trajectory = build_cubes()

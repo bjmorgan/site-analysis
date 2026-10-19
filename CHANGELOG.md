@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Polyhedral sites with reference centres now unwrap their vertices correctly when the centre or the vertex coordinates lie two or more cells away (for example a reference structure with fractional coordinates outside the unit cell and alignment off); previously some vertices were unwrapped to the wrong image, so atoms could be missed by containment and shared faces missed.
+- Polyhedral sites with reference centres now unwrap their vertices correctly when the centre or the vertex coordinates lie two or more cells away (for example a reference structure with fractional coordinates outside the unit cell and alignment off); previously some vertices were unwrapped to the wrong image, so atoms could be missed by containment and shared faces missed. The vertex coordinates of polyhedral sites are now translated by whole cells so that their lowest coordinate is in [0, 1) on every frame.
 
 ## [1.10.0] - 2026-10-12
 

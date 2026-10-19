@@ -422,6 +422,21 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		np.testing.assert_array_equal(shifts, np.tile(-translation, (4, 1)))
 		np.testing.assert_array_almost_equal(coords, vertex_coords)
 
+	def test_minimum_coordinate_translated_into_the_unit_cell(self):
+		"""Whole-cell translation puts the lowest coordinate along each axis in [0, 1)."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		for translation in ([2, 0, -2], [-1, 3, 0]):
+			with self.subTest(translation=translation):
+				coords = unwrap_vertices_to_reference_center(
+					vertex_coords, reference_center + translation, self.lattice.matrix)
+				np.testing.assert_array_almost_equal(coords.min(axis=0), [0.4, 0.4, 0.4])
+
 
 class TestCorrectPbc(unittest.TestCase):
 	"""Tests for the correct_pbc dispatch function."""
@@ -532,6 +547,19 @@ class TestNumpyUpdatePbcShifts(unittest.TestCase):
 		self.assertTrue(valid)
 		self.assertTrue(np.all(coords >= 0))
 
+	def test_minimum_coordinate_translated_into_the_unit_cell(self):
+		"""Whole-cell translation puts the lowest coordinate along each axis in [0, 1)."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01
+		for image_shift in (2, -1):
+			with self.subTest(image_shift=image_shift):
+				shifts = np.full((2, 3), image_shift, dtype=np.int64)
+				valid, coords, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+				self.assertTrue(valid)
+				np.testing.assert_array_almost_equal(coords.min(axis=0), new.min(axis=0))
+
 
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
 class TestNumbaUpdatePbcShifts(unittest.TestCase):
@@ -572,6 +600,19 @@ class TestNumbaUpdatePbcShifts(unittest.TestCase):
 		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
 		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
 		self.assertEqual(v_np, v_nb)
+
+	def test_agrees_with_numpy_minimum_translated_into_the_unit_cell(self):
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01
+		for image_shift in (2, -1):
+			with self.subTest(image_shift=image_shift):
+				shifts = np.full((2, 3), image_shift, dtype=np.int64)
+				_, c_np, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+				_, c_nb, _ = _numba_update_pbc_shifts(new, cached, shifts)
+				np.testing.assert_array_almost_equal(c_nb, c_np)
+				np.testing.assert_array_almost_equal(c_nb.min(axis=0), new.min(axis=0))
 
 
 if __name__ == '__main__':

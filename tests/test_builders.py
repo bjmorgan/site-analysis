@@ -6,7 +6,7 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.atom import Atom
-from tests.test_faces import interstitial_structure
+from tests.test_helpers import interstitial_structure
 
 from site_analysis.builders import (
 	TrajectoryBuilder,

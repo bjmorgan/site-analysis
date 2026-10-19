@@ -239,6 +239,18 @@ class Trajectory:
         """
         self.site_collection.assign_site_occupations(self.atoms, structure.lattice.matrix)
                     
+    def _polyhedral_site_collection(self) -> PolyhedralSiteCollection:
+        """Return the site collection, which must be of polyhedral sites.
+
+        Raises:
+            TypeError: If the sites are not polyhedral.
+        """
+        if not isinstance(self.site_collection, PolyhedralSiteCollection):
+            raise TypeError(
+                "Shared faces are only available for polyhedral sites, "
+                f"not {type(self.site_collection).__name__}")
+        return self.site_collection
+
     def find_shared_faces(self,
             structure: Structure) -> None:
         """Find the faces shared by pairs of polyhedral sites.
@@ -254,43 +266,46 @@ class Trajectory:
 
         Raises:
             TypeError: If the sites are not polyhedral.
-            ValueError: If a site index is negative, a vertex index is
-                beyond the structure's atoms, the coordinates are not
-                finite, or two sites coincide or one lies within another.
-                The earlier result is then kept.
+            ValueError: If a vertex index is beyond the structure's atoms,
+                the coordinates are not finite, or two sites coincide or
+                one lies within another. The earlier result is then kept.
         """
-        self.site_collection.find_shared_faces(
+        self._polyhedral_site_collection().find_shared_faces(
             structure.frac_coords, structure.lattice.matrix)
 
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of polyhedral sites.
 
-        The faces are those found by the last call to ``find_shared_faces``.
+        The faces are those found most recently by ``TrajectoryBuilder.build()``
+        or a successful call to ``find_shared_faces``. A failed call to
+        ``find_shared_faces`` keeps the earlier result.
 
         Returns:
             The shared faces, sorted by site indices then vertex indices.
 
         Raises:
             TypeError: If the sites are not polyhedral.
-            ValueError: If the shared faces have not been found.
+            RuntimeError: If the shared faces have not been found.
         """
-        return self.site_collection.shared_faces()
+        return self._polyhedral_site_collection().shared_faces()
 
     def site_adjacency(self) -> csr_array:
         """Return which polyhedral sites share a face.
 
-        The faces are those found by the last call to ``find_shared_faces``.
+        The faces are those found most recently by ``TrajectoryBuilder.build()``
+        or a successful call to ``find_shared_faces``. A failed call to
+        ``find_shared_faces`` keeps the earlier result.
 
         Returns:
-            A new symmetric boolean matrix of shape ``(n, n)``, where ``n``
-            is one more than the largest site index. Entry ``(i, j)`` is
-            True when the sites with indices ``i`` and ``j`` share a face.
+            A new symmetric boolean sparse array of shape ``(n, n)``, where
+            ``n`` is one more than the largest site index. Entry ``(i, j)``
+            is True when the sites with indices ``i`` and ``j`` share a face.
 
         Raises:
             TypeError: If the sites are not polyhedral.
-            ValueError: If the shared faces have not been found.
+            RuntimeError: If the shared faces have not been found.
         """
-        return self.site_collection.site_adjacency()
+        return self._polyhedral_site_collection().site_adjacency()
 
     def site_coordination_numbers(self) -> Counter:
         """Return the coordination numbers of all sites.

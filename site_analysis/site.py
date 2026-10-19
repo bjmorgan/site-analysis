@@ -185,7 +185,12 @@ class Site(ABC):
         Returns:
             None
 
-        """ 
+        Raises:
+            ValueError: If ``newid`` is negative.
+
+        """
+        if newid < 0:
+            raise ValueError(f"Site index must not be negative, got {newid}")
         Site._newid = newid
 
     @property

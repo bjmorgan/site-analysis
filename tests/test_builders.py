@@ -1527,7 +1527,7 @@ class TestBuilderValidation(unittest.TestCase):
 		self.assertEqual(len(traj.sites), 1)
 
 	def test_duplicate_polyhedral_sites_raises(self):
-		"""Post-build check rejects duplicate polyhedral sites."""
+		"""Polyhedral sites with the same vertex positions are rejected by the shared-face search."""
 		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
 		target = self._make_target(ref)
 

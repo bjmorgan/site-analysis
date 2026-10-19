@@ -9,6 +9,7 @@ or octahedral sites.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
@@ -215,14 +216,15 @@ class PolyhedralSite(Site):
     """
 
     def __init__(self,
-        vertex_indices: list[int],
+        vertex_indices: Iterable[int],
         label: str | None=None,
         reference_center: np.ndarray | None=None):
         """Create a PolyhedralSite instance.
         
         Args:
-            vertex_indices: List of integer indices for the vertex atoms (counting from 0).
-                Numpy integers are accepted and stored as Python ``int``.
+            vertex_indices: Integer indices for the vertex atoms (counting from 0),
+                as any iterable, such as a list, an array or a generator. They are
+                stored as a list of Python ``int``.
             label: Optional label for this site.
             reference_center: Optional reference centre for PBC handling.
         
@@ -235,9 +237,8 @@ class PolyhedralSite(Site):
             TypeError: If any element in vertex_indices is not an integer
                 (a ``bool`` is not accepted).
         """
-        if isinstance(vertex_indices, np.ndarray):
-            vertex_indices = vertex_indices.tolist()
-        
+        vertex_indices = list(vertex_indices)
+
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
 
@@ -279,8 +280,7 @@ class PolyhedralSite(Site):
 
         Clears the occupation data as in ``Site.reset``, and unsets the
         vertex coordinates, Delaunay tessellation, and PBC shift caches. The
-        hull triangle topology cache is preserved as it depends only on vertex
-        indices, which are immutable.
+        cached hull triangles are kept.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None

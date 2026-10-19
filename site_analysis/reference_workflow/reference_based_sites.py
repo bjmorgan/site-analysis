@@ -225,8 +225,9 @@ class ReferenceBasedSites:
         vertex_coords = {
             target_atom: ref_coords[ref_atom]
             for ref_environment, mapped_environment
-            in zip(ref_environments.values(), mapped_environments)
-            for ref_atom, target_atom in zip(ref_environment, mapped_environment)
+            in zip(ref_environments.values(), mapped_environments, strict=True)
+            for ref_atom, target_atom in zip(ref_environment, mapped_environment,
+                                             strict=True)
         }
 
         return sites, vertex_coords

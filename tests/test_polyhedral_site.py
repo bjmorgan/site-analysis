@@ -80,7 +80,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertIsNone(site._pbc_cached_raw_frac)
 
     def test_reset_sets_cache_stale(self):
-        """reset() marks the face topology cache as stale."""
+        """reset() marks the cached hull triangles as stale."""
         site = self.site
         site._cache_stale = False
         site.reset()
@@ -254,7 +254,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_contains_point_creates_cache_lazily(self):
-        """Test that the face topology cache is created on first contains_point call."""
+        """Test that the hull triangles are cached on first contains_point call."""
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
                                        [0.4, 0.6, 0.6],
@@ -423,6 +423,12 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         self.assertEqual(site.vertex_indices, [1, 2, 3])
         self.assertTrue(all(type(idx) is int for idx in site.vertex_indices))
     
+    def test_init_with_generator_vertex_indices(self):
+        """Test that a generator of vertex indices is stored as a list."""
+        site = PolyhedralSite(vertex_indices=(i for i in range(4)))
+
+        self.assertEqual(site.vertex_indices, [0, 1, 2, 3])
+
     def test_emptiness_check_with_non_empty_numpy_array(self):
         """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""
         vertex_indices = np.array([0, 1, 2, 3])
@@ -551,7 +557,7 @@ class TestStoreVertexCoords(unittest.TestCase):
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_cache_stale_triggers_update_after_store_vertex_coords(self):
         """After _store_vertex_coords sets _cache_stale, the next
-        contains_point call should update the face topology cache."""
+        contains_point call should update the cached hull triangles."""
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         frac = np.array([[0.4, 0.4, 0.4],
                          [0.4, 0.6, 0.6],

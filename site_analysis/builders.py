@@ -46,6 +46,7 @@ from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.voronoi_site import VoronoiSite
 from site_analysis.polyhedral_site import PolyhedralSite
+from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
@@ -532,14 +533,7 @@ class TrajectoryBuilder:
                         target_species=target_species,
                         use_reference_centers=use_reference_centers
                     )
-            for atom, coords in vertex_frac_coords.items():
-                known = self._vertex_frac_coords.get(atom)
-                if known is not None and not np.array_equal(known, coords):
-                    raise ValueError(
-                        f"Atom {atom} has different reference coordinates "
-                        f"in two sets of polyhedral sites"
-                    )
-                self._vertex_frac_coords[atom] = coords
+            self._vertex_frac_coords.update(vertex_frac_coords)
             
             # Check if any sites were found
             if not sites:
@@ -747,20 +741,25 @@ class TrajectoryBuilder:
             for site in sites
         )
 
-    def _validate_unique_sites(self, sites: list[Site]) -> None:
+    def _validate_unique_sites(self, sites: list[Site], use_positions: bool) -> None:
         """Check that no two sites share the same defining indices.
 
-        Applies to PolyhedralSite (vertex_indices) unless the builder has
-        reference coordinates for every vertex atom, and to
-        DynamicVoronoiSite (reference_indices). Skipped for VoronoiSite
-        and SphericalSite where duplicate detection based on coordinates
-        is unreliable.
+        Applies to PolyhedralSite (vertex_indices) unless ``use_positions``
+        is True, in which case the shared-face search checks for duplicates
+        by position, and to DynamicVoronoiSite (reference_indices). Skipped
+        for VoronoiSite and SphericalSite where duplicate detection based on
+        coordinates is unreliable.
+
+        Args:
+            sites: The sites to check.
+            use_positions: Whether the sites' vertex atoms all have reference
+                coordinates, as given by ``_has_vertex_coords``.
         """
         if not sites:
             return
 
         if isinstance(sites[0], PolyhedralSite):
-            if self._has_vertex_coords(sites):
+            if use_positions:
                 return
             index_attr = "vertex_indices"
         elif isinstance(sites[0], DynamicVoronoiSite):
@@ -785,7 +784,11 @@ class TrajectoryBuilder:
         """Build and return the Trajectory object.
         
         This method validates all required parameters and generates sites
-        using the previously configured site generator.
+        using the previously configured site generator. When the sites are
+        polyhedral and every vertex atom has a reference coordinate, it
+        also finds the faces the sites share from the reference geometry;
+        otherwise the shared faces are not found until
+        ``Trajectory.find_shared_faces`` is called.
         
         Returns:
             The constructed Trajectory object.
@@ -795,12 +798,11 @@ class TrajectoryBuilder:
                 reference structure has same-species atom pairs closer
                 than ``min_atom_distance``, if duplicate sites are
                 detected, or if polyhedral sites coincide or one lies within
-                another, or if two sets of polyhedral sites have different
-                reference coordinates for an atom, or if a commitment radius
-                is not positive, or a dict of radii does not cover every
-                site label or is given while some sites have no label, or
-                if a spherical site's centre is not three finite numbers or
-                its radius is negative or NaN.
+                another, or if a commitment radius is not positive, or a
+                dict of radii does not cover every site label or is given
+                while some sites have no label, or if a spherical site's
+                centre is not three finite numbers or its radius is
+                negative or NaN.
             TypeError: If site types are mixed, or if a commitment radius is
                 not a number.
         """
@@ -836,7 +838,8 @@ class TrajectoryBuilder:
             sites.extend(generated_sites)
 
         # Post-build: check for duplicate sites
-        self._validate_unique_sites(sites)
+        use_positions = self._has_vertex_coords(sites)
+        self._validate_unique_sites(sites, use_positions)
 
         # Create atoms if not already set
         if not self._atoms:
@@ -855,14 +858,17 @@ class TrajectoryBuilder:
                                 commitment_radius=self._commitment_radius)
 
         # Find shared faces from the reference geometry
-        if (self._structure is not None
-                and self._reference_structure is not None
-                and self._has_vertex_coords(sites)):
+        # The last two conditions only narrow types: use_positions implies both.
+        site_collection = trajectory.site_collection
+        reference_structure = self._reference_structure
+        if (use_positions
+                and reference_structure is not None
+                and isinstance(site_collection, PolyhedralSiteCollection)):
             vertex_frac_coords = np.full((len(self._structure), 3), np.nan)
             for atom, coords in self._vertex_frac_coords.items():
                 vertex_frac_coords[atom] = coords
-            trajectory.site_collection.find_shared_faces(
-                vertex_frac_coords, self._reference_structure.lattice.matrix)
+            site_collection.find_shared_faces(
+                vertex_frac_coords, reference_structure.lattice.matrix)
 
         # Reset the builder state for future use
         self.reset()

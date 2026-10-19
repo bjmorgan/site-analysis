@@ -9,6 +9,8 @@ specific functionality for polyhedral sites, including:
 
 - Maintaining a map of neighbouring polyhedral sites that share three or
   more vertex indices
+- Finding the faces that pairs of sites share, and which sites are
+  adjacent through a shared face
 - Optimised atom assignment via the PriorityAssignmentMixin
 - Distance-ranked site ordering when reference centres are available
 
@@ -139,7 +141,18 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     
     def neighbouring_sites(self,
             index: int) -> list[PolyhedralSite]:
-        return self._neighbouring_sites[index] 
+        """Return the sites that share three or more vertex indices with a site.
+
+        Args:
+            index: Index of the site.
+
+        Returns:
+            The neighbouring sites.
+
+        Raises:
+            KeyError: If no site has this index.
+        """
+        return self._neighbouring_sites[index]
 
     def find_shared_faces(self,
             frac_coords: np.ndarray,
@@ -158,9 +171,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 vectors.
 
         Raises:
-            ValueError: If a site index is negative, a vertex index is
-                beyond the atoms, the coordinates are not finite, or two
-                sites coincide or one lies within another.
+            ValueError: If a vertex index is beyond the atoms, the
+                coordinates are not finite, or two sites coincide or one
+                lies within another.
         """
         self._shared_faces = _find_shared_faces(
             self.sites,
@@ -174,10 +187,10 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             The shared faces, sorted by site indices then vertex indices.
 
         Raises:
-            ValueError: If the shared faces have not been found.
+            RuntimeError: If the shared faces have not been found.
         """
         if self._shared_faces is None:
-            raise ValueError(
+            raise RuntimeError(
                 "Shared faces have not been found: call Trajectory.find_shared_faces(structure)")
         return self._shared_faces
 
@@ -185,12 +198,12 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         """Return which sites share a face.
 
         Returns:
-            A new symmetric boolean matrix of shape ``(n, n)``, where ``n``
-            is one more than the largest site index. Entry ``(i, j)`` is
-            True when the sites with indices ``i`` and ``j`` share a face.
+            A new symmetric boolean sparse array of shape ``(n, n)``, where
+            ``n`` is one more than the largest site index. Entry ``(i, j)``
+            is True when the sites with indices ``i`` and ``j`` share a face.
 
         Raises:
-            ValueError: If the shared faces have not been found.
+            RuntimeError: If the shared faces have not been found.
         """
         faces = self.shared_faces()
         n = max((site.index for site in self.sites), default=-1) + 1

@@ -27,8 +27,8 @@ class Face:
     Faces compare and sort by site indices, then vertex indices.
 
     Attributes:
-        site_indices: Indices of the sites the face bounds (two for a shared
-            face), in ascending order (sorted on construction).
+        site_indices: Indices of the sites the face bounds, in ascending
+            order (sorted on construction).
         vertex_indices: Indices of the atoms at the face's vertices, in
             ascending order (sorted on construction).
     """
@@ -83,8 +83,8 @@ def _find_shared_faces(
         Every shared face, sorted by site indices then vertex indices.
 
     Raises:
-        ValueError: If a site has a negative index, a vertex index that is
-            not an atom of the structure, or non-finite vertex coordinates;
+        ValueError: If a site has a vertex index that is not an atom of the
+            structure or non-finite vertex coordinates;
             if two sites coincide (have the same vertex atoms at the same
             positions); or if the vertex atoms of one site are all vertex
             atoms of another site at the same positions, so that it lies
@@ -94,8 +94,6 @@ def _find_shared_faces(
     shifts_by_atom: defaultdict[int, list[tuple[PolyhedralSite, tuple[int, ...]]]] = (
         defaultdict(list))
     for site in sites:
-        if site.index < 0:
-            raise ValueError(f"Site {site.index} has a negative index")
         if max(site.vertex_indices) >= len(frac_coords):
             raise ValueError(
                 f"Site {site.index} has vertex index {max(site.vertex_indices)}, "

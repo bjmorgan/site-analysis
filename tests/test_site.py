@@ -112,6 +112,12 @@ class SiteTestCase(unittest.TestCase):
         site = ConcreteSite()
         self.assertEqual(site.index, 12)
    
+    def test_reset_index_to_negative_index_raises_value_error(self):
+        Site._newid = 7
+        with self.assertRaisesRegex(ValueError, "Site index must not be negative, got -1"):
+            Site.reset_index(newid=-1)
+        self.assertEqual(Site._newid, 7)
+
     def test_from_dict(self):
         site_dict = {'index': 7,
                      'contains_atoms': [3],

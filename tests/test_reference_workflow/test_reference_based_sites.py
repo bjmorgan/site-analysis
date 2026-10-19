@@ -1021,6 +1021,12 @@ class ReferenceMappingTestCase(unittest.TestCase):
                             r"to target atoms 1 and 3$"):
             self.rbs._check_pairs(np.array([1, 5]), np.array([3, 5]))
 
+    def test_conflict_within_the_pairs_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 2 is mapped "
+                            r"from reference atoms 0 and 1$"):
+            self.rbs._check_pairs(np.array([0, 1]), np.array([2, 2]))
+
 
 class ReferenceWorkflowImportTestCase(unittest.TestCase):
     """Test that reference workflow classes can be imported at package level."""

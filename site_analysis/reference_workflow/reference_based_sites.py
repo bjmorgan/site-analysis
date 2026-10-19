@@ -28,7 +28,7 @@ from pymatgen.core import Structure
 from site_analysis.reference_workflow.structure_aligner import (
     StructureAligner, _check_deprecated_alignment_options)
 from site_analysis.reference_workflow.coord_finder import CoordinationEnvironmentFinder
-from site_analysis.reference_workflow.index_mapper import IndexMapper
+from site_analysis.reference_workflow.index_mapper import IndexMapper, _check_one_to_one
 from site_analysis.reference_workflow.site_factory import SiteFactory
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
@@ -222,8 +222,8 @@ class ReferenceBasedSites:
         """Create sites from coordination environments in the reference structure.
 
         Finds the environments, maps them to the target structure, checks
-        their atom pairs against the held mapping, creates the sites with
-        ``create``, then adds the pairs to the held mapping.
+        that their atom pairs and the held mapping are one-to-one, creates
+        the sites with ``create``, then adds the pairs to the held mapping.
 
         Args:
             create: The SiteFactory method that creates the sites.
@@ -242,8 +242,8 @@ class ReferenceBasedSites:
 
         Raises:
             ValueError: If coordination environments cannot be found or
-                mapped, if an atom pair conflicts with the held mapping, or
-                if ``create`` raises.
+                mapped, if the atom pairs and the held mapping are not
+                one-to-one, or if ``create`` raises.
         """
         ref_environments = self._find_coordination_environments(
             center_species, coordination_species, cutoff, n_coord)
@@ -255,10 +255,8 @@ class ReferenceBasedSites:
             reference_centers = None
         ref_environment_list = list(ref_environments.values())
         mapped_environments = self._map_environments(ref_environment_list, target_species)
-        pairs = np.unique(np.column_stack([
-            np.array(ref_environment_list, dtype=int).reshape(-1),
-            np.array(mapped_environments, dtype=int).reshape(-1)]), axis=0)
-        ref_atoms, target_atoms = pairs.T
+        ref_atoms = np.array(ref_environment_list, dtype=int).reshape(-1)
+        target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
         self._check_pairs(ref_atoms, target_atoms)
         sites = create(
             mapped_environments,
@@ -405,7 +403,7 @@ class ReferenceBasedSites:
             ) from e
             
     def _check_pairs(self, ref_atoms: np.ndarray, target_atoms: np.ndarray) -> None:
-        """Check reference-target atom pairs against the held mapping.
+        """Check that reference-target atom pairs and the held mapping are one-to-one.
 
         Args:
             ref_atoms: Reference atom indices.
@@ -413,25 +411,14 @@ class ReferenceBasedSites:
                 atom.
 
         Raises:
-            ValueError: If a reference atom is held mapped to a different
-                target atom, or a target atom is held mapped from a
-                different reference atom. The message names the first such
-                pair.
+            ValueError: If the pairs and the held mapping together pair a
+                reference atom with two target atoms, or a target atom with
+                two reference atoms (a 1:1 mapping violation).
         """
-        held_targets = self._target_of_ref[ref_atoms]
-        conflicts = np.flatnonzero((held_targets != -1) & (held_targets != target_atoms))
-        if conflicts.size:
-            i = conflicts[0]
-            raise ValueError(
-                f"1:1 mapping violation: reference atom {ref_atoms[i]} is mapped "
-                f"to target atoms {held_targets[i]} and {target_atoms[i]}")
-        held_refs = self._ref_of_target[target_atoms]
-        conflicts = np.flatnonzero((held_refs != -1) & (held_refs != ref_atoms))
-        if conflicts.size:
-            i = conflicts[0]
-            raise ValueError(
-                f"1:1 mapping violation: target atom {target_atoms[i]} is mapped "
-                f"from reference atoms {held_refs[i]} and {ref_atoms[i]}")
+        held_refs = np.flatnonzero(self._target_of_ref != -1)
+        _check_one_to_one(
+            np.concatenate([held_refs, ref_atoms]),
+            np.concatenate([self._target_of_ref[held_refs], target_atoms]))
 
     def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.

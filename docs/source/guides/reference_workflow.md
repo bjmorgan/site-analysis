@@ -241,7 +241,7 @@ The limit and the reported alignment metrics are measured in the reference struc
 ### Mapping Conflicts
 
 ```
-ValueError: 1:1 mapping violation: Multiple reference atoms map to the same target atom(s)
+ValueError: 1:1 mapping violation: target atom 12 is mapped from reference atoms 3 and 7
 ```
 
 This error occurs when the mapping cannot establish a one-to-one correspondence between reference and target atoms. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.

@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 from pymatgen.core import Lattice
 
-from site_analysis.reference_workflow.index_mapper import IndexMapper
+from site_analysis.reference_workflow.index_mapper import IndexMapper, _check_one_to_one
 
 
 def _cubic_matrix(a: float) -> np.ndarray:
@@ -322,11 +322,7 @@ class TestIndexMapper(unittest.TestCase):
         self.assertEqual(mapped_coordinating, expected)
 
     def test_detailed_error_message(self):
-        """Test that 1:1 mapping violation produces detailed error message.
-
-        Ensures the error message contains information about which specific
-        target atoms were mapped to by multiple reference atoms.
-        """
+        """A 1:1 mapping violation names the target atom and its reference atoms."""
         lattice_matrix = _cubic_matrix(5.0)
 
         # Reference: 3 atoms (Cartesian / 5.0 = fractional)
@@ -346,18 +342,15 @@ class TestIndexMapper(unittest.TestCase):
 
         mapper = IndexMapper()
 
-        try:
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 0 is mapped "
+                            r"from reference atoms 0 and 1$"):
             mapper.map_coordinating_atoms(
                 ref_frac_coords=ref_frac_coords,
                 target_frac_coords=target_frac_coords,
                 lattice_matrix=lattice_matrix,
                 ref_coordinating=ref_coordinating,
             )
-            self.fail("Expected ValueError was not raised")
-        except ValueError as e:
-            error_msg = str(e)
-            self.assertIn("1:1 mapping violation", error_msg)
-            self.assertIn("indices [0]", error_msg)
 
 
 """Unit tests for IndexMapper species filtering functionality.
@@ -555,6 +548,31 @@ class TestIndexMapperSpeciesFiltering(unittest.TestCase):
                 target_species=target_species,
                 species_filter="Cl",
             )
+
+
+class CheckOneToOneTestCase(unittest.TestCase):
+    """Tests for _check_one_to_one."""
+
+    def test_one_to_one_pairs_pass(self):
+        _check_one_to_one(np.array([0, 1, 2]), np.array([5, 3, 4]))
+
+    def test_repeated_pairs_pass(self):
+        _check_one_to_one(np.array([0, 1, 0]), np.array([5, 3, 5]))
+
+    def test_no_pairs_pass(self):
+        _check_one_to_one(np.array([], dtype=int), np.array([], dtype=int))
+
+    def test_reference_atom_with_two_target_atoms_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: reference atom 1 is mapped "
+                            r"to target atoms 3 and 4$"):
+            _check_one_to_one(np.array([1, 0, 1]), np.array([4, 5, 3]))
+
+    def test_target_atom_with_two_reference_atoms_raises(self):
+        with self.assertRaisesRegex(
+                ValueError, r"^1:1 mapping violation: target atom 3 is mapped "
+                            r"from reference atoms 0 and 2$"):
+            _check_one_to_one(np.array([2, 1, 0]), np.array([3, 4, 3]))
 
 
 if __name__ == '__main__':

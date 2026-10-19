@@ -127,7 +127,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 	def test_with_voronoi_sites_single_label(self):
 		"""A single label is used for every Voronoi site."""
 		builder = self.builder.with_voronoi_sites(centres=self.centres, labels="oct")
-		sites = builder._site_generators[0]()
+		sites = builder._site_generators[0](Mock())
 		self.assertEqual([site.label for site in sites], ["oct", "oct"])
 
 	def test_with_voronoi_sites_label_count_must_match(self):
@@ -329,22 +329,43 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		mock_rbs_class.assert_called_once()
 		self.assertEqual(mock_rbs.create_polyhedral_sites.call_count, 2)
 
-	def test_failed_build_does_not_reuse_reference_based_sites(self):
-		"""A build after a failed build creates a new ReferenceBasedSites."""
+	def test_build_after_a_failed_build_uses_the_current_target_structure(self):
+		"""Sites built after a failed build map to the current target structure's atoms."""
+		reference = interstitial_structure()
+		target = reference.copy()
+		target.remove_species(["Li"])
 		builder = (TrajectoryBuilder()
-			.with_structure(self.structure)
-			.with_reference_structure(self.reference_structure)
+			.with_structure(target)
+			.with_reference_structure(reference)
 			.with_mobile_species("Li")
+			.with_site_mapping("O")
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4))
-
-		with self._patched_reference_build() as mock_rbs_class:
-			mock_rbs_class.return_value.create_polyhedral_sites.side_effect = [
-				ValueError("x"), [Mock()]]
-			with self.assertRaisesRegex(ValueError, "^x$"):
-				builder.build()
+		with self.assertRaisesRegex(ValueError, "^No atoms found matching mobile species"):
 			builder.build()
 
-		self.assertEqual(mock_rbs_class.call_count, 2)
+		reordered = Structure(reference.lattice, reference.species[::-1],
+			reference.frac_coords[::-1])
+		trajectory = builder.with_structure(reordered).build()
+
+		vertex_species = {reordered[i].species_string
+			for site in trajectory.sites for i in site.vertex_indices}
+		self.assertEqual(vertex_species, {"O"})
+
+	def test_build_after_a_failed_build_uses_the_current_mobile_species(self):
+		"""Atoms built after a failed build are of the current mobile species."""
+		structure = Structure(Lattice.cubic(10.0), ["Li", "Na"],
+			[[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])
+		builder = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_mobile_species("Li")
+			.with_spherical_sites(centres=[[0.1, 0.1, 0.1]], radii=1.0)
+			.with_commitment(radius=-1.0))
+		with self.assertRaisesRegex(ValueError, "^commitment radii must be positive"):
+			builder.build()
+
+		trajectory = builder.with_mobile_species("Na").with_commitment().build()
+
+		self.assertEqual([atom.index for atom in trajectory.atoms], [1])
 
 	def test_build_checks_required_parameters(self):
 		"""Test that build validates required parameters."""
@@ -1102,7 +1123,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Mock SphericalSite to capture what it's called with
 		with patch('site_analysis.builders.SphericalSite') as mock_spherical_site:
 			# Call the generator
-			site_generator()
+			site_generator(Mock())
 			
 			# Check that SphericalSite was called 3 times (once per centre)
 			self.assertEqual(mock_spherical_site.call_count, 3)
@@ -1126,7 +1147,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		# Mock SphericalSite to capture what it's called with
 		with patch('site_analysis.builders.SphericalSite') as mock_spherical_site:
 			# Call the generator
-			site_generator()
+			site_generator(Mock())
 			
 			# Check that SphericalSite was called 3 times (once per centre)
 			self.assertEqual(mock_spherical_site.call_count, 3)
@@ -1194,14 +1215,14 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder = TrajectoryBuilder()
 
 		# Set state directly to non-default values
-		builder._structure = Mock(spec=Structure)
+		builder._structure = self.structure
 		builder._reference_structure = Mock(spec=Structure)
 		builder._mobile_species = "Li"
 		builder._atoms = [Mock(spec=Atom)]
 		builder._align = False
 		builder._align_species = ["Na"]
 		builder._mapping_species = ["Cl"]
-		builder._site_generators = [lambda: []]
+		builder._site_generators = [lambda get_reference_based_sites: []]
 
 		# Mock the methods called within build (including validation)
 		with patch('site_analysis.builders.atoms_from_structure'), \
@@ -1236,8 +1257,7 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder._align = False
 		builder._align_species = ["Na"]
 		builder._mapping_species = ["Cl"]
-		builder._site_generators = [lambda: []]
-		builder._reference_based_sites = Mock()
+		builder._site_generators = [lambda get_reference_based_sites: []]
 		
 		# Call reset and verify it returns self for chaining
 		result = builder.reset()
@@ -1252,7 +1272,6 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		self.assertIsNone(builder._align_species)
 		self.assertIsNone(builder._mapping_species)
 		self.assertEqual(builder._site_generators, [])
-		self.assertIsNone(builder._reference_based_sites)
 		
 	def test_initialization_calls_reset(self):
 		"""Test that TrajectoryBuilder.__init__() calls reset()."""
@@ -1608,8 +1627,8 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaisesRegex(TypeError, "mixed Site types: PolyhedralSite, SphericalSite"):
 			builder.build()
 
-	def test_existing_site_with_vertex_beyond_structure_after_reference_based_sites(self):
-		"""An existing polyhedral site with a vertex index beyond the structure's atoms builds."""
+	def test_existing_site_with_vertex_beyond_structure_after_reference_based_sites_raises(self):
+		"""An existing polyhedral site with a vertex index beyond the structure's atoms raises."""
 		structure = interstitial_structure()
 		existing_site = PolyhedralSite(vertex_indices=[130, 131, 132, 133])
 		existing_site.index = 64  # follows the 64 reference-based sites
@@ -1620,9 +1639,23 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
 			.with_existing_sites([existing_site]))
 
-		trajectory = builder.build()
+		with self.assertRaisesRegex(ValueError,
+			"^Site 64 has vertex index 133, but the structure has 128 atoms$"):
+			builder.build()
 
-		self.assertEqual(len(trajectory.sites), 65)
+	def test_existing_site_with_vertex_beyond_structure_raises(self):
+		"""A polyhedral site with a vertex index beyond the structure's atoms raises."""
+		structure = interstitial_structure()
+		existing_site = PolyhedralSite(vertex_indices=[0, 1, 2, 128])
+		existing_site.index = 0
+		builder = (TrajectoryBuilder()
+			.with_structure(structure)
+			.with_mobile_species("Li")
+			.with_existing_sites([existing_site]))
+
+		with self.assertRaisesRegex(ValueError,
+			"^Site 0 has vertex index 128, but the structure has 128 atoms$"):
+			builder.build()
 
 	def test_duplicate_dynamic_voronoi_sites_raises(self):
 		"""Post-build check rejects duplicate dynamic voronoi sites."""

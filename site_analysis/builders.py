@@ -55,6 +55,12 @@ from site_analysis.reference_workflow.structure_aligner import _check_deprecated
 import numpy as np
 from typing import Callable, Sequence, Any
 
+# Returns the ReferenceBasedSites of a build, created on the first call
+_ReferenceBasedSitesGetter = Callable[[], ReferenceBasedSites]
+
+# Creates the sites of one with_*_sites definition during build()
+_SiteGenerator = Callable[[_ReferenceBasedSitesGetter], Sequence[Site]]
+
 
 class TrajectoryBuilder:
     """Builder for creating Trajectory objects for site analysis.
@@ -136,11 +142,7 @@ class TrajectoryBuilder:
         self._commitment_radius: float | dict[str, float] | None = None
 
         # Functions to be called during build() to create sites
-        self._site_generators: list[Callable] = []
-
-        # The ReferenceBasedSites shared by the reference-based site
-        # generators during build()
-        self._reference_based_sites: ReferenceBasedSites | None = None
+        self._site_generators: list[_SiteGenerator] = []
 
         return self
         
@@ -367,7 +369,7 @@ class TrajectoryBuilder:
             raise ValueError("Number of centres must match number of labels")
             
         # Define the site generation function but don't execute it yet
-        def create_spherical_sites() -> Sequence[SphericalSite]:
+        def create_spherical_sites(_: _ReferenceBasedSitesGetter) -> Sequence[SphericalSite]:
             # Create spherical sites
             sites = []
             for i, (centre, radius) in enumerate(zip(centres, radii)):
@@ -409,7 +411,7 @@ class TrajectoryBuilder:
             raise ValueError("Number of centres must match number of labels")
 
         # Define the site generation function but don't execute it yet
-        def create_voronoi_sites() -> Sequence[VoronoiSite]:
+        def create_voronoi_sites(_: _ReferenceBasedSitesGetter) -> Sequence[VoronoiSite]:
             # Create Voronoi sites
             sites = []
             for i, centre in enumerate(centres):
@@ -503,8 +505,9 @@ class TrajectoryBuilder:
             )
         """
         # Define the site generation function but don't execute it yet
-        def create_polyhedral_sites() -> Sequence[PolyhedralSite]:
-            rbs = self._get_reference_based_sites()
+        def create_polyhedral_sites(
+                get_reference_based_sites: _ReferenceBasedSitesGetter) -> Sequence[PolyhedralSite]:
+            rbs = get_reference_based_sites()
 
             # Create sites
             sites = rbs.create_polyhedral_sites(
@@ -608,8 +611,9 @@ class TrajectoryBuilder:
             )
         """
         # Define the site generation function but don't execute it yet
-        def create_dynamic_voronoi_sites() -> Sequence[DynamicVoronoiSite]:
-            rbs = self._get_reference_based_sites()
+        def create_dynamic_voronoi_sites(
+                get_reference_based_sites: _ReferenceBasedSitesGetter) -> Sequence[DynamicVoronoiSite]:
+            rbs = get_reference_based_sites()
 
             # Create sites
             sites = rbs.create_dynamic_voronoi_sites(
@@ -640,7 +644,7 @@ class TrajectoryBuilder:
     def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
         """Use existing site objects."""
         # Define a simple function that returns the provided sites
-        def return_existing_sites() -> list[Site]:
+        def return_existing_sites(_: _ReferenceBasedSitesGetter) -> list[Site]:
             return sites
             
         # Store the function for later execution
@@ -697,35 +701,33 @@ class TrajectoryBuilder:
                     f".with_min_atom_distance(0) on the builder."
                 )
 
-    def _get_reference_based_sites(self) -> ReferenceBasedSites:
-        """The ReferenceBasedSites for the current build, created on first use.
+    def _new_reference_based_sites(self) -> ReferenceBasedSites:
+        """Create a ReferenceBasedSites from the builder's current settings.
 
-        It is created with the builder's alignment settings; if alignment is
-        on and no alignment species are set, the mapping species are used
-        for alignment.
+        It maps the reference structure to the structure with the builder's
+        alignment settings; if alignment is on and no alignment species are
+        set, the mapping species are used for alignment.
 
         Returns:
-            The same ReferenceBasedSites for every call within a build.
+            A new ReferenceBasedSites.
 
         Raises:
             ValueError: If the structure or reference structure is not set,
                 or if alignment fails.
         """
-        if self._reference_based_sites is None:
-            if not self._structure or not self._reference_structure:
-                raise ValueError(
-                    "Both structure and reference_structure must be set for "
-                    "polyhedral and dynamic Voronoi sites")
-            align_species = self._align_species
-            if self._align and align_species is None and self._mapping_species is not None:
-                align_species = self._mapping_species
-            self._reference_based_sites = ReferenceBasedSites(
-                reference_structure=self._reference_structure,
-                target_structure=self._structure,
-                align=self._align,
-                align_species=align_species
-            )
-        return self._reference_based_sites
+        if not self._structure or not self._reference_structure:
+            raise ValueError(
+                "Both structure and reference_structure must be set for "
+                "polyhedral and dynamic Voronoi sites")
+        align_species = self._align_species
+        if self._align and align_species is None and self._mapping_species is not None:
+            align_species = self._mapping_species
+        return ReferenceBasedSites(
+            reference_structure=self._reference_structure,
+            target_structure=self._structure,
+            align=self._align,
+            align_species=align_species
+        )
 
     @property
     def _effective_mapping_species(self) -> list[str] | None:
@@ -750,10 +752,9 @@ class TrajectoryBuilder:
 
         Returns:
             True if the shared faces were found: the sites are polyhedral,
-            ``rbs`` is not None, and every vertex atom is an atom of the
-            target structure with a row of
-            ``rbs.mapped_reference_frac_coords()`` that is finite. False
-            otherwise.
+            ``rbs`` is not None, and the row of
+            ``rbs.mapped_reference_frac_coords()`` for every vertex atom is
+            finite. False otherwise.
 
         Raises:
             ValueError: If two sites coincide or one lies within another.
@@ -763,12 +764,29 @@ class TrajectoryBuilder:
         coords = rbs.mapped_reference_frac_coords()
         vertex_indices = np.concatenate(
             [site.vertex_indices for site in site_collection.sites])
-        if not (vertex_indices < len(coords)).all():
-            return False
         if not np.isfinite(coords[vertex_indices]).all():
             return False
         site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
         return True
+
+    @staticmethod
+    def _validate_vertex_indices(sites: list[Site], n_atoms: int) -> None:
+        """Check that every vertex index of a polyhedral site is an atom of the structure.
+
+        Args:
+            sites: The sites to check.
+            n_atoms: The number of atoms in the structure.
+
+        Raises:
+            ValueError: If a polyhedral site has a vertex index that is not
+                less than ``n_atoms``. The message names the first such site
+                and its largest vertex index.
+        """
+        for site in sites:
+            if isinstance(site, PolyhedralSite) and max(site.vertex_indices) >= n_atoms:
+                raise ValueError(
+                    f"Site {site.index} has vertex index {max(site.vertex_indices)}, "
+                    f"but the structure has {n_atoms} atoms")
 
     def _validate_unique_sites(self, sites: list[Site]) -> None:
         """Check that no two sites share the same defining indices.
@@ -821,7 +839,9 @@ class TrajectoryBuilder:
                 reference structure has same-species atom pairs closer
                 than ``min_atom_distance``, if site definitions map
                 different reference atoms to the same target atom (a 1:1
-                mapping violation), if duplicate sites are detected, or if
+                mapping violation), if a polyhedral site has a vertex index
+                that is not an atom of the structure, if duplicate sites are
+                detected, or if
                 polyhedral sites coincide or one lies within another, or if
                 a commitment radius is not positive, or a dict of radii does
                 not cover every site label or is given while some sites have
@@ -840,22 +860,32 @@ class TrajectoryBuilder:
         if self._reference_structure is not None and self._min_atom_distance > 0:
             self._validate_reference_atom_distances()
 
-        # Reset the site index counter and clear the ReferenceBasedSites
-        # left by a failed build
+        # Reset the site index counter
         Site.reset_index()
-        self._reference_based_sites = None
+
+        # The reference-based site generators share one ReferenceBasedSites,
+        # created on first use
+        reference_based_sites: ReferenceBasedSites | None = None
+
+        def get_reference_based_sites() -> ReferenceBasedSites:
+            nonlocal reference_based_sites
+            if reference_based_sites is None:
+                reference_based_sites = self._new_reference_based_sites()
+            return reference_based_sites
 
         # Generate all sites
         sites: list[Site] = []
         for generator in self._site_generators:
-            sites.extend(generator())
+            sites.extend(generator(get_reference_based_sites))
+        self._validate_vertex_indices(sites, len(self._structure))
 
-        # Create atoms if not already set
-        if not self._atoms:
+        # Use the existing atoms if set, otherwise create them
+        atoms = self._atoms
+        if not atoms:
             if not self._mobile_species:
                 raise ValueError("Mobile species must be set")
-            self._atoms = atoms_from_structure(self._structure, self._mobile_species)
-            if not self._atoms:
+            atoms = atoms_from_structure(self._structure, self._mobile_species)
+            if not atoms:
                 available_species = sorted(set(str(site.specie) for site in self._structure))
                 raise ValueError(
                     f"No atoms found matching mobile species '{self._mobile_species}'. "
@@ -863,13 +893,13 @@ class TrajectoryBuilder:
                 )
 
         # Create trajectory
-        trajectory = Trajectory(sites=sites, atoms=self._atoms,
+        trajectory = Trajectory(sites=sites, atoms=atoms,
                                 commitment_radius=self._commitment_radius)
 
         # Find shared faces from the reference geometry, which also rejects
         # coincident sites; otherwise check for duplicate sites by index
         if not self._find_reference_shared_faces(
-                self._reference_based_sites, trajectory.site_collection):
+                reference_based_sites, trajectory.site_collection):
             self._validate_unique_sites(sites)
 
         # Reset the builder state for future use

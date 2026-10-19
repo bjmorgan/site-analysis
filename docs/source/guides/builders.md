@@ -237,7 +237,7 @@ Controls structure alignment between reference and target structures.
 
 **Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries the translations that put a reference atom of one alignment species on one chosen target atom of that species, one from each set of translations related by a translational symmetry of the reference's alignment atoms, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by such a symmetry fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic. The builder aligns once per build, and every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in that build uses the same alignment and the same reference-to-target mapping. If two definitions map different reference atoms to the same target atom, `build()` raises `ValueError` ("1:1 mapping violation").
+Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries the translations that put a reference atom of one alignment species on one chosen target atom of that species, one from each set of translations related by a translational symmetry of the reference's alignment atoms, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by such a symmetry fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic. The builder aligns once per build, and every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in that build uses the same alignment.
 
 **Parameters:**
 - `align`: Whether to perform alignment (default: `True`)
@@ -265,6 +265,8 @@ builder.with_structure_alignment(align=False)
 
 #### `with_site_mapping(mapping_species)`
 Sets species to use for mapping sites between reference and target structures.
+
+Every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in a build uses the same reference-to-target mapping. If two definitions map different reference atoms to the same target atom, `build()` raises `ValueError` ("1:1 mapping violation").
 
 **Parameters:**
 - `mapping_species`: Species to use for mapping (string or list of strings)

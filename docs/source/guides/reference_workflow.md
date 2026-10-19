@@ -241,10 +241,14 @@ The limit and the reported alignment metrics are measured in the reference struc
 ### Mapping Conflicts
 
 ```
+ValueError: Failed to map coordination environments for ['O'] species: 1:1 mapping violation: target atom 12 is mapped from reference atoms 3 and 7
+```
+
+```
 ValueError: 1:1 mapping violation: target atom 12 is mapped from reference atoms 3 and 7
 ```
 
-This error occurs when the mapping cannot establish a one-to-one correspondence between reference and target atoms. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
+These errors occur when the mapping cannot establish a one-to-one correspondence between reference and target atoms. The first, from `IndexMapper`, means that within one site definition two reference atoms are nearest to the same target atom; the message names the mapping species, if any. The second means that two site definitions conflict: a definition maps a reference atom to a target atom that an earlier definition in the same build mapped from a different reference atom. With `ReferenceBasedSites` used directly, it can also read `1:1 mapping violation: reference atom 3 is mapped to target atoms 12 and 15`, when a call maps a reference atom to a different target atom from an earlier call, for example because the calls use different `target_species`. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
 
 ## Advanced Implementation
 
@@ -276,7 +280,7 @@ atoms = atoms_from_structure(target_structure, "Li")
 trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
 ```
 
-The sites created by successive `create_polyhedral_sites` and `create_dynamic_voronoi_sites` calls share one reference-to-target mapping, which raises `ValueError` ("1:1 mapping violation") if a call would map a different reference atom to a target atom that is already mapped. `mapped_reference_frac_coords()` returns the fractional coordinates of the reference atom mapped to each target atom (aligned to the target when alignment is on), as an array of shape `(n_target_atoms, 3)` with NaN for target atoms that no site uses:
+The sites created by successive `create_polyhedral_sites` and `create_dynamic_voronoi_sites` calls share one reference-to-target mapping, which raises `ValueError` ("1:1 mapping violation") if a call would map a different reference atom to a target atom that is already mapped, or the same reference atom to a different target atom. `mapped_reference_frac_coords()` returns the fractional coordinates of the reference atom mapped to each target atom (aligned to the target when alignment is on), as an array of shape `(n_target_atoms, 3)` with NaN for target atoms that no site uses:
 
 ```python
 reference_coords = rbs.mapped_reference_frac_coords()

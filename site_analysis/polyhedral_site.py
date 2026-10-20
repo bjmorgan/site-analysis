@@ -123,7 +123,7 @@ if HAS_NUMBA:
         return False
 
 
-class HullTriangleCache:
+class _HullTriangleCache:
     """Cached hull triangle topology and surface normal data for containment.
 
     The topology (which vertex triples form each hull triangle) is computed
@@ -149,7 +149,7 @@ class HullTriangleCache:
         """
         if not HAS_NUMBA:
             raise RuntimeError(
-                "HullTriangleCache requires numba. "
+                "_HullTriangleCache requires numba. "
                 "Install it with: pip install site-analysis[fast]"
             )
         hull = ConvexHull(vertex_coords)
@@ -256,7 +256,7 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
-        self._hull_triangle_cache: HullTriangleCache | None = None
+        self._hull_triangle_cache: _HullTriangleCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
         self._pending_lattice_matrix: np.ndarray | None = None
@@ -477,7 +477,7 @@ class PolyhedralSite(Site):
         try:
             if HAS_NUMBA:
                 if self._hull_triangle_cache is None:
-                    self._hull_triangle_cache = HullTriangleCache(self.vertex_coords)
+                    self._hull_triangle_cache = _HullTriangleCache(self.vertex_coords)
                     self._cache_stale = False
                 elif self._cache_stale:
                     self._hull_triangle_cache.update(self.vertex_coords)

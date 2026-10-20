@@ -815,5 +815,27 @@ class TestTilingLeavesNoAtomUnassigned(unittest.TestCase):
         self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
 
 
+
+class TestAssignmentToSitesSpanningMoreThanTwoCells(unittest.TestCase):
+    """Atoms are assigned to sites whose unwrapped vertices span more than two cells."""
+
+    def test_atom_near_the_far_vertex_is_assigned(self):
+        """An atom near the far vertex of a site spanning x from 0.9 to 2.2 is assigned to it."""
+        # Rows (1,0,0), (3,1,0), (0,0,1) scaled to Angstrom: an unreduced basis.
+        lattice_matrix = 4.0 * np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        # The vertices' images nearest the reference centre (0.6, 0, 0.5).
+        vertices = np.array([[2.2, -0.4, 0.5], [1.0, 0.0, 0.7], [1.1, -0.2, 0.4], [0.9, 0.0, 0.4]])
+        point = 0.8 * vertices[0] + 0.2 * vertices.mean(axis=0)
+        frac_coords = np.vstack([vertices, point]) % 1.0
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                              reference_center=np.array([0.6, 0.0, 0.5]))
+        collection = PolyhedralSiteCollection([site])
+        atom = Atom(index=4)
+        atom.assign_coords(frac_coords)
+        site.notify_structure_changed(frac_coords, lattice_matrix)
+        collection.assign_site_occupations([atom], lattice_matrix)
+        self.assertEqual(atom.in_site, site.index)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -14,7 +14,7 @@ from collections.abc import Iterable
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
 from site_analysis.site import Site, _as_index
-from site_analysis.tools import x_pbc
+from site_analysis.tools import _SHIFTS
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
@@ -26,7 +26,7 @@ if HAS_NUMBA:
     def _numba_update_hull_triangles(
         vertex_coords: np.ndarray,
         triangles: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
         """JIT-compiled hull triangle normal and centre sign computation.
 
         Args:
@@ -35,7 +35,9 @@ if HAS_NUMBA:
                 triangle.
 
         Returns:
-            Tuple of (triangle_normals, triangle_ref_points, centre_signs).
+            Tuple of (triangle_normals, triangle_ref_points, centre_signs,
+            within_two_cells), where within_two_cells is True if every
+            vertex coordinate is in [0, 2).
         """
         n_triangles = triangles.shape[0]
         n_vertices = vertex_coords.shape[0]
@@ -44,9 +46,12 @@ if HAS_NUMBA:
         centre_signs = np.empty(n_triangles)
 
         centre = np.zeros(3)
+        within_two_cells = True
         for i in range(n_vertices):
             for k in range(3):
                 centre[k] += vertex_coords[i, k]
+                if not (0.0 <= vertex_coords[i, k] < 2.0):
+                    within_two_cells = False
         for k in range(3):
             centre[k] /= n_vertices
 
@@ -78,7 +83,7 @@ if HAS_NUMBA:
                 dot += triangle_normals[j, k] * (centre[k] - triangle_ref_points[j, k])
             centre_signs[j] = np.sign(dot)
 
-        return triangle_normals, triangle_ref_points, centre_signs
+        return triangle_normals, triangle_ref_points, centre_signs, within_two_cells
 
     @numba.njit(cache=True)
     def _numba_sn_query(
@@ -123,6 +128,51 @@ if HAS_NUMBA:
         return False
 
 
+def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
+    """Whole-cell shifts from a point in [0, 1) to its images that can lie inside a polyhedron.
+
+    An image ``x + n`` of a point ``x`` in [0, 1) lies inside the
+    vertices' bounding box only if ``floor(min_k) <= n_k <= floor(max_k)``
+    along each axis ``k``, where ``min_k`` and ``max_k`` are the lowest and
+    highest vertex coordinates. When every such range lies within {0, 1},
+    the eight shifts of ``x_pbc`` (``n_k`` in {0, 1}) are returned, as the
+    same array each time.
+
+    Args:
+        vertex_coords: (N_vertices, 3) array of vertex positions.
+
+    Returns:
+        (M, 3) integer array of shifts.
+    """
+    if vertex_coords.min() >= 0.0 and vertex_coords.max() < 2.0:
+        return _SHIFTS
+    lower = np.floor(vertex_coords.min(axis=0)).astype(np.int64)
+    upper = np.floor(vertex_coords.max(axis=0)).astype(np.int64)
+    axes = [np.arange(lo, hi + 1) for lo, hi in zip(lower, upper)]
+    return np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
+
+
+def _images(x: np.ndarray,
+        shifts: np.ndarray,
+        pbc_images: np.ndarray | None) -> np.ndarray:
+    """Images of a point to test for containment.
+
+    Args:
+        x: Fractional coordinates of the point, in any periodic image.
+        shifts: Whole-cell shifts from ``_image_shifts``.
+        pbc_images: Precomputed ``x_pbc`` of x wrapped into [0, 1), or
+            None.
+
+    Returns:
+        ``pbc_images`` if given and ``shifts`` are the eight shifts of
+        ``x_pbc``; otherwise x wrapped into [0, 1) plus each shift.
+    """
+    if pbc_images is not None and shifts is _SHIFTS:
+        return pbc_images
+    images: np.ndarray = (x - np.floor(x)) + shifts
+    return images
+
+
 class HullTriangleCache:
     """Cached hull triangle topology and surface normal data for containment.
 
@@ -135,6 +185,9 @@ class HullTriangleCache:
     Attributes:
         triangles: (N_triangles, 3) array of vertex indices per hull
             triangle.
+        image_shifts: (M, 3) integer array of whole-cell shifts from a
+            point in [0, 1) to its images that can lie inside the
+            polyhedron, as from ``_image_shifts``.
     """
 
     def __init__(self, vertex_coords: np.ndarray) -> None:
@@ -157,6 +210,7 @@ class HullTriangleCache:
         self._triangle_normals: np.ndarray
         self._triangle_ref_points: np.ndarray
         self._centre_signs: np.ndarray
+        self.image_shifts: np.ndarray
         self.update(vertex_coords)
 
     def update(self, vertex_coords: np.ndarray) -> None:
@@ -167,9 +221,9 @@ class HullTriangleCache:
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
         """
-        self._triangle_normals, self._triangle_ref_points, self._centre_signs = (
-            _numba_update_hull_triangles(vertex_coords, self.triangles)
-        )
+        (self._triangle_normals, self._triangle_ref_points, self._centre_signs,
+         within_two_cells) = _numba_update_hull_triangles(vertex_coords, self.triangles)
+        self.image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
 
     def contains_point(self, x_pbc_points: np.ndarray) -> bool:
         """Test whether any PBC image point is inside the polyhedron.
@@ -445,6 +499,10 @@ class PolyhedralSite(Site):
             pbc_images: np.ndarray | None = None) -> bool:
         """Test whether a specific point is enclosed by this polyhedral site.
 
+        The point may be given in any periodic image. It is wrapped into
+        [0, 1), and each of its images that can lie inside the vertices'
+        bounding box is tested, however many cells the vertices span.
+
         The containment algorithm is selected automatically based on available
         dependencies. When numba is installed, uses a JIT-compiled surface
         normal method. Otherwise, falls back to Delaunay tessellation.
@@ -453,8 +511,11 @@ class PolyhedralSite(Site):
             x: Fractional coordinates of the point to test (length 3 array).
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
-            pbc_images: Optional pre-computed PBC images of x, shape (N, 3).
-                If provided, skips the internal ``x_pbc`` call.
+            pbc_images: Optional images of x precomputed as ``x_pbc`` of x
+                wrapped into [0, 1), shape (8, 3), to share between sites.
+                They are tested instead of computing them when every vertex
+                coordinate is in [0, 2); otherwise the site computes the
+                images it needs from x.
 
         Returns:
             True if the point is inside the polyhedron.
@@ -473,7 +534,6 @@ class PolyhedralSite(Site):
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
-        x_images = pbc_images if pbc_images is not None else x_pbc(x)
         try:
             if HAS_NUMBA:
                 if self._hull_triangle_cache is None:
@@ -482,8 +542,10 @@ class PolyhedralSite(Site):
                 elif self._cache_stale:
                     self._hull_triangle_cache.update(self.vertex_coords)
                     self._cache_stale = False
-                return self._hull_triangle_cache.contains_point(x_images)
-            return self._contains_point_delaunay(x_images)
+                return self._hull_triangle_cache.contains_point(
+                    _images(x, self._hull_triangle_cache.image_shifts, pbc_images))
+            return self._contains_point_delaunay(
+                _images(x, _image_shifts(self.vertex_coords), pbc_images))
         except QhullError as e:
             raise RuntimeError(
                 f"Degenerate vertex geometry for polyhedral_site {self.index} "
@@ -512,9 +574,8 @@ class PolyhedralSite(Site):
             atom: The atom to test.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
-            pbc_images: Optional pre-computed PBC images of the atom's
-                fractional coordinates. If provided, passed through to
-                ``contains_point`` to avoid redundant computation.
+            pbc_images: Optional images of the atom's fractional
+                coordinates, passed through to ``contains_point``.
 
         Returns:
             True if the atom is inside the polyhedron.

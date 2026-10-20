@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `TrajectoryBuilder.build()` no longer reuses the atoms created by a failed build, so a rebuild uses the current mobile species and structure (#92).
 - Polyhedral sites and dynamic Voronoi sites with reference centres now unwrap their vertices (or reference atoms) to the periodic image nearest the centre, exactly in any cell, including strongly skewed ones, and when the centre and the atom coordinates are more than one cell apart (for example a reference structure, or a target frame, with fractional coordinates outside the unit cell, with alignment off); previously some vertices were unwrapped to the wrong image, so polyhedral sites could miss atoms and shared faces, and dynamic Voronoi site centres could be wrong. The vertex coordinates of polyhedral sites, with or without reference centres, are now translated by whole cells so that their lowest coordinate is in [0, 1) on every frame (#92).
+- Polyhedral sites now contain the points inside them however many cells their unwrapped vertices span, as they can in unreduced or strongly sheared cells, and `PolyhedralSite.contains_point()` accepts a point in any periodic image. Previously only the point and its images one cell along each positive axis were tested, so atoms in a site whose vertices reach beyond two cells along an axis could be missed, as could points given outside the unit cell.
 
 ## [1.10.0] - 2026-10-12
 

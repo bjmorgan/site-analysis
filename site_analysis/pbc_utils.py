@@ -9,9 +9,31 @@ from __future__ import annotations
 from typing import Callable, Literal, overload
 
 import numpy as np
-from site_analysis.distances import _nearest_image_shifts
+from site_analysis.distances import _as_coords, _nearest_image_shifts
 
 from site_analysis._compat import HAS_NUMBA
+
+
+def _as_reference_center(value: object) -> np.ndarray:
+    """Return a reference centre as a float array.
+
+    Args:
+        value: The reference centre, three finite numbers.
+
+    Returns:
+        A new float64 array of shape (3,).
+
+    Raises:
+        ValueError: If ``value`` is not three finite numbers.
+    """
+    try:
+        centre = np.array(value, dtype=np.float64)
+    except (TypeError, ValueError):
+        centre = None
+    if centre is None or centre.shape != (3,) or not np.isfinite(centre).all():
+        raise ValueError(f"reference_center must be three finite numbers, got {value}")
+    return centre
+
 
 def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
     """Apply the legacy spread-based periodic boundary condition handling.
@@ -100,7 +122,10 @@ def unwrap_vertices_to_reference_center(
         ``(unwrapped_coords, image_shifts)``.
 
     Raises:
-        ValueError: If the coordinates are not finite, or the lattice is
+        ValueError: If ``frac_coords`` does not have shape (n, 3) or is not
+            finite, ``reference_center`` is not three finite numbers, a
+            vertex's fractional displacement from the reference centre has
+            a component of 2**52 or more in magnitude, or the lattice is
             singular, nearly singular, or extremely elongated.
     """
     if frac_coords.size == 0:
@@ -108,6 +133,8 @@ def unwrap_vertices_to_reference_center(
             return frac_coords, np.zeros((0, 3), dtype=np.int64)
         return frac_coords
 
+    frac_coords = _as_coords(frac_coords, "frac_coords")
+    reference_center = _as_reference_center(reference_center)
     image_shifts = _nearest_image_shifts(frac_coords - reference_center, lattice_matrix)
     result = _translate_into_unit_cell(frac_coords + image_shifts)
 
@@ -143,6 +170,10 @@ def correct_pbc(
         shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype. The
         image shifts are relative to ``frac_coords`` and exclude the
         whole-cell translation applied to ``corrected_coords``.
+
+    Raises:
+        ValueError: If ``reference_center`` is not None and
+            ``unwrap_vertices_to_reference_center`` rejects the input.
     """
     if frac_coords.size == 0:
         return frac_coords, np.zeros((0, 3), dtype=np.int64)

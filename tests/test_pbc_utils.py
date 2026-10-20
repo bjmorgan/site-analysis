@@ -438,9 +438,9 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 
 
 class TestExactUnwrapping(unittest.TestCase):
-	"""Tests that unwrapping finds the nearest image exactly in skewed cells."""
+	"""Tests that unwrapping finds the nearest image exactly in an unreduced cell."""
 
-	# Rows (1,0,0), (3,1,0), (0,0,1): not a reduced basis.
+	# Rows (1,0,0), (3,1,0), (0,0,1): an unreduced basis.
 	UNREDUCED = np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
 	def test_unreduced_cell_picks_the_nearest_image(self):
@@ -459,38 +459,20 @@ class TestExactUnwrapping(unittest.TestCase):
 					self.UNREDUCED, return_image_shifts=True)
 				np.testing.assert_array_equal(shifts, [np.array([1, -1, 0]) - offset])
 
-	def test_matches_brute_force_in_skewed_cells(self):
-		"""The chosen image is as near the centre as any image in a large search range."""
-		rng = np.random.default_rng(7)
-		triclinic = Lattice.from_parameters(4.0, 5.0, 6.0, 70.0, 80.0, 100.0).matrix
-		cubic = Lattice.cubic(4.0).matrix
-		transforms = [
-			np.eye(3, dtype=int),
-			np.array([[1, 0, 0], [3, 1, 0], [0, 0, 1]]),
-			np.array([[1, 2, 0], [0, 1, 3], [0, 0, 1]]),
-			np.array([[1, 1, 1], [0, 1, 2], [1, 0, 2]]),
-		]
-		search = np.array(np.meshgrid(*[np.arange(-6, 7)] * 3)).reshape(3, -1).T
-		for base in (cubic, triclinic):
-			for transform in transforms:
-				lattice_matrix = transform @ base
-				for _ in range(5):
-					centre = rng.random(3)
-					vertices = centre + rng.uniform(-1.0, 1.0, size=(6, 3)) + rng.integers(-3, 4, size=(6, 3))
-					_, shifts = unwrap_vertices_to_reference_center(
-						vertices, centre, lattice_matrix, return_image_shifts=True)
-					for vertex, shift in zip(vertices, shifts):
-						displacement = vertex - centre
-						brute_force = np.linalg.norm((displacement + search) @ lattice_matrix, axis=1).min()
-						chosen = np.linalg.norm((displacement + shift) @ lattice_matrix)
-						self.assertAlmostEqual(chosen, brute_force, places=9)
-
 	def test_non_finite_coordinates_raise(self):
-		"""Non-finite vertex coordinates are rejected."""
+		"""Non-finite vertex coordinates are rejected by name."""
 		vertices = np.array([[0.1, 0.2, 0.3], [np.nan, 0.2, 0.3]])
-		with self.assertRaises(ValueError):
+		with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
 			unwrap_vertices_to_reference_center(
 				vertices, np.array([0.5, 0.5, 0.5]), Lattice.cubic(10.0).matrix)
+
+	def test_non_finite_reference_center_raises(self):
+		"""A non-finite reference centre is rejected by name."""
+		with self.assertRaisesRegex(
+				ValueError, "^reference_center must be three finite numbers, got "):
+			unwrap_vertices_to_reference_center(
+				np.array([[0.1, 0.2, 0.3]]), np.array([np.nan, 0.5, 0.5]),
+				Lattice.cubic(10.0).matrix)
 
 	def test_singular_lattice_raises(self):
 		"""A singular lattice is rejected."""

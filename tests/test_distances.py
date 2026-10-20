@@ -543,8 +543,9 @@ class TestSearches(unittest.TestCase):
 class TestNearestImageShifts(unittest.TestCase):
     """The shift to the nearest periodic image of each displacement is exact in any cell."""
 
-    def test_nearest_shift_in_a_sheared_cell(self):
+    def test_nearest_shift_in_an_unreduced_cell(self):
         """A vertex at (0.6, 0.6, 0.5) is nearest a centre at (0, 0, 0.5) when shifted by (1, -1, 0)."""
+        # Rows (1,0,0), (3,1,0), (0,0,1): an unreduced basis.
         lattice_matrix = np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
         displacements = np.array([[0.6, 0.6, 0.5]]) - np.array([0.0, 0.0, 0.5])
         for has_numba in BACKENDS:
@@ -587,7 +588,7 @@ class TestNearestImageShifts(unittest.TestCase):
                             displacements, np.zeros_like(displacements), lattice_matrix))
 
     def test_ties_are_resolved_consistently(self):
-        """A displacement halfway between two images gets the same shift every time, on every path."""
+        """A displacement halfway between two images gets the same shift with and without numba, on repeated calls."""
         displacements = np.array([[0.5, 0.0, 0.0]])
         lattice_matrix = Lattice.cubic(4.0).matrix
         results = []

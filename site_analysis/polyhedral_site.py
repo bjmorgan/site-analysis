@@ -13,11 +13,11 @@ from collections.abc import Iterable
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
-from site_analysis.site import Site, _as_index, _as_reference_center
+from site_analysis.site import Site, _as_index
 from site_analysis.tools import _SHIFTS
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
-from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
+from site_analysis.pbc_utils import _as_reference_center, correct_pbc, update_pbc_shifts
 
 if HAS_NUMBA:
     import numba
@@ -307,7 +307,8 @@ class PolyhedralSite(Site):
             if k in seen:
                 raise ValueError(f"vertex_indices lists atom {k} more than once")
             seen.add(k)
-        reference_center = _as_reference_center(reference_center)
+        if reference_center is not None:
+            reference_center = _as_reference_center(reference_center)
 
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices

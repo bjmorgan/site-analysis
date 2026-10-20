@@ -7,9 +7,9 @@ atoms.
 
 from __future__ import annotations
 import numpy as np
-from .site import Site, _as_reference_center
+from .site import Site
 from .atom import Atom
-from site_analysis.pbc_utils import correct_pbc
+from site_analysis.pbc_utils import _as_reference_center, correct_pbc
 
 class DynamicVoronoiSite(Site):
     """Site subclass corresponding to Voronoi cells with centres dynamically 
@@ -63,7 +63,8 @@ class DynamicVoronoiSite(Site):
             ValueError: If reference_center is not None and not three
                 finite numbers.
         """
-        reference_center = _as_reference_center(reference_center)
+        if reference_center is not None:
+            reference_center = _as_reference_center(reference_center)
         super(DynamicVoronoiSite, self).__init__(label=label)
         self.reference_indices = reference_indices
         self._centre_coords: np.ndarray | None = None

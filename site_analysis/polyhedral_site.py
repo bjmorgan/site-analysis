@@ -202,6 +202,8 @@ class _HullTriangleCache:
 
         Raises:
             RuntimeError: If numba is not installed.
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, from ``_image_shifts``.
         """
         if not HAS_NUMBA:
             raise RuntimeError(
@@ -225,6 +227,10 @@ class _HullTriangleCache:
 
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
+
+        Raises:
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, from ``_image_shifts``.
         """
         (self._triangle_normals, self._triangle_ref_points, self._centre_signs,
          within_two_cells) = _numba_update_hull_triangles(vertex_coords, self.triangles)
@@ -324,6 +330,7 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
+        self._point_image_shifts: np.ndarray | None = None
         self._hull_triangle_cache: _HullTriangleCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
@@ -344,12 +351,13 @@ class PolyhedralSite(Site):
         """Clear the recorded occupation data and cached geometry for this site.
 
         Clears the occupation data as in ``Site.reset``, and unsets the
-        vertex coordinates, Delaunay tessellation, and PBC shift caches. The
-        cached hull triangles are kept.
+        vertex coordinates, Delaunay tessellation, image shifts of points
+        and PBC shift caches. The cached hull triangles are kept.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None
         self._delaunay = None
+        self._point_image_shifts = None
         self._cache_stale = True
         self._pending_frac_coords = None
         self._pending_lattice_matrix = None
@@ -463,8 +471,9 @@ class PolyhedralSite(Site):
         image shifts incrementally by detecting coordinate wraps
         (jumps of ~1.0), avoiding the expensive nearest-image search.
 
-        Sets ``vertex_coords``, clears the Delaunay tessellation, and
-        marks the cached hull triangle normals to be recomputed.
+        Sets ``vertex_coords``, clears the Delaunay tessellation and the
+        image shifts of points, and marks the cached hull triangle normals
+        to be recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
@@ -481,6 +490,7 @@ class PolyhedralSite(Site):
                 self._pbc_cached_raw_frac = frac_coords.copy()
                 self.vertex_coords = vertex_coords
                 self._delaunay = None
+                self._point_image_shifts = None
                 self._cache_stale = True
                 return
 
@@ -491,6 +501,7 @@ class PolyhedralSite(Site):
         self._pbc_cached_raw_frac = frac_coords.copy()
         self.vertex_coords = corrected
         self._delaunay = None
+        self._point_image_shifts = None
         self._cache_stale = True
 
     def get_vertex_species(self,
@@ -568,8 +579,10 @@ class PolyhedralSite(Site):
                     self._hull_triangle_cache.update(self.vertex_coords)
                     self._cache_stale = False
                 return self._hull_triangle_cache.contains_point(x)
+            if self._point_image_shifts is None:
+                self._point_image_shifts = _image_shifts(self.vertex_coords)
             return self._contains_point_delaunay(
-                (x - np.floor(x)) + _image_shifts(self.vertex_coords))
+                (x - np.floor(x)) + self._point_image_shifts)
         except QhullError as e:
             raise RuntimeError(
                 f"Degenerate vertex geometry for polyhedral_site {self.index} "

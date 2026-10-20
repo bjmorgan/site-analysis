@@ -525,8 +525,23 @@ class TestContainmentImageLimit(unittest.TestCase):
                 site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
                 site.vertex_coords = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
                                                      [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
-                with self.assertRaisesRegex(ValueError, "cells"):
+                with self.assertRaisesRegex(ValueError, r"vertices span \[1001, 1, 1\] cells"):
                     site.contains_point(np.array([0.5, 0.5, 0.5]))
+
+    def test_delaunay_path_computes_image_shifts_once_per_vertex_assignment(self):
+        """Without numba, the image shifts are computed on the first test after each assignment only."""
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.HAS_NUMBA', False), \
+                patch('site_analysis.polyhedral_site._image_shifts',
+                      wraps=_image_shifts) as shifts:
+            site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+            for _ in range(3):
+                site.contains_point(np.array([0.5, 0.5, 0.5]))
+            self.assertEqual(shifts.call_count, 1)
+            site.assign_vertex_coords(_TETRAHEDRON + 0.01, lattice_matrix)
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
+            self.assertEqual(shifts.call_count, 2)
 
 
 class TestContainmentOfPointsInAnyImage(unittest.TestCase):

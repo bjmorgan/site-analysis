@@ -576,7 +576,11 @@ def _pair_distance(
     if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
             and _inverse_widths_are_finite(inverse_widths)):
         return math.nan
-    return math.sqrt(_nearest_image(_wrap(f0), _wrap(f1), _wrap(f2), rows, inverse_widths)[0])
+    # float() keeps the search in Python floats without numba, where the
+    # numpy scalars np.rint returns would slow every step; numba compiles it
+    # to nothing.
+    return math.sqrt(_nearest_image(float(_wrap(f0)), float(_wrap(f1)), float(_wrap(f2)),
+                                    rows, inverse_widths)[0])
 
 
 @_jitable
@@ -609,8 +613,10 @@ def _nearest_image_shift(
         The integer shift ``n - _round_half_up(f)``, which takes ``f`` to
         its nearest image.
     """
+    # float() as in _pair_distance.
     _, n0, n1, n2 = _nearest_image(
-        _wrap_half_up(f0), _wrap_half_up(f1), _wrap_half_up(f2), rows, inverse_widths)
+        float(_wrap_half_up(f0)), float(_wrap_half_up(f1)), float(_wrap_half_up(f2)),
+        rows, inverse_widths)
     return (n0 - int(_round_half_up(f0)), n1 - int(_round_half_up(f1)),
             n2 - int(_round_half_up(f2)))
 

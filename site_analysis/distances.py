@@ -226,12 +226,25 @@ def _wrap(f: float) -> float:
         f: A finite fractional coordinate or displacement.
 
     Returns:
-        ``f - _round_half_up(f)``, in ``[-0.5, 0.5)``, exactly. Halves are
-        rounded up, so the result is the same whichever whole number is
-        added to ``f``.
+        ``f - round(f)``, in ``[-0.5, 0.5]``, with halves rounded to even.
     """
     if abs(f) >= _WHOLE_NUMBER_LIMIT:
         return 0.0
+    return f - round(f)
+
+
+@_jitable
+def _wrap_half_up(f: float) -> float:
+    """A fractional coordinate minus its nearest whole number, halves rounded up.
+
+    Args:
+        f: A finite number smaller than ``_WHOLE_NUMBER_LIMIT`` in
+            magnitude.
+
+    Returns:
+        ``f - _round_half_up(f)``, in ``[-0.5, 0.5)``, exactly: the same
+        whichever whole number is added to ``f``.
+    """
     return f - _round_half_up(f)
 
 
@@ -471,28 +484,28 @@ def _search_ball(
 
 @_inlined_jitable
 def _nearest_image(
-    f0: float,
-    f1: float,
-    f2: float,
+    r0: float,
+    r1: float,
+    r2: float,
     rows: Sequence[Sequence[float]] | np.ndarray,
     inverse_widths: tuple[float, float, float],
 ) -> tuple[float, int, int, int]:
-    """Smallest squared length among the images of a fractional displacement, and its shift.
+    """Smallest squared length among the images of a rounded displacement, and its shift.
 
-    Starts from the image nearest in fractional coordinates,
-    ``r = f - _round_half_up(f)``. Only the integer shifts ``n`` in the box from
-    ``_shift_bounds`` can give a nearer image ``r + n``. For pairs closer
-    than about half the cell's smallest perpendicular width the box holds
-    only ``n = 0``, and ``r`` is the answer. Otherwise ``_search_box``
-    searches the box, or, if it holds more than ``_MAX_BOX_SEARCH``
-    shifts, ``_search_ball`` searches the ball of images that could be
-    nearer.
+    Starts from ``r``, a fractional displacement minus its nearest whole
+    numbers, from ``_wrap`` or ``_wrap_half_up``. Only the integer shifts
+    ``n`` in the box from ``_shift_bounds`` can give a nearer image
+    ``r + n``. For pairs closer than about half the cell's smallest
+    perpendicular width the box holds only ``n = 0``, and ``r`` is the
+    answer. Otherwise ``_search_box`` searches the box, or, if it holds
+    more than ``_MAX_BOX_SEARCH`` shifts, ``_search_ball`` searches the
+    ball of images that could be nearer.
 
     Args:
-        f0: First component of the fractional displacement, finite and
-            smaller than ``_WHOLE_NUMBER_LIMIT`` in magnitude.
-        f1: Second component of the fractional displacement, as ``f0``.
-        f2: Third component of the fractional displacement, as ``f0``.
+        r0: First component of the rounded displacement, in
+            ``[-0.5, 0.5]``.
+        r1: Second component of the rounded displacement, as ``r0``.
+        r2: Third component of the rounded displacement, as ``r0``.
         rows: Lattice vectors as rows, indexed ``rows[i][j]``.
         inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``, for a cell that ``_inverse_widths``
@@ -504,9 +517,6 @@ def _nearest_image(
         it; of images equally near, the rounded image if it is one of
         them, otherwise the first the search visits.
     """
-    r0 = _wrap(f0)
-    r1 = _wrap(f1)
-    r2 = _wrap(f2)
     best = _squared_length(r0, r1, r2, rows)
     lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
     if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
@@ -529,7 +539,8 @@ def _pair_distance(
 ) -> float:
     """Exact minimum-image distance for one fractional displacement.
 
-    The length of the nearest image from ``_nearest_image``.
+    The length of the nearest image from ``_nearest_image``, started
+    from the rounded image ``_wrap`` gives.
 
     Args:
         f0: First component of the fractional displacement.
@@ -548,7 +559,7 @@ def _pair_distance(
     if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
             and _inverse_widths_are_finite(inverse_widths)):
         return math.nan
-    return math.sqrt(_nearest_image(f0, f1, f2, rows, inverse_widths)[0])
+    return math.sqrt(_nearest_image(_wrap(f0), _wrap(f1), _wrap(f2), rows, inverse_widths)[0])
 
 
 @_jitable
@@ -561,8 +572,11 @@ def _nearest_image_shift(
 ) -> tuple[int, int, int]:
     """The shift that takes a fractional displacement to its nearest image.
 
-    The shift of the nearest image from ``_nearest_image``, relative to
-    ``f`` rather than to its rounded image.
+    The shift of the nearest image from ``_nearest_image``, started from
+    the rounded image ``_wrap_half_up`` gives, relative to ``f`` rather
+    than to that image. The search keeps the first of equally near
+    images, so starting from an image that is the same whichever cell
+    ``f`` is given in makes the shift so too.
 
     Args:
         f0: First component of the fractional displacement, finite and
@@ -578,7 +592,8 @@ def _nearest_image_shift(
         The integer shift ``n - _round_half_up(f)``, which takes ``f`` to
         its nearest image.
     """
-    _, n0, n1, n2 = _nearest_image(f0, f1, f2, rows, inverse_widths)
+    _, n0, n1, n2 = _nearest_image(
+        _wrap_half_up(f0), _wrap_half_up(f1), _wrap_half_up(f2), rows, inverse_widths)
     return (n0 - _round_half_up(f0), n1 - _round_half_up(f1),
             n2 - _round_half_up(f2))
 
@@ -990,37 +1005,35 @@ def _rounded_half_up(f: np.ndarray) -> np.ndarray:
 
 
 def _rounded_images(
-    frac_displacements: np.ndarray,
+    r: np.ndarray,
     rows: list[list[float]],
     inverse_widths: tuple[float, float, float],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Rounded images of many fractional displacements, and which need a search.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Squared lengths of many rounded displacements, and which need a search.
 
-    The first steps of ``_pair_distance`` and ``_nearest_image_shift``,
-    vectorised with the same arithmetic: the rounded image
-    ``r = f - _round_half_up(f)`` of each displacement, its squared length, and its
+    The first steps of ``_nearest_image``, vectorised with the same
+    arithmetic: the squared length of each rounded displacement and its
     box of shifts from ``_shift_bounds``.
 
     Args:
-        frac_displacements: Finite fractional displacements, shape (K, 3).
+        r: Fractional displacements minus their nearest whole numbers,
+            shape (K, 3), as ``_wrap`` or ``_wrap_half_up`` gives.
         rows: Lattice vectors as rows, from ``lattice_matrix.tolist()``.
         inverse_widths: The cell's reciprocal perpendicular widths, from
             ``_inverse_widths``.
 
     Returns:
-        ``(r, best, lo, hi, search)``: the rounded images, shape (K, 3);
-        their squared lengths, shape (K,); the lower and upper shift
-        bounds, as floats, shape (K, 3); and the indices of the
-        displacements whose box holds a shift other than 0.
+        ``(best, lo, hi, search)``: the squared lengths, shape (K,); the
+        lower and upper shift bounds, as floats, shape (K, 3); and the
+        indices of the displacements whose box holds a shift other than 0.
     """
-    r = frac_displacements - _rounded_half_up(frac_displacements)
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
     per_axis = np.array(inverse_widths)
     lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
     hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
-    return r, best, lo, hi, search
+    return best, lo, hi, search
 
 
 def _distances_from_rounded_images(
@@ -1053,7 +1066,8 @@ def _distances_from_rounded_images(
     Returns:
         (K,) array of minimum-image distances.
     """
-    r, best, lo, hi, search = _rounded_images(frac_displacements, rows, inverse_widths)
+    r = frac_displacements - np.round(frac_displacements)
+    best, lo, hi, search = _rounded_images(r, rows, inverse_widths)
     if search.size == 0:
         return np.asarray(np.sqrt(best))
     within_one_cell = np.all((lo[search] >= -1) & (hi[search] <= 1), axis=1)
@@ -1141,8 +1155,9 @@ def _nearest_image_shifts(
     # the nearest are searched one at a time; the others take the rounding
     # shift, as _nearest_image_shift would.
     rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    shifts = -_rounded_half_up(displacements).astype(np.int64)
-    *_, search = _rounded_images(displacements, rows, inverse_widths)
+    rounded = _rounded_half_up(displacements)
+    shifts = -rounded.astype(np.int64)
+    *_, search = _rounded_images(displacements - rounded, rows, inverse_widths)
     for p in search.tolist():
         f0, f1, f2 = displacements[p].tolist()
         shifts[p] = _nearest_image_shift(f0, f1, f2, rows, inverse_widths)

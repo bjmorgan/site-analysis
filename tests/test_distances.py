@@ -73,6 +73,59 @@ def brute_force_distance(frac1, frac2, lattice_matrix, reach=12):
     return float(brute_force_distances(frac1, frac2, lattice_matrix, reach)[0])
 
 
+def random_unimodular(rng):
+    """A random integer matrix with entries from -3 to 3 and determinant 1 or -1."""
+    while True:
+        matrix = rng.integers(-3, 4, (3, 3))
+        if abs(round(np.linalg.det(matrix))) == 1:
+            return matrix
+
+
+def random_lattices(rng):
+    """Random near-cubic, strongly sheared, thin and unreduced cells."""
+    cubic = Lattice.cubic(4.0).matrix
+    triclinic = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60).matrix
+    lattices = {}
+    for k in range(3):
+        lattices[f"near-cubic {k}"] = cubic + rng.uniform(-0.3, 0.3, (3, 3))
+        shear = np.eye(3)
+        i, j = rng.choice(3, size=2, replace=False)
+        shear[i, j] = rng.integers(3, 8)
+        lattices[f"sheared {k}"] = shear @ triclinic
+        scale = np.ones(3)
+        scale[rng.integers(3)] = 0.1
+        lattices[f"thin {k}"] = scale[:, np.newaxis] * triclinic
+        lattices[f"unreduced cubic {k}"] = random_unimodular(rng) @ cubic
+        lattices[f"unreduced triclinic {k}"] = random_unimodular(rng) @ triclinic
+    return lattices
+
+
+def random_displacements(rng, n):
+    """Random fractional displacements, up to five cells away from the unit cell."""
+    return rng.uniform(-0.5, 0.5, (n, 3)) + rng.integers(-5, 6, (n, 3))
+
+
+def brute_force_minimum(displacement, lattice_matrix, reach):
+    """Smallest length of any image of a displacement, from every image within ``reach``.
+
+    Every image within ``reach`` of the origin lies in the box of shifts
+    searched, widened by a cell each way against rounding.
+    """
+    r = displacement - np.round(displacement)
+    inverse_widths = np.linalg.norm(np.linalg.inv(lattice_matrix), axis=0)
+    lo = np.floor(-reach * inverse_widths - r).astype(int) - 1
+    hi = np.ceil(reach * inverse_widths - r).astype(int) + 1
+    shifts = np.stack(np.meshgrid(*(np.arange(a, b + 1) for a, b in zip(lo, hi)),
+                                  indexing="ij"), axis=-1).reshape(-1, 3)
+    return float(np.linalg.norm((r + shifts) @ lattice_matrix, axis=1).min())
+
+
+def nearest_image_shifts_and_distances(displacements, lattice_matrix):
+    """Shifts from ``_nearest_image_shifts``, and the lengths of the images they give."""
+    shifts = dist_mod._nearest_image_shifts(displacements, lattice_matrix)
+    return shifts, np.linalg.norm((displacements + shifts) @ lattice_matrix, axis=1)
+
+
 class TestFracToCart(unittest.TestCase):
     """Tests for fractional to Cartesian coordinate conversion."""
 
@@ -371,7 +424,7 @@ class TestSearches(unittest.TestCase):
     """The box and ball searches find the same images, and each is used where it is cheaper."""
 
     def test_box_and_ball_searches_agree_exactly(self):
-        """Both searches return the same smallest squared length for every pair."""
+        """Both searches return the same smallest squared length, and a shift that gives it, for every pair."""
         rng = np.random.default_rng(86)
         for name, lattice_matrix in VARIED_CELLS.items():
             rows = lattice_matrix.tolist()
@@ -383,9 +436,13 @@ class TestSearches(unittest.TestCase):
                     # The rounded image, as _pair_distance starts.
                     r = [dist_mod._wrap(float(x) - float(y)) for x, y in zip(a, b)]
                     best = dist_mod._squared_length(*r, rows)
-                    self.assertEqual(
-                        dist_mod._search_ball(*r, best, rows, inverse_widths),
-                        dist_mod._search_box(*r, best, rows, inverse_widths))
+                    ball = dist_mod._search_ball(*r, best, rows, inverse_widths)
+                    box = dist_mod._search_box(*r, best, rows, inverse_widths)
+                    self.assertEqual(ball[0], box[0])
+                    for squared_length, *shift in (ball, box):
+                        self.assertEqual(
+                            dist_mod._squared_length(*(a + n for a, n in zip(r, shift)), rows),
+                            squared_length)
 
     def test_large_box_uses_the_ball_search(self):
         """A long pair in an elongated cell is searched by the ball."""
@@ -481,6 +538,97 @@ class TestSearches(unittest.TestCase):
                     dist_mod.paired_mic_distances(
                         frac1[np.newaxis], frac2[np.newaxis], lattice_matrix),
                     [expected], rtol=1e-12)
+
+
+class TestNearestImageShifts(unittest.TestCase):
+    """The shift to the nearest periodic image of each displacement is exact in any cell."""
+
+    def test_nearest_shift_in_a_sheared_cell(self):
+        """A vertex at (0.6, 0.6, 0.5) is nearest a centre at (0, 0, 0.5) when shifted by (1, -1, 0)."""
+        lattice_matrix = np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        displacements = np.array([[0.6, 0.6, 0.5]]) - np.array([0.0, 0.0, 0.5])
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                np.testing.assert_array_equal(
+                    dist_mod._nearest_image_shifts(displacements, lattice_matrix), [[1, -1, 0]])
+
+    def test_matches_brute_force(self):
+        """Each shift gives an image as near as any, in near-cubic, sheared, thin and unreduced cells."""
+        rng = np.random.default_rng(0)
+        for name, lattice_matrix in random_lattices(rng).items():
+            displacements = random_displacements(rng, 30)
+            for has_numba in BACKENDS:
+                with self.subTest(cell=name, numba=has_numba), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    shifts, distances = nearest_image_shifts_and_distances(
+                        displacements, lattice_matrix)
+                    self.assertEqual(shifts.dtype, np.int64)
+                    # Any nearer image would lie within the distance found.
+                    expected = [brute_force_minimum(f, lattice_matrix, d)
+                                for f, d in zip(displacements, distances)]
+                    np.testing.assert_allclose(distances, expected, rtol=1e-12)
+
+    def test_distances_match_paired_mic_distances(self):
+        """The image each shift gives is at exactly the minimum-image distance."""
+        rng = np.random.default_rng(1)
+        for name, lattice_matrix in random_lattices(rng).items():
+            displacements = random_displacements(rng, 30)
+            rows = lattice_matrix.tolist()
+            for has_numba in BACKENDS:
+                with self.subTest(cell=name, numba=has_numba), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    images = displacements + dist_mod._nearest_image_shifts(
+                        displacements, lattice_matrix)
+                    np.testing.assert_array_equal(
+                        np.sqrt(dist_mod._squared_length(
+                            images[:, 0], images[:, 1], images[:, 2], rows)),
+                        dist_mod.paired_mic_distances(
+                            displacements, np.zeros_like(displacements), lattice_matrix))
+
+    def test_ties_are_resolved_consistently(self):
+        """A displacement halfway between two images gets the same shift every time, on every path."""
+        displacements = np.array([[0.5, 0.0, 0.0]])
+        lattice_matrix = Lattice.cubic(4.0).matrix
+        results = []
+        for has_numba in BACKENDS:
+            with patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                results += [dist_mod._nearest_image_shifts(displacements, lattice_matrix)
+                            for _ in range(2)]
+        for other in results[1:]:
+            np.testing.assert_array_equal(other, results[0])
+
+    def test_empty_input_returns_empty(self):
+        """No displacements give an empty (0, 3) array of shifts."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                shifts = dist_mod._nearest_image_shifts(np.empty((0, 3)), np.eye(3))
+                self.assertEqual(shifts.shape, (0, 3))
+                self.assertEqual(shifts.dtype, np.int64)
+
+    def test_invalid_input_raises_value_error(self):
+        """Non-finite, misshapen or huge displacements and rejected lattices raise ValueError."""
+        cubic = Lattice.cubic(4.0).matrix
+        singular = np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        cases = {
+            "NaN displacement": (np.array([[np.nan, 0.0, 0.0]]), cubic,
+                                 "displacements must be finite"),
+            "wrong shape": (np.zeros((2, 2)), cubic,
+                            r"displacements must have shape \(N, 3\), got \(2, 2\)"),
+            "displacement beyond 2**52": (np.array([[2.0 ** 52, 0.0, 0.0]]), cubic,
+                                         r"displacements must be smaller than 2\*\*52"),
+            "lattice of wrong shape": (np.zeros((1, 3)), np.eye(2),
+                                       r"lattice_matrix must have shape \(3, 3\), got \(2, 2\)"),
+            "NaN lattice": (np.zeros((1, 3)), np.full((3, 3), np.nan),
+                            "lattice_matrix must be finite"),
+            "singular lattice": (np.zeros((1, 3)), singular,
+                                 "lattice_matrix must not be singular, nearly singular or extremely elongated"),
+        }
+        for name, (displacements, lattice_matrix, message) in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, message):
+                    dist_mod._nearest_image_shifts(displacements, lattice_matrix)
 
 
 class TestUndefinedDistances(unittest.TestCase):
@@ -663,3 +811,19 @@ class TestNumbaAcceleration(unittest.TestCase):
                           side_effect=AssertionError("serial kernel used")):
             dist_mod.paired_mic_distances(
                 rng.random((n, 3)), rng.random((n, 3)), lattice.matrix)
+
+
+@unittest.skipUnless(HAS_NUMBA, "numba not installed")
+class TestNearestImageShiftsNumba(unittest.TestCase):
+    """Nearest-image shifts are the same with and without numba."""
+
+    def test_numba_and_numpy_shifts_are_identical(self):
+        """Both paths give identical shifts in near-cubic, sheared, thin and unreduced cells."""
+        rng = np.random.default_rng(0)
+        for name, lattice_matrix in random_lattices(rng).items():
+            displacements = random_displacements(rng, 30)
+            with self.subTest(cell=name):
+                with patch.object(dist_mod, "HAS_NUMBA", False):
+                    without_numba = dist_mod._nearest_image_shifts(displacements, lattice_matrix)
+                np.testing.assert_array_equal(
+                    dist_mod._nearest_image_shifts(displacements, lattice_matrix), without_numba)

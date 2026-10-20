@@ -89,6 +89,25 @@ def _jitable(func: _F) -> _F:
     return func
 
 
+def _inlined_jitable(func: _F) -> _F:
+    """As ``_jitable``, but numba inlines ``func`` into the compiled code that calls it.
+
+    The compiler then drops the work for any results the caller does not
+    use, such as the shift that ``_pair_distance`` takes from
+    ``_search_box`` but does not need.
+
+    Args:
+        func: A function that numba can compile.
+
+    Returns:
+        ``func`` itself.
+    """
+    if HAS_NUMBA:
+        from numba.extending import register_jitable
+        register_jitable(inline="always")(func)
+    return func
+
+
 @_jitable
 def _squared_length(
     d0: _T,
@@ -235,7 +254,7 @@ def _shift_bounds(
             math.floor(d * inverse_widths[2] - r2 + _SHIFT_MARGIN))
 
 
-@_jitable
+@_inlined_jitable
 def _search_box(
     r0: float,
     r1: float,
@@ -243,11 +262,12 @@ def _search_box(
     best: float,
     rows: Sequence[Sequence[float]] | np.ndarray,
     inverse_widths: tuple[float, float, float],
-) -> float:
-    """Smallest squared length among the images that could be nearer.
+) -> tuple[float, int, int, int]:
+    """Smallest squared length among the images that could be nearer, and its shift.
 
     Evaluates every shift in the box from ``_shift_bounds``, which holds
-    every image no further away than the rounded image.
+    every image no further away than the rounded image. Of images equally
+    near, the first evaluated is kept.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -259,16 +279,20 @@ def _search_box(
             ``_inverse_widths``.
 
     Returns:
-        The smallest squared length found, at most ``best``.
+        ``(squared_length, n0, n1, n2)``: the smallest squared length found,
+        at most ``best``, and the shift ``n`` of the image ``r + n`` that
+        has it, ``(0, 0, 0)`` if none is nearer than the rounded image.
     """
     lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
+    s0 = s1 = s2 = 0
     for n0 in range(lo0, hi0 + 1):
         for n1 in range(lo1, hi1 + 1):
             for n2 in range(lo2, hi2 + 1):
                 candidate = _squared_length(r0 + n0, r1 + n1, r2 + n2, rows)
                 if candidate < best:
                     best = candidate
-    return best
+                    s0, s1, s2 = n0, n1, n2
+    return best, s0, s1, s2
 
 
 @_jitable
@@ -353,16 +377,17 @@ def _search_ball(
     best: float,
     rows: Sequence[Sequence[float]] | np.ndarray,
     inverse_widths: tuple[float, float, float],
-) -> float:
-    """Smallest squared length among the images that could be nearer.
+) -> tuple[float, int, int, int]:
+    """Smallest squared length among the images that could be nearer, and its shift.
 
     Enumerates the images within the ball of the current best distance
     (Fincke-Pohst), one axis at a time from the widest: each shift along
     an axis leaves less of the distance for the axes after it. In
     elongated, thin or sheared cells far fewer images are visited than in
     the box from ``_shift_bounds``, which bounds each axis on its own. Has
-    the same arguments as ``_search_box``, and finds the same smallest
-    squared length.
+    the same arguments and results as ``_search_box``, and finds the same
+    smallest squared length; of images equally near, the first visited is
+    kept, so the shift may differ.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -374,23 +399,32 @@ def _search_ball(
             ``_inverse_widths``.
 
     Returns:
-        The smallest squared length found, at most ``best``.
+        ``(squared_length, n0, n1, n2)``: the smallest squared length found,
+        at most ``best``, and the shift ``n``, in the original axis order,
+        of the image ``r + n`` that has it, ``(0, 0, 0)`` if none is nearer
+        than the rounded image.
     """
     axes, levels, factors = _enumeration_basis(rows, inverse_widths)
     i_r00, r01_r00, r02_r00, i_r11, r12_r11, i_r22, r11, r12, r22 = factors
     r = (r0, r1, r2)
     y0c, y1c, y2c = r[axes[0]], r[axes[1]], r[axes[2]]
+    # Shifts are kept in level order, and mapped back to axis order at the
+    # end.
+    s = (0, 0, 0)
     # First, the image found by rounding one level at a time from the
     # outermost (Babai's nearest plane; y2c is already rounded). In
     # unreduced or sheared cells it is usually far nearer than the rounded
     # image, and the ball starts small. Every image, here and below, is
     # scored with _squared_length in the original axis order, so that
     # results are identical to _search_box's.
-    y1 = y1c + round(-r12_r11 * y2c - y1c)
-    y = (y0c + round(-r01_r00 * y1 - r02_r00 * y2c - y0c), y1, y2c)
+    m1 = round(-r12_r11 * y2c - y1c)
+    y1 = y1c + m1
+    m0 = round(-r01_r00 * y1 - r02_r00 * y2c - y0c)
+    y = (y0c + m0, y1, y2c)
     candidate = _squared_length(y[levels[0]], y[levels[1]], y[levels[2]], rows)
     if candidate < best:
         best = candidate
+        s = (m0, m1, 0)
     # Images up to a relative margin beyond the current best are visited,
     # so that rounding in these bounds does not leave out a nearer image in
     # any but nearly singular cells.
@@ -415,7 +449,8 @@ def _search_ball(
                 candidate = _squared_length(y[levels[0]], y[levels[1]], y[levels[2]], rows)
                 if candidate < best:
                     best = candidate
-    return best
+                    s = (n0, n1, n2)
+    return best, s[levels[0]], s[levels[1]], s[levels[2]]
 
 
 @_jitable
@@ -465,8 +500,50 @@ def _pair_distance(
     # ensures it), but in a nearly singular cell their product may not, and
     # numba would wrap it round to an arbitrary number.
     if (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
-        return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths))
-    return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths))
+        return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths)[0])
+    return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths)[0])
+
+
+@_jitable
+def _nearest_image_shift(
+    f0: float,
+    f1: float,
+    f2: float,
+    rows: Sequence[Sequence[float]] | np.ndarray,
+    inverse_widths: tuple[float, float, float],
+) -> tuple[int, int, int]:
+    """The shift that takes a fractional displacement to its nearest image.
+
+    Finds the nearest image ``r + n`` of the rounded image
+    ``r = f - round(f)`` as ``_pair_distance`` does, keeping the image
+    that its searches find first of any equally near.
+
+    Args:
+        f0: First component of the fractional displacement, finite and
+            smaller than ``_WHOLE_NUMBER_LIMIT`` in magnitude.
+        f1: Second component of the fractional displacement, as ``f0``.
+        f2: Third component of the fractional displacement, as ``f0``.
+        rows: Lattice vectors as rows, indexed ``rows[i][j]``.
+        inverse_widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``, for a cell that ``_inverse_widths``
+            accepts.
+
+    Returns:
+        The integer shift ``n - round(f)``, which takes ``f`` to its
+        nearest image.
+    """
+    r0 = _wrap(f0)
+    r1 = _wrap(f1)
+    r2 = _wrap(f2)
+    best = _squared_length(r0, r1, r2, rows)
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
+    if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
+        n0 = n1 = n2 = 0
+    elif (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
+        _, n0, n1, n2 = _search_box(r0, r1, r2, best, rows, inverse_widths)
+    else:
+        _, n0, n1, n2 = _search_ball(r0, r1, r2, best, rows, inverse_widths)
+    return n0 - round(f0), n1 - round(f1), n2 - round(f2)
 
 
 if HAS_NUMBA:
@@ -577,6 +654,37 @@ if HAS_NUMBA:
                 lattice_matrix, inverse_widths)
         return result
 
+    @numba.njit(cache=True)
+    def _nearest_image_shifts_numba(
+        displacements: np.ndarray,
+        lattice_matrix: np.ndarray,
+    ) -> np.ndarray:
+        """JIT-compiled shifts of fractional displacements to their nearest images.
+
+        Args:
+            displacements: Fractional displacements, shape (N, 3), each
+                finite and smaller than ``_WHOLE_NUMBER_LIMIT`` in
+                magnitude.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors (pymatgen convention), one that ``_inverse_widths``
+                accepts.
+
+        Returns:
+            (N, 3) int64 array of shifts from ``_nearest_image_shift``.
+        """
+        rows = _lattice_rows(lattice_matrix)
+        inverse_widths = _inverse_widths(rows)
+        n = displacements.shape[0]
+        shifts = np.empty((n, 3), dtype=np.int64)
+        for p in range(n):
+            n0, n1, n2 = _nearest_image_shift(
+                displacements[p, 0], displacements[p, 1], displacements[p, 2],
+                rows, inverse_widths)
+            shifts[p, 0] = n0
+            shifts[p, 1] = n1
+            shifts[p, 2] = n2
+        return shifts
+
 
 # The rows and reciprocal widths of the last lattice that ``mic_distance``
 # was given without numba, keyed by the lattice's bytes. Computing them
@@ -647,6 +755,51 @@ def mic_distance(
                           rows, inverse_widths)
 
 
+def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
+    """Return coordinates as a float64 array of shape (N, 3).
+
+    Args:
+        coords: Coordinates to check.
+        name: Argument name, for the error message.
+
+    Returns:
+        The coordinates as a contiguous float64 array.
+
+    Raises:
+        ValueError: If ``coords`` does not have shape (N, 3) or is not
+            finite.
+    """
+    array = np.ascontiguousarray(coords, dtype=np.float64)
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError(f"{name} must have shape (N, 3), got {array.shape}")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} must be finite")
+    return array
+
+
+def _check_lattice_matrix(lattice_matrix: np.ndarray) -> None:
+    """Check that a lattice matrix is one the distance functions accept.
+
+    Args:
+        lattice_matrix: Float64 lattice matrix where rows are lattice
+            vectors (pymatgen convention).
+
+    Raises:
+        ValueError: If ``lattice_matrix`` does not have shape (3, 3), is
+            not finite, or is singular, nearly so, or extremely elongated
+            (an edge more than 2**50 times the cell's narrowest
+            perpendicular width).
+    """
+    if lattice_matrix.shape != (3, 3):
+        raise ValueError(
+            f"lattice_matrix must have shape (3, 3), got {lattice_matrix.shape}"
+        )
+    if not np.isfinite(lattice_matrix).all():
+        raise ValueError("lattice_matrix must be finite")
+    if not _inverse_widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
+        raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
+
+
 def paired_mic_distances(
     frac_coords1: np.ndarray,
     frac_coords2: np.ndarray,
@@ -686,17 +839,10 @@ def paired_mic_distances(
             f"frac_coords1 and frac_coords2 must both have shape (K, 3), "
             f"got {frac_coords1.shape} and {frac_coords2.shape}"
         )
-    if lattice_matrix.shape != (3, 3):
-        raise ValueError(
-            f"lattice_matrix must have shape (3, 3), got {lattice_matrix.shape}"
-        )
-    for name, array in (("frac_coords1", frac_coords1),
-                        ("frac_coords2", frac_coords2),
-                        ("lattice_matrix", lattice_matrix)):
+    for name, array in (("frac_coords1", frac_coords1), ("frac_coords2", frac_coords2)):
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must be finite")
-    if not _inverse_widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
-        raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
+    _check_lattice_matrix(lattice_matrix)
     return _paired_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
 
 
@@ -829,7 +975,7 @@ def _distances_from_rounded_images(
     box_size = np.prod(hi[rest] - lo[rest] + 1.0, axis=1)
     for p in rest[box_size > _MAX_BOX_SEARCH]:
         best[p] = _search_ball(float(r[p, 0]), float(r[p, 1]), float(r[p, 2]),
-                               float(best[p]), rows, inverse_widths)
+                               float(best[p]), rows, inverse_widths)[0]
     # The others: each shift in their combined box, for just the pairs whose
     # own box contains it.
     far = rest[box_size <= _MAX_BOX_SEARCH]
@@ -850,6 +996,47 @@ def _distances_from_rounded_images(
                         best_search[pairs] = np.minimum(best_search[pairs], candidate)
         best[far] = best_search
     return np.asarray(np.sqrt(best))
+
+
+def _nearest_image_shifts(
+    displacements: np.ndarray,
+    lattice_matrix: np.ndarray,
+) -> np.ndarray:
+    """Integer shifts that take fractional displacements to their nearest images.
+
+    For each displacement ``f``, the shift ``n`` such that ``f + n`` is
+    the periodic image of ``f`` with the shortest Cartesian length, exact
+    for any cell. Of images equally near, the same one is chosen every
+    time, with and without numba. Uses numba JIT compilation when
+    available; the results are the same without numba.
+
+    Args:
+        displacements: Fractional displacements, shape (N, 3).
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors (pymatgen convention: ``lattice.matrix``).
+
+    Returns:
+        (N, 3) int64 array of shifts.
+
+    Raises:
+        ValueError: If ``displacements`` does not have shape (N, 3), is not
+            finite, or has a component of 2**52 or more in magnitude, or
+            ``lattice_matrix`` does not have shape (3, 3), is not finite,
+            or is singular, nearly so, or extremely elongated (an edge more
+            than 2**50 times the cell's narrowest perpendicular width).
+    """
+    displacements = _as_coords(displacements, "displacements")
+    if not (np.abs(displacements) < _WHOLE_NUMBER_LIMIT).all():
+        raise ValueError("displacements must be smaller than 2**52 in magnitude")
+    lattice_matrix = np.ascontiguousarray(lattice_matrix, dtype=np.float64)
+    _check_lattice_matrix(lattice_matrix)
+    if HAS_NUMBA:
+        return np.asarray(_nearest_image_shifts_numba(displacements, lattice_matrix))
+    rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
+    shifts = np.empty(displacements.shape, dtype=np.int64)
+    for p, (f0, f1, f2) in enumerate(displacements.tolist()):
+        shifts[p] = _nearest_image_shift(f0, f1, f2, rows, inverse_widths)
+    return shifts
 
 
 def frac_to_cart(

@@ -449,6 +449,56 @@ def _search_ball(
     return best, s[levels[0]], s[levels[1]], s[levels[2]]
 
 
+@_inlined_jitable
+def _nearest_image(
+    f0: float,
+    f1: float,
+    f2: float,
+    rows: Sequence[Sequence[float]] | np.ndarray,
+    inverse_widths: tuple[float, float, float],
+) -> tuple[float, int, int, int]:
+    """Smallest squared length among the images of a fractional displacement, and its shift.
+
+    Starts from the image nearest in fractional coordinates,
+    ``r = f - round(f)``. Only the integer shifts ``n`` in the box from
+    ``_shift_bounds`` can give a nearer image ``r + n``. For pairs closer
+    than about half the cell's smallest perpendicular width the box holds
+    only ``n = 0``, and ``r`` is the answer. Otherwise ``_search_box``
+    searches the box, or, if it holds more than ``_MAX_BOX_SEARCH``
+    shifts, ``_search_ball`` searches the ball of images that could be
+    nearer.
+
+    Args:
+        f0: First component of the fractional displacement, finite and
+            smaller than ``_WHOLE_NUMBER_LIMIT`` in magnitude.
+        f1: Second component of the fractional displacement, as ``f0``.
+        f2: Third component of the fractional displacement, as ``f0``.
+        rows: Lattice vectors as rows, indexed ``rows[i][j]``.
+        inverse_widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``, for a cell that ``_inverse_widths``
+            accepts.
+
+    Returns:
+        ``(squared_length, n0, n1, n2)``: the smallest squared length of
+        any image, and the shift ``n`` of the image ``r + n`` that has
+        it; of images equally near, the rounded image if it is one of
+        them, otherwise the first the search visits.
+    """
+    r0 = _wrap(f0)
+    r1 = _wrap(f1)
+    r2 = _wrap(f2)
+    best = _squared_length(r0, r1, r2, rows)
+    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
+    if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
+        return best, 0, 0, 0
+    # Counted in floats: each range fits a 64-bit integer (_MAX_ELONGATION
+    # ensures it), but in a nearly singular cell their product may not, and
+    # numba would wrap it round to an arbitrary number.
+    if (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
+        return _search_box(r0, r1, r2, best, rows, inverse_widths)
+    return _search_ball(r0, r1, r2, best, rows, inverse_widths)
+
+
 @_jitable
 def _pair_distance(
     f0: float,
@@ -459,14 +509,7 @@ def _pair_distance(
 ) -> float:
     """Exact minimum-image distance for one fractional displacement.
 
-    Starts from the image nearest in fractional coordinates,
-    ``r = f - round(f)``, at Cartesian distance ``d``. Only the integer
-    shifts ``n`` in the box from ``_shift_bounds`` can give a nearer image
-    ``r + n``. For pairs closer than about half the cell's smallest
-    perpendicular width the box holds only ``n = 0``, and ``d`` is the
-    answer. Otherwise ``_search_box`` searches the box, or, if it holds
-    more than ``_MAX_BOX_SEARCH`` shifts, ``_search_ball`` searches the
-    ball of images that could be nearer.
+    The length of the nearest image from ``_nearest_image``.
 
     Args:
         f0: First component of the fractional displacement.
@@ -477,27 +520,15 @@ def _pair_distance(
             ``_inverse_widths``.
 
     Returns:
-        The minimum-image distance.
+        The minimum-image distance, NaN for a non-finite displacement or
+        a cell that ``_inverse_widths`` rejects.
     """
     # Non-finite input or a singular lattice: there is no distance to find,
     # and rounding NaN would raise in Python.
     if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
             and _inverse_widths_are_finite(inverse_widths)):
         return math.nan
-    r0 = _wrap(f0)
-    r1 = _wrap(f1)
-    r2 = _wrap(f2)
-    best = _squared_length(r0, r1, r2, rows)
-    d = math.sqrt(best)
-    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, d, inverse_widths)
-    if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
-        return d
-    # Counted in floats: each range fits a 64-bit integer (_MAX_ELONGATION
-    # ensures it), but in a nearly singular cell their product may not, and
-    # numba would wrap it round to an arbitrary number.
-    if (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
-        return math.sqrt(_search_box(r0, r1, r2, best, rows, inverse_widths)[0])
-    return math.sqrt(_search_ball(r0, r1, r2, best, rows, inverse_widths)[0])
+    return math.sqrt(_nearest_image(f0, f1, f2, rows, inverse_widths)[0])
 
 
 @_jitable
@@ -510,9 +541,8 @@ def _nearest_image_shift(
 ) -> tuple[int, int, int]:
     """The shift that takes a fractional displacement to its nearest image.
 
-    Finds the nearest image ``r + n`` of the rounded image
-    ``r = f - round(f)`` as ``_pair_distance`` does, keeping the image
-    that its searches find first of any equally near.
+    The shift of the nearest image from ``_nearest_image``, relative to
+    ``f`` rather than to its rounded image.
 
     Args:
         f0: First component of the fractional displacement, finite and
@@ -528,17 +558,7 @@ def _nearest_image_shift(
         The integer shift ``n - round(f)``, which takes ``f`` to its
         nearest image.
     """
-    r0 = _wrap(f0)
-    r1 = _wrap(f1)
-    r2 = _wrap(f2)
-    best = _squared_length(r0, r1, r2, rows)
-    lo0, hi0, lo1, hi1, lo2, hi2 = _shift_bounds(r0, r1, r2, math.sqrt(best), inverse_widths)
-    if lo0 == 0 and hi0 == 0 and lo1 == 0 and hi1 == 0 and lo2 == 0 and hi2 == 0:
-        n0 = n1 = n2 = 0
-    elif (hi0 - lo0 + 1.0) * (hi1 - lo1 + 1.0) * (hi2 - lo2 + 1.0) <= _MAX_BOX_SEARCH:
-        _, n0, n1, n2 = _search_box(r0, r1, r2, best, rows, inverse_widths)
-    else:
-        _, n0, n1, n2 = _search_ball(r0, r1, r2, best, rows, inverse_widths)
+    _, n0, n1, n2 = _nearest_image(f0, f1, f2, rows, inverse_widths)
     return n0 - round(f0), n1 - round(f1), n2 - round(f2)
 
 

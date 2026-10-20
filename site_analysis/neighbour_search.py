@@ -24,8 +24,9 @@ from site_analysis.distances import (
     _paired_mic_distances,
 )
 
-# Candidate searches are widened slightly so that rounding does not drop a
-# neighbour. Exact distances then remove any extra candidates.
+# Candidate searches are widened by these relative and absolute amounts,
+# more than the rounding in the scaled coordinates and in the tree's own
+# arithmetic. Exact distances then remove any extra candidates.
 _RELATIVE_TOLERANCE = 1e-9
 _ABSOLUTE_TOLERANCE = 1e-12
 
@@ -33,6 +34,12 @@ _ABSOLUTE_TOLERANCE = 1e-12
 # rounding error grows with the coordinates' distance from the cell.
 # Searches are also widened by this multiple of that error bound.
 _ROUNDING_SAFETY = 8.0
+
+# The smallest singular value of the lattice matrix with unit rows is
+# lowered by this much, more than the error in computing it, which is about
+# one machine epsilon in the flattest cells accepted. Those cells keep it
+# above 6e-9, so it stays far from zero.
+_SIGMA_MIN_ERROR = 32.0 * np.finfo(np.float64).eps
 
 
 class PeriodicNeighbourIndex:
@@ -44,8 +51,9 @@ class PeriodicNeighbourIndex:
     separations, but a Cartesian separation is never shorter than
     ``sigma_min`` times the scaled separation, where ``sigma_min`` is the
     smallest singular value of the lattice matrix with each row scaled to
-    unit length. A tree search with radius ``r / sigma_min`` therefore
-    finds every pair within Cartesian distance ``r``. The exact
+    unit length, less a bound on the error in computing it. A tree search
+    with radius ``r / sigma_min`` therefore finds every pair within
+    Cartesian distance ``r``. The exact
     minimum-image distance of each candidate pair is then computed by
     ``paired_mic_distances``, so results match that function.
 
@@ -79,7 +87,8 @@ class PeriodicNeighbourIndex:
         _check_lattice_matrix(self._lattice_matrix)
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
-        self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())
+        self._sigma_min = (float(np.linalg.svd(unit_rows, compute_uv=False).min())
+                           - _SIGMA_MIN_ERROR)
         self._max_abs_coord = float(np.abs(self._frac_coords).max(initial=0.0))
         self._tree = cKDTree(self._scaled(self._frac_coords), boxsize=self._lengths)
 
@@ -107,9 +116,12 @@ class PeriodicNeighbourIndex:
             query_frac: np.ndarray) -> np.ndarray:
         """Return the tree search radius that covers a Cartesian distance.
 
-        The radius is widened slightly so that rounding does not drop a
-        neighbour. Rounding errors in the exact distances grow with the
-        magnitude of the fractional coordinates, and so does the widening.
+        The radius is widened, so that rounding does not drop a neighbour:
+        by ``_RELATIVE_TOLERANCE`` and ``_ABSOLUTE_TOLERANCE`` for the
+        rounding in the tree's coordinates, and by ``_ROUNDING_SAFETY``
+        times the rounding in the exact distances, which grows with the
+        magnitude of the fractional coordinates. ``sigma_min`` is already
+        lowered by ``_SIGMA_MIN_ERROR``.
 
         Args:
             distance: Cartesian distance, or one distance per query point.

@@ -7,7 +7,7 @@ atoms.
 
 from __future__ import annotations
 import numpy as np
-from .site import Site
+from .site import Site, _as_reference_center
 from .atom import Atom
 from site_analysis.pbc_utils import correct_pbc
 
@@ -53,11 +53,17 @@ class DynamicVoronoiSite(Site):
         Args:
             reference_indices: List of atom indices whose positions will be used to dynamically calculate the centre of this site.
             label: Optional label for this site.
-            reference_center: Optional reference centre for PBC handling.
+            reference_center: Optional reference centre for PBC handling,
+                three finite numbers, stored as a float array.
         
         Returns:
             None
+
+        Raises:
+            ValueError: If reference_center is not None and not three
+                finite numbers.
         """
+        reference_center = _as_reference_center(reference_center)
         super(DynamicVoronoiSite, self).__init__(label=label)
         self.reference_indices = reference_indices
         self._centre_coords: np.ndarray | None = None

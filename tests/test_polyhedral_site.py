@@ -19,6 +19,15 @@ BACKENDS = [True, False] if HAS_NUMBA else [False]
 
 class PolyhedralSiteTestCase(unittest.TestCase):
 
+    INVALID_REFERENCE_CENTRES = {
+        "NaN": [np.nan, 0.5, 0.6],
+        "infinite": [np.inf, 0.5, 0.6],
+        "two numbers": [0.4, 0.5],
+        "text": "abc",
+        "ragged": [[0.1, 0.2], [0.3]],
+        "complex": [1 + 1j, 0.0, 0.0],
+    }
+
     def setUp(self):
         Site._newid = 1
         vertex_indices = [0, 1, 3, 4]
@@ -414,6 +423,20 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         site = PolyhedralSite(vertex_indices=(i for i in range(4)))
 
         self.assertEqual(site.vertex_indices, [0, 1, 2, 3])
+
+    def test_init_rejects_a_reference_centre_that_is_not_three_finite_numbers(self):
+        """A reference centre that is not three finite numbers raises ValueError."""
+        for name, value in self.INVALID_REFERENCE_CENTRES.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(
+                        ValueError, "^reference_center must be three finite numbers, got "):
+                    PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=value)
+
+    def test_init_stores_the_reference_centre_as_a_float_array(self):
+        """A reference centre given as a list is stored as a float64 array."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0, 0.5, 1])
+        self.assertEqual(site.reference_center.dtype, np.float64)
+        np.testing.assert_array_equal(site.reference_center, [0.0, 0.5, 1.0])
 
     def test_emptiness_check_with_non_empty_numpy_array(self):
         """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""

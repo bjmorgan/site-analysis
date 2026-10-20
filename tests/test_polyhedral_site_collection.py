@@ -98,16 +98,6 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         collection = PolyhedralSiteCollection(s for s in [self.site1, self.site2, self.site3])
         self.assertEqual(collection.sites, [self.site1, self.site2, self.site3])
 
-    def test_init_rejects_a_non_finite_reference_centre(self):
-        """A site with a NaN reference centre is rejected, naming the site."""
-        Site._newid = 10
-        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                reference_center=np.array([0.1, 0.2, 0.3])),
-                 PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                                reference_center=np.array([np.nan, 0.5, 0.6]))]
-        with self.assertRaisesRegex(ValueError, "reference centre of site 11"):
-            PolyhedralSiteCollection(sites)
-    
     def test_analyse_structure(self):
         """Test that analyse_structure notifies sites and updates occupations."""
         # Setup mocks
@@ -521,48 +511,6 @@ class TestCollectReferenceCentres(unittest.TestCase):
         np.testing.assert_array_equal(centres[0], [0.1, 0.2, 0.3])
         np.testing.assert_array_equal(centres[1], [0.4, 0.5, 0.6])
         self.assertEqual(site_indices, [site_a.index, site_b.index])
-
-    def test_raises_for_a_non_finite_reference_centre(self):
-        """A reference centre with a NaN raises ValueError naming the site index."""
-        Site._newid = 10
-        sites = [
-            PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                           reference_center=np.array([0.1, 0.2, 0.3])),
-            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                           reference_center=np.array([np.nan, 0.5, 0.6])),
-        ]
-        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
-            _collect_reference_centres(sites)
-
-    def test_raises_for_a_reference_centre_that_is_not_three_numbers(self):
-        """A reference centre that is not three numbers raises ValueError naming the site index."""
-        values = {
-            "two numbers": np.array([0.4, 0.5]),
-            "text": "abc",
-            "ragged": [[0.1, 0.2], [0.3]],
-            "complex": [1 + 1j, 0.0, 0.0],
-        }
-        for name, value in values.items():
-            with self.subTest(name):
-                Site._newid = 10
-                sites = [
-                    PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                                   reference_center=np.array([0.1, 0.2, 0.3])),
-                    PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=value),
-                ]
-                with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
-                    _collect_reference_centres(sites)
-
-    def test_raises_for_a_non_finite_reference_centre_after_a_site_without_one(self):
-        """A NaN reference centre raises even when an earlier site has no reference centre."""
-        Site._newid = 10
-        sites = [
-            PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-            PolyhedralSite(vertex_indices=[4, 5, 6, 7],
-                           reference_center=np.array([np.nan, 0.5, 0.6])),
-        ]
-        with self.assertRaisesRegex(ValueError, "reference centre of site 11 must be three finite numbers"):
-            _collect_reference_centres(sites)
 
 
 class TestAssignSiteOccupationsInteraction(unittest.TestCase):

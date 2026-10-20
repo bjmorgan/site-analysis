@@ -13,7 +13,7 @@ from collections.abc import Iterable
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
-from site_analysis.site import Site, _as_index
+from site_analysis.site import Site, _as_index, _as_reference_center
 from site_analysis.tools import _SHIFTS
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
@@ -280,14 +280,16 @@ class PolyhedralSite(Site):
                 as any iterable, such as a list, an array or a generator. They are
                 stored as a list of Python ``int``.
             label: Optional label for this site.
-            reference_center: Optional reference centre for PBC handling.
+            reference_center: Optional reference centre for PBC handling,
+                three finite numbers, stored as a float array.
         
         Returns:
             None
         
         Raises:
             ValueError: If vertex_indices is empty, contains a negative index,
-                or lists an atom more than once.
+                or lists an atom more than once, or if reference_center is
+                not None and not three finite numbers.
             TypeError: If any element in vertex_indices is not an integer
                 (a ``bool`` is not accepted).
         """
@@ -305,7 +307,8 @@ class PolyhedralSite(Site):
             if k in seen:
                 raise ValueError(f"vertex_indices lists atom {k} more than once")
             seen.add(k)
-        
+        reference_center = _as_reference_center(reference_center)
+
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None

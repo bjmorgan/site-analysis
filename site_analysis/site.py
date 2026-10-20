@@ -43,6 +43,29 @@ def _as_index(value: object, name: str) -> int:
     return int(value)
 
 
+def _as_reference_center(value: object) -> np.ndarray | None:
+    """Return a site's reference centre as a float array, or None.
+
+    Args:
+        value: The reference centre: three finite numbers, or None.
+
+    Returns:
+        A new float64 array of shape (3,), or None if ``value`` is None.
+
+    Raises:
+        ValueError: If ``value`` is not None and not three finite numbers.
+    """
+    if value is None:
+        return None
+    try:
+        centre = np.array(value, dtype=np.float64)
+    except (TypeError, ValueError):
+        centre = None
+    if centre is None or centre.shape != (3,) or not np.isfinite(centre).all():
+        raise ValueError(f"reference_center must be three finite numbers, got {value}")
+    return centre
+
+
 class Site(ABC):
     """Parent class for defining sites.
 

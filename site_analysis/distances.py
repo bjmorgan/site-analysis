@@ -915,6 +915,40 @@ def _paired_mic_distances_numpy(
     return distances
 
 
+def _rounded_images(
+    frac_displacements: np.ndarray,
+    rows: list[list[float]],
+    inverse_widths: tuple[float, float, float],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Rounded images of many fractional displacements, and which need a search.
+
+    The first steps of ``_pair_distance`` and ``_nearest_image_shift``,
+    vectorised with the same arithmetic: the rounded image
+    ``r = f - round(f)`` of each displacement, its squared length, and its
+    box of shifts from ``_shift_bounds``.
+
+    Args:
+        frac_displacements: Finite fractional displacements, shape (K, 3).
+        rows: Lattice vectors as rows, from ``lattice_matrix.tolist()``.
+        inverse_widths: The cell's reciprocal perpendicular widths, from
+            ``_inverse_widths``.
+
+    Returns:
+        ``(r, best, lo, hi, search)``: the rounded images, shape (K, 3);
+        their squared lengths, shape (K,); the lower and upper shift
+        bounds, as floats, shape (K, 3); and the indices of the
+        displacements whose box holds a shift other than 0.
+    """
+    r = frac_displacements - np.round(frac_displacements)
+    best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
+    d = np.sqrt(best)[:, np.newaxis]
+    per_axis = np.array(inverse_widths)
+    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
+    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
+    search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
+    return r, best, lo, hi, search
+
+
 def _distances_from_rounded_images(
     frac_displacements: np.ndarray,
     rows: list[list[float]],
@@ -945,13 +979,7 @@ def _distances_from_rounded_images(
     Returns:
         (K,) array of minimum-image distances.
     """
-    r = frac_displacements - np.round(frac_displacements)
-    best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
-    d = np.sqrt(best)[:, np.newaxis]
-    per_axis = np.array(inverse_widths)
-    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
-    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
-    search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
+    r, best, lo, hi, search = _rounded_images(frac_displacements, rows, inverse_widths)
     if search.size == 0:
         return np.asarray(np.sqrt(best))
     within_one_cell = np.all((lo[search] >= -1) & (hi[search] <= 1), axis=1)
@@ -1032,9 +1060,14 @@ def _nearest_image_shifts(
     _check_lattice_matrix(lattice_matrix)
     if HAS_NUMBA:
         return np.asarray(_nearest_image_shifts_numba(displacements, lattice_matrix))
+    # Without numba, only the displacements whose rounded image may not be
+    # the nearest are searched one at a time; the others take the rounding
+    # shift, as _nearest_image_shift would.
     rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    shifts = np.empty(displacements.shape, dtype=np.int64)
-    for p, (f0, f1, f2) in enumerate(displacements.tolist()):
+    shifts = -np.round(displacements).astype(np.int64)
+    *_, search = _rounded_images(displacements, rows, inverse_widths)
+    for p in search.tolist():
+        f0, f1, f2 = displacements[p].tolist()
         shifts[p] = _nearest_image_shift(f0, f1, f2, rows, inverse_widths)
     return shifts
 

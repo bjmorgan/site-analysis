@@ -630,6 +630,19 @@ class TestNumbaUpdatePbcShifts(unittest.TestCase):
 		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
 		self.assertEqual(v_np, v_nb)
 
+	def test_agrees_with_numpy_non_finite_coordinate(self):
+		"""A NaN coordinate invalidates the cache, as it does without numba."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached.copy()
+		new[1, 2] = np.nan
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
+		self.assertFalse(v_np)
+		self.assertEqual(v_nb, v_np)
+
 	def test_agrees_with_numpy_minimum_translated_into_the_unit_cell(self):
 		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
 		cached = np.array([[0.1, 0.2, 0.3],

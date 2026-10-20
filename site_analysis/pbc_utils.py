@@ -196,11 +196,10 @@ def _numpy_update_pbc_shifts(
         the caller should perform a full recomputation.
     """
     diff = frac_coords - cached_raw_frac
-    wrapping = np.round(diff).astype(np.int64)
-    physical_diff = diff - wrapping
-    if not np.all(np.abs(physical_diff) < 0.3):
+    wrapping = np.round(diff)
+    if not np.all(np.abs(diff - wrapping) < 0.3):
         return False, frac_coords, image_shifts
-    new_shifts = image_shifts - wrapping
+    new_shifts = image_shifts - wrapping.astype(np.int64)
     return True, _translate_into_unit_cell(frac_coords + new_shifts), new_shifts
 
 
@@ -231,7 +230,7 @@ if HAS_NUMBA:
                 diff = frac_coords[i, k] - cached_raw_frac[i, k]
                 w = int(np.round(diff))
                 physical = diff - w
-                if physical >= 0.3 or physical <= -0.3:
+                if not (abs(physical) < 0.3):
                     return False, frac_coords, image_shifts
                 new_shifts[i, k] = image_shifts[i, k] - w
         shifted = np.empty((n, 3))

@@ -429,7 +429,7 @@ class TestExactMinimumImage(unittest.TestCase):
 
 
 class TestSearches(unittest.TestCase):
-    """The box and ball searches find the same images, and each is used where it is cheaper."""
+    """The box and ball searches find the same images, however large the box."""
 
     def test_box_and_ball_searches_agree_exactly(self):
         """Both searches return the same smallest squared length, and a shift that gives it, for every pair."""
@@ -452,50 +452,25 @@ class TestSearches(unittest.TestCase):
                             dist_mod._squared_length(*(x + n for x, n in zip(r, shift)), rows),
                             squared_length)
 
-    def test_large_box_uses_the_ball_search(self):
-        """A long pair in an elongated cell is searched by the ball."""
-        frac1, frac2 = np.array([0.1, 0.2, 0.0]), np.array([0.3, 0.4, 0.4])
-        with patch.object(dist_mod, "HAS_NUMBA", False), \
-                patch.object(dist_mod, "_search_ball", wraps=dist_mod._search_ball) as ball, \
-                patch.object(dist_mod, "_search_box", wraps=dist_mod._search_box) as box:
-            dist_mod.mic_distance(frac1, frac2, ELONGATED_CELLS["orthorhombic 10x10x200"])
-        ball.assert_called_once()
-        box.assert_not_called()
-
-    def test_small_box_uses_the_box_search(self):
-        """A short pair in an elongated cell is searched by the box."""
-        # 6.4 A apart across the short axes: a box of 2 x 2 x 1 shifts.
-        frac1, frac2 = np.array([0.55, 0.65, 0.0]), np.array([0.1, 0.2, 0.0])
-        with patch.object(dist_mod, "HAS_NUMBA", False), \
-                patch.object(dist_mod, "_search_ball", wraps=dist_mod._search_ball) as ball, \
-                patch.object(dist_mod, "_search_box", wraps=dist_mod._search_box) as box:
-            dist_mod.mic_distance(frac1, frac2, ELONGATED_CELLS["orthorhombic 10x10x200"])
-        box.assert_called_once()
-        ball.assert_not_called()
-
-    def test_numpy_batches_use_the_ball_search_for_large_boxes(self):
-        """Without numba, batches send pairs with large boxes to the ball search too."""
-        lattice_matrix = ELONGATED_CELLS["orthorhombic 10x10x200"]
-        frac1 = np.array([[0.1, 0.2, 0.0], [0.1, 0.2, 0.0]])
-        frac2 = np.array([[0.3, 0.4, 0.4], [0.3, 0.4, 0.45]])
-        with patch.object(dist_mod, "HAS_NUMBA", False), \
-                patch.object(dist_mod, "_search_ball", wraps=dist_mod._search_ball) as ball:
-            dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
-        self.assertEqual(ball.call_count, 2)
-
     def test_huge_boxes_finish(self):
-        """A long pair in a very elongated cell, with a box of 200 million shifts, is found at once."""
-        lattice_matrix = np.diag([1.0, 1.0, 10000.0])
-        frac1, frac2 = np.array([0.5, 0.5, 0.5]), np.zeros(3)
-        # In an orthogonal cell the rounded image is the nearest.
-        expected = math.sqrt(0.25 + 0.25 + 5000.0 ** 2)
+        """Long pairs with boxes of millions of shifts, nearest thousands of cells from the rounded image, are found at once, alone and in a batch with a short pair."""
+        # A 1 x 1 x 10000 cell whose long vector leans 5000.5 cells along
+        # x: the nearest image of a pair half a cell apart along it lies
+        # 2500 cells from the rounded image, and its box holds about 75
+        # million shifts.
+        lattice_matrix = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [5000.5, 0.0, 8660.0]])
+        frac1 = np.array([[0.5, 0.5, 0.5], [0.5, 0.5, 0.25], [0.1, 0.0, 0.0]])
+        frac2 = np.zeros((3, 3))
+        expected = [math.sqrt(0.25 ** 2 + 0.5 ** 2 + 4330.0 ** 2),
+                    math.sqrt(0.375 ** 2 + 0.5 ** 2 + 2165.0 ** 2), 0.1]
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch.object(dist_mod, "HAS_NUMBA", has_numba):
-                self.assertEqual(dist_mod.mic_distance(frac1, frac2, lattice_matrix), expected)
+                self.assertEqual(
+                    [dist_mod.mic_distance(a, b, lattice_matrix) for a, b in zip(frac1, frac2)],
+                    expected)
                 np.testing.assert_array_equal(
-                    dist_mod.paired_mic_distances(
-                        frac1[np.newaxis], frac2[np.newaxis], lattice_matrix), [expected])
+                    dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix), expected)
 
     def test_long_pairs_in_strongly_unreduced_cells(self):
         """Long pairs in cells that are sheared or tilted by thousands of cells match the reduced cell."""
@@ -823,50 +798,35 @@ class TestNumbaAcceleration(unittest.TestCase):
     """Tests for numba-accelerated distance functions."""
 
     def test_mic_distance_numba_matches_pymatgen(self):
-        """Numba single-pair version produces same results as pymatgen."""
-        from site_analysis.distances import _mic_distance_numba
+        """The single-pair distance with numba matches pymatgen."""
         lattice = Lattice.from_parameters(5.0, 6.0, 7.0, 80, 70, 60)
         rng = np.random.default_rng(42)
         for _ in range(100):
             frac1 = rng.random(3)
             frac2 = rng.random(3)
             expected = float(lattice.get_distance_and_image(frac1, frac2)[0])
-            result = _mic_distance_numba(frac1, frac2, lattice.matrix)
+            result = dist_mod.mic_distance(frac1, frac2, lattice.matrix)
             self.assertAlmostEqual(result, expected, places=10)
 
     def test_small_and_large_batches_agree(self):
         """Small batches, on one thread, and large batches, in parallel, give identical distances."""
-        # About half the pairs in this cell are searched by the ball.
-        lattice_matrix = HARD_CELLS["cubic lattice in a cell sheared 5x"]
+        # A typical cell; a sheared cell in which about half the pairs are
+        # searched by the ball; and an elongated cell in which long pairs
+        # have boxes of many shifts.
+        cells = ("triclinic", "cubic lattice in a cell sheared 5x, vectors rolled 0",
+                 "orthorhombic 10x10x200")
         rng = np.random.default_rng(7)
         n = 2 * dist_mod._PARALLEL_MIN_PAIRS
-        frac1 = rng.uniform(-2.0, 3.0, (n, 3))
-        frac2 = rng.uniform(-2.0, 3.0, (n, 3))
         small_n = dist_mod._PARALLEL_MIN_PAIRS - 1
-        large = dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
-        small = dist_mod.paired_mic_distances(frac1[:small_n], frac2[:small_n], lattice_matrix)
-        np.testing.assert_array_equal(small, large[:small_n])
-
-    def test_small_batches_use_serial_kernel(self):
-        """Batches below the parallel threshold use the single-threaded kernel."""
-        lattice = Lattice.cubic(10.0)
-        rng = np.random.default_rng(8)
-        n = dist_mod._PARALLEL_MIN_PAIRS - 1
-        with patch.object(dist_mod, '_paired_mic_distances_parallel',
-                          side_effect=AssertionError("parallel kernel used")):
-            dist_mod.paired_mic_distances(
-                rng.random((n, 3)), rng.random((n, 3)), lattice.matrix)
-
-    def test_large_batches_use_parallel_kernel(self):
-        """Batches at or above the parallel threshold use the parallel kernel."""
-        lattice = Lattice.cubic(10.0)
-        rng = np.random.default_rng(8)
-        n = dist_mod._PARALLEL_MIN_PAIRS
-        with patch.object(dist_mod, '_paired_mic_distances_serial',
-                          side_effect=AssertionError("serial kernel used")):
-            dist_mod.paired_mic_distances(
-                rng.random((n, 3)), rng.random((n, 3)), lattice.matrix)
-
+        for name in cells:
+            lattice_matrix = VARIED_CELLS[name]
+            frac1 = rng.uniform(-2.0, 3.0, (n, 3))
+            frac2 = rng.uniform(-2.0, 3.0, (n, 3))
+            with self.subTest(cell=name):
+                large = dist_mod.paired_mic_distances(frac1, frac2, lattice_matrix)
+                small = dist_mod.paired_mic_distances(
+                    frac1[:small_n], frac2[:small_n], lattice_matrix)
+                np.testing.assert_array_equal(small, large[:small_n])
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
 class TestNearestImageShiftsNumba(unittest.TestCase):

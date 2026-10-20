@@ -3,7 +3,7 @@ import warnings
 
 import pytest
 
-from site_analysis.polyhedral_site import PolyhedralSite, HullTriangleCache, _image_shifts
+from site_analysis.polyhedral_site import PolyhedralSite, _HullTriangleCache, _image_shifts
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.atom import Atom
 from site_analysis.site import Site
@@ -903,22 +903,22 @@ _OCTAHEDRON = np.array([
 
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
 class TestHullTriangleCache(unittest.TestCase):
-    """Tests for HullTriangleCache with numba acceleration."""
+    """Tests for _HullTriangleCache with numba acceleration."""
 
     def test_initialisation_computes_triangles(self):
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         # A tetrahedron has 4 triangular faces
         self.assertEqual(cache.triangles.shape[0], 4)
         self.assertEqual(cache.triangles.shape[1], 3)
 
     def test_initialisation_computes_triangles_octahedron(self):
-        cache = HullTriangleCache(_OCTAHEDRON)
+        cache = _HullTriangleCache(_OCTAHEDRON)
         # An octahedron has 8 triangular faces
         self.assertEqual(cache.triangles.shape[0], 8)
         self.assertEqual(cache.triangles.shape[1], 3)
 
     def test_update_preserves_topology(self):
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         original_simplices = cache.triangles.copy()
         # Slightly perturb vertex coordinates
         perturbed = _TETRAHEDRON + 0.01
@@ -927,46 +927,46 @@ class TestHullTriangleCache(unittest.TestCase):
 
     def test_image_shifts_cover_every_cell_the_vertices_span(self):
         """The image shifts run from 0 to 2 along x for vertices spanning x from 0.4 to 2.6."""
-        cache = HullTriangleCache(_TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+        cache = _HullTriangleCache(_TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
         self.assertEqual(sorted(set(cache.image_shifts[:, 0])), [0, 1, 2])
 
     def test_contains_point_inside_tetrahedron(self):
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
         self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_tetrahedron(self):
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
         self.assertFalse(cache.contains_point(point_outside))
 
     def test_contains_point_inside_octahedron(self):
-        cache = HullTriangleCache(_OCTAHEDRON)
+        cache = _HullTriangleCache(_OCTAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
         self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_octahedron(self):
-        cache = HullTriangleCache(_OCTAHEDRON)
+        cache = _HullTriangleCache(_OCTAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
         self.assertFalse(cache.contains_point(point_outside))
 
     def test_contains_point_in_another_image(self):
         """A point is contained in whichever periodic image it is given."""
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         for point in ([1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
             with self.subTest(point=point):
                 self.assertTrue(cache.contains_point(np.array(point)))
 
     def test_contains_point_tests_every_image_the_vertices_can_contain(self):
         """A point near the far vertex of a site spanning x from 0.4 to 2.6 is contained."""
-        cache = HullTriangleCache(
+        cache = _HullTriangleCache(
             _TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
         self.assertTrue(cache.contains_point(np.array([0.3, 0.5, 0.5])))
         self.assertFalse(cache.contains_point(np.array([0.5, 0.2, 0.2])))
 
     def test_contains_point_after_coordinate_update(self):
         """Containment still works after updating coordinates."""
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         # Shift all vertices by +0.1 in x
         shifted = _TETRAHEDRON.copy()
         shifted[:, 0] += 0.1
@@ -986,7 +986,7 @@ class TestNumbaQuery(unittest.TestCase):
     def test_query_inside_point(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
         result = _numba_sn_query(
             point_inside,
@@ -1000,7 +1000,7 @@ class TestNumbaQuery(unittest.TestCase):
     def test_query_outside_point(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
         result = _numba_sn_query(
             point_outside,
@@ -1014,7 +1014,7 @@ class TestNumbaQuery(unittest.TestCase):
     def test_query_wraps_the_point_into_the_unit_cell(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         result = _numba_sn_query(
             np.array([1.5, -0.5, 2.5]),
             np.zeros((1, 3), dtype=np.int64),
@@ -1027,7 +1027,7 @@ class TestNumbaQuery(unittest.TestCase):
     def test_query_returns_true_if_any_image_inside(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         # First image outside, second inside
         shifts = np.array([[1, 0, 0], [0, 0, 0]], dtype=np.int64)
         result = _numba_sn_query(
@@ -1042,7 +1042,7 @@ class TestNumbaQuery(unittest.TestCase):
     def test_query_returns_false_if_all_images_outside(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
-        cache = HullTriangleCache(_TETRAHEDRON)
+        cache = _HullTriangleCache(_TETRAHEDRON)
         shifts = np.array([[0, 0, 0], [1, 1, 1]], dtype=np.int64)
         result = _numba_sn_query(
             np.array([0.1, 0.1, 0.1]),

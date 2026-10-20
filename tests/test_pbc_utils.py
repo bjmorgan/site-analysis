@@ -450,6 +450,18 @@ class TestExactUnwrapping(unittest.TestCase):
 			self.UNREDUCED, return_image_shifts=True)
 		np.testing.assert_array_equal(shifts, [[1, -1, 0]])
 
+	def test_vertex_half_a_cell_from_the_centre_unwraps_the_same_in_any_image(self):
+		"""A vertex exactly half a cell from the centre is unwrapped to the same image whichever whole-cell offset it is given with."""
+		cubic = np.eye(3) * 4.0
+		centre = np.array([0.25, 0.25, 0.25])
+		vertices = np.array([[0.75, 0.25, 0.75], [0.35, 0.25, 0.25]])
+		reference = unwrap_vertices_to_reference_center(vertices, centre, cubic)
+		for offset in ([1, 0, 0], [-1, 0, 0], [3, 0, -1], [-1, 2, 1]):
+			with self.subTest(offset=offset):
+				shifted = vertices + np.array([offset, [0, 0, 0]])
+				unwrapped = unwrap_vertices_to_reference_center(shifted, centre, cubic)
+				np.testing.assert_array_equal(unwrapped, reference)
+
 	def test_vertex_several_cells_away_in_an_unreduced_cell(self):
 		"""Whole-cell offsets of the vertex change the shift by the opposite amount."""
 		for offset in ([5, 0, 0], [-2, 5, 3], [0, -5, 0]):

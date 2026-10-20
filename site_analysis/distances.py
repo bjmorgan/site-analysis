@@ -208,11 +208,13 @@ def _wrap(f: float) -> float:
         f: A finite fractional coordinate or displacement.
 
     Returns:
-        ``f - round(f)``, in ``[-0.5, 0.5]``, with halves rounded to even.
+        ``f - floor(f + 0.5)``, in ``[-0.5, 0.5)``: halves are rounded up,
+        so the result is the same whichever whole number is added to
+        ``f``.
     """
     if abs(f) >= _WHOLE_NUMBER_LIMIT:
         return 0.0
-    return f - round(f)
+    return f - math.floor(f + 0.5)
 
 
 @_jitable
@@ -460,7 +462,7 @@ def _nearest_image(
     """Smallest squared length among the images of a fractional displacement, and its shift.
 
     Starts from the image nearest in fractional coordinates,
-    ``r = f - round(f)``. Only the integer shifts ``n`` in the box from
+    ``r = f - floor(f + 0.5)``. Only the integer shifts ``n`` in the box from
     ``_shift_bounds`` can give a nearer image ``r + n``. For pairs closer
     than about half the cell's smallest perpendicular width the box holds
     only ``n = 0``, and ``r`` is the answer. Otherwise ``_search_box``
@@ -555,11 +557,12 @@ def _nearest_image_shift(
             accepts.
 
     Returns:
-        The integer shift ``n - round(f)``, which takes ``f`` to its
-        nearest image.
+        The integer shift ``n - floor(f + 0.5)``, which takes ``f`` to
+        its nearest image.
     """
     _, n0, n1, n2 = _nearest_image(f0, f1, f2, rows, inverse_widths)
-    return n0 - round(f0), n1 - round(f1), n2 - round(f2)
+    return (n0 - math.floor(f0 + 0.5), n1 - math.floor(f1 + 0.5),
+            n2 - math.floor(f2 + 0.5))
 
 
 if HAS_NUMBA:
@@ -963,7 +966,7 @@ def _rounded_images(
 
     The first steps of ``_pair_distance`` and ``_nearest_image_shift``,
     vectorised with the same arithmetic: the rounded image
-    ``r = f - round(f)`` of each displacement, its squared length, and its
+    ``r = f - floor(f + 0.5)`` of each displacement, its squared length, and its
     box of shifts from ``_shift_bounds``.
 
     Args:
@@ -978,7 +981,7 @@ def _rounded_images(
         bounds, as floats, shape (K, 3); and the indices of the
         displacements whose box holds a shift other than 0.
     """
-    r = frac_displacements - np.round(frac_displacements)
+    r = frac_displacements - np.floor(frac_displacements + 0.5)
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
     per_axis = np.array(inverse_widths)
@@ -1075,8 +1078,9 @@ def _nearest_image_shifts(
     For each displacement ``f``, the shift ``n`` such that ``f + n`` is
     the periodic image of ``f`` with the shortest Cartesian length, exact
     for any cell. Of images equally near, the same one is chosen every
-    time, with and without numba. Uses numba JIT compilation when
-    available; the results are the same without numba.
+    time, whichever periodic image ``f`` is given in, with and without
+    numba. Uses numba JIT compilation when available; the results are the
+    same without numba.
 
     Args:
         displacements: Fractional displacements, shape (N, 3).
@@ -1105,7 +1109,7 @@ def _nearest_image_shifts(
     # the nearest are searched one at a time; the others take the rounding
     # shift, as _nearest_image_shift would.
     rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    shifts = -np.round(displacements).astype(np.int64)
+    shifts = -np.floor(displacements + 0.5).astype(np.int64)
     *_, search = _rounded_images(displacements, rows, inverse_widths)
     for p in search.tolist():
         f0, f1, f2 = displacements[p].tolist()

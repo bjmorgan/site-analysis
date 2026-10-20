@@ -599,6 +599,24 @@ class TestNearestImageShifts(unittest.TestCase):
         for other in results[1:]:
             np.testing.assert_array_equal(other, results[0])
 
+    def test_ties_do_not_depend_on_the_periodic_image_given(self):
+        """Half-cell displacements given in different images are taken to the same image."""
+        lattice_matrix = Lattice.cubic(4.0).matrix
+        cases = (
+            np.array([[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [-0.5, 0.0, 0.0],
+                      [-1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]),
+            np.array([[0.5, 0.5, 0.5], [1.5, -0.5, 2.5], [-0.5, 1.5, -1.5]]),
+            np.array([[0.5, 0.25, -0.5], [-1.5, 2.25, 1.5], [3.5, -0.75, 0.5]]),
+        )
+        for has_numba in BACKENDS:
+            for displacements in cases:
+                with self.subTest(numba=has_numba, displacements=displacements[0]), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    images = displacements + dist_mod._nearest_image_shifts(
+                        displacements, lattice_matrix)
+                    for image in images[1:]:
+                        np.testing.assert_array_equal(image, images[0])
+
     def test_empty_input_returns_empty(self):
         """No displacements give an empty (0, 3) array of shifts."""
         for has_numba in BACKENDS:

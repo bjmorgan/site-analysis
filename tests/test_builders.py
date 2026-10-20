@@ -8,8 +8,8 @@ from site_analysis.site import Site
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
-from tests.test_helpers import (interstitial_structure, li_na_structure,
-	one_target_atom_for_two_reference_atoms)
+from tests.test_helpers import (interstitial_structure, interstitial_structure_outside_the_cell,
+	li_na_structure, one_target_atom_for_two_reference_atoms)
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -1596,6 +1596,7 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaises(ValueError) as ctx:
 			builder.build()
 		self.assertIn("coincide", str(ctx.exception))
+		self.assertIn("multiple atoms inside the same coordination environment", str(ctx.exception))
 
 	def test_duplicate_existing_polyhedral_sites_raises(self):
 		"""Polyhedral sites without reference coordinates are checked by vertex indices."""
@@ -1794,9 +1795,7 @@ class TestBuilderAlignment(unittest.TestCase):
 	def test_reference_with_coordinates_outside_the_cell_assigns_every_atom(self):
 		"""With alignment off, a reference outside the unit cell still contains every atom."""
 		structure = interstitial_structure()
-		coords = structure.frac_coords + np.random.default_rng(3).integers(
-			-2, 3, size=structure.frac_coords.shape)
-		reference = Structure(structure.lattice, structure.species, coords)
+		reference = interstitial_structure_outside_the_cell()
 		trajectory = (TrajectoryBuilder()
 			.with_structure(structure)
 			.with_reference_structure(reference)

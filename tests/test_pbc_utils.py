@@ -375,11 +375,8 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		reference_center = np.array([0.0, 0.5, 0.5])
 		coords, shifts = unwrap_vertices_to_reference_center(
 			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
-		# coords = raw + shifts + uniform, so (coords - uniform) - raw = shifts
-		shifted_raw = vertex_coords + shifts
-		min_coords = np.min(shifted_raw, axis=0)
-		uniform = -np.floor(min_coords)
-		np.testing.assert_array_almost_equal(coords, shifted_raw + uniform)
+		np.testing.assert_array_equal(shifts, [[0, 0, 0], [-1, 0, 0]])
+		np.testing.assert_array_almost_equal(coords, [[1.05, 0.5, 0.5], [0.95, 0.5, 0.5]])
 
 	def test_unwrap_vertices_empty_input(self):
 		"""Test that empty input is handled correctly."""
@@ -507,10 +504,7 @@ class TestNumpyUpdatePbcShifts(unittest.TestCase):
 		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
 		self.assertTrue(valid)
 		np.testing.assert_array_equal(new_shifts, shifts)
-		expected = new + shifts
-		min_coords = np.min(expected, axis=0)
-		uniform = -np.floor(min_coords)
-		np.testing.assert_array_almost_equal(coords, expected + uniform)
+		np.testing.assert_array_almost_equal(coords, [[0.11, 0.21, 1.31], [0.41, 1.51, 0.61]])
 
 	def test_cache_hit_with_wrapping(self):
 		"""Vertex wrapping from 0.99 to 0.01 is detected and shifts adjusted."""

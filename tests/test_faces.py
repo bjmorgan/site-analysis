@@ -12,7 +12,7 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.site import Site
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.trajectory import Trajectory
-from tests.test_helpers import interstitial_structure
+from tests.test_helpers import interstitial_structure, interstitial_structure_outside_the_cell
 
 
 def simple_cubic_cubes(n):
@@ -510,9 +510,7 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
 
     def test_reference_with_coordinates_outside_the_cell_and_no_alignment(self):
         structure = interstitial_structure()
-        coords = structure.frac_coords + np.random.default_rng(3).integers(
-            -2, 3, size=structure.frac_coords.shape)
-        reference = Structure(structure.lattice, structure.species, coords)
+        reference = interstitial_structure_outside_the_cell()
 
         def build(reference_structure):
             return (TrajectoryBuilder()

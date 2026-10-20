@@ -21,7 +21,8 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pymatgen.core import Structure
 
@@ -183,10 +184,12 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                if a target atom is mapped from two different reference
-                atoms, or a reference atom to two different target atoms,
-                counting the mapping held from earlier calls (a 1:1 mapping
-                violation), or if both label and labels are provided.
+                if an environment contains the same atom more than once (as
+                periodic images in a small cell), if a target atom is mapped
+                from two different reference atoms, or a reference atom to
+                two different target atoms, counting the mapping held from
+                earlier calls (a 1:1 mapping violation), or if both label and
+                labels are provided.
         """
         return self._create_sites(
             self._initialise_site_factory().create_polyhedral_sites,
@@ -227,10 +230,12 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                if a target atom is mapped from two different reference
-                atoms, or a reference atom to two different target atoms,
-                counting the mapping held from earlier calls (a 1:1 mapping
-                violation), or if both label and labels are provided.
+                if an environment contains the same atom more than once (as
+                periodic images in a small cell), if a target atom is mapped
+                from two different reference atoms, or a reference atom to
+                two different target atoms, counting the mapping held from
+                earlier calls (a 1:1 mapping violation), or if both label and
+                labels are provided.
         """
         return self._create_sites(
             self._initialise_site_factory().create_dynamic_voronoi_sites,
@@ -276,7 +281,8 @@ class ReferenceBasedSites:
 
         Raises:
             ValueError: If coordination environments cannot be found or
-                mapped, if the atom pairs and the held mapping are not
+                mapped, if an environment contains the same atom more than
+                once, if the atom pairs and the held mapping are not
                 one-to-one, or if ``create`` raises.
         """
         ref_environments = self._find_coordination_environments(
@@ -312,7 +318,7 @@ class ReferenceBasedSites:
 
         The mapping holds the coordinating atoms of the sites created by
         ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``
-        (the centre atoms are not mapped, so their rows are NaN); a call
+        (an environment's centre atom is not mapped by that environment); a call
         that raises adds none.
 
         Returns:

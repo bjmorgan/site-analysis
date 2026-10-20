@@ -313,9 +313,7 @@ def _collect_reference_centres(
 
 def construct_neighbouring_sites(
         sites: list[PolyhedralSite]) -> dict[int, list[PolyhedralSite]]:
-    """
-    Find, for each polyhedral site, the other sites that share three or more
-    vertex indices with it.
+    """Find the sites that share three or more vertex indices with each site.
 
     Args:
         sites: List of PolyhedralSite objects to check for shared vertices.

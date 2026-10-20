@@ -640,7 +640,8 @@ class Trajectory:
         """Reset the trajectory.
         
         This clears all trajectory information for atoms and sites and
-        resets the timesteps list.
+        resets the timesteps list. The shared faces of polyhedral sites are
+        kept.
         """
         for atom in self.atoms:
             atom.reset()

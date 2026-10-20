@@ -23,25 +23,25 @@ if HAS_NUMBA:
     import numba
 
     @numba.njit(cache=True)
-    def _numba_update_faces(
+    def _numba_update_hull_triangles(
         vertex_coords: np.ndarray,
-        face_simplices: np.ndarray,
+        triangles: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """JIT-compiled hull triangle normal and centre sign computation.
 
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
-            face_simplices: (N_faces, 3) array of vertex indices per hull
+            triangles: (N_triangles, 3) array of vertex indices per hull
                 triangle.
 
         Returns:
-            Tuple of (face_normals, face_ref_points, centre_signs).
+            Tuple of (triangle_normals, triangle_ref_points, centre_signs).
         """
-        n_faces = face_simplices.shape[0]
+        n_triangles = triangles.shape[0]
         n_vertices = vertex_coords.shape[0]
-        face_normals = np.empty((n_faces, 3))
-        face_ref_points = np.empty((n_faces, 3))
-        centre_signs = np.empty(n_faces)
+        triangle_normals = np.empty((n_triangles, 3))
+        triangle_ref_points = np.empty((n_triangles, 3))
+        centre_signs = np.empty(n_triangles)
 
         centre = np.zeros(3)
         for i in range(n_vertices):
@@ -50,10 +50,10 @@ if HAS_NUMBA:
         for k in range(3):
             centre[k] /= n_vertices
 
-        for j in range(n_faces):
-            i0 = face_simplices[j, 0]
-            i1 = face_simplices[j, 1]
-            i2 = face_simplices[j, 2]
+        for j in range(n_triangles):
+            i0 = triangles[j, 0]
+            i1 = triangles[j, 1]
+            i2 = triangles[j, 2]
 
             # Edge vectors from vertex 2
             e0x = vertex_coords[i0, 0] - vertex_coords[i2, 0]
@@ -64,27 +64,27 @@ if HAS_NUMBA:
             e1z = vertex_coords[i1, 2] - vertex_coords[i2, 2]
 
             # Cross product
-            face_normals[j, 0] = e0y * e1z - e0z * e1y
-            face_normals[j, 1] = e0z * e1x - e0x * e1z
-            face_normals[j, 2] = e0x * e1y - e0y * e1x
+            triangle_normals[j, 0] = e0y * e1z - e0z * e1y
+            triangle_normals[j, 1] = e0z * e1x - e0x * e1z
+            triangle_normals[j, 2] = e0x * e1y - e0y * e1x
 
-            # Reference point (first vertex of face)
+            # Reference point (first vertex of triangle)
             for k in range(3):
-                face_ref_points[j, k] = vertex_coords[i0, k]
+                triangle_ref_points[j, k] = vertex_coords[i0, k]
 
             # Centre sign
             dot = 0.0
             for k in range(3):
-                dot += face_normals[j, k] * (centre[k] - face_ref_points[j, k])
+                dot += triangle_normals[j, k] * (centre[k] - triangle_ref_points[j, k])
             centre_signs[j] = np.sign(dot)
 
-        return face_normals, face_ref_points, centre_signs
+        return triangle_normals, triangle_ref_points, centre_signs
 
     @numba.njit(cache=True)
     def _numba_sn_query(
         x_pbc_points: np.ndarray,
-        face_normals: np.ndarray,
-        face_ref_points: np.ndarray,
+        triangle_normals: np.ndarray,
+        triangle_ref_points: np.ndarray,
         centre_signs: np.ndarray,
     ) -> bool:
         """JIT-compiled containment check using surface normals.
@@ -95,23 +95,23 @@ if HAS_NUMBA:
 
         Args:
             x_pbc_points: (N, 3) array of periodic boundary images.
-            face_normals: (N_faces, 3) precomputed outward triangle normals.
-            face_ref_points: (N_faces, 3) reference vertex per triangle.
-            centre_signs: (N_faces,) sign of centre dot product per triangle.
+            triangle_normals: (N_triangles, 3) precomputed outward triangle normals.
+            triangle_ref_points: (N_triangles, 3) reference vertex per triangle.
+            centre_signs: (N_triangles,) sign of centre dot product per triangle.
 
         Returns:
             True if any PBC image is inside the polyhedron.
         """
         n_points = x_pbc_points.shape[0]
-        n_faces = face_normals.shape[0]
+        n_triangles = triangle_normals.shape[0]
         for i in range(n_points):
             all_match = True
-            for j in range(n_faces):
+            for j in range(n_triangles):
                 dot = 0.0
                 for k in range(3):
-                    dot += ((x_pbc_points[i, k] - face_ref_points[j, k])
-                            * face_normals[j, k])
-                # dot == 0.0 means the point lies exactly on the face
+                    dot += ((x_pbc_points[i, k] - triangle_ref_points[j, k])
+                            * triangle_normals[j, k])
+                # dot == 0.0 means the point lies exactly on the triangle
                 # plane; np.sign(0.0) returns 0.0 which would never
                 # match centre_signs (always +/-1), so we skip the
                 # check to avoid falsely rejecting boundary points.
@@ -123,7 +123,7 @@ if HAS_NUMBA:
         return False
 
 
-class FaceTopologyCache:
+class HullTriangleCache:
     """Cached hull triangle topology and surface normal data for containment.
 
     The topology (which vertex triples form each hull triangle) is computed
@@ -133,7 +133,7 @@ class FaceTopologyCache:
     new vertex coordinates using the cached topology.
 
     Attributes:
-        face_simplices: (N_faces, 3) array of vertex indices per hull
+        triangles: (N_triangles, 3) array of vertex indices per hull
             triangle.
     """
 
@@ -149,13 +149,13 @@ class FaceTopologyCache:
         """
         if not HAS_NUMBA:
             raise RuntimeError(
-                "FaceTopologyCache requires numba. "
+                "HullTriangleCache requires numba. "
                 "Install it with: pip install site-analysis[fast]"
             )
         hull = ConvexHull(vertex_coords)
-        self.face_simplices: np.ndarray = hull.simplices
-        self._face_normals: np.ndarray
-        self._face_ref_points: np.ndarray
+        self.triangles: np.ndarray = hull.simplices
+        self._triangle_normals: np.ndarray
+        self._triangle_ref_points: np.ndarray
         self._centre_signs: np.ndarray
         self.update(vertex_coords)
 
@@ -167,8 +167,8 @@ class FaceTopologyCache:
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
         """
-        self._face_normals, self._face_ref_points, self._centre_signs = (
-            _numba_update_faces(vertex_coords, self.face_simplices)
+        self._triangle_normals, self._triangle_ref_points, self._centre_signs = (
+            _numba_update_hull_triangles(vertex_coords, self.triangles)
         )
 
     def contains_point(self, x_pbc_points: np.ndarray) -> bool:
@@ -182,8 +182,8 @@ class FaceTopologyCache:
         """
         return bool(_numba_sn_query(
             x_pbc_points,
-            self._face_normals,
-            self._face_ref_points,
+            self._triangle_normals,
+            self._triangle_ref_points,
             self._centre_signs,
         ))
 
@@ -256,7 +256,7 @@ class PolyhedralSite(Site):
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
-        self._face_topology_cache: FaceTopologyCache | None = None
+        self._hull_triangle_cache: HullTriangleCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
         self._pending_lattice_matrix: np.ndarray | None = None
@@ -476,13 +476,13 @@ class PolyhedralSite(Site):
         x_images = pbc_images if pbc_images is not None else x_pbc(x)
         try:
             if HAS_NUMBA:
-                if self._face_topology_cache is None:
-                    self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
+                if self._hull_triangle_cache is None:
+                    self._hull_triangle_cache = HullTriangleCache(self.vertex_coords)
                     self._cache_stale = False
                 elif self._cache_stale:
-                    self._face_topology_cache.update(self.vertex_coords)
+                    self._hull_triangle_cache.update(self.vertex_coords)
                     self._cache_stale = False
-                return self._face_topology_cache.contains_point(x_images)
+                return self._hull_triangle_cache.contains_point(x_images)
             return self._contains_point_delaunay(x_images)
         except QhullError as e:
             raise RuntimeError(

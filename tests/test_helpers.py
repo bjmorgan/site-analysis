@@ -39,6 +39,14 @@ def interstitial_structure(supercell=(2, 2, 2), a=4.0):
 	return unit * supercell
 
 
+def interstitial_structure_outside_the_cell(seed=3):
+	"""`interstitial_structure()` with each atom moved by a random whole number of cells along each axis."""
+	structure = interstitial_structure()
+	coords = structure.frac_coords + np.random.default_rng(seed).integers(
+		-2, 3, size=structure.frac_coords.shape)
+	return Structure(structure.lattice, structure.species, coords)
+
+
 def li_na_structure():
 	"""A Li atom and a Na atom in a 10 Angstrom cubic cell."""
 	return Structure(Lattice.cubic(10.0), ["Li", "Na"], [[0.1, 0.1, 0.1], [0.6, 0.6, 0.6]])

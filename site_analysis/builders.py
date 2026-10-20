@@ -53,7 +53,8 @@ from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
 import numpy as np
-from typing import Callable, Sequence, Any
+from collections.abc import Callable, Sequence
+from typing import Any
 
 # Returns the ReferenceBasedSites of a build, created on the first call
 _ReferenceBasedSitesGetter = Callable[[], ReferenceBasedSites]
@@ -637,7 +638,7 @@ class TrajectoryBuilder:
         self._site_generators.append(create_dynamic_voronoi_sites)
         return self
         
-    def with_existing_sites(self, sites: list) -> TrajectoryBuilder:
+    def with_existing_sites(self, sites: Sequence[Site]) -> TrajectoryBuilder:
         """Use existing site objects.
 
         The sites are used as given. They are checked when ``build()`` is
@@ -653,12 +654,15 @@ class TrajectoryBuilder:
 
         Raises:
             ValueError: At ``build()``, if a polyhedral site has a vertex
-                index that is not an atom of the structure.
+                index that is not an atom of the structure, or if two sites
+                of the build are duplicates (coincident or nested when the
+                shared faces are found from the reference geometry,
+                otherwise with the same vertex or reference indices).
             TypeError: At ``build()``, if the sites of the build (these and
                 those from other site definitions) are of mixed site types.
         """
         # Define a simple function that returns the provided sites
-        def return_existing_sites(_: _ReferenceBasedSitesGetter) -> list[Site]:
+        def return_existing_sites(_: _ReferenceBasedSitesGetter) -> Sequence[Site]:
             return sites
             
         # Store the function for later execution
@@ -773,7 +777,10 @@ class TrajectoryBuilder:
             finite. False otherwise.
 
         Raises:
-            ValueError: If two sites coincide or one lies inside another.
+            ValueError: If two sites coincide or one lies inside another. The
+                message says that this typically means the reference
+                structure has multiple atoms inside the same coordination
+                environment.
         """
         if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
             return False
@@ -782,7 +789,12 @@ class TrajectoryBuilder:
             [site.vertex_indices for site in site_collection.sites])
         if not np.isfinite(coords[vertex_indices]).all():
             return False
-        site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
+        try:
+            site_collection.find_shared_faces(coords, rbs.reference_structure.lattice.matrix)
+        except ValueError as error:
+            raise ValueError(
+                f"{error}. This typically means the reference structure has "
+                f"multiple atoms inside the same coordination environment.") from error
         return True
 
     def _validate_unique_sites(self, sites: list[Site]) -> None:
@@ -790,7 +802,10 @@ class TrajectoryBuilder:
 
         Applies to PolyhedralSite (vertex_indices) and DynamicVoronoiSite
         (reference_indices). Skipped for VoronoiSite and SphericalSite where
-        duplicate detection based on coordinates is unreliable.
+        duplicate detection based on coordinates is unreliable. ``build()``
+        calls this only when the shared faces were not found from the
+        reference geometry, which rejects coincident and nested polyhedral
+        sites by position instead.
 
         Args:
             sites: The sites to check.
@@ -823,10 +838,11 @@ class TrajectoryBuilder:
         
         This method validates all required parameters and generates sites
         using the previously configured site generators. When every site is
-        polyhedral and every vertex atom of every site is a vertex of a site
-        created by ``with_polyhedral_sites``, it also finds the faces the
-        sites share from the reference geometry; otherwise the shared faces
-        are not found until ``Trajectory.find_shared_faces`` is called.
+        polyhedral and every vertex atom of every site was mapped from the
+        reference structure by a ``with_polyhedral_sites`` definition, it
+        also finds the faces the sites share from the reference geometry;
+        otherwise the shared faces are not found until
+        ``Trajectory.find_shared_faces`` is called.
         
         Sites are created first, then the atoms, then the trajectory, so a
         missing mobile species is reported before mixed site types, an
@@ -842,7 +858,8 @@ class TrajectoryBuilder:
                 sites, no mobile species or no atoms of it, reference atoms of
                 one species closer than ``min_atom_distance``, a failed
                 structure alignment, or commitment radii that are not
-                positive or do not cover every site label.
+                positive, do not cover every site label, or are given as a
+                dict while some sites have no label.
             ValueError: Invalid sites: no sites found for a definition, a
                 spherical site whose centre is not three finite numbers or
                 whose radius is negative or NaN, a polyhedral site with a

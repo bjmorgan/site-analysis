@@ -58,6 +58,14 @@ VARIED_CELLS = {
     **ELONGATED_CELLS,
 }
 
+# Every combination, on the three axes, of one ULP below, exactly at and
+# one ULP above -0.5 and 0.5: the 216 displacements on which the rounding
+# of each axis, and the tie-breaks between images, are decided.
+HALF_INTEGER_GRID = np.array(list(itertools.product(
+    [value for half in (-0.5, 0.5)
+     for value in (np.nextafter(half, -math.inf), half, np.nextafter(half, math.inf))],
+    repeat=3)))
+
 
 def brute_force_distances(frac1, frac2, lattice_matrix, reach=12):
     """Minimum-image distances between pairs, from every shift up to ``reach`` cells each way."""
@@ -352,11 +360,11 @@ class TestExactMinimumImage(unittest.TestCase):
                         expected, rtol=1e-12)
 
     def test_all_implementations_agree_exactly(self):
-        """Single and paired distances, with and without numba, are identical."""
+        """Single and paired distances, with and without numba, are identical, on the half-integer grid too."""
         rng = np.random.default_rng(85)
         for name, lattice_matrix in VARIED_CELLS.items():
-            frac1 = rng.uniform(-2.0, 3.0, (200, 3))
-            frac2 = rng.uniform(-2.0, 3.0, (200, 3))
+            frac1 = np.concatenate([rng.uniform(-2.0, 3.0, (200, 3)), HALF_INTEGER_GRID])
+            frac2 = np.concatenate([rng.uniform(-2.0, 3.0, (200, 3)), np.zeros((216, 3))])
             results = []
             for has_numba in BACKENDS:
                 with patch.object(dist_mod, "HAS_NUMBA", has_numba):
@@ -865,10 +873,10 @@ class TestNearestImageShiftsNumba(unittest.TestCase):
     """Nearest-image shifts are the same with and without numba."""
 
     def test_numba_and_numpy_shifts_are_identical(self):
-        """Both paths give identical shifts in near-cubic, sheared, thin and unreduced cells."""
+        """Both paths give identical shifts in near-cubic, sheared, thin and unreduced cells, on the half-integer grid too."""
         rng = np.random.default_rng(0)
         for name, lattice_matrix in random_lattices(rng).items():
-            displacements = random_displacements(rng, 30)
+            displacements = np.concatenate([random_displacements(rng, 30), HALF_INTEGER_GRID])
             with self.subTest(cell=name):
                 with patch.object(dist_mod, "HAS_NUMBA", False):
                     without_numba = dist_mod._nearest_image_shifts(displacements, lattice_matrix)

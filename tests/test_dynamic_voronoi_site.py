@@ -160,6 +160,25 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         np.testing.assert_array_almost_equal(
             site.centre, [0.05, 0.5, 0.5])
 
+    def test_calculate_centre_in_an_unreduced_cell(self):
+        """The centre is the mean of the reference atoms' images nearest the
+        reference centre, found exactly in an unreduced cell."""
+        # Rows (1,0,0), (3,1,0), (0,0,1) scaled to Angstrom: an unreduced basis.
+        lattice_matrix = 4.0 * np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        site = DynamicVoronoiSite(
+            reference_indices=[0, 1, 2, 3],
+            reference_center=np.array([0.0, 0.0, 0.5]))
+        frac_coords = np.array([[0.6, 0.6, 0.5],
+                                [0.4, 0.0, 0.7],
+                                [0.5, 0.8, 0.4],
+                                [0.3, 0.0, 0.4]])
+
+        site.calculate_centre(frac_coords, lattice_matrix)
+
+        # The nearest images are (1.6, -0.4, 0.5), (0.4, 0, 0.7),
+        # (0.5, -0.2, 0.4) and (0.3, 0, 0.4); their mean, wrapped into [0, 1).
+        np.testing.assert_array_almost_equal(site.centre, [0.70, 0.85, 0.5])
+
     def test_calculate_centre_rejects_non_finite_coordinates_without_reference_centre(self):
         """A site without a reference centre rejects a NaN reference atom coordinate."""
         site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])

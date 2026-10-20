@@ -16,8 +16,9 @@ import numpy as np
 from site_analysis._compat import HAS_NUMBA
 
 
-# Shift ranges are widened by this fraction of a cell, so that rounding
-# cannot leave out an image that might be the nearest.
+# Shift ranges are widened by this fraction of a cell at each end, which
+# exceeds the rounding in their ends for ranges of fewer than about 2**23
+# cells.
 _SHIFT_MARGIN = 1e-9
 
 # A cell whose volume is below this fraction of the product of its edge
@@ -329,9 +330,9 @@ def _search_box(
 ) -> tuple[float, int, int, int]:
     """Smallest squared length among the images that could be nearer, and its shift.
 
-    Evaluates every shift in the box from ``_shift_bounds``, which holds
-    every image no further away than the rounded image. Of images equally
-    near, the first evaluated is kept.
+    Evaluates every shift in the box from ``_shift_bounds``, which holds,
+    to within rounding, every image no further away than the rounded
+    image. Of images equally near, the first evaluated is kept.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -432,8 +433,9 @@ def _search_ball(
     elongated, thin or sheared cells far fewer images are visited than in
     the box from ``_shift_bounds``, which bounds each axis on its own. Has
     the same arguments as ``_search_box`` and finds the same smallest
-    squared length; of images equally near, the first visited is kept, so
-    its shift may differ from the one ``_search_box`` returns.
+    squared length to within rounding; of images equally near, the first
+    visited is kept, so its shift may differ from the one ``_search_box``
+    returns.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -596,8 +598,8 @@ def _nearest_image_shift(
     The shift of the nearest image from ``_nearest_image``, started from
     the rounded image ``_wrap_half_up`` gives, relative to ``f`` rather
     than to that image. The search keeps the first of equally near
-    images, so starting from an image that is the same whichever cell
-    ``f`` is given in makes the shift so too.
+    images, so the shift is the same whichever cell ``f`` is given in,
+    when ``f`` in that cell is exactly representable.
 
     Args:
         f0: First component of the fractional displacement, finite and
@@ -1131,10 +1133,10 @@ def _nearest_image_shifts(
 
     For each displacement ``f``, the shift ``n`` such that ``f + n`` is
     the periodic image of ``f`` with the shortest Cartesian length, exact
-    for any cell. Of images equally near, the same one is chosen every
-    time, whichever periodic image ``f`` is given in, with and without
-    numba. Uses numba JIT compilation when available; the results are the
-    same without numba.
+    for any cell. Of images equally near, the same one is chosen with and
+    without numba, and whichever periodic image ``f`` is given in when
+    that image is exactly representable. Uses numba JIT compilation when
+    available; the results are the same without numba.
 
     Args:
         displacements: Fractional displacements, shape (N, 3).

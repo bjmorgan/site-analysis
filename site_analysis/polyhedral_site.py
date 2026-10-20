@@ -393,7 +393,7 @@ class PolyhedralSite(Site):
         the cache), delegates to ``correct_pbc()`` for full PBC
         unwrapping. On subsequent calls, updates the cached integer
         image shifts incrementally by detecting coordinate wraps
-        (jumps of ~1.0), avoiding the expensive 27-image distance search.
+        (jumps of ~1.0), avoiding the expensive nearest-image search.
 
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
         marks the cached hull triangle normals to be recomputed.

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Callable, Literal, overload
 
 import numpy as np
-from site_analysis.distances import frac_to_cart
+from site_analysis.distances import _nearest_image_shifts
 
 from site_analysis._compat import HAS_NUMBA
 
@@ -56,12 +56,6 @@ def _translate_into_unit_cell(coords: np.ndarray) -> np.ndarray:
     return translated
 
 
-# Generate all 27 possible shifts: [-1,0,1] for each dimension
-_PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
-                                          for dy in [-1, 0, 1]
-                                          for dz in [-1, 0, 1]],
-                                         dtype=np.int64)
-                                        
 @overload
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
@@ -86,8 +80,10 @@ def unwrap_vertices_to_reference_center(
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
 
-    The vertices and the reference centre may lie in any periodic images,
-    however many cells apart.
+    Each vertex is moved to its periodic image nearest the reference
+    centre, exactly in any cell: the image is found by the search used
+    for minimum-image distances. The vertices and the reference centre
+    may lie in any periodic images, however many cells apart.
 
     Args:
         frac_coords: Array of fractional coordinates with shape (n, 3).
@@ -102,25 +98,17 @@ def unwrap_vertices_to_reference_center(
         whole cells so the lowest coordinate along each axis is in [0, 1).
         If ``return_image_shifts`` is True, returns a tuple of
         ``(unwrapped_coords, image_shifts)``.
+
+    Raises:
+        ValueError: If the coordinates are not finite, or the lattice is
+            singular, nearly singular, or extremely elongated.
     """
     if frac_coords.size == 0:
         if return_image_shifts:
             return frac_coords, np.zeros((0, 3), dtype=np.int64)
         return frac_coords
 
-    n_vertices = len(frac_coords)
-    # Move each vertex to the image nearest the centre in fractional
-    # coordinates, then search the 27 images around it.
-    base_shifts = np.round(reference_center - frac_coords).astype(np.int64)
-    vertex_images = (frac_coords + base_shifts)[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
-
-    ref_cart = frac_to_cart(reference_center, lattice_matrix)
-    vertex_images_cart = frac_to_cart(vertex_images.reshape(n_vertices * 27, 3), lattice_matrix)
-    distances = np.linalg.norm(
-        vertex_images_cart - ref_cart, axis=1).reshape(n_vertices, 27)
-
-    best_indices = np.argmin(distances, axis=1)
-    image_shifts: np.ndarray = base_shifts + _PERIODIC_SHIFTS[best_indices]
+    image_shifts = _nearest_image_shifts(frac_coords - reference_center, lattice_matrix)
     result = _translate_into_unit_cell(frac_coords + image_shifts)
 
     if return_image_shifts:
@@ -174,12 +162,12 @@ def _numpy_update_pbc_shifts(
 ) -> tuple[bool, np.ndarray, np.ndarray]:
     """Incrementally update cached PBC image shifts between frames.
 
-    Full PBC unwrapping is expensive because it evaluates all 27
-    periodic images per coordinate. Between successive MD frames,
+    Full PBC unwrapping is expensive because it searches for the nearest
+    periodic image of every coordinate. Between successive MD frames,
     atoms typically move by small amounts, so the integer image
     shifts rarely change. This function detects coordinate wraps
     (jumps of ~1.0 in fractional coordinates) and adjusts shifts
-    accordingly, avoiding the full 27-image search.
+    accordingly, avoiding the full nearest-image search.
 
     If any coordinate has moved by more than 0.3 fractional units
     (after accounting for wrapping), the cache is considered invalid

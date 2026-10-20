@@ -444,6 +444,33 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             PolyhedralSite(vertex_indices)
         self.assertIn("vertex_indices cannot be empty", str(context.exception))
               
+class TestContainmentInSkewedCell(unittest.TestCase):
+    """Tests that containment uses the exactly unwrapped vertices in skewed cells."""
+
+    def test_site_contains_its_centroid_in_an_unreduced_cell(self):
+        """Vertices that need shifts a 27-image search misses still give the intended tetrahedron."""
+        # Rows (1,0,0), (3,1,0), (0,0,1) scaled to Angstrom: not a reduced basis.
+        lattice_matrix = 4.0 * np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        raw_frac_coords = np.array([
+            [0.6, 0.6, 0.5],
+            [0.4, 0.0, 0.7],
+            [0.5, 0.8, 0.4],
+            [0.3, 0.0, 0.4],
+        ])
+        # The images nearest the reference centre, from a brute-force search.
+        nearest_images = np.array([
+            [1.6, -0.4, 0.5],
+            [0.4, 0.0, 0.7],
+            [0.5, -0.2, 0.4],
+            [0.3, 0.0, 0.4],
+        ])
+        centroid = nearest_images.mean(axis=0) % 1.0
+        site = PolyhedralSite(
+            vertex_indices=[0, 1, 2, 3], reference_center=np.array([0.0, 0.0, 0.5]))
+        site.assign_vertex_coords(raw_frac_coords, lattice_matrix)
+        self.assertTrue(site.contains_point(centroid))
+
+
 class TestNotifyStructureChanged(unittest.TestCase):
     """Tests for lazy coordinate assignment via notify_structure_changed."""
 

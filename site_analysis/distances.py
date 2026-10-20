@@ -201,6 +201,24 @@ def _inverse_widths_are_finite(inverse_widths: tuple[float, float, float]) -> bo
 
 
 @_jitable
+def _round_half_up(f: float) -> int:
+    """The whole number nearest ``f``, with halves rounded up.
+
+    Args:
+        f: A finite number smaller than ``_WHOLE_NUMBER_LIMIT`` in
+            magnitude.
+
+    Returns:
+        ``round(f)``, plus one if ``f`` is exactly halfway between two
+        whole numbers and ``round`` chose the lower (even) one.
+    """
+    n = round(f)
+    if f - n == 0.5:
+        n += 1
+    return n
+
+
+@_jitable
 def _wrap(f: float) -> float:
     """A fractional coordinate minus its nearest whole number.
 
@@ -208,13 +226,13 @@ def _wrap(f: float) -> float:
         f: A finite fractional coordinate or displacement.
 
     Returns:
-        ``f - floor(f + 0.5)``, in ``[-0.5, 0.5)``: halves are rounded up,
-        so the result is the same whichever whole number is added to
-        ``f``.
+        ``f - _round_half_up(f)``, in ``[-0.5, 0.5)``, exactly. Halves are
+        rounded up, so the result is the same whichever whole number is
+        added to ``f``.
     """
     if abs(f) >= _WHOLE_NUMBER_LIMIT:
         return 0.0
-    return f - math.floor(f + 0.5)
+    return f - _round_half_up(f)
 
 
 @_jitable
@@ -462,7 +480,7 @@ def _nearest_image(
     """Smallest squared length among the images of a fractional displacement, and its shift.
 
     Starts from the image nearest in fractional coordinates,
-    ``r = f - floor(f + 0.5)``. Only the integer shifts ``n`` in the box from
+    ``r = f - _round_half_up(f)``. Only the integer shifts ``n`` in the box from
     ``_shift_bounds`` can give a nearer image ``r + n``. For pairs closer
     than about half the cell's smallest perpendicular width the box holds
     only ``n = 0``, and ``r`` is the answer. Otherwise ``_search_box``
@@ -557,12 +575,12 @@ def _nearest_image_shift(
             accepts.
 
     Returns:
-        The integer shift ``n - floor(f + 0.5)``, which takes ``f`` to
+        The integer shift ``n - _round_half_up(f)``, which takes ``f`` to
         its nearest image.
     """
     _, n0, n1, n2 = _nearest_image(f0, f1, f2, rows, inverse_widths)
-    return (n0 - math.floor(f0 + 0.5), n1 - math.floor(f1 + 0.5),
-            n2 - math.floor(f2 + 0.5))
+    return (n0 - _round_half_up(f0), n1 - _round_half_up(f1),
+            n2 - _round_half_up(f2))
 
 
 if HAS_NUMBA:
@@ -957,6 +975,20 @@ def _paired_mic_distances_numpy(
     return distances
 
 
+def _rounded_half_up(f: np.ndarray) -> np.ndarray:
+    """The whole numbers nearest each element of ``f``, with halves rounded up.
+
+    Args:
+        f: Finite floats smaller than ``_WHOLE_NUMBER_LIMIT`` in magnitude.
+
+    Returns:
+        ``_round_half_up`` of each element, as floats of the same shape.
+    """
+    n = np.round(f)
+    n[f - n == 0.5] += 1.0
+    return n
+
+
 def _rounded_images(
     frac_displacements: np.ndarray,
     rows: list[list[float]],
@@ -966,7 +998,7 @@ def _rounded_images(
 
     The first steps of ``_pair_distance`` and ``_nearest_image_shift``,
     vectorised with the same arithmetic: the rounded image
-    ``r = f - floor(f + 0.5)`` of each displacement, its squared length, and its
+    ``r = f - _round_half_up(f)`` of each displacement, its squared length, and its
     box of shifts from ``_shift_bounds``.
 
     Args:
@@ -981,7 +1013,7 @@ def _rounded_images(
         bounds, as floats, shape (K, 3); and the indices of the
         displacements whose box holds a shift other than 0.
     """
-    r = frac_displacements - np.floor(frac_displacements + 0.5)
+    r = frac_displacements - _rounded_half_up(frac_displacements)
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
     per_axis = np.array(inverse_widths)
@@ -1109,7 +1141,7 @@ def _nearest_image_shifts(
     # the nearest are searched one at a time; the others take the rounding
     # shift, as _nearest_image_shift would.
     rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    shifts = -np.floor(displacements + 0.5).astype(np.int64)
+    shifts = -_rounded_half_up(displacements).astype(np.int64)
     *_, search = _rounded_images(displacements, rows, inverse_widths)
     for p in search.tolist():
         f0, f1, f2 = displacements[p].tolist()

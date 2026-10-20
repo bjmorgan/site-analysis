@@ -617,6 +617,24 @@ class TestNearestImageShifts(unittest.TestCase):
                     for image in images[1:]:
                         np.testing.assert_array_equal(image, images[0])
 
+    def test_displacements_an_ulp_from_a_half_take_the_nearer_image(self):
+        """0.7 - 0.2, one ULP below 0.5, keeps shift 0; one ULP above 0.5 takes shift -1."""
+        below = 0.7 - 0.2
+        above = np.nextafter(0.5, 1.0)
+        displacements = np.array([[below, 0.0, 0.0], [-below, 0.0, 0.0],
+                                  [above, 0.0, 0.0], [-above, 0.0, 0.0]])
+        lattice_matrix = Lattice.cubic(4.0).matrix
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                shifts = dist_mod._nearest_image_shifts(displacements, lattice_matrix)
+                np.testing.assert_array_equal(
+                    shifts, [[0, 0, 0], [0, 0, 0], [-1, 0, 0], [1, 0, 0]])
+                self.assertEqual(
+                    dist_mod.paired_mic_distances(
+                        displacements[:1], np.zeros((1, 3)), lattice_matrix)[0],
+                    4.0 * below)
+
     def test_empty_input_returns_empty(self):
         """No displacements give an empty (0, 3) array of shifts."""
         for has_numba in BACKENDS:

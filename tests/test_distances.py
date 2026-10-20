@@ -441,7 +441,7 @@ class TestSearches(unittest.TestCase):
                     self.assertEqual(ball[0], box[0])
                     for squared_length, *shift in (ball, box):
                         self.assertEqual(
-                            dist_mod._squared_length(*(a + n for a, n in zip(r, shift)), rows),
+                            dist_mod._squared_length(*(x + n for x, n in zip(r, shift)), rows),
                             squared_length)
 
     def test_large_box_uses_the_ball_search(self):

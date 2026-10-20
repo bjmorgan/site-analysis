@@ -8,40 +8,40 @@ or octahedral sites.
 
 from __future__ import annotations
 
-import itertools
 import warnings
+from collections.abc import Iterable
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay, QhullError
-from site_analysis.site import Site
+from site_analysis.site import Site, _as_index
 from site_analysis.tools import x_pbc
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 
-
 if HAS_NUMBA:
     import numba
 
     @numba.njit(cache=True)
-    def _numba_update_faces(
+    def _numba_update_hull_triangles(
         vertex_coords: np.ndarray,
-        face_simplices: np.ndarray,
+        triangles: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """JIT-compiled face normal and centre sign computation.
+        """JIT-compiled hull triangle normal and centre sign computation.
 
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
-            face_simplices: (N_faces, 3) array of vertex indices per face.
+            triangles: (N_triangles, 3) array of vertex indices per hull
+                triangle.
 
         Returns:
-            Tuple of (face_normals, face_ref_points, centre_signs).
+            Tuple of (triangle_normals, triangle_ref_points, centre_signs).
         """
-        n_faces = face_simplices.shape[0]
+        n_triangles = triangles.shape[0]
         n_vertices = vertex_coords.shape[0]
-        face_normals = np.empty((n_faces, 3))
-        face_ref_points = np.empty((n_faces, 3))
-        centre_signs = np.empty(n_faces)
+        triangle_normals = np.empty((n_triangles, 3))
+        triangle_ref_points = np.empty((n_triangles, 3))
+        centre_signs = np.empty(n_triangles)
 
         centre = np.zeros(3)
         for i in range(n_vertices):
@@ -50,10 +50,10 @@ if HAS_NUMBA:
         for k in range(3):
             centre[k] /= n_vertices
 
-        for j in range(n_faces):
-            i0 = face_simplices[j, 0]
-            i1 = face_simplices[j, 1]
-            i2 = face_simplices[j, 2]
+        for j in range(n_triangles):
+            i0 = triangles[j, 0]
+            i1 = triangles[j, 1]
+            i2 = triangles[j, 2]
 
             # Edge vectors from vertex 2
             e0x = vertex_coords[i0, 0] - vertex_coords[i2, 0]
@@ -64,54 +64,54 @@ if HAS_NUMBA:
             e1z = vertex_coords[i1, 2] - vertex_coords[i2, 2]
 
             # Cross product
-            face_normals[j, 0] = e0y * e1z - e0z * e1y
-            face_normals[j, 1] = e0z * e1x - e0x * e1z
-            face_normals[j, 2] = e0x * e1y - e0y * e1x
+            triangle_normals[j, 0] = e0y * e1z - e0z * e1y
+            triangle_normals[j, 1] = e0z * e1x - e0x * e1z
+            triangle_normals[j, 2] = e0x * e1y - e0y * e1x
 
-            # Reference point (first vertex of face)
+            # Reference point (first vertex of triangle)
             for k in range(3):
-                face_ref_points[j, k] = vertex_coords[i0, k]
+                triangle_ref_points[j, k] = vertex_coords[i0, k]
 
             # Centre sign
             dot = 0.0
             for k in range(3):
-                dot += face_normals[j, k] * (centre[k] - face_ref_points[j, k])
+                dot += triangle_normals[j, k] * (centre[k] - triangle_ref_points[j, k])
             centre_signs[j] = np.sign(dot)
 
-        return face_normals, face_ref_points, centre_signs
+        return triangle_normals, triangle_ref_points, centre_signs
 
     @numba.njit(cache=True)
     def _numba_sn_query(
         x_pbc_points: np.ndarray,
-        face_normals: np.ndarray,
-        face_ref_points: np.ndarray,
+        triangle_normals: np.ndarray,
+        triangle_ref_points: np.ndarray,
         centre_signs: np.ndarray,
     ) -> bool:
         """JIT-compiled containment check using surface normals.
 
         For each PBC image point, checks whether the point lies on the
-        same side as the polyhedron centre for every face. Uses early
-        exit on first failing face for efficiency.
+        same side as the polyhedron centre for every hull triangle. Uses early
+        exit on first failing triangle for efficiency.
 
         Args:
             x_pbc_points: (N, 3) array of periodic boundary images.
-            face_normals: (N_faces, 3) precomputed outward face normals.
-            face_ref_points: (N_faces, 3) reference vertex per face.
-            centre_signs: (N_faces,) sign of centre dot product per face.
+            triangle_normals: (N_triangles, 3) precomputed outward triangle normals.
+            triangle_ref_points: (N_triangles, 3) reference vertex per triangle.
+            centre_signs: (N_triangles,) sign of centre dot product per triangle.
 
         Returns:
             True if any PBC image is inside the polyhedron.
         """
         n_points = x_pbc_points.shape[0]
-        n_faces = face_normals.shape[0]
+        n_triangles = triangle_normals.shape[0]
         for i in range(n_points):
             all_match = True
-            for j in range(n_faces):
+            for j in range(n_triangles):
                 dot = 0.0
                 for k in range(3):
-                    dot += ((x_pbc_points[i, k] - face_ref_points[j, k])
-                            * face_normals[j, k])
-                # dot == 0.0 means the point lies exactly on the face
+                    dot += ((x_pbc_points[i, k] - triangle_ref_points[j, k])
+                            * triangle_normals[j, k])
+                # dot == 0.0 means the point lies exactly on the triangle
                 # plane; np.sign(0.0) returns 0.0 which would never
                 # match centre_signs (always +/-1), so we skip the
                 # check to avoid falsely rejecting boundary points.
@@ -123,51 +123,52 @@ if HAS_NUMBA:
         return False
 
 
-class FaceTopologyCache:
-    """Cached face topology and surface normal data for polyhedral containment.
+class HullTriangleCache:
+    """Cached hull triangle topology and surface normal data for containment.
 
-    The face topology (which vertex triples form each face) is computed
+    The topology (which vertex triples form each hull triangle) is computed
     once from an initial ``ConvexHull`` and cached permanently -- it depends
     only on vertex connectivity, not on coordinates. Per-timestep, the
-    face normals, reference points, and centre signs are recomputed from
+    triangle normals, reference points, and centre signs are recomputed from
     new vertex coordinates using the cached topology.
 
     Attributes:
-        face_simplices: (N_faces, 3) array of vertex indices per face.
+        triangles: (N_triangles, 3) array of vertex indices per hull
+            triangle.
     """
 
     def __init__(self, vertex_coords: np.ndarray) -> None:
-        """Compute face topology from initial vertex coordinates.
+        """Compute hull triangle topology from initial vertex coordinates.
 
         Args:
             vertex_coords: (N_vertices, 3) array of vertex positions.
-                Used to build a ConvexHull and extract face connectivity.
+                Used to build a ConvexHull and extract triangle connectivity.
 
         Raises:
             RuntimeError: If numba is not installed.
         """
         if not HAS_NUMBA:
             raise RuntimeError(
-                "FaceTopologyCache requires numba. "
+                "HullTriangleCache requires numba. "
                 "Install it with: pip install site-analysis[fast]"
             )
         hull = ConvexHull(vertex_coords)
-        self.face_simplices: np.ndarray = hull.simplices
-        self._face_normals: np.ndarray
-        self._face_ref_points: np.ndarray
+        self.triangles: np.ndarray = hull.simplices
+        self._triangle_normals: np.ndarray
+        self._triangle_ref_points: np.ndarray
         self._centre_signs: np.ndarray
         self.update(vertex_coords)
 
     def update(self, vertex_coords: np.ndarray) -> None:
-        """Recompute face normals from cached topology and new coordinates.
+        """Recompute triangle normals from cached topology and new coordinates.
 
         Called once per timestep after vertex coordinates are assigned.
 
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
         """
-        self._face_normals, self._face_ref_points, self._centre_signs = (
-            _numba_update_faces(vertex_coords, self.face_simplices)
+        self._triangle_normals, self._triangle_ref_points, self._centre_signs = (
+            _numba_update_hull_triangles(vertex_coords, self.triangles)
         )
 
     def contains_point(self, x_pbc_points: np.ndarray) -> bool:
@@ -181,8 +182,8 @@ class FaceTopologyCache:
         """
         return bool(_numba_sn_query(
             x_pbc_points,
-            self._face_normals,
-            self._face_ref_points,
+            self._triangle_normals,
+            self._triangle_ref_points,
             self._centre_signs,
         ))
 
@@ -195,8 +196,8 @@ class PolyhedralSite(Site):
     constructing a convex polyhedron from the vertex atoms and checking whether
     points lie within this polyhedron. The containment algorithm is selected
     automatically: when numba is available, a JIT-compiled surface normal method
-    with cached face topology is used; otherwise, falls back to Delaunay
-    tessellation via scipy.
+    with cached hull triangle topology is used; otherwise, falls back to
+    Delaunay tessellation via scipy.
 
     The polyhedron vertices are defined using atom indices in a structure, and
     their coordinates are assigned from the structure when needed. This allows the
@@ -215,13 +216,15 @@ class PolyhedralSite(Site):
     """
 
     def __init__(self,
-        vertex_indices: list[int],
+        vertex_indices: Iterable[int],
         label: str | None=None,
         reference_center: np.ndarray | None=None):
         """Create a PolyhedralSite instance.
         
         Args:
-            vertex_indices: List of integer indices for the vertex atoms (counting from 0).
+            vertex_indices: Integer indices for the vertex atoms (counting from 0),
+                as any iterable, such as a list, an array or a generator. They are
+                stored as a list of Python ``int``.
             label: Optional label for this site.
             reference_center: Optional reference centre for PBC handling.
         
@@ -229,23 +232,31 @@ class PolyhedralSite(Site):
             None
         
         Raises:
-            ValueError: If vertex_indices is empty.
-            TypeError: If any element in vertex_indices is not an integer.
+            ValueError: If vertex_indices is empty, contains a negative index,
+                or lists an atom more than once.
+            TypeError: If any element in vertex_indices is not an integer
+                (a ``bool`` is not accepted).
         """
-        if isinstance(vertex_indices, np.ndarray):
-            vertex_indices = vertex_indices.tolist()
-        
+        vertex_indices = list(vertex_indices)
+
         if not vertex_indices:
             raise ValueError("vertex_indices cannot be empty")
 
-        if not all(isinstance(idx, int) for idx in vertex_indices):
-            raise TypeError("All vertex indices must be integers")
+        vertex_indices = [_as_index(idx, "vertex index") for idx in vertex_indices]
+
+        seen: set[int] = set()
+        for k in vertex_indices:
+            if k < 0:
+                raise ValueError(f"vertex_indices contains negative atom index {k}")
+            if k in seen:
+                raise ValueError(f"vertex_indices lists atom {k} more than once")
+            seen.add(k)
         
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
-        self._face_topology_cache: FaceTopologyCache | None = None
+        self._hull_triangle_cache: HullTriangleCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
         self._pending_lattice_matrix: np.ndarray | None = None
@@ -266,8 +277,7 @@ class PolyhedralSite(Site):
 
         Clears the occupation data as in ``Site.reset``, and unsets the
         vertex coordinates, Delaunay tessellation, and PBC shift caches. The
-        face topology cache is preserved as it depends only on vertex
-        indices, which are immutable.
+        cached hull triangles are kept.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None
@@ -386,7 +396,7 @@ class PolyhedralSite(Site):
         (jumps of ~1.0), avoiding the expensive 27-image distance search.
 
         Sets ``vertex_coords``, clears the Delaunay tessellation, and
-        marks the face topology cache as stale.
+        marks the cached hull triangle normals to be recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
@@ -466,13 +476,13 @@ class PolyhedralSite(Site):
         x_images = pbc_images if pbc_images is not None else x_pbc(x)
         try:
             if HAS_NUMBA:
-                if self._face_topology_cache is None:
-                    self._face_topology_cache = FaceTopologyCache(self.vertex_coords)
+                if self._hull_triangle_cache is None:
+                    self._hull_triangle_cache = HullTriangleCache(self.vertex_coords)
                     self._cache_stale = False
                 elif self._cache_stale:
-                    self._face_topology_cache.update(self.vertex_coords)
+                    self._hull_triangle_cache.update(self.vertex_coords)
                     self._cache_stale = False
-                return self._face_topology_cache.contains_point(x_images)
+                return self._hull_triangle_cache.contains_point(x_images)
             return self._contains_point_delaunay(x_images)
         except QhullError as e:
             raise RuntimeError(

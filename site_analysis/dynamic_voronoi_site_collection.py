@@ -95,10 +95,6 @@ class _CentreGroup:
             return None
         new_shifts = self.pbc_shifts - wrapping
         corrected = batch_ref + new_shifts
-        # Shift each site's coords so all values are >= 0
-        min_coords = np.min(corrected, axis=1)  # (n_sites, 3)
-        non_neg = np.maximum(0, np.ceil(-min_coords))  # (n_sites, 3)
-        corrected = corrected + non_neg[:, np.newaxis, :]
         self.pbc_shifts = new_shifts
         self.cached_raw_frac = batch_ref.copy()
         centres: np.ndarray = np.mean(corrected, axis=1) % 1.0

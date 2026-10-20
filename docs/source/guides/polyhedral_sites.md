@@ -168,11 +168,59 @@ trajectory = Trajectory(sites=sites, atoms=atoms)
 
 This approach is useful when you have pre-identified coordination environments or need to work with non-standard polyhedra.
 
+Vertex indices are Python or numpy integers; `PolyhedralSite` raises `TypeError` for any other value, including a `bool`. Every structure the trajectory analyses must have an atom for every vertex index: `analyse_structure()` (and so `append_timestep()`) and `TrajectoryBuilder.build()` raise `ValueError` ("Site {index} has vertex index {k}, but the structure has {n} atoms") naming the first such site in index order. `PolyhedralSiteCollection.validate_atom_count(n_atoms)` makes the same check.
+
 For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
+
+## Shared Faces and Adjacency
+
+Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. When the two sites' interiors do not overlap, these atoms lie in one plane and are a face of both polyhedra. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order. Creating a `Face` stores its indices as `int` and raises `TypeError` for an index that is not a Python or numpy integer, including a `bool`.
+
+No tolerance is involved. The faces depend on which periodic image of each vertex atom is nearest its site's reference centre (or, for a site without a reference centre, on the spread-based unwrapping of its vertices), so a structure distorted enough to change that image changes the faces.
+
+In a cell two sites wide, two neighbouring sites share two faces, one on each side.
+
+When every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition, `build()` finds the shared faces from the reference geometry (aligned when alignment is on), mapped to the target structure's atom indices. Otherwise (for example if the sites are created directly with `Trajectory(sites=..., atoms=...)`, or the builder also adds sites with `with_existing_sites` with vertex atoms that no `with_polyhedral_sites` definition mapped), `build()` does not find the faces, and `trajectory.find_shared_faces(structure)` must be called. It can also be called to recompute the faces from another structure, which replaces the faces found before. The structure must have its atoms in the same order as the structures the trajectory analyses, because the sites' vertex indices refer to that order.
+
+Polyhedral sites may overlap partially. Their shared faces are found by the same rule, from the vertex atoms alone, so a shared face of two overlapping sites need not be a face of either polyhedron.
+
+`find_shared_faces` raises `ValueError`, keeping the faces found before, for two sites that coincide (they have the same vertex atoms at the same positions), for a site that lies inside another (all its vertex atoms are vertices of the other site under one lattice translation), for a vertex index not less than the number of atoms in the structure, and for non-finite vertex coordinates. `shared_faces()` and `site_adjacency()` raise `RuntimeError` before the shared faces are found. `find_shared_faces`, `shared_faces()` and `site_adjacency()` raise `TypeError` for sites that are not polyhedral.
+
+`shared_faces()` returns every shared face as a tuple of `Face` objects sorted by `site_indices` and then `vertex_indices`:
+
+```python
+from collections import Counter
+
+faces = trajectory.shared_faces()
+faces_of_site_7 = [face for face in faces if 7 in face.site_indices]
+
+species = [atom.species_string for atom in structure]
+faces_by_species = Counter(
+    tuple(sorted(species[i] for i in face.vertex_indices)) for face in faces)
+```
+
+`site_adjacency()` gives which sites share a face, as a symmetric boolean `scipy.sparse.csr_array` indexed by `site.index`, with shape `(n, n)` where `n` is one more than the largest site index. It can be joined with the transition events to find whether each transition was between sites that share a face:
+
+```python
+adjacency = trajectory.site_adjacency()
+
+adjacency[3, 7]                       # True if sites 3 and 7 share a face
+neighbours = adjacency[[7]].indices   # indices of the sites sharing a face with site 7
+
+# Whether each transition was between sites that share a face
+events = trajectory.transition_events()
+between_neighbours = adjacency[events.from_site[:, None],
+                               events.to_site[:, None]].toarray().ravel()
+not_between_neighbours = events[~between_neighbours]
+```
+
+Indexing with column vectors (`[:, None]`) gives a sparse array whether or not there are any transitions, so `.toarray().ravel()` always gives a boolean array with one element per transition.
+
+Transitions record the sites an atom left and entered, not faces, so in a cell two sites wide a transition between neighbouring sites cannot be matched to one of their two faces.
 
 ## Containment Algorithms
 
-The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached face topology is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:
+The best available algorithm is selected automatically. When [numba](https://numba.pydata.org/) is installed, a JIT-compiled surface normal method with cached hull triangles is used. Otherwise, the package falls back to Delaunay tessellation via scipy. Installing numba typically gives a ~7x speedup for polyhedral site analysis:
 
 ```bash
 pip install site-analysis[fast]  # installs numba

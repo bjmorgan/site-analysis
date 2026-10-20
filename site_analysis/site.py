@@ -21,6 +21,28 @@ from typing import Any
 from .atom import Atom
 import numpy as np
 
+
+def _as_index(value: object, name: str) -> int:
+    """Return an atom or site index as an int.
+
+    Args:
+        value: The index, a Python or numpy integer.
+        name: What the index is, for the error message, such as
+            ``"vertex index"``.
+
+    Returns:
+        The index as an int.
+
+    Raises:
+        TypeError: If ``value`` is not an integer. A ``bool`` is not
+            accepted.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(
+            f"{name} must be an integer, got {type(value).__name__} {value!r}")
+    return int(value)
+
+
 class Site(ABC):
     """Parent class for defining sites.
 
@@ -185,7 +207,12 @@ class Site(ABC):
         Returns:
             None
 
-        """ 
+        Raises:
+            ValueError: If ``newid`` is negative.
+
+        """
+        if newid < 0:
+            raise ValueError(f"Site index must not be negative, got {newid}")
         Site._newid = newid
 
     @property

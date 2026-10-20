@@ -30,7 +30,9 @@ This ordering means atoms that remain in or near their current site are resolved
 
 If no site contains the atom, it is left unassigned (`None`).
 
-For polyhedral sites, the collection also maintains information about face-sharing neighbouring polyhedra, which can be used for identifying connected diffusion pathways.
+Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency).
+
+Polyhedral sites may overlap partially; a shared face of overlapping sites is found from the vertex atoms alone, and need not be a face of either polyhedron. A site whose vertex atoms are all vertices of another site under one lattice translation (including a site with the same vertex atoms) raises a `ValueError` when shared faces are found; the guide describes when that happens.
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 

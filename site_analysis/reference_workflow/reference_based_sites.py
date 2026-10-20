@@ -21,17 +21,39 @@ where those same environments might be harder to identify directly.
 """
 
 import numpy as np
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pymatgen.core import Structure
 
 from site_analysis.reference_workflow.structure_aligner import (
     StructureAligner, _check_deprecated_alignment_options)
 from site_analysis.reference_workflow.coord_finder import CoordinationEnvironmentFinder
-from site_analysis.reference_workflow.index_mapper import IndexMapper
+from site_analysis.reference_workflow.index_mapper import IndexMapper, _check_one_to_one
 from site_analysis.reference_workflow.site_factory import SiteFactory
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
+from site_analysis.site import Site
+
+SiteT = TypeVar('SiteT', bound=Site)
+
+
+def _describe_environments(
+        centre_species: str,
+        coordination_species: str | list[str]) -> str:
+    """Describe the species of a set of coordination environments.
+
+    Args:
+        centre_species: The species at the centres of the environments.
+        coordination_species: The coordinating species, a string or a list
+            of strings (joined with ", " in the description).
+
+    Returns:
+        A description such as ``"Ti centres and O, F coordinating atoms"``.
+    """
+    species = (coordination_species if isinstance(coordination_species, str)
+               else ", ".join(coordination_species))
+    return f"{centre_species} centres and {species} coordinating atoms"
 
 
 class ReferenceBasedSites:
@@ -45,6 +67,9 @@ class ReferenceBasedSites:
     3. IndexMapper - to map environments from reference to target structure
     4. SiteFactory - to create appropriate site objects
     
+    All ``create_*`` calls on an instance share one reference-to-target
+    mapping, which each call checks and extends.
+
     Attributes:
         reference_structure: Reference structure defining ideal coordination environments.
         target_structure: Target structure where sites will be created.
@@ -118,6 +143,11 @@ class ReferenceBasedSites:
         self._coord_finder: CoordinationEnvironmentFinder | None = None
         self._index_mapper: IndexMapper | None = None
         self._site_factory: SiteFactory | None = None
+
+        # The mapping between the atoms of the sites created by the
+        # create_* methods: the target atom index of each reference atom,
+        # or -1 if unmapped
+        self._target_of_ref = np.full(len(self._ref_frac_coords), -1)
         
     @property
     def _effective_ref_coords(self) -> np.ndarray:
@@ -154,43 +184,24 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                or if both label and labels are provided.
+                if an environment contains the same atom more than once (as
+                periodic images in a small cell), if a target atom is mapped
+                from two different reference atoms, or a reference atom to
+                two different target atoms, counting the mapping held from
+                earlier calls (a 1:1 mapping violation), or if both label and
+                labels are provided.
         """
-        # Find coordination environments in reference structure
-        ref_environments = self._find_coordination_environments(
+        return self._create_sites(
+            self._initialise_site_factory().create_polyhedral_sites,
             center_species=center_species,
             coordination_species=vertex_species,
             cutoff=cutoff,
-            n_coord=n_vertices
-        )
-        
-        # Check we do not have repeat periodic images in the coordination environments
-        self._validate_unique_environments(ref_environments)
-        
-        # Calculate reference centres if requested
-        if use_reference_centers:
-            center_indices = list(ref_environments.keys())
-            reference_centers = self._calculate_reference_centers_from_indices(center_indices)
-        else:
-            reference_centers = None
-            
-        # Map environments to target structure
-        mapped_environments = self._map_environments(
-            list(ref_environments.values()),
-            target_species
-        )
-        
-        # Create polyhedral sites
-        site_factory = self._initialise_site_factory()
-        sites = site_factory.create_polyhedral_sites(
-            mapped_environments,
-            reference_centers=reference_centers,
+            n_coord=n_vertices,
             label=label,
-            labels=labels
-        )
-        
-        return sites
-    
+            labels=labels,
+            target_species=target_species,
+            use_reference_centers=use_reference_centers)
+
     def create_dynamic_voronoi_sites(self, 
                                 center_species: str, 
                                 reference_species: str | list[str], 
@@ -219,40 +230,118 @@ class ReferenceBasedSites:
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
-                or if both label and labels are provided.
+                if an environment contains the same atom more than once (as
+                periodic images in a small cell), if a target atom is mapped
+                from two different reference atoms, or a reference atom to
+                two different target atoms, counting the mapping held from
+                earlier calls (a 1:1 mapping violation), or if both label and
+                labels are provided.
         """
-        # Find coordination environments in reference structure
+        return self._create_sites(
+            self._initialise_site_factory().create_dynamic_voronoi_sites,
+            center_species=center_species,
+            coordination_species=reference_species,
+            cutoff=cutoff,
+            n_coord=n_reference,
+            label=label,
+            labels=labels,
+            target_species=target_species,
+            use_reference_centers=use_reference_centers)
+
+    def _create_sites(self,
+            create: Callable[..., list[SiteT]],
+            center_species: str,
+            coordination_species: str | list[str],
+            cutoff: float,
+            n_coord: int,
+            label: str | None,
+            labels: list[str] | None,
+            target_species: str | list[str] | None,
+            use_reference_centers: bool) -> list[SiteT]:
+        """Create sites from coordination environments in the reference structure.
+
+        Finds the environments, maps them to the target structure, checks
+        that their atom pairs and the held mapping are one-to-one, creates
+        the sites with ``create``, then adds the pairs to the held mapping.
+
+        Args:
+            create: The SiteFactory method that creates the sites.
+            center_species: Species at the centre of coordination environments.
+            coordination_species: Coordination atom species.
+            cutoff: Cutoff distance for coordination environment.
+            n_coord: Number of coordination atoms per environment.
+            label: Label to apply to all created sites.
+            labels: List of labels for each site.
+            target_species: Species to map to in the target structure.
+            use_reference_centers: Whether to pass reference centres to
+                ``create``.
+
+        Returns:
+            The sites returned by ``create``.
+
+        Raises:
+            ValueError: If coordination environments cannot be found or
+                mapped, if an environment contains the same atom more than
+                once, if the atom pairs and the held mapping are not
+                one-to-one, or if ``create`` raises.
+        """
         ref_environments = self._find_coordination_environments(
-            center_species, reference_species, cutoff, n_reference
-        )
-        
-        # Check we do not have repeat periodic images in the coordination environments
+            center_species, coordination_species, cutoff, n_coord)
         self._validate_unique_environments(ref_environments)
-        
-        # Calculate reference centres if requested
         if use_reference_centers:
-            center_indices = list(ref_environments.keys())
-            reference_centers = self._calculate_reference_centers_from_indices(center_indices)
+            reference_centers = self._calculate_reference_centers_from_indices(
+                list(ref_environments))
         else:
             reference_centers = None
-            
-        # Map environments to target structure
-        mapped_environments = self._map_environments(
-            list(ref_environments.values()),
-            target_species
-        )
-        
-        # Create dynamic Voronoi sites
-        site_factory = self._initialise_site_factory()
-        sites = site_factory.create_dynamic_voronoi_sites(
+        ref_environment_list = list(ref_environments.values())
+        ref_atoms = np.array(ref_environment_list, dtype=int).reshape(-1)
+        try:
+            mapped_environments = self._map_environments(ref_environment_list, target_species)
+            target_atoms = np.array(mapped_environments, dtype=int).reshape(-1)
+            self._check_pairs(ref_atoms, target_atoms)
+        except ValueError as error:
+            description = _describe_environments(center_species, coordination_species)
+            raise ValueError(
+                f"Failed to map coordination environments for {description}: {error}"
+            ) from error
+        sites = create(
             mapped_environments,
             reference_centers=reference_centers,
             label=label,
             labels=labels
         )
-        
+        self._target_of_ref[ref_atoms] = target_atoms
         return sites
-    
+
+    def mapped_reference_frac_coords(self) -> np.ndarray:
+        """Return the fractional coordinates of the reference atom mapped to each target atom.
+
+        The mapping holds the coordinating atoms of the sites created by
+        ``create_polyhedral_sites`` and ``create_dynamic_voronoi_sites``
+        (an environment's centre atom is not mapped by that environment); a call
+        that raises adds none.
+
+        Returns:
+            A new array of shape ``(n_target_atoms, 3)``. Row ``t`` holds the
+            coordinates of the reference atom mapped to target atom ``t``
+            (aligned to the target when alignment is on), or NaN if target
+            atom ``t`` is not mapped.
+        """
+        coords = np.full((len(self._target_frac_coords), 3), np.nan)
+        refs, targets = self._held_pairs()
+        coords[targets] = self._effective_ref_coords[refs]
+        return coords
+
+    def _held_pairs(self) -> tuple[np.ndarray, np.ndarray]:
+        """The reference-target atom pairs of the held mapping.
+
+        Returns:
+            The mapped reference atom indices, in ascending order, and the
+            target atom index paired with each.
+        """
+        refs = np.flatnonzero(self._target_of_ref != -1)
+        return refs, self._target_of_ref[refs]
+
     def _align_structures(self, align_species: list[str] | None = None) -> None:
         """Align the reference structure to the target structure.
 
@@ -317,10 +406,9 @@ class ReferenceBasedSites:
             return environments_dict
             
         except ValueError as e:
-            # Re-raise with more context
+            description = _describe_environments(center_species, coordination_species)
             raise ValueError(
-                f"Failed to find coordination environments for {center_species} centers "
-                f"and {coordination_species} coordinating atoms: {str(e)}"
+                f"Failed to find coordination environments for {description}: {e}"
             ) from e
     
     def _map_environments(self, 
@@ -342,33 +430,37 @@ class ReferenceBasedSites:
         if not ref_environments:
             return []
         
-        try:
-            # Create index mapper if not already initialised
-            if self._index_mapper is None:
-                self._index_mapper = IndexMapper()
+        # Create index mapper if not already initialised
+        if self._index_mapper is None:
+            self._index_mapper = IndexMapper()
 
-            ref_coords = self._effective_ref_coords
-            lattice_matrix = self._ref_lattice_matrix
+        return self._index_mapper.map_coordinating_atoms(
+            ref_frac_coords=self._effective_ref_coords,
+            target_frac_coords=self._target_frac_coords,
+            lattice_matrix=self._ref_lattice_matrix,
+            ref_coordinating=ref_environments,
+            target_species=self._target_species,
+            species_filter=target_species,
+        )
 
-            # Map environments
-            mapped_environments = self._index_mapper.map_coordinating_atoms(
-                ref_frac_coords=ref_coords,
-                target_frac_coords=self._target_frac_coords,
-                lattice_matrix=lattice_matrix,
-                ref_coordinating=ref_environments,
-                target_species=self._target_species,
-                species_filter=target_species,
-            )
-            
-            return mapped_environments
-            
-        except ValueError as e:
-            # Re-raise with more context
-            species_str = f" for {target_species} species" if target_species else ""
-            raise ValueError(
-                f"Failed to map coordination environments{species_str}: {str(e)}"
-            ) from e
-            
+    def _check_pairs(self, ref_atoms: np.ndarray, target_atoms: np.ndarray) -> None:
+        """Check that reference-target atom pairs and the held mapping are one-to-one.
+
+        Args:
+            ref_atoms: Reference atom indices.
+            target_atoms: The target atom index paired with each reference
+                atom.
+
+        Raises:
+            ValueError: If the pairs and the held mapping together pair a
+                reference atom with two target atoms, or a target atom with
+                two reference atoms (a 1:1 mapping violation).
+        """
+        held_refs, held_targets = self._held_pairs()
+        _check_one_to_one(
+            np.concatenate([held_refs, ref_atoms]),
+            np.concatenate([held_targets, target_atoms]))
+
     def _initialise_site_factory(self) -> SiteFactory:
         """Initialise the site factory if not already done.
         

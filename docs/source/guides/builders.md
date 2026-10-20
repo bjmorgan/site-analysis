@@ -237,7 +237,7 @@ Controls structure alignment between reference and target structures.
 
 **Note**: Structure alignment is **enabled by default** when using polyhedral or dynamic Voronoi sites, even if this method is not explicitly called. To disable alignment, you must call this method with `align=False`.
 
-Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries the translations that put a reference atom of one alignment species on one chosen target atom of that species, one from each set of translations related by a translational symmetry of the reference's alignment atoms, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by such a symmetry fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic.
+Alignment finds the translation that superimposes the reference on the target, whatever the offset between their origins. It tries the translations that put a reference atom of one alignment species on one chosen target atom of that species, one from each set of translations related by a translational symmetry of the reference's alignment atoms, screens them on a sample of atoms, and refines those that pass, best fit first, until one superimposes the structures. Translations that differ by such a symmetry fit equally well, and any one of them may be returned; they differ only in which index each site receives (the reference workflow guide shows how to keep indices consistent across trajectories). If no translation superimposes the structures, it raises `ValueError`; see "Alignment Errors" in the reference workflow guide. The search is deterministic. The builder aligns once per build, and every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in that build uses the same alignment.
 
 **Parameters:**
 - `align`: Whether to perform alignment (default: `True`)
@@ -265,6 +265,8 @@ builder.with_structure_alignment(align=False)
 
 #### `with_site_mapping(mapping_species)`
 Sets species to use for mapping sites between reference and target structures.
+
+Every `with_polyhedral_sites` and `with_dynamic_voronoi_sites` definition in a build uses the same reference-to-target mapping; a conflict raises `ValueError` ("1:1 mapping violation", see [Mapping Conflicts](reference_workflow.md#mapping-conflicts)).
 
 **Parameters:**
 - `mapping_species`: Species to use for mapping (string or list of strings)
@@ -518,20 +520,45 @@ The builder validates your configuration when you call `build()`. Common errors 
 
 ```python
 # Missing required components
-builder = TrajectoryBuilder()
-builder.with_structure(structure)
-# Forgot mobile_species and sites
-trajectory = builder.build()  # Raises ValueError
+builder = TrajectoryBuilder().with_structure(structure)
+# Forgot the mobile species and the sites
+trajectory = builder.build()
+# ValueError: Site type must be defined using one of the with_*_sites methods
 
 # Mixing different site types
-builder.with_spherical_sites(centres=centres1, radii=1.5)
-       .with_voronoi_sites(centres=centres2)  # Error: can't mix site types
-trajectory = builder.build()  # Raises TypeError
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_spherical_sites(centres=centres1, radii=1.5)
+    .with_voronoi_sites(centres=centres2))  # Error at build: can't mix site types
+trajectory = builder.build()
+# TypeError: A Trajectory cannot be initialised with mixed Site types:
+# SphericalSite, VoronoiSite
 
 # Missing reference structure
-builder.with_polyhedral_sites(...)  # Without with_reference_structure()
-trajectory = builder.build()  # Raises ValueError
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_polyhedral_sites(
+        centre_species="Li", vertex_species="O", cutoff=3.0, n_vertices=4))
+# Without with_reference_structure()
+trajectory = builder.build()
+# ValueError: Both structure and reference_structure must be set for
+# polyhedral and dynamic Voronoi sites
+
+# A polyhedral site (from with_existing_sites) with a vertex index
+# that is not an atom of the structure, here one with 96 atoms
+from site_analysis.polyhedral_site import PolyhedralSite
+
+builder = (TrajectoryBuilder()
+    .with_structure(structure)
+    .with_mobile_species("Li")
+    .with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 96])]))
+trajectory = builder.build()
+# ValueError: Site 0 has vertex index 96, but the structure has 96 atoms
 ```
+
+In the last example the site's index is the one it was given when it was created.
 
 ### Reference Structure Validation
 
@@ -552,13 +579,27 @@ trajectory = builder.build()
 builder.with_min_atom_distance(0)
 ```
 
-**Duplicate sites**: After generating sites, the builder checks that no two polyhedral sites share the same vertex indices and no two dynamic Voronoi sites share the same reference indices. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+**Duplicate sites**: After generating sites, the builder checks that no two sites are duplicates. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+
+When every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition, the builder finds duplicates by position. Two sites with the same vertex atoms under one lattice translation raise a `ValueError` that they coincide, and a site all of whose vertex atoms are vertices of another site under one lattice translation raises a `ValueError` that it lies inside that site. Sites with the same vertex atoms in different periodic images (for example cubes in a cell two sites wide) are distinct.
 
 ```python
 # Even with the distance check disabled, duplicate sites are caught
-builder.with_min_atom_distance(0)
-       .with_polyhedral_sites(...)
+builder = (builder.with_min_atom_distance(0)
+           .with_polyhedral_sites(...))
 trajectory = builder.build()
+# ValueError: Sites 0 and 1 coincide: they have the same vertex atoms
+# at the same positions. This typically means the reference structure
+# has multiple atoms inside the same coordination environment.
+
+# ValueError: Site 2 lies inside site 0: all its vertex atoms are
+# vertices of site 0. This typically means the reference structure
+# has multiple atoms inside the same coordination environment.
+```
+
+For dynamic Voronoi sites, and for polyhedral sites whenever the position-based check does not apply, the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral). The position-based check is used only when every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition; if any site has a vertex atom that was not (for example, sites added with `with_existing_sites`), the vertex-index check is used for all polyhedral sites:
+
+```python
 # ValueError: Duplicate sites: site 0 and site 1 share the same
 # vertex_indices [3, 7, 12, 15]. ...
 ```

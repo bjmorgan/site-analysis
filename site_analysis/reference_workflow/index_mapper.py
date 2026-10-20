@@ -23,6 +23,34 @@ import numpy as np
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 
+def _check_one_to_one(ref_atoms: np.ndarray, target_atoms: np.ndarray) -> None:
+    """Check that reference-target atom pairs form a one-to-one mapping.
+
+    Repeated pairs are allowed.
+
+    Args:
+        ref_atoms: Reference atom indices.
+        target_atoms: The target atom index paired with each reference atom.
+
+    Raises:
+        ValueError: If a reference atom is paired with two target atoms, or
+            a target atom with two reference atoms. The pairs are checked in
+            order and the message describes the first conflict found, naming
+            the earlier partner first.
+    """
+    target_of_ref: dict[int, int] = {}
+    ref_of_target: dict[int, int] = {}
+    for ref, target in zip(ref_atoms.tolist(), target_atoms.tolist()):
+        if target_of_ref.setdefault(ref, target) != target:
+            raise ValueError(
+                f"1:1 mapping violation: reference atom {ref} is mapped "
+                f"to target atoms {target_of_ref[ref]} and {target}")
+        if ref_of_target.setdefault(target, ref) != ref:
+            raise ValueError(
+                f"1:1 mapping violation: target atom {target} is mapped "
+                f"from reference atoms {ref_of_target[target]} and {ref}")
+
+
 class IndexMapper:
     """Maps coordinating atom indices between reference and target crystal structures.
 
@@ -173,20 +201,7 @@ class IndexMapper:
             filtered_target_coords, lattice_matrix).query_nearest(ref_coords)
         mapped_indices = target_indices[closest_indices]
 
-        # Check for 1:1 mapping violations
-        if len(mapped_indices) != len(np.unique(mapped_indices)):
-            # Find the duplicates
-            seen = set()
-            duplicates = []
-            for idx in mapped_indices:
-                if idx in seen:
-                    duplicates.append(int(idx))
-                seen.add(idx)
-
-            raise ValueError(
-                f"1:1 mapping violation: Multiple reference atoms map to "
-                f"the same target atom(s) at indices {duplicates}"
-            )
+        _check_one_to_one(np.asarray(ref_indices), mapped_indices)
 
         # Create mapping dictionary
         mapping = {ref_indices[i]: int(mapped_indices[i]) for i in range(len(ref_indices))}

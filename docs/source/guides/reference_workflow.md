@@ -241,10 +241,15 @@ The limit and the reported alignment metrics are measured in the reference struc
 ### Mapping Conflicts
 
 ```
-ValueError: 1:1 mapping violation: Multiple reference atoms map to the same target atom(s)
+ValueError: Failed to map coordination environments for Li centres and O coordinating atoms: 1:1 mapping violation: target atom 12 is mapped from reference atoms 3 and 7
 ```
 
-This error occurs when the mapping cannot establish a one-to-one correspondence between reference and target atoms. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
+This error occurs when the mapping cannot establish a one-to-one correspondence between reference and target atoms. The message names the centre species and the coordinating species of the site definition that failed (a list of coordinating species is joined with ", "). It has two causes:
+
+- Within one site definition, two reference atoms are nearest to the same target atom.
+- Two site definitions conflict: a definition maps a reference atom to a target atom that an earlier definition in the same build mapped from a different reference atom.
+
+With `ReferenceBasedSites` used directly, the part of the message after the prefix can also read `1:1 mapping violation: reference atom 3 is mapped to target atoms 12 and 15`, when a call maps a reference atom to a different target atom from an earlier call because the calls use different `target_species`. Verify that structures have consistent orientations, as alignment only handles translation. Try alternative mapping species if the current selection causes ambiguities. Check for unusually distorted coordination environments that might prevent clean mapping.
 
 ## Advanced Implementation
 
@@ -274,6 +279,12 @@ polyhedral_sites = rbs.create_polyhedral_sites(
 from site_analysis import Trajectory, atoms_from_structure
 atoms = atoms_from_structure(target_structure, "Li")
 trajectory = Trajectory(sites=polyhedral_sites, atoms=atoms)
+```
+
+The sites created by successive `create_polyhedral_sites` and `create_dynamic_voronoi_sites` calls share one reference-to-target mapping; a call that conflicts with it raises `ValueError` ("1:1 mapping violation", see [Mapping Conflicts](#mapping-conflicts)). `mapped_reference_frac_coords()` returns the fractional coordinates of the reference atom mapped to each target atom (aligned to the target when alignment is on), as an array of shape `(n_target_atoms, 3)` with NaN for target atoms that no site uses:
+
+```python
+reference_coords = rbs.mapped_reference_frac_coords()
 ```
 
 This direct approach provides additional control for specialised analyses and can be integrated with custom analysis workflows.

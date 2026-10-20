@@ -34,6 +34,7 @@ from numbers import Real
 from typing import Sequence
 
 import numpy as np
+from scipy.sparse import csr_array
 from tqdm.auto import tqdm
 
 from pymatgen.core import Structure
@@ -43,6 +44,7 @@ from .transition_table import TransitionTable
 
 from .atom import Atom
 from .distances import mic_distance
+from .faces import Face
 from .dynamic_voronoi_site import DynamicVoronoiSite
 from .dynamic_voronoi_site_collection import DynamicVoronoiSiteCollection
 from .polyhedral_site import PolyhedralSite
@@ -95,8 +97,11 @@ class Trajectory:
             raise ValueError("Cannot initialise Trajectory with empty atoms list")
         
         # ensure that all sites are of the same type
-        if len(set([type(s) for s in sites])) > 1:
-            raise TypeError("A Trajectory cannot be initialised with mixed Site types")
+        site_types = {type(site) for site in sites}
+        if len(site_types) > 1:
+            raise TypeError(
+                "A Trajectory cannot be initialised with mixed Site types: "
+                f"{', '.join(sorted(site_type.__name__ for site_type in site_types))}")
         
         # Map site types to their corresponding collection classes
         site_collection_map: dict[type[Site], type[SiteCollection]] = {
@@ -107,7 +112,7 @@ class Trajectory:
         }
         
         # Find the appropriate site collection class
-        site_type = type(sites[0])
+        (site_type,) = site_types
         try:
             collection_class = site_collection_map[site_type]
         except KeyError:
@@ -223,6 +228,10 @@ class Trajectory:
         
         Args:
             structure: A pymatgen Structure object to be analysed.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of the structure.
         """
         self.site_collection.analyse_structure(self.atoms, structure)
         
@@ -237,6 +246,78 @@ class Trajectory:
         """
         self.site_collection.assign_site_occupations(self.atoms, structure.lattice.matrix)
                     
+    def _polyhedral_site_collection(self) -> PolyhedralSiteCollection:
+        """Return the site collection, which must be of polyhedral sites.
+
+        Returns:
+            The site collection.
+
+        Raises:
+            TypeError: If the sites are not polyhedral.
+        """
+        if not isinstance(self.site_collection, PolyhedralSiteCollection):
+            raise TypeError(
+                "Shared faces are only available for polyhedral sites, "
+                f"not {type(self.site_collection).__name__}")
+        return self.site_collection
+
+    def find_shared_faces(self,
+            structure: Structure) -> None:
+        """Find the faces shared by pairs of polyhedral sites.
+
+        Two sites share a face when they share three or more vertex atoms
+        under one lattice translation. The structure's atoms must be in the
+        trajectory's atom order, so that its atom indices are the sites'
+        vertex indices. The result replaces any earlier one, and is kept by
+        ``reset()``.
+
+        Args:
+            structure: A pymatgen Structure object.
+
+        Raises:
+            TypeError: If the sites are not polyhedral.
+            ValueError: If a site has a vertex index that is not an atom of
+                the structure, the vertex coordinates are not finite, or two
+                sites coincide or one lies inside another. The earlier result
+                is then kept.
+        """
+        self._polyhedral_site_collection().find_shared_faces(
+            structure.frac_coords, structure.lattice.matrix)
+
+    def shared_faces(self) -> tuple[Face, ...]:
+        """Return the faces shared by pairs of polyhedral sites.
+
+        The faces are those found most recently by ``TrajectoryBuilder.build()``
+        or a successful call to ``find_shared_faces``. A failed call to
+        ``find_shared_faces`` keeps the earlier result.
+
+        Returns:
+            The shared faces, sorted by site indices then vertex indices.
+
+        Raises:
+            TypeError: If the sites are not polyhedral.
+            RuntimeError: If the shared faces have not been found.
+        """
+        return self._polyhedral_site_collection().shared_faces()
+
+    def site_adjacency(self) -> csr_array:
+        """Return which polyhedral sites share a face.
+
+        The faces are those found most recently by ``TrajectoryBuilder.build()``
+        or a successful call to ``find_shared_faces``. A failed call to
+        ``find_shared_faces`` keeps the earlier result.
+
+        Returns:
+            A new symmetric boolean sparse array of shape ``(n, n)``, where
+            ``n`` is one more than the largest site index. Entry ``(i, j)``
+            is True when the sites with indices ``i`` and ``j`` share a face.
+
+        Raises:
+            TypeError: If the sites are not polyhedral.
+            RuntimeError: If the shared faces have not been found.
+        """
+        return self._polyhedral_site_collection().site_adjacency()
+
     def site_coordination_numbers(self) -> Counter:
         """Return the coordination numbers of all sites.
         
@@ -485,6 +566,10 @@ class Trajectory:
         Args:
             structure: A pymatgen Structure object for this timestep.
             t: Optional timestep index to record. If None, no timestep is recorded.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of the structure.
         """
         self.analyse_structure(structure)
         if self._commitment_radii is None:
@@ -555,7 +640,8 @@ class Trajectory:
         """Reset the trajectory.
         
         This clears all trajectory information for atoms and sites and
-        resets the timesteps list.
+        resets the timesteps list. The shared faces of polyhedral sites are
+        kept.
         """
         for atom in self.atoms:
             atom.reset()
@@ -694,6 +780,10 @@ class Trajectory:
             structures: The structures to analyse, one per timestep.
             progress: Show a progress bar. Automatically selects the
                 appropriate widget for terminal or notebook environments.
+
+        Raises:
+            ValueError: If the sites are polyhedral and a site has a vertex
+                index that is not an atom of a structure.
         """
         generator: Iterable[tuple[int, Structure]] = enumerate(structures, 1)
         if progress:

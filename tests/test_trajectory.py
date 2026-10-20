@@ -59,10 +59,20 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
         trajectory.timesteps = ['foo', 'bar']
         self.assertEqual(len(trajectory), 2)
 
-    def test_init_raises_type_error_if_passed_mixed_site_types(self):
-        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-                 VoronoiSite(frac_coords=np.array([0.5, 0.5, 0.5]))]
-        with self.assertRaises(TypeError):
+    def test_mixed_site_types_error_names_the_types_in_sorted_order(self):
+        sites = [VoronoiSite(frac_coords=np.array([0.5, 0.5, 0.5])),
+                 SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=1.0)]
+        with self.assertRaisesRegex(
+                TypeError, "^A Trajectory cannot be initialised with mixed Site types: "
+                           "SphericalSite, VoronoiSite$"):
+            Trajectory(atoms=[Atom(index=0)], sites=sites)
+
+    def test_site_types_with_the_same_name_are_mixed(self):
+        subclass = type("VoronoiSite", (VoronoiSite,), {})
+        sites = [VoronoiSite(frac_coords=np.array([0.5, 0.5, 0.5])),
+                 subclass(frac_coords=np.array([0.5, 0.5, 0.5]))]
+        with self.assertRaisesRegex(
+                TypeError, "mixed Site types: VoronoiSite, VoronoiSite$"):
             Trajectory(atoms=[Atom(index=0)], sites=sites)
 
     def test_init_raises_type_error_if_passed_invalid_site_type(self):

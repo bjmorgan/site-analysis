@@ -214,8 +214,9 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		expected_centre = centre_before_wrap % 1.0  # DynamicVoronoiSite wraps back
 		np.testing.assert_array_almost_equal(site.centre, expected_centre, decimal=7)
 
-	def test_polyhedral_site_negative_coordinates_no_correction(self):
-		"""Test negative coordinates that don't require PBC correction."""
+	def test_polyhedral_site_negative_coordinates_translated_into_unit_cell(self):
+		"""Test negative coordinates that don't require spread correction are
+		translated by whole cells into the unit cell."""
 		species = ["Re"] * 4
 		coords = [
 			[0.2, -0.1, 0.2],    # Negative y-coordinate
@@ -228,8 +229,9 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
-		# Should remain unchanged (spread < 0.5, no correction needed)
-		expected_coords = np.array(coords)
+		# Spread < 0.5, so no spread correction; the vertices are only
+		# translated by a whole cell in y so the lowest y coordinate is in [0, 1)
+		expected_coords = np.array(coords) + np.array([0.0, 1.0, 0.0])
 		np.testing.assert_array_almost_equal(site.vertex_coords, expected_coords, decimal=7)
 
 	def test_dynamic_voronoi_site_negative_coordinates_no_correction(self):
@@ -373,11 +375,8 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		reference_center = np.array([0.0, 0.5, 0.5])
 		coords, shifts = unwrap_vertices_to_reference_center(
 			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
-		# coords = raw + shifts + uniform, so (coords - uniform) - raw = shifts
-		shifted_raw = vertex_coords + shifts
-		min_coords = np.min(shifted_raw, axis=0)
-		uniform = np.maximum(0, np.ceil(-min_coords))
-		np.testing.assert_array_almost_equal(coords, shifted_raw + uniform)
+		np.testing.assert_array_equal(shifts, [[0, 0, 0], [-1, 0, 0]])
+		np.testing.assert_array_almost_equal(coords, [[1.05, 0.5, 0.5], [0.95, 0.5, 0.5]])
 
 	def test_unwrap_vertices_empty_input(self):
 		"""Test that empty input is handled correctly."""
@@ -388,6 +387,55 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 		
 		# Should return empty array with correct shape
 		self.assertEqual(result.shape, (0, 3))
+
+	def test_reference_centre_several_cells_away(self):
+		"""Moving the reference centre by whole cells moves the image shifts by the same amount."""
+		vertex_coords = np.array([
+			[0.1, 0.5, 0.5],
+			[0.95, 0.5, 0.5],
+			[0.05, 0.6, 0.5],
+			[0.05, 0.4, 0.5],
+		])
+		reference_center = np.array([0.05, 0.5, 0.5])
+		translation = np.array([2, -3, 1])
+		_, shifts = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center, self.lattice.matrix, return_image_shifts=True)
+		_, shifts_translated = unwrap_vertices_to_reference_center(
+			vertex_coords, reference_center + translation, self.lattice.matrix,
+			return_image_shifts=True)
+		np.testing.assert_array_equal(shifts_translated - shifts, np.tile(translation, (4, 1)))
+
+	def test_vertices_several_cells_away(self):
+		"""Image shifts undo whole-cell translations of the vertices relative to the centre."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		translation = np.array([-2, 0, 3])
+		coords, shifts = unwrap_vertices_to_reference_center(
+			vertex_coords + translation, reference_center, self.lattice.matrix,
+			return_image_shifts=True)
+		np.testing.assert_array_equal(shifts, np.tile(-translation, (4, 1)))
+		np.testing.assert_array_almost_equal(coords, vertex_coords)
+
+	def test_minimum_coordinate_translated_into_the_unit_cell(self):
+		"""Whole-cell translation puts the lowest coordinate along each axis in [0, 1)."""
+		vertex_coords = np.array([
+			[0.4, 0.4, 0.4],
+			[0.6, 0.6, 0.4],
+			[0.6, 0.4, 0.6],
+			[0.4, 0.6, 0.6],
+		])
+		reference_center = np.array([0.5, 0.5, 0.5])
+		for translation in ([2, 0, -2], [-1, 3, 0]):
+			with self.subTest(translation=translation):
+				coords = unwrap_vertices_to_reference_center(
+					vertex_coords, reference_center + translation, self.lattice.matrix)
+				np.testing.assert_array_almost_equal(coords.min(axis=0), [0.4, 0.4, 0.4])
+
 
 class TestCorrectPbc(unittest.TestCase):
 	"""Tests for the correct_pbc dispatch function."""
@@ -456,10 +504,7 @@ class TestNumpyUpdatePbcShifts(unittest.TestCase):
 		valid, coords, new_shifts = _numpy_update_pbc_shifts(new, cached, shifts)
 		self.assertTrue(valid)
 		np.testing.assert_array_equal(new_shifts, shifts)
-		expected = new + shifts
-		min_coords = np.min(expected, axis=0)
-		uniform = np.maximum(0, np.ceil(-min_coords))
-		np.testing.assert_array_almost_equal(coords, expected + uniform)
+		np.testing.assert_array_almost_equal(coords, [[0.11, 0.21, 1.31], [0.41, 1.51, 0.61]])
 
 	def test_cache_hit_with_wrapping(self):
 		"""Vertex wrapping from 0.99 to 0.01 is detected and shifts adjusted."""
@@ -486,17 +531,18 @@ class TestNumpyUpdatePbcShifts(unittest.TestCase):
 		valid, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
 		self.assertFalse(valid)
 
-	def test_non_negative_shift_applied(self):
-		"""Uniform shift ensures all output coordinates are non-negative."""
+	def test_minimum_coordinate_translated_into_the_unit_cell(self):
+		"""Whole-cell translation puts the lowest coordinate along each axis in [0, 1)."""
 		from site_analysis.pbc_utils import _numpy_update_pbc_shifts
-		cached = np.array([[0.05, 0.05, 0.05],
-						   [0.1, 0.1, 0.1]])
-		new = cached + 0.001
-		shifts = np.array([[0, 0, -1],
-						   [0, 0, -1]], dtype=np.int64)
-		valid, coords, _ = _numpy_update_pbc_shifts(new, cached, shifts)
-		self.assertTrue(valid)
-		self.assertTrue(np.all(coords >= 0))
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01
+		for image_shift in (2, -1):
+			with self.subTest(image_shift=image_shift):
+				shifts = np.full((2, 3), image_shift, dtype=np.int64)
+				valid, coords, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+				self.assertTrue(valid)
+				np.testing.assert_array_almost_equal(coords.min(axis=0), new.min(axis=0))
 
 
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
@@ -538,6 +584,19 @@ class TestNumbaUpdatePbcShifts(unittest.TestCase):
 		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
 		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
 		self.assertEqual(v_np, v_nb)
+
+	def test_agrees_with_numpy_minimum_translated_into_the_unit_cell(self):
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached + 0.01
+		for image_shift in (2, -1):
+			with self.subTest(image_shift=image_shift):
+				shifts = np.full((2, 3), image_shift, dtype=np.int64)
+				_, c_np, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+				_, c_nb, _ = _numba_update_pbc_shifts(new, cached, shifts)
+				np.testing.assert_array_almost_equal(c_nb, c_np)
+				np.testing.assert_array_almost_equal(c_nb.min(axis=0), new.min(axis=0))
 
 
 if __name__ == '__main__':

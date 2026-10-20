@@ -151,9 +151,11 @@ def correct_pbc(
         whole-cell translation applied to ``corrected_coords``.
 
     Raises:
-        ValueError: If ``reference_center`` is not None and
+        ValueError: If ``frac_coords`` does not have shape (n, 3) or is not
+            finite, or if ``reference_center`` is not None and
             ``unwrap_vertices_to_reference_center`` rejects the input.
     """
+    frac_coords = _as_coords(frac_coords, "frac_coords")
     if frac_coords.size == 0:
         return frac_coords, np.zeros((0, 3), dtype=np.int64)
     if reference_center is not None:

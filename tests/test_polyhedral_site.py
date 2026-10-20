@@ -642,6 +642,29 @@ class TestStoreVertexCoords(unittest.TestCase):
                             tetrahedron + offset + 0.005, self.lattice_matrix)
                     self.assertTrue(site.contains_point(centre))
 
+    def test_non_finite_coordinates_raise_without_reference_centre(self):
+        """A site without a reference centre rejects a NaN vertex coordinate."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.1, 0.1, 0.1],
+                         [0.2, 0.2, 0.2],
+                         [0.3, np.nan, 0.3],
+                         [0.4, 0.4, 0.4]])
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site._store_vertex_coords(frac, self.lattice_matrix)
+
+    def test_non_finite_coordinates_raise_on_a_later_frame(self):
+        """A NaN vertex coordinate is rejected when cached shifts exist from an earlier frame."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice_matrix)
+        frac2 = frac1.copy()
+        frac2[2, 1] = np.nan
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site._store_vertex_coords(frac2, self.lattice_matrix)
+
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_cache_stale_triggers_update_after_store_vertex_coords(self):
         """After _store_vertex_coords sets _cache_stale, the next

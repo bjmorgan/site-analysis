@@ -160,6 +160,16 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         np.testing.assert_array_almost_equal(
             site.centre, [0.05, 0.5, 0.5])
 
+    def test_calculate_centre_rejects_non_finite_coordinates_without_reference_centre(self):
+        """A site without a reference centre rejects a NaN reference atom coordinate."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        frac_coords = np.array([[0.1, 0.1, 0.1],
+                                [0.2, 0.1, 0.1],
+                                [0.1, np.nan, 0.1],
+                                [0.1, 0.1, 0.2]])
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site.calculate_centre(frac_coords, Lattice.cubic(10.0).matrix)
+
     def test_centre_method(self):
         """Test that the centre method returns the calculated centre coordinates."""
         reference_indices = [0, 1, 2, 3]

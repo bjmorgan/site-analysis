@@ -527,6 +527,14 @@ class TestCorrectPbc(unittest.TestCase):
 		self.assertEqual(shifts.shape, (0, 3))
 		self.assertEqual(shifts.dtype, np.int64)
 
+	def test_non_finite_coordinates_raise_without_reference_centre(self):
+		"""Non-finite coordinates are rejected by name on the spread-based path too."""
+		for name, value in (("NaN", np.nan), ("infinite", np.inf)):
+			with self.subTest(name):
+				frame = np.array([[0.1, 0.1, 0.9], [value, 0.2, 0.1]])
+				with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+					correct_pbc(frame, None, self.lattice.matrix)
+
 	def test_legacy_path_returns_consistent_shifts(self):
 		"""Shifts from the legacy path satisfy corrected = original + shifts."""
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])

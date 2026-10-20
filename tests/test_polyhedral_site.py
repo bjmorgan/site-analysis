@@ -500,11 +500,14 @@ class TestContainmentOfPointsInAnyImage(unittest.TestCase):
         """A point is contained in whichever periodic image it is given."""
         vertices = np.array([[0.4, 0.5, 0.5], [0.6, 0.5, 0.5], [0.5, 0.4, 0.5],
                              [0.5, 0.6, 0.5], [0.5, 0.5, 0.4], [0.5, 0.5, 0.6]])
-        site = PolyhedralSite(vertex_indices=range(6), reference_center=np.array([0.5, 0.5, 0.5]))
-        site.assign_vertex_coords(vertices, Lattice.cubic(10.0).matrix)
-        for point in ([0.5, 0.5, 0.5], [1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
-            with self.subTest(point=point):
-                self.assertTrue(site.contains_point(np.array(point)))
+        for has_numba in BACKENDS:
+            with patch('site_analysis.polyhedral_site.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=range(6),
+                                      reference_center=np.array([0.5, 0.5, 0.5]))
+                site.assign_vertex_coords(vertices, Lattice.cubic(10.0).matrix)
+                for point in ([0.5, 0.5, 0.5], [1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
+                    with self.subTest(numba=has_numba, point=point):
+                        self.assertTrue(site.contains_point(np.array(point)))
 
 
 class TestNotifyStructureChanged(unittest.TestCase):

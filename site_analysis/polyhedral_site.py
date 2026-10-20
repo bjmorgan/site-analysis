@@ -17,7 +17,8 @@ from site_analysis.site import Site, _as_index
 from site_analysis.tools import _SHIFTS
 from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
-from site_analysis.pbc_utils import _as_reference_center, correct_pbc, update_pbc_shifts
+from site_analysis.distances import _as_point
+from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 
 if HAS_NUMBA:
     import numba
@@ -179,8 +180,8 @@ class HullTriangleCache:
     The topology (which vertex triples form each hull triangle) is computed
     once from an initial ``ConvexHull`` and cached permanently -- it depends
     only on vertex connectivity, not on coordinates. Per-timestep, the
-    triangle normals, reference points, and centre signs are recomputed from
-    new vertex coordinates using the cached topology.
+    triangle normals, reference points, centre signs and image shifts are
+    recomputed from new vertex coordinates using the cached topology.
 
     Attributes:
         triangles: (N_triangles, 3) array of vertex indices per hull
@@ -214,9 +215,11 @@ class HullTriangleCache:
         self.update(vertex_coords)
 
     def update(self, vertex_coords: np.ndarray) -> None:
-        """Recompute triangle normals from cached topology and new coordinates.
+        """Recompute triangle normals and image shifts from new coordinates.
 
-        Called once per timestep after vertex coordinates are assigned.
+        Recomputes the triangle normals, reference points and centre signs
+        from the cached topology, and sets ``image_shifts``. Called once per
+        timestep after vertex coordinates are assigned.
 
         Args:
             vertex_coords: (N_vertices, 3) array of current vertex positions.
@@ -308,7 +311,7 @@ class PolyhedralSite(Site):
                 raise ValueError(f"vertex_indices lists atom {k} more than once")
             seen.add(k)
         if reference_center is not None:
-            reference_center = _as_reference_center(reference_center)
+            reference_center = _as_point(reference_center, "reference_center")
 
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices

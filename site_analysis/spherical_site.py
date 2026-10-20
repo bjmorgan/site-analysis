@@ -9,7 +9,7 @@ the site is less important than its location.
 from __future__ import annotations
 from .site import Site
 from .atom import Atom
-from site_analysis.distances import mic_distance
+from site_analysis.distances import _as_point, mic_distance
 import numpy as np
 
 
@@ -74,9 +74,7 @@ class SphericalSite(Site):
             ValueError: If ``frac_coords`` is not three finite numbers, or
                 ``rcut`` is negative or NaN.
         """
-        centre = np.array(frac_coords, dtype=np.float64)
-        if centre.shape != (3,) or not np.all(np.isfinite(centre)):
-            raise ValueError(f"frac_coords must be three finite numbers, got {frac_coords}")
+        centre = _as_point(frac_coords, "frac_coords")
         if not rcut >= 0:
             raise ValueError(f"rcut must be non-negative, got {rcut}")
         super(SphericalSite, self).__init__(label=label)

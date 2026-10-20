@@ -777,6 +777,29 @@ def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
     return array
 
 
+def _as_point(value: object, name: str) -> np.ndarray:
+    """Return a point as a new float64 array of shape (3,).
+
+    Args:
+        value: The point, three finite numbers.
+        name: Argument name, for the error message.
+
+    Returns:
+        A new float64 array of shape (3,).
+
+    Raises:
+        ValueError: If ``value`` is not three finite numbers, including if
+            it is not numeric.
+    """
+    try:
+        point = np.array(value, dtype=np.float64)
+    except (TypeError, ValueError):
+        point = None
+    if point is None or point.shape != (3,) or not np.isfinite(point).all():
+        raise ValueError(f"{name} must be three finite numbers, got {value}")
+    return point
+
+
 def _check_lattice_matrix(lattice_matrix: np.ndarray) -> None:
     """Check that a lattice matrix is one the distance functions accept.
 

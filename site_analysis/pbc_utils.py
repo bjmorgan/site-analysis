@@ -9,30 +9,9 @@ from __future__ import annotations
 from typing import Callable, Literal, overload
 
 import numpy as np
-from site_analysis.distances import _as_coords, _nearest_image_shifts
+from site_analysis.distances import _as_coords, _as_point, _nearest_image_shifts
 
 from site_analysis._compat import HAS_NUMBA
-
-
-def _as_reference_center(value: object) -> np.ndarray:
-    """Return a reference centre as a float array.
-
-    Args:
-        value: The reference centre, three finite numbers.
-
-    Returns:
-        A new float64 array of shape (3,).
-
-    Raises:
-        ValueError: If ``value`` is not three finite numbers.
-    """
-    try:
-        centre = np.array(value, dtype=np.float64)
-    except (TypeError, ValueError):
-        centre = None
-    if centre is None or centre.shape != (3,) or not np.isfinite(centre).all():
-        raise ValueError(f"reference_center must be three finite numbers, got {value}")
-    return centre
 
 
 def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
@@ -134,7 +113,7 @@ def unwrap_vertices_to_reference_center(
         return frac_coords
 
     frac_coords = _as_coords(frac_coords, "frac_coords")
-    reference_center = _as_reference_center(reference_center)
+    reference_center = _as_point(reference_center, "reference_center")
     image_shifts = _nearest_image_shifts(frac_coords - reference_center, lattice_matrix)
     result = _translate_into_unit_cell(frac_coords + image_shifts)
 

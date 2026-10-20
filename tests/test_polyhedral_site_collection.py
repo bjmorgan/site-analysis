@@ -763,7 +763,6 @@ class TestTilingLeavesNoAtomUnassigned(unittest.TestCase):
         self.assertEqual(self.unassigned_atoms(PolyhedralSiteCollection(sites)), [])
 
 
-
 class TestAssignmentToSitesSpanningMoreThanTwoCells(unittest.TestCase):
     """Atoms are assigned to sites whose unwrapped vertices span more than two cells."""
 

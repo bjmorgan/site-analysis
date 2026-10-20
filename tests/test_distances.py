@@ -618,22 +618,32 @@ class TestNearestImageShifts(unittest.TestCase):
                         np.testing.assert_array_equal(image, images[0])
 
     def test_displacements_an_ulp_from_a_half_take_the_nearer_image(self):
-        """0.7 - 0.2, one ULP below 0.5, keeps shift 0; one ULP above 0.5 takes shift -1."""
-        below = 0.7 - 0.2
-        above = np.nextafter(0.5, 1.0)
-        displacements = np.array([[below, 0.0, 0.0], [-below, 0.0, 0.0],
-                                  [above, 0.0, 0.0], [-above, 0.0, 0.0]])
+        """One ULP below k + 0.5 on any axis keeps shift -k, one ULP above takes -(k + 1), and the distance is exact."""
         lattice_matrix = Lattice.cubic(4.0).matrix
-        for has_numba in BACKENDS:
-            with self.subTest(numba=has_numba), \
-                    patch.object(dist_mod, "HAS_NUMBA", has_numba):
-                shifts = dist_mod._nearest_image_shifts(displacements, lattice_matrix)
-                np.testing.assert_array_equal(
-                    shifts, [[0, 0, 0], [0, 0, 0], [-1, 0, 0], [1, 0, 0]])
-                self.assertEqual(
-                    dist_mod.paired_mic_distances(
-                        displacements[:1], np.zeros((1, 3)), lattice_matrix)[0],
-                    4.0 * below)
+        zeros = np.zeros((2, 3))
+        for axis in range(3):
+            for k in (-1, 0, 1):
+                below = np.nextafter(k + 0.5, -math.inf)
+                above = np.nextafter(k + 0.5, math.inf)
+                displacements = np.zeros((2, 3))
+                displacements[:, axis] = (below, above)
+                expected_shifts = np.zeros((2, 3), dtype=np.int64)
+                expected_shifts[:, axis] = (-k, -(k + 1))
+                # The subtractions are exact, and so is scaling by 4.
+                expected_distances = 4.0 * np.array([below - k, (k + 1) - above])
+                for has_numba in BACKENDS:
+                    with self.subTest(axis=axis, k=k, numba=has_numba), \
+                            patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                        np.testing.assert_array_equal(
+                            dist_mod._nearest_image_shifts(displacements, lattice_matrix),
+                            expected_shifts)
+                        np.testing.assert_array_equal(
+                            dist_mod.paired_mic_distances(displacements, zeros, lattice_matrix),
+                            expected_distances)
+                        np.testing.assert_array_equal(
+                            [dist_mod.mic_distance(d, zeros[0], lattice_matrix)
+                             for d in displacements],
+                            expected_distances)
 
     def test_empty_input_returns_empty(self):
         """No displacements give an empty (0, 3) array of shifts."""

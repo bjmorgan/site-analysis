@@ -449,5 +449,36 @@ class TestResetWithCalculatedCentre(unittest.TestCase):
         self.assertIsNone(site._centre_coords)
 
 
+class DynamicVoronoiSiteReferenceCentreSerialisationTestCase(unittest.TestCase):
+    """Test reference centre serialisation for DynamicVoronoiSite."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_round_trip_preserves_reference_center(self):
+        """A reference centre survives as_dict -> from_dict."""
+        original = DynamicVoronoiSite(
+            reference_indices=[1, 2, 3], reference_center=np.array([0.25, 0.5, 0.75]))
+
+        reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
+
+        np.testing.assert_array_equal(
+            reconstructed.reference_center, original.reference_center)
+
+    def test_round_trip_without_reference_center_gives_none(self):
+        """A site with no reference centre reloads with none."""
+        original = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+
+        reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
+
+        self.assertIsNone(reconstructed.reference_center)
+
+    def test_from_dict_without_reference_center_key_gives_none(self):
+        """A dict written before reference centres were saved still loads."""
+        site = DynamicVoronoiSite.from_dict({'reference_indices': [4, 5, 6]})
+
+        self.assertIsNone(site.reference_center)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -756,6 +756,33 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         self.assertEqual(reconstructed.vertex_indices, original.vertex_indices)
         self.assertEqual(reconstructed.label, original.label)
         np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
+
+    def test_round_trip_preserves_reference_center(self):
+        """A reference centre survives as_dict -> from_dict."""
+        original = PolyhedralSite(
+            vertex_indices=[0, 1, 2, 3], reference_center=np.array([0.25, 0.5, 0.75]))
+
+        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+
+        np.testing.assert_array_equal(
+            reconstructed.reference_center, original.reference_center)
+
+    def test_round_trip_without_reference_center_gives_none(self):
+        """A site with no reference centre reloads with none."""
+        original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+
+        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+
+        self.assertIsNone(reconstructed.reference_center)
+
+    def test_from_dict_without_reference_center_key_gives_none(self):
+        """A dict written before reference centres were saved still loads."""
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        del site_dict['reference_center']
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertIsNone(site.reference_center)
         
     def test_polyhedral_site_init_with_reference_center(self):
         """Test PolyhedralSite can be initialised with a reference centre."""

@@ -598,18 +598,49 @@ class PolyhedralSite(Site):
         return self.contains_point(atom.frac_coords, pbc_images=pbc_images)
 
     def as_dict(self) -> dict:
+        """Dictionary of this site's attributes, which may contain numpy arrays.
+
+        Besides the attributes of :class:`~site_analysis.site.Site`, it contains
+        the ``vertex_indices``, the ``vertex_coords`` (``None`` if not yet
+        assigned) and the ``reference_center`` as a list of three floats
+        (``None`` if the site has none).
+
+        Returns:
+            dict: dictionary representation of this site.
+        """
         d = super(PolyhedralSite, self).as_dict()
         d['vertex_indices'] = self.vertex_indices
         d['vertex_coords'] = self.vertex_coords
+        d['reference_center'] = (
+            None if self.reference_center is None else self.reference_center.tolist())
         return d
 
     @classmethod
-    def from_dict(cls, d):
-        polyhedral_site = cls(vertex_indices=d['vertex_indices'])
+    def from_dict(cls, d: dict) -> PolyhedralSite:
+        """Create a PolyhedralSite object from a dict representation.
+
+        Restores the vertex indices, vertex coordinates, contained atoms,
+        label and reference centre. A dict without a ``reference_center``
+        key, as written by earlier versions, gives a site with no reference
+        centre.
+
+        Args:
+            d (dict): The dict representation of this site.
+
+        Returns:
+            PolyhedralSite: A new PolyhedralSite instance.
+
+        Raises:
+            ValueError: If ``reference_center`` is not None and not three
+                finite numbers.
+        """
+        polyhedral_site = cls(
+            vertex_indices=d['vertex_indices'],
+            reference_center=d.get('reference_center'))
         polyhedral_site.vertex_coords = d['vertex_coords']
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')
-        return polyhedral_site 
+        return polyhedral_site
 
     @property
     def centre(self) -> np.ndarray:

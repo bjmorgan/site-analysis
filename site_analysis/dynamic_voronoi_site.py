@@ -145,7 +145,9 @@ class DynamicVoronoiSite(Site):
     def as_dict(self) -> dict:
         """Dictionary of this site's attributes, which may contain numpy arrays.
 
-        For example, the recorded ``points`` are numpy arrays.
+        For example, the recorded ``points`` are numpy arrays. It also contains
+        the ``reference_center`` as a list of three floats (``None`` if the site
+        has none) and, if it has been calculated, the ``centre_coords``.
         
         Args:
             None
@@ -155,6 +157,8 @@ class DynamicVoronoiSite(Site):
         """
         d = super(DynamicVoronoiSite, self).as_dict()
         d['reference_indices'] = self.reference_indices
+        d['reference_center'] = (
+            None if self.reference_center is None else self.reference_center.tolist())
         if self._centre_coords is not None:
             d['centre_coords'] = self._centre_coords.tolist()
         return d
@@ -162,14 +166,22 @@ class DynamicVoronoiSite(Site):
     @classmethod
     def from_dict(cls, d: dict) -> DynamicVoronoiSite:
         """Create a DynamicVoronoiSite object from a dict representation.
+
+        A dict without a ``reference_center`` key, as written by earlier
+        versions, gives a site with no reference centre.
         
         Args:
             d (dict): The dict representation of this Site.
             
         Returns:
             DynamicVoronoiSite: A new DynamicVoronoiSite instance.
+
+        Raises:
+            ValueError: If ``reference_center`` is not None and not three
+                finite numbers.
         """
-        site = cls(reference_indices=d['reference_indices'])
+        site = cls(reference_indices=d['reference_indices'],
+                   reference_center=d.get('reference_center'))
         site.label = d.get('label')
         site.contains_atoms = d.get('contains_atoms', [])
         site.trajectory = d.get('trajectory', [])

@@ -34,6 +34,7 @@ class DynamicVoronoiSite(Site):
             the dynamic centre of the site.
         centre_coords (np.ndarray or None): Fractional coordinates of the dynamically 
             calculated site centre. This is None initially and calculated on demand.
+        reference_center (np.ndarray or None): Optional reference centre for PBC handling.
             
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes

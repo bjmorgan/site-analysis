@@ -73,7 +73,7 @@ class PeriodicNeighbourIndex:
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
-        # The test the distance functions apply, so that no lattice accepted
+        # The checks the distance functions apply, so that no lattice accepted
         # here gives them undefined distances. It also keeps sigma_min well
         # above zero: the relative volume is at most 1.5 times sigma_min.
         _check_lattice_matrix(self._lattice_matrix)

@@ -176,12 +176,10 @@ def _numpy_update_pbc_shifts(
 ) -> tuple[bool, np.ndarray, np.ndarray]:
     """Incrementally update cached PBC image shifts between frames.
 
-    Full PBC unwrapping is expensive because it searches for the nearest
-    periodic image of every coordinate. Between successive MD frames,
-    atoms typically move by small amounts, so the integer image
-    shifts rarely change. This function detects coordinate wraps
-    (jumps of ~1.0 in fractional coordinates) and adjusts shifts
-    accordingly, avoiding the full nearest-image search.
+    Between successive MD frames, atoms typically move by small amounts,
+    so the integer image shifts rarely change. This function detects
+    coordinate wraps (jumps of ~1.0 in fractional coordinates) and
+    adjusts shifts accordingly, avoiding the full nearest-image search.
 
     If any coordinate has moved by more than 0.3 fractional units
     (after accounting for wrapping), the cache is considered invalid

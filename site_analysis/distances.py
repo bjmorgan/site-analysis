@@ -92,10 +92,6 @@ def _jitable(func: _F) -> _F:
 def _inlined_jitable(func: _F) -> _F:
     """As ``_jitable``, but numba inlines ``func`` into the compiled code that calls it.
 
-    The compiler then drops the work for any results the caller does not
-    use, such as the shift that ``_pair_distance`` takes from
-    ``_search_box`` but does not need.
-
     Args:
         func: A function that numba can compile.
 
@@ -385,9 +381,9 @@ def _search_ball(
     an axis leaves less of the distance for the axes after it. In
     elongated, thin or sheared cells far fewer images are visited than in
     the box from ``_shift_bounds``, which bounds each axis on its own. Has
-    the same arguments and results as ``_search_box``, and finds the same
-    smallest squared length; of images equally near, the first visited is
-    kept, so the shift may differ.
+    the same arguments as ``_search_box`` and finds the same smallest
+    squared length; of images equally near, the first visited is kept, so
+    its shift may differ from the one ``_search_box`` returns.
 
     Args:
         r0: First component of the rounded fractional displacement.

@@ -322,26 +322,35 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                                             [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
-    def test_contains_point_tests_provided_pbc_images(self):
-        """For a site within two cells, the provided images are tested in place of the point's own."""
+    def test_contains_point_pbc_images_parameter_is_ignored_and_warns(self):
+        """pbc_images emits a DeprecationWarning and the point's own images are tested."""
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
                                        [0.4, 0.6, 0.6],
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
-        self.assertTrue(site.contains_point(
-            np.array([0.1, 0.1, 0.1]), pbc_images=np.array([[0.5, 0.5, 0.5]])))
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            inside = site.contains_point(
+                np.array([0.1, 0.1, 0.1]), pbc_images=np.array([[0.5, 0.5, 0.5]]))
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("pbc_images", str(w[0].message))
+        self.assertFalse(inside)
 
-    def test_contains_atom_forwards_pbc_images(self):
-        """contains_atom passes pbc_images through to contains_point."""
+    def test_contains_atom_pbc_images_parameter_emits_deprecation_warning(self):
+        """contains_atom warns for pbc_images and does not pass it on."""
         atom = Mock(spec=Atom)
         atom.frac_coords = np.array([0.3, 0.4, 0.5])
         site = self.site
         site.contains_point = Mock(return_value=True)
-        precomputed = np.array([[0.3, 0.4, 0.5]])
-        site.contains_atom(atom, pbc_images=precomputed)
-        call_kwargs = site.contains_point.call_args[1]
-        np.testing.assert_array_equal(call_kwargs['pbc_images'], precomputed)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            site.contains_atom(atom, pbc_images=np.array([[0.3, 0.4, 0.5]]))
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("pbc_images", str(w[0].message))
+        self.assertEqual(site.contains_point.call_args.kwargs, {})
 
     def test_contains_atom_algo_parameter_emits_deprecation_warning(self):
         atom = Mock(spec=Atom)
@@ -865,16 +874,6 @@ _OCTAHEDRON = np.array([
     [0.5, 0.5, 0.4],
 ])
 
-_PBC_SHIFTS = np.array([
-    [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-    [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1],
-])
-
-
-def _x_pbc(x: np.ndarray) -> np.ndarray:
-    return _PBC_SHIFTS + x
-
-
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
 class TestHullTriangleCache(unittest.TestCase):
     """Tests for HullTriangleCache with numba acceleration."""
@@ -907,22 +906,36 @@ class TestHullTriangleCache(unittest.TestCase):
     def test_contains_point_inside_tetrahedron(self):
         cache = HullTriangleCache(_TETRAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_tetrahedron(self):
         cache = HullTriangleCache(_TETRAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
 
     def test_contains_point_inside_octahedron(self):
         cache = HullTriangleCache(_OCTAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_octahedron(self):
         cache = HullTriangleCache(_OCTAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
+
+    def test_contains_point_in_another_image(self):
+        """A point is contained in whichever periodic image it is given."""
+        cache = HullTriangleCache(_TETRAHEDRON)
+        for point in ([1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
+            with self.subTest(point=point):
+                self.assertTrue(cache.contains_point(np.array(point)))
+
+    def test_contains_point_tests_every_image_the_vertices_can_contain(self):
+        """A point near the far vertex of a site spanning x from 0.4 to 2.6 is contained."""
+        cache = HullTriangleCache(
+            _TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+        self.assertTrue(cache.contains_point(np.array([0.3, 0.5, 0.5])))
+        self.assertFalse(cache.contains_point(np.array([0.5, 0.2, 0.2])))
 
     def test_contains_point_after_coordinate_update(self):
         """Containment still works after updating coordinates."""
@@ -933,10 +946,10 @@ class TestHullTriangleCache(unittest.TestCase):
         cache.update(shifted)
         # Centre of shifted tetrahedron is now at [0.6, 0.5, 0.5]
         point_inside = np.array([0.6, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
         # Original centre is now outside
         point_outside = np.array([0.4, 0.5, 0.5])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
 
 
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
@@ -947,9 +960,10 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = HullTriangleCache(_TETRAHEDRON)
-        point_inside = np.array([[0.5, 0.5, 0.5]])
+        point_inside = np.array([0.5, 0.5, 0.5])
         result = _numba_sn_query(
             point_inside,
+            np.zeros((1, 3), dtype=np.int64),
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
@@ -960,23 +974,38 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = HullTriangleCache(_TETRAHEDRON)
-        point_outside = np.array([[0.1, 0.1, 0.1]])
+        point_outside = np.array([0.1, 0.1, 0.1])
         result = _numba_sn_query(
             point_outside,
+            np.zeros((1, 3), dtype=np.int64),
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
         )
         self.assertFalse(result)
 
+    def test_query_wraps_the_point_into_the_unit_cell(self):
+        from site_analysis.polyhedral_site import _numba_sn_query
+
+        cache = HullTriangleCache(_TETRAHEDRON)
+        result = _numba_sn_query(
+            np.array([1.5, -0.5, 2.5]),
+            np.zeros((1, 3), dtype=np.int64),
+            cache._triangle_normals,
+            cache._triangle_ref_points,
+            cache._centre_signs,
+        )
+        self.assertTrue(result)
+
     def test_query_returns_true_if_any_image_inside(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = HullTriangleCache(_TETRAHEDRON)
-        # First point outside, second inside
-        points = np.array([[0.1, 0.1, 0.1], [0.5, 0.5, 0.5]])
+        # First image outside, second inside
+        shifts = np.array([[1, 0, 0], [0, 0, 0]], dtype=np.int64)
         result = _numba_sn_query(
-            points,
+            np.array([0.5, 0.5, 0.5]),
+            shifts,
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
@@ -987,9 +1016,10 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = HullTriangleCache(_TETRAHEDRON)
-        points = np.array([[0.1, 0.1, 0.1], [0.8, 0.8, 0.9]])
+        shifts = np.array([[0, 0, 0], [1, 1, 1]], dtype=np.int64)
         result = _numba_sn_query(
-            points,
+            np.array([0.1, 0.1, 0.1]),
+            shifts,
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,

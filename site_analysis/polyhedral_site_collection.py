@@ -29,7 +29,6 @@ from .faces import Face, _find_shared_faces
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
-from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
 from scipy.sparse import csr_array
@@ -136,11 +135,10 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         self.reset_site_occupations()
         for atom in atoms:
             atom.in_site = None
-            pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
             for site in self._get_priority_sites(atom, lattice_matrix):
-                if site.contains_atom(atom, pbc_images=pbc_images):
+                if site.contains_atom(atom):
                     self.update_occupation(site, atom)
                     break
     

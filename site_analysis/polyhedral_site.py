@@ -88,34 +88,42 @@ if HAS_NUMBA:
 
     @numba.njit(cache=True)
     def _numba_sn_query(
-        x_pbc_points: np.ndarray,
+        x: np.ndarray,
+        image_shifts: np.ndarray,
         triangle_normals: np.ndarray,
         triangle_ref_points: np.ndarray,
         centre_signs: np.ndarray,
     ) -> bool:
         """JIT-compiled containment check using surface normals.
 
-        For each PBC image point, checks whether the point lies on the
-        same side as the polyhedron centre for every hull triangle. Uses early
-        exit on first failing triangle for efficiency.
+        Wraps the point into [0, 1) and tests each of its images given by
+        the shifts: an image is inside when it lies on the same side as
+        the polyhedron centre for every hull triangle. Exits early on the
+        first failing triangle of an image, and on the first image inside.
 
         Args:
-            x_pbc_points: (N, 3) array of periodic boundary images.
+            x: (3,) fractional coordinates of the point, in any periodic
+                image.
+            image_shifts: (M, 3) integer array of whole-cell shifts from
+                the wrapped point to the images to test.
             triangle_normals: (N_triangles, 3) precomputed outward triangle normals.
             triangle_ref_points: (N_triangles, 3) reference vertex per triangle.
             centre_signs: (N_triangles,) sign of centre dot product per triangle.
 
         Returns:
-            True if any PBC image is inside the polyhedron.
+            True if any image is inside the polyhedron.
         """
-        n_points = x_pbc_points.shape[0]
+        wrapped = np.empty(3)
+        for k in range(3):
+            wrapped[k] = x[k] - np.floor(x[k])
+        n_images = image_shifts.shape[0]
         n_triangles = triangle_normals.shape[0]
-        for i in range(n_points):
+        for i in range(n_images):
             all_match = True
             for j in range(n_triangles):
                 dot = 0.0
                 for k in range(3):
-                    dot += ((x_pbc_points[i, k] - triangle_ref_points[j, k])
+                    dot += ((wrapped[k] + image_shifts[i, k] - triangle_ref_points[j, k])
                             * triangle_normals[j, k])
                 # dot == 0.0 means the point lies exactly on the triangle
                 # plane; np.sign(0.0) returns 0.0 which would never
@@ -135,43 +143,19 @@ def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
     An image ``x + n`` of a point ``x`` in [0, 1) lies inside the
     vertices' bounding box only if ``floor(min_k) <= n_k <= floor(max_k)``
     along each axis ``k``, where ``min_k`` and ``max_k`` are the lowest and
-    highest vertex coordinates. When every such range lies within {0, 1},
-    the eight shifts of ``x_pbc`` (``n_k`` in {0, 1}) are returned, as the
-    same array each time.
+    highest vertex coordinates.
 
     Args:
-        vertex_coords: (N_vertices, 3) array of vertex positions.
+        vertex_coords: (N_vertices, 3) array of finite vertex positions.
 
     Returns:
-        (M, 3) integer array of shifts.
+        (M, 3) integer array of the shifts, one for each cell the bounding
+        box meets.
     """
-    if vertex_coords.min() >= 0.0 and vertex_coords.max() < 2.0:
-        return _SHIFTS
     lower = np.floor(vertex_coords.min(axis=0)).astype(np.int64)
     upper = np.floor(vertex_coords.max(axis=0)).astype(np.int64)
     axes = [np.arange(lo, hi + 1) for lo, hi in zip(lower, upper)]
     return np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
-
-
-def _images(x: np.ndarray,
-        shifts: np.ndarray,
-        pbc_images: np.ndarray | None) -> np.ndarray:
-    """Images of a point to test for containment.
-
-    Args:
-        x: Fractional coordinates of the point, in any periodic image.
-        shifts: Whole-cell shifts from ``_image_shifts``.
-        pbc_images: Precomputed ``x_pbc`` of x wrapped into [0, 1), or
-            None.
-
-    Returns:
-        ``pbc_images`` if given and ``shifts`` are the eight shifts of
-        ``x_pbc``; otherwise x wrapped into [0, 1) plus each shift.
-    """
-    if pbc_images is not None and shifts is _SHIFTS:
-        return pbc_images
-    images: np.ndarray = (x - np.floor(x)) + shifts
-    return images
 
 
 class HullTriangleCache:
@@ -188,7 +172,9 @@ class HullTriangleCache:
             triangle.
         image_shifts: (M, 3) integer array of whole-cell shifts from a
             point in [0, 1) to its images that can lie inside the
-            polyhedron, as from ``_image_shifts``.
+            polyhedron: the eight shifts with components in {0, 1} when
+            every vertex coordinate is in [0, 2), otherwise those from
+            ``_image_shifts``.
     """
 
     def __init__(self, vertex_coords: np.ndarray) -> None:
@@ -228,17 +214,22 @@ class HullTriangleCache:
          within_two_cells) = _numba_update_hull_triangles(vertex_coords, self.triangles)
         self.image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
 
-    def contains_point(self, x_pbc_points: np.ndarray) -> bool:
-        """Test whether any PBC image point is inside the polyhedron.
+    def contains_point(self, x: np.ndarray) -> bool:
+        """Test whether an image of a point is inside the polyhedron.
+
+        The point is wrapped into [0, 1) and each of its images given by
+        ``image_shifts`` is tested.
 
         Args:
-            x_pbc_points: (N, 3) array of periodic boundary images.
+            x: (3,) fractional coordinates of the point, in any periodic
+                image.
 
         Returns:
-            True if any point is inside the polyhedron.
+            True if an image of the point is inside the polyhedron.
         """
         return bool(_numba_sn_query(
-            x_pbc_points,
+            x,
+            self.image_shifts,
             self._triangle_normals,
             self._triangle_ref_points,
             self._centre_signs,
@@ -518,11 +509,9 @@ class PolyhedralSite(Site):
             x: Fractional coordinates of the point to test (length 3 array).
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
-            pbc_images: Optional images of x precomputed as ``x_pbc`` of x
-                wrapped into [0, 1), shape (8, 3), to share between sites.
-                They are tested instead of computing them when every vertex
-                coordinate is in [0, 2); otherwise the site computes the
-                images it needs from x.
+            pbc_images: Deprecated. Previously images of the point to test
+                in place of its own. Now ignored; the site tests the images
+                of the point that can lie inside it.
 
         Returns:
             True if the point is inside the polyhedron.
@@ -532,6 +521,13 @@ class PolyhedralSite(Site):
                 "The 'algo' parameter is deprecated and will be removed in a "
                 "future version. The best available containment algorithm is "
                 "now selected automatically.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if pbc_images is not None:
+            warnings.warn(
+                "The 'pbc_images' parameter is deprecated and will be removed in "
+                "version 2.0. The site now tests the images of the point itself.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -549,10 +545,9 @@ class PolyhedralSite(Site):
                 elif self._cache_stale:
                     self._hull_triangle_cache.update(self.vertex_coords)
                     self._cache_stale = False
-                return self._hull_triangle_cache.contains_point(
-                    _images(x, self._hull_triangle_cache.image_shifts, pbc_images))
+                return self._hull_triangle_cache.contains_point(x)
             return self._contains_point_delaunay(
-                _images(x, _image_shifts(self.vertex_coords), pbc_images))
+                (x - np.floor(x)) + _image_shifts(self.vertex_coords))
         except QhullError as e:
             raise RuntimeError(
                 f"Degenerate vertex geometry for polyhedral_site {self.index} "
@@ -581,8 +576,9 @@ class PolyhedralSite(Site):
             atom: The atom to test.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
-            pbc_images: Optional images of the atom's fractional
-                coordinates, passed through to ``contains_point``.
+            pbc_images: Deprecated. Previously images of the atom to test
+                in place of its own. Now ignored; the site tests the images
+                of the atom that can lie inside it.
 
         Returns:
             True if the atom is inside the polyhedron.
@@ -595,7 +591,14 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return self.contains_point(atom.frac_coords, pbc_images=pbc_images)
+        if pbc_images is not None:
+            warnings.warn(
+                "The 'pbc_images' parameter is deprecated and will be removed in "
+                "version 2.0. The site now tests the images of the atom itself.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self.contains_point(atom.frac_coords)
 
     def as_dict(self) -> dict:
         """Dictionary of this site's attributes, which may contain numpy arrays.

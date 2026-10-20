@@ -1052,6 +1052,7 @@ def _distances_from_rounded_images(
 def _nearest_image_shifts(
     displacements: np.ndarray,
     lattice_matrix: np.ndarray,
+    name: str = "displacements",
 ) -> np.ndarray:
     """Integer shifts that take fractional displacements to their nearest images.
 
@@ -1065,6 +1066,7 @@ def _nearest_image_shifts(
         displacements: Fractional displacements, shape (N, 3).
         lattice_matrix: (3, 3) lattice matrix where rows are lattice
             vectors (pymatgen convention: ``lattice.matrix``).
+        name: What the displacements are called in error messages.
 
     Returns:
         (N, 3) int64 array of shifts.
@@ -1076,9 +1078,9 @@ def _nearest_image_shifts(
             or is singular, nearly so, or extremely elongated (an edge more
             than 2**50 times the cell's narrowest perpendicular width).
     """
-    displacements = _as_coords(displacements, "displacements")
+    displacements = _as_coords(displacements, name)
     if not (np.abs(displacements) < _WHOLE_NUMBER_LIMIT).all():
-        raise ValueError("displacements must be smaller than 2**52 in magnitude")
+        raise ValueError(f"{name} must be smaller than 2**52 in magnitude")
     lattice_matrix = np.ascontiguousarray(lattice_matrix, dtype=np.float64)
     _check_lattice_matrix(lattice_matrix)
     if HAS_NUMBA:

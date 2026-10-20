@@ -474,6 +474,20 @@ class TestExactUnwrapping(unittest.TestCase):
 				np.array([[0.1, 0.2, 0.3]]), np.array([np.nan, 0.5, 0.5]),
 				Lattice.cubic(10.0).matrix)
 
+	def test_vertex_too_far_from_the_reference_centre_raises(self):
+		"""A displacement too large for the search is rejected by the user's argument names."""
+		cases = {
+			"2**52 cells away": (np.array([[2.0 ** 52, 0.2, 0.3]]), np.array([0.0, 0.5, 0.5]),
+				"^the displacement of each vertex from reference_center must be smaller than 2\\*\\*52 in magnitude$"),
+			"overflowing": (np.array([[1e308, 0.2, 0.3]]), np.array([-1e308, 0.5, 0.5]),
+				"^the displacement of each vertex from reference_center must be finite$"),
+		}
+		for name, (vertices, reference_center, message) in cases.items():
+			with self.subTest(name), np.errstate(over="ignore"):
+				with self.assertRaisesRegex(ValueError, message):
+					unwrap_vertices_to_reference_center(
+						vertices, reference_center, Lattice.cubic(10.0).matrix)
+
 	def test_singular_lattice_raises(self):
 		"""A singular lattice is rejected."""
 		lattice_matrix = np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]])

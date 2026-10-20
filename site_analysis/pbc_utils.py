@@ -114,7 +114,9 @@ def unwrap_vertices_to_reference_center(
 
     frac_coords = _as_coords(frac_coords, "frac_coords")
     reference_center = _as_point(reference_center, "reference_center")
-    image_shifts = _nearest_image_shifts(frac_coords - reference_center, lattice_matrix)
+    image_shifts = _nearest_image_shifts(
+        frac_coords - reference_center, lattice_matrix,
+        name="the displacement of each vertex from reference_center")
     result = _translate_into_unit_cell(frac_coords + image_shifts)
 
     if return_image_shifts:

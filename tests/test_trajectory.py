@@ -1214,6 +1214,30 @@ class TrajectoryCommitmentTestCase(unittest.TestCase):
         self.assertEqual(self.site_b.transitions, {0: 1})
 
 
+    def commitment_candidate(self, trajectory, frac_coords):
+        """An atom inside site b, committed to site a, at the given coordinates."""
+        atom = trajectory.atoms[0]
+        atom._frac_coords = np.array(frac_coords)
+        atom.in_site = 1
+        atom.committed_site = 0
+        return atom
+
+    def test_commitment_raises_for_non_finite_coordinates(self):
+        """The commitment distance of an atom with a NaN coordinate raises ValueError."""
+        trajectory = self.make_trajectory()
+        self.commitment_candidate(trajectory, [np.nan, 0.5, 0.5])
+        with self.assertRaisesRegex(ValueError, "must be finite"):
+            trajectory._apply_commitment({0: 100.0, 1: 100.0}, self.lattice.matrix)
+
+    def test_commitment_raises_for_singular_lattice(self):
+        """The commitment distance in a singular lattice raises ValueError."""
+        trajectory = self.make_trajectory()
+        self.commitment_candidate(trajectory, [self.x["b_core"], 0.5, 0.5])
+        singular = np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0], [0.0, 0.0, 10.0]])
+        with self.assertRaisesRegex(ValueError, "lattice_matrix must not be singular"):
+            trajectory._apply_commitment({0: 100.0, 1: 100.0}, singular)
+
+
 class PolyhedralCommitmentTestCase(unittest.TestCase):
     """Tests for commitment with polyhedral sites."""
 

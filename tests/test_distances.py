@@ -1,5 +1,6 @@
 import itertools
 import math
+import re
 import unittest
 from unittest.mock import patch
 
@@ -193,6 +194,38 @@ class TestMicDistance(unittest.TestCase):
         expected = lattice.get_distance_and_image(frac1, frac2)[0]
         result = mic_distance(frac1, frac2, lattice.matrix)
         self.assertAlmostEqual(result, float(expected), places=10)
+
+
+class TestMicDistanceInputChecks(unittest.TestCase):
+    """mic_distance rejects malformed inputs, with and without numba."""
+
+    def test_point_of_wrong_shape_raises_value_error(self):
+        """A point that does not have shape (3,) raises ValueError naming the argument."""
+        good = np.array([0.1, 0.2, 0.3])
+        lattice_matrix = 10.0 * np.eye(3)
+        for bad_shape in ((2,), (4,), (1, 3), (3, 1)):
+            bad = np.zeros(bad_shape)
+            for has_numba in BACKENDS:
+                with patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    with self.subTest(argument="frac1", shape=bad_shape, numba=has_numba):
+                        with self.assertRaisesRegex(
+                                ValueError, r"frac1 must have shape \(3,\), got " + re.escape(str(bad_shape))):
+                            dist_mod.mic_distance(bad, good, lattice_matrix)
+                    with self.subTest(argument="frac2", shape=bad_shape, numba=has_numba):
+                        with self.assertRaisesRegex(
+                                ValueError, r"frac2 must have shape \(3,\), got " + re.escape(str(bad_shape))):
+                            dist_mod.mic_distance(good, bad, lattice_matrix)
+
+    def test_lattice_of_wrong_shape_raises_value_error(self):
+        """A lattice matrix that does not have shape (3, 3) raises ValueError naming it."""
+        point = np.array([0.1, 0.2, 0.3])
+        for bad_shape in ((2, 3), (3, 2), (9,), (3, 3, 1)):
+            for has_numba in BACKENDS:
+                with self.subTest(shape=bad_shape, numba=has_numba), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    with self.assertRaisesRegex(
+                            ValueError, r"lattice_matrix must have shape \(3, 3\), got " + re.escape(str(bad_shape))):
+                        dist_mod.mic_distance(point, np.zeros(3), np.ones(bad_shape))
 
 
 class TestPairedMicDistances(unittest.TestCase):
@@ -484,7 +517,7 @@ class TestSearches(unittest.TestCase):
 
 
 class TestUndefinedDistances(unittest.TestCase):
-    """Non-finite input and rejected lattices give NaN or raise."""
+    """Non-finite input and rejected lattices raise, or give NaN where unchecked."""
 
     # Singular, nearly singular or extremely elongated lattices.
     REJECTED_LATTICES = {
@@ -501,23 +534,41 @@ class TestUndefinedDistances(unittest.TestCase):
         "extremely elongated cell": np.array([[1e-10, 0.0, 0.0], [1e10, 1e10, 0.0], [0.0, 0.0, 1.0]]),
     }
 
-    def test_mic_distance_of_non_finite_input_is_nan(self):
-        """NaN or inf coordinates give NaN, with and without numba."""
+    def test_mic_distance_of_non_finite_input_raises_value_error(self):
+        """NaN or inf coordinates raise ValueError naming the argument, with and without numba."""
+        good = np.array([0.1, 0.2, 0.3])
         for has_numba in BACKENDS:
             for value in (np.nan, np.inf):
-                with self.subTest(numba=has_numba, value=value), \
-                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
-                    self.assertTrue(math.isnan(dist_mod.mic_distance(
-                        np.array([value, 0.2, 0.3]), np.zeros(3), 10.0 * np.eye(3))))
+                bad = np.array([value, 0.2, 0.3])
+                with patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    with self.subTest(argument="frac1", value=value, numba=has_numba):
+                        with self.assertRaisesRegex(ValueError, "frac1 must be finite"):
+                            dist_mod.mic_distance(bad, good, 10.0 * np.eye(3))
+                    with self.subTest(argument="frac2", value=value, numba=has_numba):
+                        with self.assertRaisesRegex(ValueError, "frac2 must be finite"):
+                            dist_mod.mic_distance(good, bad, 10.0 * np.eye(3))
 
-    def test_mic_distance_in_rejected_lattice_is_nan(self):
-        """A singular, nearly singular or extremely elongated lattice gives NaN, with and without numba."""
+    def test_mic_distance_in_non_finite_lattice_raises_value_error(self):
+        """A lattice matrix with a NaN or inf entry raises ValueError naming it, with and without numba."""
+        for has_numba in BACKENDS:
+            for value in (np.nan, np.inf):
+                lattice_matrix = 10.0 * np.eye(3)
+                lattice_matrix[1, 2] = value
+                with self.subTest(value=value, numba=has_numba), \
+                        patch.object(dist_mod, "HAS_NUMBA", has_numba):
+                    with self.assertRaisesRegex(ValueError, "lattice_matrix must be finite"):
+                        dist_mod.mic_distance(np.array([0.1, 0.2, 0.3]), np.zeros(3), lattice_matrix)
+
+    def test_mic_distance_in_rejected_lattice_raises_value_error(self):
+        """A singular, nearly singular or extremely elongated lattice raises ValueError, with and without numba."""
         for name, lattice_matrix in self.REJECTED_LATTICES.items():
             for has_numba in BACKENDS:
                 with self.subTest(name, numba=has_numba), \
                         patch.object(dist_mod, "HAS_NUMBA", has_numba):
-                    self.assertTrue(math.isnan(dist_mod.mic_distance(
-                        np.array([0.1, 0.2, 0.3]), np.zeros(3), lattice_matrix)))
+                    with self.assertRaisesRegex(
+                            ValueError,
+                            "lattice_matrix must not be singular, nearly singular or extremely elongated"):
+                        dist_mod.mic_distance(np.array([0.1, 0.2, 0.3]), np.zeros(3), lattice_matrix)
 
     def test_paired_mic_distances_rejects_lattice(self):
         """paired_mic_distances raises ValueError for a singular, nearly singular or extremely elongated lattice."""

@@ -332,6 +332,31 @@ class SphericalSiteTestCase(unittest.TestCase):
             "Point should be inside large radius site"
         )
 
+    def test_contains_point_raises_for_non_finite_point(self):
+        """A NaN or inf coordinate raises ValueError, even for a radius that would contain any point."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=100.0)
+        for value in (np.nan, np.inf):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "must be finite"):
+                    site.contains_point(np.array([value, 0.5, 0.5]), lattice_matrix=self.lattice.matrix)
+
+    def test_contains_point_raises_for_singular_lattice(self):
+        """A singular lattice raises ValueError, even for a radius that would contain any point."""
+        site = SphericalSite(frac_coords=np.array([0.5, 0.5, 0.5]), rcut=100.0)
+        singular = np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0], [0.0, 0.0, 10.0]])
+        with self.assertRaisesRegex(ValueError, "lattice_matrix must not be singular"):
+            site.contains_point(np.array([0.5, 0.5, 0.5]), lattice_matrix=singular)
+
+    def test_contains_point_raises_for_point_of_wrong_shape(self):
+        """A point with two components raises ValueError."""
+        with self.assertRaisesRegex(ValueError, r"must have shape \(3,\)"):
+            self.test_site.contains_point(np.array([0.5, 0.5]), lattice_matrix=self.lattice.matrix)
+
+    def test_contains_point_raises_for_lattice_of_wrong_shape(self):
+        """A lattice matrix with two rows raises ValueError."""
+        with self.assertRaisesRegex(ValueError, r"lattice_matrix must have shape \(3, 3\)"):
+            self.test_site.contains_point(np.array([0.5, 0.5, 0.5]), lattice_matrix=self.lattice.matrix[:2])
+
     def test_repr(self):
         """Test the __repr__ method for SphericalSite."""
         frac_coords = np.array([0.25, 0.25, 0.25])

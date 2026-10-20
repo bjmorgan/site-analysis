@@ -609,6 +609,40 @@ def _rows_and_inverse_widths(
     return stored[1], stored[2]
 
 
+_POINT_SHAPE = (3,)
+_LATTICE_SHAPE = (3, 3)
+_REJECTED_LATTICE_MESSAGE = (
+    "lattice_matrix must not be singular, nearly singular or extremely elongated")
+
+
+def _undefined_distance_reason(
+    frac1: np.ndarray,
+    frac2: np.ndarray,
+    lattice_matrix: np.ndarray,
+) -> str:
+    """Why a minimum-image distance between two points came out as NaN.
+
+    Args:
+        frac1: Fractional coordinates of point 1, shape (3,).
+        frac2: Fractional coordinates of point 2, shape (3,).
+        lattice_matrix: (3, 3) lattice matrix where rows are lattice
+            vectors (pymatgen convention).
+
+    Returns:
+        The message for the ``ValueError``: the first of the inputs that
+        is not finite, a displacement between the points too large for a
+        float, or otherwise a lattice matrix that is singular, nearly so,
+        or extremely elongated.
+    """
+    for name, array in (("frac1", frac1), ("frac2", frac2),
+                        ("lattice_matrix", lattice_matrix)):
+        if not np.isfinite(array).all():
+            return f"{name} must be finite"
+    if not np.isfinite(frac1 - frac2).all():
+        return "the displacement between frac1 and frac2 is too large for a float"
+    return _REJECTED_LATTICE_MESSAGE
+
+
 def mic_distance(
     frac1: np.ndarray,
     frac2: np.ndarray,
@@ -621,12 +655,6 @@ def mic_distance(
     improved performance on repeated single-pair calls; for float64
     input, the result is the same without numba.
 
-    Note:
-        The distance is undefined for non-finite inputs (NaN, inf), and
-        NaN is returned. NaN is also returned for a lattice matrix that is
-        singular, nearly so, or extremely elongated (an edge more than
-        2**50 times the cell's narrowest perpendicular width).
-
     Args:
         frac1: Fractional coordinates of point 1, a float64 array of
             shape (3,).
@@ -637,14 +665,35 @@ def mic_distance(
 
     Returns:
         The minimum-image distance in the same units as the lattice matrix.
+
+    Raises:
+        ValueError: If ``frac1`` or ``frac2`` does not have shape (3,),
+            or ``lattice_matrix`` does not have shape (3, 3), or any of
+            the three is not finite, or the lattice matrix is singular,
+            nearly so, or extremely elongated (an edge more than 2**50
+            times the cell's narrowest perpendicular width).
     """
+    # The numba kernel does not check bounds, so a malformed array would
+    # be read past its end.
+    if frac1.shape != _POINT_SHAPE:
+        raise ValueError(f"frac1 must have shape (3,), got {frac1.shape}")
+    if frac2.shape != _POINT_SHAPE:
+        raise ValueError(f"frac2 must have shape (3,), got {frac2.shape}")
+    if lattice_matrix.shape != _LATTICE_SHAPE:
+        raise ValueError(f"lattice_matrix must have shape (3, 3), got {lattice_matrix.shape}")
     if HAS_NUMBA:
-        return float(_mic_distance_numba(frac1, frac2, lattice_matrix))
-    rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    return _pair_distance(float(frac1[0]) - float(frac2[0]),
-                          float(frac1[1]) - float(frac2[1]),
-                          float(frac1[2]) - float(frac2[2]),
-                          rows, inverse_widths)
+        distance = float(_mic_distance_numba(frac1, frac2, lattice_matrix))
+    else:
+        rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
+        distance = _pair_distance(float(frac1[0]) - float(frac2[0]),
+                                  float(frac1[1]) - float(frac2[1]),
+                                  float(frac1[2]) - float(frac2[2]),
+                                  rows, inverse_widths)
+    # The distance is NaN only for non-finite input or a rejected lattice.
+    # Finding which afterwards keeps the check off the hot path.
+    if math.isnan(distance):
+        raise ValueError(_undefined_distance_reason(frac1, frac2, lattice_matrix))
+    return distance
 
 
 def paired_mic_distances(
@@ -696,7 +745,7 @@ def paired_mic_distances(
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must be finite")
     if not _inverse_widths_are_finite(_inverse_widths(lattice_matrix.tolist())):
-        raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
+        raise ValueError(_REJECTED_LATTICE_MESSAGE)
     return _paired_mic_distances(frac_coords1, frac_coords2, lattice_matrix)
 
 

@@ -3,7 +3,7 @@ import warnings
 
 import pytest
 
-from site_analysis.polyhedral_site import PolyhedralSite, HullTriangleCache
+from site_analysis.polyhedral_site import PolyhedralSite, HullTriangleCache, _image_shifts
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.atom import Atom
 from site_analysis.site import Site
@@ -501,6 +501,32 @@ class TestContainmentInUnreducedCell(unittest.TestCase):
                                       reference_center=self.REFERENCE_CENTER + translation)
                 site.assign_vertex_coords(self.RAW_FRAC_COORDS + translation, self.LATTICE_MATRIX)
                 self.assertTrue(site.contains_point(point))
+
+
+class TestContainmentImageLimit(unittest.TestCase):
+    """Tests that containment rejects a site whose vertices span more cells than it will test."""
+
+    def test_image_shifts_rejects_vertices_spanning_too_many_cells(self):
+        """Vertices spanning 1001 cells along x are rejected, naming the cells spanned."""
+        vertices = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        with self.assertRaisesRegex(ValueError, r"span \[1001, 1, 1\] cells"):
+            _image_shifts(vertices)
+
+    def test_image_shifts_allows_vertices_spanning_the_limit(self):
+        """Vertices spanning 10 cells along each axis give 1000 shifts."""
+        vertices = _TETRAHEDRON + [[0.0, 0.0, 0.0], [9.0, 0.0, 0.0], [0.0, 9.0, 0.0], [0.0, 0.0, 9.0]]
+        self.assertEqual(_image_shifts(vertices).shape, (1000, 3))
+
+    def test_contains_point_rejects_a_site_spanning_too_many_cells(self):
+        """contains_point raises ValueError for a site spanning 1001 cells, with and without numba."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedral_site.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site.vertex_coords = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
+                                                     [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+                with self.assertRaisesRegex(ValueError, "cells"):
+                    site.contains_point(np.array([0.5, 0.5, 0.5]))
 
 
 class TestContainmentOfPointsInAnyImage(unittest.TestCase):

@@ -137,6 +137,11 @@ if HAS_NUMBA:
         return False
 
 
+# The most cells a polyhedral site's vertices may span, counted over all
+# three axes, for the site to test the images of a point in each of them.
+_MAX_IMAGE_SHIFTS = 1000
+
+
 def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
     """Whole-cell shifts from a point in [0, 1) to its images that can lie inside a polyhedron.
 
@@ -151,9 +156,20 @@ def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
     Returns:
         (M, 3) integer array of the shifts, one for each cell the bounding
         box meets.
+
+    Raises:
+        ValueError: If the bounding box meets more than
+            ``_MAX_IMAGE_SHIFTS`` cells, as it can for a site in a
+            strongly skewed or unreduced cell.
     """
     lower = np.floor(vertex_coords.min(axis=0)).astype(np.int64)
     upper = np.floor(vertex_coords.max(axis=0)).astype(np.int64)
+    cells = upper - lower + 1
+    if np.prod(cells, dtype=np.float64) > _MAX_IMAGE_SHIFTS:
+        raise ValueError(
+            f"vertices span {cells.tolist()} cells along the lattice axes, more than "
+            f"the {_MAX_IMAGE_SHIFTS} cells in which a site's images can be tested; "
+            "use a reduced cell")
     axes = [np.arange(lo, hi + 1) for lo, hi in zip(lower, upper)]
     return np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
 
@@ -499,7 +515,7 @@ class PolyhedralSite(Site):
 
         The point may be given in any periodic image. It is wrapped into
         [0, 1), and each of its images that can lie inside the vertices'
-        bounding box is tested, however many cells the vertices span.
+        bounding box is tested, in every cell the vertices span.
 
         The containment algorithm is selected automatically based on available
         dependencies. When numba is installed, uses a JIT-compiled surface
@@ -515,6 +531,12 @@ class PolyhedralSite(Site):
 
         Returns:
             True if the point is inside the polyhedron.
+
+        Raises:
+            RuntimeError: If no vertex coordinates have been assigned, or
+                the vertices are degenerate.
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, as they can in a strongly skewed or unreduced cell.
         """
         if algo is not None:
             warnings.warn(

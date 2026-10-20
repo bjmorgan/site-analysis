@@ -26,6 +26,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         "text": "abc",
         "ragged": [[0.1, 0.2], [0.3]],
         "complex": [1 + 1j, 0.0, 0.0],
+        "integer too large for a float": [10 ** 400, 0.0, 0.0],
     }
 
     def setUp(self):

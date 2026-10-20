@@ -793,7 +793,7 @@ def _as_point(value: object, name: str) -> np.ndarray:
     """
     try:
         point = np.array(value, dtype=np.float64)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         point = None
     if point is None or point.shape != (3,) or not np.isfinite(point).all():
         raise ValueError(f"{name} must be three finite numbers, got {value}")

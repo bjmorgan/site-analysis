@@ -249,6 +249,42 @@ def _wrap_half_up(f: float) -> float:
 
 
 @_jitable
+def _shift_interval(centre: _T, half_width: _T) -> tuple[_T, _T]:
+    """The interval of shifts ``n`` with ``|centre + n| <= half_width``, widened.
+
+    Each end is moved outwards by ``_SHIFT_MARGIN``, which exceeds the
+    rounding in the ends for intervals of fewer than about 2**23 cells.
+
+    Args:
+        centre: The coordinate before shifting, a float or an array.
+        half_width: The largest coordinate allowed after shifting, of the
+            same type as ``centre``.
+
+    Returns:
+        ``(lo, hi)``, the ends of the interval, of the same type as
+        ``centre``. The integer shifts in it run from ``ceil(lo)`` to
+        ``floor(hi)``.
+    """
+    return -half_width - centre - _SHIFT_MARGIN, half_width - centre + _SHIFT_MARGIN
+
+
+@_jitable
+def _shift_range(centre: float, half_width: float) -> tuple[int, int]:
+    """The integer shifts ``n`` with ``|centre + n| <= half_width``.
+
+    Args:
+        centre: The coordinate before shifting.
+        half_width: The largest coordinate allowed after shifting.
+
+    Returns:
+        ``(lo, hi)``, the inclusive range of shifts, the integers in the
+        interval from ``_shift_interval``.
+    """
+    lo, hi = _shift_interval(centre, half_width)
+    return math.ceil(lo), math.floor(hi)
+
+
+@_jitable
 def _shift_bounds(
     r0: float,
     r1: float,
@@ -259,8 +295,8 @@ def _shift_bounds(
     """The box of integer shifts that holds every image within a distance.
 
     An image ``r + n`` at most ``d`` away has
-    ``|r_i + n_i| <= d * inverse_widths[i]`` on each axis. The ranges are widened
-    by ``_SHIFT_MARGIN`` so that rounding cannot leave out a shift.
+    ``|r_i + n_i| <= d * inverse_widths[i]`` on each axis, so the box is
+    the ``_shift_range`` of each axis.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -275,12 +311,10 @@ def _shift_bounds(
         on each axis. Each range contains 0 when ``d`` is the length of
         ``r``.
     """
-    return (math.ceil(-d * inverse_widths[0] - r0 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[0] - r0 + _SHIFT_MARGIN),
-            math.ceil(-d * inverse_widths[1] - r1 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[1] - r1 + _SHIFT_MARGIN),
-            math.ceil(-d * inverse_widths[2] - r2 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[2] - r2 + _SHIFT_MARGIN))
+    lo0, hi0 = _shift_range(r0, d * inverse_widths[0])
+    lo1, hi1 = _shift_range(r1, d * inverse_widths[1])
+    lo2, hi2 = _shift_range(r2, d * inverse_widths[2])
+    return lo0, hi0, lo1, hi1, lo2, hi2
 
 
 @_inlined_jitable
@@ -322,24 +356,6 @@ def _search_box(
                     best = candidate
                     s0, s1, s2 = n0, n1, n2
     return best, s0, s1, s2
-
-
-@_jitable
-def _shift_range(centre: float, half_width: float) -> tuple[int, int]:
-    """The integer shifts ``n`` with ``|centre + n| <= half_width``.
-
-    The range is widened by ``_SHIFT_MARGIN`` so that rounding cannot leave
-    out a shift.
-
-    Args:
-        centre: The coordinate before shifting.
-        half_width: The largest coordinate allowed after shifting.
-
-    Returns:
-        ``(lo, hi)``, the inclusive range of shifts.
-    """
-    return (math.ceil(-half_width - centre - _SHIFT_MARGIN),
-            math.floor(half_width - centre + _SHIFT_MARGIN))
 
 
 @_jitable
@@ -1029,9 +1045,8 @@ def _rounded_images(
     """
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
-    per_axis = np.array(inverse_widths)
-    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
-    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
+    lo, hi = _shift_interval(r, d * np.array(inverse_widths))
+    lo, hi = np.ceil(lo), np.floor(hi)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
     return best, lo, hi, search
 

@@ -29,7 +29,6 @@ from .faces import Face, _find_shared_faces
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
 from .atom import Atom
-from .tools import x_pbc
 from pymatgen.core import Structure
 import numpy as np
 from scipy.sparse import csr_array
@@ -69,8 +68,6 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Raises:
             TypeError: If any site is not a ``PolyhedralSite``.
-            ValueError: If a site's reference centre is not three finite
-                numbers.
 
         """
         sites = list(sites)
@@ -138,11 +135,10 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         self.reset_site_occupations()
         for atom in atoms:
             atom.in_site = None
-            pbc_images = x_pbc(atom.frac_coords)
 
             # Check sites in priority order until found
             for site in self._get_priority_sites(atom, lattice_matrix):
-                if site.contains_atom(atom, pbc_images=pbc_images):
+                if site.contains_atom(atom):
                     self.update_occupation(site, atom)
                     break
     
@@ -286,27 +282,10 @@ def _collect_reference_centres(
         - centres is an (N, 3) array of fractional coordinates, or None
           if any site lacks a reference centre.
         - site_indices is a list of site indices.
-
-    Raises:
-        ValueError: If a site has a reference centre that is not three
-            finite numbers, even if another site lacks one.
     """
-    centres = []
-    for s in sites:
-        if s.reference_center is None:
-            continue
-        try:
-            centre = np.asarray(s.reference_center, dtype=np.float64)
-            valid = centre.shape == (3,) and bool(np.isfinite(centre).all())
-        except (TypeError, ValueError):
-            valid = False
-        if not valid:
-            raise ValueError(
-                f"reference centre of site {s.index} must be three finite numbers, "
-                f"got {s.reference_center}")
-        centres.append(centre)
     site_indices = [s.index for s in sites]
-    if len(centres) < len(sites):
+    centres = [s.reference_center for s in sites]
+    if any(centre is None for centre in centres):
         return None, site_indices
     return np.array(centres), site_indices
 

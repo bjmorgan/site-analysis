@@ -295,6 +295,28 @@ class TestCandidateSearch(unittest.TestCase):
         found, metrics = align_structures(reference, target)
         self.assertLess(metrics['rmsd'], 0.15)
 
+    def test_an_unreduced_basis_aligns_as_well_as_a_cubic_one(self):
+        """A noisy cubic sublattice aligns with the same RMSD in the cubic and an unreduced basis."""
+        cubic = 4.0 * np.eye(3)
+        # Rows (1,2,0), (0,1,3), (0,0,1) of the cubic cell: an unreduced basis.
+        unreduced = np.array([[1, 2, 0], [0, 1, 3], [0, 0, 1]]) @ cubic
+        reference = np.array([[i, j, k] for i in (0, 2) for j in (0, 2) for k in (0, 2)],
+                             dtype=float) + 0.3
+        species = ["O"] * len(reference)
+        for seed in range(5):
+            with self.subTest(seed=seed):
+                rng = np.random.default_rng(seed)
+                target = (reference + rng.uniform(-1.0, 1.0, 3)
+                          + rng.uniform(-0.5, 0.5, reference.shape))
+                rmsds = []
+                for lattice_matrix in (cubic, unreduced):
+                    inverse = np.linalg.inv(lattice_matrix)
+                    _, metrics = StructureAligner().align(
+                        (reference @ inverse) % 1.0, species,
+                        (target @ inverse) % 1.0, species, lattice_matrix)
+                    rmsds.append(metrics['rmsd'])
+                self.assertAlmostEqual(rmsds[1], rmsds[0], delta=1e-8)
+
     def test_refinement_finds_the_least_squares_translation(self):
         """With every atom paired with its own image, the result is the shift plus the mean noise."""
         reference = random_framework()

@@ -9,9 +9,10 @@ from __future__ import annotations
 from typing import Callable, Literal, overload
 
 import numpy as np
-from site_analysis.distances import frac_to_cart
+from site_analysis.distances import _as_coords, _as_point, _nearest_image_shifts
 
 from site_analysis._compat import HAS_NUMBA
+
 
 def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
     """Apply the legacy spread-based periodic boundary condition handling.
@@ -56,12 +57,6 @@ def _translate_into_unit_cell(coords: np.ndarray) -> np.ndarray:
     return translated
 
 
-# Generate all 27 possible shifts: [-1,0,1] for each dimension
-_PERIODIC_SHIFTS = np.array([[dx, dy, dz] for dx in [-1, 0, 1]
-                                          for dy in [-1, 0, 1]
-                                          for dz in [-1, 0, 1]],
-                                         dtype=np.int64)
-                                        
 @overload
 def unwrap_vertices_to_reference_center(
     frac_coords: np.ndarray,
@@ -86,8 +81,10 @@ def unwrap_vertices_to_reference_center(
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Vectorised unwrapping of vertices to their closest periodic images relative to a reference centre.
 
-    The vertices and the reference centre may lie in any periodic images,
-    however many cells apart.
+    Each vertex is moved to its periodic image nearest the reference
+    centre, exactly in any cell: the image is found by the search used
+    for minimum-image distances. The vertices and the reference centre
+    may lie in any periodic images, however many cells apart.
 
     Args:
         frac_coords: Array of fractional coordinates with shape (n, 3).
@@ -102,25 +99,24 @@ def unwrap_vertices_to_reference_center(
         whole cells so the lowest coordinate along each axis is in [0, 1).
         If ``return_image_shifts`` is True, returns a tuple of
         ``(unwrapped_coords, image_shifts)``.
+
+    Raises:
+        ValueError: If ``frac_coords`` does not have shape (n, 3) or is not
+            finite, ``reference_center`` is not three finite numbers, a
+            vertex's fractional displacement from the reference centre has
+            a component of 2**52 or more in magnitude, or the lattice is
+            singular, nearly singular, or extremely elongated.
     """
     if frac_coords.size == 0:
         if return_image_shifts:
             return frac_coords, np.zeros((0, 3), dtype=np.int64)
         return frac_coords
 
-    n_vertices = len(frac_coords)
-    # Move each vertex to the image nearest the centre in fractional
-    # coordinates, then search the 27 images around it.
-    base_shifts = np.round(reference_center - frac_coords).astype(np.int64)
-    vertex_images = (frac_coords + base_shifts)[:, np.newaxis, :] + _PERIODIC_SHIFTS[np.newaxis, :, :]
-
-    ref_cart = frac_to_cart(reference_center, lattice_matrix)
-    vertex_images_cart = frac_to_cart(vertex_images.reshape(n_vertices * 27, 3), lattice_matrix)
-    distances = np.linalg.norm(
-        vertex_images_cart - ref_cart, axis=1).reshape(n_vertices, 27)
-
-    best_indices = np.argmin(distances, axis=1)
-    image_shifts: np.ndarray = base_shifts + _PERIODIC_SHIFTS[best_indices]
+    frac_coords = _as_coords(frac_coords, "frac_coords")
+    reference_center = _as_point(reference_center, "reference_center")
+    image_shifts = _nearest_image_shifts(
+        frac_coords - reference_center, lattice_matrix,
+        name="the displacement of each vertex from reference_center")
     result = _translate_into_unit_cell(frac_coords + image_shifts)
 
     if return_image_shifts:
@@ -155,7 +151,13 @@ def correct_pbc(
         shape ``(n, 3)`` and ``image_shifts`` has ``int64`` dtype. The
         image shifts are relative to ``frac_coords`` and exclude the
         whole-cell translation applied to ``corrected_coords``.
+
+    Raises:
+        ValueError: If ``frac_coords`` does not have shape (n, 3) or is not
+            finite, or if ``reference_center`` is not None and
+            ``unwrap_vertices_to_reference_center`` rejects the input.
     """
+    frac_coords = _as_coords(frac_coords, "frac_coords")
     if frac_coords.size == 0:
         return frac_coords, np.zeros((0, 3), dtype=np.int64)
     if reference_center is not None:
@@ -174,12 +176,10 @@ def _numpy_update_pbc_shifts(
 ) -> tuple[bool, np.ndarray, np.ndarray]:
     """Incrementally update cached PBC image shifts between frames.
 
-    Full PBC unwrapping is expensive because it evaluates all 27
-    periodic images per coordinate. Between successive MD frames,
-    atoms typically move by small amounts, so the integer image
-    shifts rarely change. This function detects coordinate wraps
-    (jumps of ~1.0 in fractional coordinates) and adjusts shifts
-    accordingly, avoiding the full 27-image search.
+    Between successive MD frames, atoms typically move by small amounts,
+    so the integer image shifts rarely change. This function detects
+    coordinate wraps (jumps of ~1.0 in fractional coordinates) and
+    adjusts shifts accordingly, avoiding the full nearest-image search.
 
     If any coordinate has moved by more than 0.3 fractional units
     (after accounting for wrapping), the cache is considered invalid
@@ -198,11 +198,10 @@ def _numpy_update_pbc_shifts(
         the caller should perform a full recomputation.
     """
     diff = frac_coords - cached_raw_frac
-    wrapping = np.round(diff).astype(np.int64)
-    physical_diff = diff - wrapping
-    if not np.all(np.abs(physical_diff) < 0.3):
+    wrapping = np.round(diff)
+    if not np.all(np.abs(diff - wrapping) < 0.3):
         return False, frac_coords, image_shifts
-    new_shifts = image_shifts - wrapping
+    new_shifts = image_shifts - wrapping.astype(np.int64)
     return True, _translate_into_unit_cell(frac_coords + new_shifts), new_shifts
 
 
@@ -233,7 +232,7 @@ if HAS_NUMBA:
                 diff = frac_coords[i, k] - cached_raw_frac[i, k]
                 w = int(np.round(diff))
                 physical = diff - w
-                if physical >= 0.3 or physical <= -0.3:
+                if not (abs(physical) < 0.3):
                     return False, frac_coords, image_shifts
                 new_shifts[i, k] = image_shifts[i, k] - w
         shifted = np.empty((n, 3))

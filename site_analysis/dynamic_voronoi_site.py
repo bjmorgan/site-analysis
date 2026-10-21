@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 from .site import Site
 from .atom import Atom
+from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc
 
 class DynamicVoronoiSite(Site):
@@ -33,6 +34,7 @@ class DynamicVoronoiSite(Site):
             the dynamic centre of the site.
         centre_coords (np.ndarray or None): Fractional coordinates of the dynamically 
             calculated site centre. This is None initially and calculated on demand.
+        reference_center (np.ndarray or None): Optional reference centre for PBC handling.
             
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
@@ -53,11 +55,18 @@ class DynamicVoronoiSite(Site):
         Args:
             reference_indices: List of atom indices whose positions will be used to dynamically calculate the centre of this site.
             label: Optional label for this site.
-            reference_center: Optional reference centre for PBC handling.
+            reference_center: Optional reference centre for PBC handling,
+                three finite numbers, stored as a float array.
         
         Returns:
             None
+
+        Raises:
+            ValueError: If reference_center is not None and not three
+                finite numbers.
         """
+        if reference_center is not None:
+            reference_center = _as_point(reference_center, "reference_center")
         super(DynamicVoronoiSite, self).__init__(label=label)
         self.reference_indices = reference_indices
         self._centre_coords: np.ndarray | None = None
@@ -137,7 +146,9 @@ class DynamicVoronoiSite(Site):
     def as_dict(self) -> dict:
         """Dictionary of this site's attributes, which may contain numpy arrays.
 
-        For example, the recorded ``points`` are numpy arrays.
+        For example, the recorded ``points`` are numpy arrays. It also contains
+        the ``reference_center`` as a list of three floats (``None`` if the site
+        has none) and, if it has been calculated, the ``centre_coords``.
         
         Args:
             None
@@ -147,6 +158,8 @@ class DynamicVoronoiSite(Site):
         """
         d = super(DynamicVoronoiSite, self).as_dict()
         d['reference_indices'] = self.reference_indices
+        d['reference_center'] = (
+            None if self.reference_center is None else self.reference_center.tolist())
         if self._centre_coords is not None:
             d['centre_coords'] = self._centre_coords.tolist()
         return d
@@ -154,14 +167,22 @@ class DynamicVoronoiSite(Site):
     @classmethod
     def from_dict(cls, d: dict) -> DynamicVoronoiSite:
         """Create a DynamicVoronoiSite object from a dict representation.
+
+        A dict without a ``reference_center`` key, as written by earlier
+        versions, gives a site with no reference centre.
         
         Args:
             d (dict): The dict representation of this Site.
             
         Returns:
             DynamicVoronoiSite: A new DynamicVoronoiSite instance.
+
+        Raises:
+            ValueError: If ``reference_center`` is not None and not three
+                finite numbers.
         """
-        site = cls(reference_indices=d['reference_indices'])
+        site = cls(reference_indices=d['reference_indices'],
+                   reference_center=d.get('reference_center'))
         site.label = d.get('label')
         site.contains_atoms = d.get('contains_atoms', [])
         site.trajectory = d.get('trajectory', [])

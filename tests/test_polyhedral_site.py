@@ -3,7 +3,7 @@ import warnings
 
 import pytest
 
-from site_analysis.polyhedral_site import PolyhedralSite, _HullTriangleCache
+from site_analysis.polyhedral_site import PolyhedralSite, _HullTriangleCache, _image_shifts
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.atom import Atom
 from site_analysis.site import Site
@@ -13,7 +13,21 @@ from collections import Counter
 from scipy.spatial import Delaunay
 from pymatgen.core import Structure, Lattice
 
+# Containment with numba where it is installed, and with Delaunay tessellation.
+BACKENDS = [True, False] if HAS_NUMBA else [False]
+
+
 class PolyhedralSiteTestCase(unittest.TestCase):
+
+    INVALID_REFERENCE_CENTRES = {
+        "NaN": [np.nan, 0.5, 0.6],
+        "infinite": [np.inf, 0.5, 0.6],
+        "two numbers": [0.4, 0.5],
+        "text": "abc",
+        "ragged": [[0.1, 0.2], [0.3]],
+        "complex": [1 + 1j, 0.0, 0.0],
+        "integer too large for a float": [10 ** 400, 0.0, 0.0],
+    }
 
     def setUp(self):
         Site._newid = 1
@@ -228,12 +242,9 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                        [0.6, 0.4, 0.6]])
         site._hull_triangle_cache = None
         site._contains_point_delaunay = Mock(return_value=True)
-        x = np.array([0.5, 0.5, 0.5])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
-            result = site.contains_point(x)
-            site._contains_point_delaunay.assert_called_once()
-            self.assertTrue(result)
+        result = site.contains_point(np.array([0.5, 0.5, 0.5]))
+        site._contains_point_delaunay.assert_called_once()
+        self.assertTrue(result)
 
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_contains_point_uses_cache_when_available(self):
@@ -243,14 +254,12 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
         mock_cache = Mock()
+        mock_cache.image_shifts = np.zeros((1, 3), dtype=int)
         mock_cache.contains_point.return_value = True
         site._hull_triangle_cache = mock_cache
-        x = np.array([0.5, 0.5, 0.5])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
-            result = site.contains_point(x)
-            mock_cache.contains_point.assert_called_once()
-            self.assertTrue(result)
+        result = site.contains_point(np.array([0.5, 0.5, 0.5]))
+        mock_cache.contains_point.assert_called_once()
+        self.assertTrue(result)
 
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_contains_point_creates_cache_lazily(self):
@@ -314,41 +323,35 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                                             [0.5, 0.5, 0.5]]))
             self.assertTrue(in_site)
 
-    def test_contains_point_uses_provided_pbc_images(self):
-        """contains_point skips x_pbc when pbc_images is provided."""
+    def test_contains_point_pbc_images_parameter_is_ignored_and_warns(self):
+        """pbc_images emits a DeprecationWarning and the point's own images are tested."""
         site = self.site
         site.vertex_coords = np.array([[0.4, 0.4, 0.4],
                                        [0.4, 0.6, 0.6],
                                        [0.6, 0.6, 0.4],
                                        [0.6, 0.4, 0.6]])
-        precomputed = np.array([[0.5, 0.5, 0.5]])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            site.contains_point(np.array([0.5, 0.5, 0.5]), pbc_images=precomputed)
-            mock_x_pbc.assert_not_called()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            inside = site.contains_point(
+                np.array([0.1, 0.1, 0.1]), pbc_images=np.array([[0.5, 0.5, 0.5]]))
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("pbc_images", str(w[0].message))
+        self.assertFalse(inside)
 
-    def test_contains_point_calls_x_pbc_when_no_pbc_images(self):
-        """contains_point computes x_pbc when pbc_images is not provided."""
-        site = self.site
-        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
-                                       [0.4, 0.6, 0.6],
-                                       [0.6, 0.6, 0.4],
-                                       [0.6, 0.4, 0.6]])
-        x = np.array([0.5, 0.5, 0.5])
-        with patch('site_analysis.polyhedral_site.x_pbc', autospec=True) as mock_x_pbc:
-            mock_x_pbc.return_value = np.array([[0.5, 0.5, 0.5]])
-            site.contains_point(x)
-            mock_x_pbc.assert_called_once_with(x)
-
-    def test_contains_atom_forwards_pbc_images(self):
-        """contains_atom passes pbc_images through to contains_point."""
+    def test_contains_atom_pbc_images_parameter_emits_deprecation_warning(self):
+        """contains_atom warns for pbc_images and does not pass it on."""
         atom = Mock(spec=Atom)
         atom.frac_coords = np.array([0.3, 0.4, 0.5])
         site = self.site
         site.contains_point = Mock(return_value=True)
-        precomputed = np.array([[0.3, 0.4, 0.5]])
-        site.contains_atom(atom, pbc_images=precomputed)
-        call_kwargs = site.contains_point.call_args[1]
-        np.testing.assert_array_equal(call_kwargs['pbc_images'], precomputed)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            site.contains_atom(atom, pbc_images=np.array([[0.3, 0.4, 0.5]]))
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("pbc_images", str(w[0].message))
+        self.assertEqual(site.contains_point.call_args.kwargs, {})
 
     def test_contains_atom_algo_parameter_emits_deprecation_warning(self):
         atom = Mock(spec=Atom)
@@ -431,6 +434,20 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
         self.assertEqual(site.vertex_indices, [0, 1, 2, 3])
 
+    def test_init_rejects_a_reference_centre_that_is_not_three_finite_numbers(self):
+        """A reference centre that is not three finite numbers raises ValueError."""
+        for name, value in self.INVALID_REFERENCE_CENTRES.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(
+                        ValueError, "^reference_center must be three finite numbers, got "):
+                    PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=value)
+
+    def test_init_stores_the_reference_centre_as_a_float_array(self):
+        """A reference centre given as a list is stored as a float64 array."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0, 0.5, 1])
+        self.assertEqual(site.reference_center.dtype, np.float64)
+        np.testing.assert_array_equal(site.reference_center, [0.0, 0.5, 1.0])
+
     def test_emptiness_check_with_non_empty_numpy_array(self):
         """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""
         vertex_indices = np.array([0, 1, 2, 3])
@@ -443,7 +460,107 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             PolyhedralSite(vertex_indices)
         self.assertIn("vertex_indices cannot be empty", str(context.exception))
-              
+
+
+class TestContainmentInUnreducedCell(unittest.TestCase):
+    """Tests that containment uses the exactly unwrapped vertices in an unreduced cell."""
+
+    # Rows (1,0,0), (3,1,0), (0,0,1) scaled to Angstrom: an unreduced basis.
+    LATTICE_MATRIX = 4.0 * np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    RAW_FRAC_COORDS = np.array([
+        [0.6, 0.6, 0.5],
+        [0.4, 0.0, 0.7],
+        [0.5, 0.8, 0.4],
+        [0.3, 0.0, 0.4],
+    ])
+    REFERENCE_CENTER = np.array([0.0, 0.0, 0.5])
+    # The images nearest the reference centre, from a brute-force search.
+    NEAREST_IMAGES = np.array([
+        [1.6, -0.4, 0.5],
+        [0.4, 0.0, 0.7],
+        [0.5, -0.2, 0.4],
+        [0.3, 0.0, 0.4],
+    ])
+
+    def test_site_contains_its_centroid(self):
+        """Vertices unwrapped to their nearest images in an unreduced cell enclose their centroid."""
+        centroid = self.NEAREST_IMAGES.mean(axis=0) % 1.0
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=self.REFERENCE_CENTER)
+        site.assign_vertex_coords(self.RAW_FRAC_COORDS, self.LATTICE_MATRIX)
+        self.assertTrue(site.contains_point(centroid))
+
+    def test_site_spanning_more_than_two_cells_contains_a_point_near_its_far_vertex(self):
+        """A site whose vertices span x from 0.9 to 2.2 contains a point near the vertex at x = 2.2."""
+        translation = np.array([0.6, 0.0, 0.0])
+        vertices = self.NEAREST_IMAGES + translation
+        point = (0.8 * vertices[0] + 0.2 * vertices.mean(axis=0)) % 1.0
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedral_site.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                      reference_center=self.REFERENCE_CENTER + translation)
+                site.assign_vertex_coords(self.RAW_FRAC_COORDS + translation, self.LATTICE_MATRIX)
+                self.assertTrue(site.contains_point(point))
+
+
+class TestContainmentImageLimit(unittest.TestCase):
+    """Tests that containment rejects a site whose vertices span more cells than it will test."""
+
+    def test_image_shifts_rejects_vertices_spanning_too_many_cells(self):
+        """Vertices spanning 1001 cells along x are rejected, naming the cells spanned."""
+        vertices = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        with self.assertRaisesRegex(ValueError, r"span \[1001, 1, 1\] cells"):
+            _image_shifts(vertices)
+
+    def test_image_shifts_allows_vertices_spanning_the_limit(self):
+        """Vertices spanning 10 cells along each axis give 1000 shifts."""
+        vertices = _TETRAHEDRON + [[0.0, 0.0, 0.0], [9.0, 0.0, 0.0], [0.0, 9.0, 0.0], [0.0, 0.0, 9.0]]
+        self.assertEqual(_image_shifts(vertices).shape, (1000, 3))
+
+    def test_contains_point_rejects_a_site_spanning_too_many_cells(self):
+        """contains_point raises ValueError for a site spanning 1001 cells, with and without numba."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedral_site.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site.vertex_coords = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
+                                                     [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+                with self.assertRaisesRegex(ValueError, r"vertices span \[1001, 1, 1\] cells"):
+                    site.contains_point(np.array([0.5, 0.5, 0.5]))
+
+    def test_delaunay_path_computes_image_shifts_once_per_vertex_assignment(self):
+        """Without numba, the image shifts are computed on the first test after each assignment only."""
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=np.array([0.5, 0.5, 0.5]))
+        with patch('site_analysis.polyhedral_site.HAS_NUMBA', False), \
+                patch('site_analysis.polyhedral_site._image_shifts',
+                      wraps=_image_shifts) as shifts:
+            site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+            for _ in range(3):
+                site.contains_point(np.array([0.5, 0.5, 0.5]))
+            self.assertEqual(shifts.call_count, 1)
+            site.assign_vertex_coords(_TETRAHEDRON + 0.01, lattice_matrix)
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
+            self.assertEqual(shifts.call_count, 2)
+
+
+class TestContainmentOfPointsInAnyImage(unittest.TestCase):
+    """Tests that containment does not depend on the periodic image a point is given in."""
+
+    def test_point_in_another_image_is_contained(self):
+        """A point is contained in whichever periodic image it is given."""
+        vertices = np.array([[0.4, 0.5, 0.5], [0.6, 0.5, 0.5], [0.5, 0.4, 0.5],
+                             [0.5, 0.6, 0.5], [0.5, 0.5, 0.4], [0.5, 0.5, 0.6]])
+        for has_numba in BACKENDS:
+            with patch('site_analysis.polyhedral_site.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=range(6),
+                                      reference_center=np.array([0.5, 0.5, 0.5]))
+                site.assign_vertex_coords(vertices, Lattice.cubic(10.0).matrix)
+                for point in ([0.5, 0.5, 0.5], [1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
+                    with self.subTest(numba=has_numba, point=point):
+                        self.assertTrue(site.contains_point(np.array(point)))
+
+
 class TestNotifyStructureChanged(unittest.TestCase):
     """Tests for lazy coordinate assignment via notify_structure_changed."""
 
@@ -576,6 +693,29 @@ class TestStoreVertexCoords(unittest.TestCase):
                             tetrahedron + offset + 0.005, self.lattice_matrix)
                     self.assertTrue(site.contains_point(centre))
 
+    def test_non_finite_coordinates_raise_without_reference_centre(self):
+        """A site without a reference centre rejects a NaN vertex coordinate."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac = np.array([[0.1, 0.1, 0.1],
+                         [0.2, 0.2, 0.2],
+                         [0.3, np.nan, 0.3],
+                         [0.4, 0.4, 0.4]])
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site._store_vertex_coords(frac, self.lattice_matrix)
+
+    def test_non_finite_coordinates_raise_on_a_later_frame(self):
+        """A NaN vertex coordinate is rejected when cached shifts exist from an earlier frame."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        frac1 = np.array([[0.1, 0.1, 0.1],
+                          [0.2, 0.2, 0.2],
+                          [0.3, 0.3, 0.3],
+                          [0.4, 0.4, 0.4]])
+        site._store_vertex_coords(frac1, self.lattice_matrix)
+        frac2 = frac1.copy()
+        frac2[2, 1] = np.nan
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site._store_vertex_coords(frac2, self.lattice_matrix)
+
     @unittest.skipUnless(HAS_NUMBA, "numba not available")
     def test_cache_stale_triggers_update_after_store_vertex_coords(self):
         """After _store_vertex_coords sets _cache_stale, the next
@@ -690,6 +830,33 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         self.assertEqual(reconstructed.vertex_indices, original.vertex_indices)
         self.assertEqual(reconstructed.label, original.label)
         np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
+
+    def test_round_trip_preserves_reference_center(self):
+        """A reference centre survives as_dict -> from_dict."""
+        original = PolyhedralSite(
+            vertex_indices=[0, 1, 2, 3], reference_center=np.array([0.25, 0.5, 0.75]))
+
+        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+
+        np.testing.assert_array_equal(
+            reconstructed.reference_center, original.reference_center)
+
+    def test_round_trip_without_reference_center_gives_none(self):
+        """A site with no reference centre reloads with none."""
+        original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+
+        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+
+        self.assertIsNone(reconstructed.reference_center)
+
+    def test_from_dict_without_reference_center_key_gives_none(self):
+        """A dict written before reference centres were saved still loads."""
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        del site_dict['reference_center']
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertIsNone(site.reference_center)
         
     def test_polyhedral_site_init_with_reference_center(self):
         """Test PolyhedralSite can be initialised with a reference centre."""
@@ -749,16 +916,6 @@ _OCTAHEDRON = np.array([
     [0.5, 0.5, 0.4],
 ])
 
-_PBC_SHIFTS = np.array([
-    [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-    [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1],
-])
-
-
-def _x_pbc(x: np.ndarray) -> np.ndarray:
-    return _PBC_SHIFTS + x
-
-
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
 class TestHullTriangleCache(unittest.TestCase):
     """Tests for _HullTriangleCache with numba acceleration."""
@@ -783,25 +940,44 @@ class TestHullTriangleCache(unittest.TestCase):
         cache.update(perturbed)
         np.testing.assert_array_equal(cache.triangles, original_simplices)
 
+    def test_image_shifts_cover_every_cell_the_vertices_span(self):
+        """The image shifts run from 0 to 2 along x for vertices spanning x from 0.4 to 2.6."""
+        cache = _HullTriangleCache(_TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+        self.assertEqual(sorted(set(cache.image_shifts[:, 0])), [0, 1, 2])
+
     def test_contains_point_inside_tetrahedron(self):
         cache = _HullTriangleCache(_TETRAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_tetrahedron(self):
         cache = _HullTriangleCache(_TETRAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
 
     def test_contains_point_inside_octahedron(self):
         cache = _HullTriangleCache(_OCTAHEDRON)
         point_inside = np.array([0.5, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
 
     def test_contains_point_outside_octahedron(self):
         cache = _HullTriangleCache(_OCTAHEDRON)
         point_outside = np.array([0.1, 0.1, 0.1])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
+
+    def test_contains_point_in_another_image(self):
+        """A point is contained in whichever periodic image it is given."""
+        cache = _HullTriangleCache(_TETRAHEDRON)
+        for point in ([1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
+            with self.subTest(point=point):
+                self.assertTrue(cache.contains_point(np.array(point)))
+
+    def test_contains_point_tests_every_image_the_vertices_can_contain(self):
+        """A point near the far vertex of a site spanning x from 0.4 to 2.6 is contained."""
+        cache = _HullTriangleCache(
+            _TETRAHEDRON + [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+        self.assertTrue(cache.contains_point(np.array([0.3, 0.5, 0.5])))
+        self.assertFalse(cache.contains_point(np.array([0.5, 0.2, 0.2])))
 
     def test_contains_point_after_coordinate_update(self):
         """Containment still works after updating coordinates."""
@@ -812,10 +988,10 @@ class TestHullTriangleCache(unittest.TestCase):
         cache.update(shifted)
         # Centre of shifted tetrahedron is now at [0.6, 0.5, 0.5]
         point_inside = np.array([0.6, 0.5, 0.5])
-        self.assertTrue(cache.contains_point(_x_pbc(point_inside)))
+        self.assertTrue(cache.contains_point(point_inside))
         # Original centre is now outside
         point_outside = np.array([0.4, 0.5, 0.5])
-        self.assertFalse(cache.contains_point(_x_pbc(point_outside)))
+        self.assertFalse(cache.contains_point(point_outside))
 
 
 @pytest.mark.skipif(not HAS_NUMBA, reason="numba not installed")
@@ -826,9 +1002,10 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = _HullTriangleCache(_TETRAHEDRON)
-        point_inside = np.array([[0.5, 0.5, 0.5]])
+        point_inside = np.array([0.5, 0.5, 0.5])
         result = _numba_sn_query(
             point_inside,
+            np.zeros((1, 3), dtype=np.int64),
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
@@ -839,23 +1016,38 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = _HullTriangleCache(_TETRAHEDRON)
-        point_outside = np.array([[0.1, 0.1, 0.1]])
+        point_outside = np.array([0.1, 0.1, 0.1])
         result = _numba_sn_query(
             point_outside,
+            np.zeros((1, 3), dtype=np.int64),
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
         )
         self.assertFalse(result)
 
+    def test_query_wraps_the_point_into_the_unit_cell(self):
+        from site_analysis.polyhedral_site import _numba_sn_query
+
+        cache = _HullTriangleCache(_TETRAHEDRON)
+        result = _numba_sn_query(
+            np.array([1.5, -0.5, 2.5]),
+            np.zeros((1, 3), dtype=np.int64),
+            cache._triangle_normals,
+            cache._triangle_ref_points,
+            cache._centre_signs,
+        )
+        self.assertTrue(result)
+
     def test_query_returns_true_if_any_image_inside(self):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = _HullTriangleCache(_TETRAHEDRON)
-        # First point outside, second inside
-        points = np.array([[0.1, 0.1, 0.1], [0.5, 0.5, 0.5]])
+        # First image outside, second inside
+        shifts = np.array([[1, 0, 0], [0, 0, 0]], dtype=np.int64)
         result = _numba_sn_query(
-            points,
+            np.array([0.5, 0.5, 0.5]),
+            shifts,
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,
@@ -866,9 +1058,10 @@ class TestNumbaQuery(unittest.TestCase):
         from site_analysis.polyhedral_site import _numba_sn_query
 
         cache = _HullTriangleCache(_TETRAHEDRON)
-        points = np.array([[0.1, 0.1, 0.1], [0.8, 0.8, 0.9]])
+        shifts = np.array([[0, 0, 0], [1, 1, 1]], dtype=np.int64)
         result = _numba_sn_query(
-            points,
+            np.array([0.1, 0.1, 0.1]),
+            shifts,
             cache._triangle_normals,
             cache._triangle_ref_points,
             cache._centre_signs,

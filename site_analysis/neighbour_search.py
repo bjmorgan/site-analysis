@@ -19,8 +19,8 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from site_analysis.distances import (
-    _inverse_widths,
-    _inverse_widths_are_finite,
+    _as_coords,
+    _check_lattice_matrix,
     _paired_mic_distances,
 )
 
@@ -33,28 +33,6 @@ _ABSOLUTE_TOLERANCE = 1e-12
 # rounding error grows with the coordinates' distance from the cell.
 # Searches are also widened by this multiple of that error bound.
 _ROUNDING_SAFETY = 8.0
-
-
-def _as_coords(coords: np.ndarray, name: str) -> np.ndarray:
-    """Return coordinates as a float64 array of shape (N, 3).
-
-    Args:
-        coords: Coordinates to check.
-        name: Argument name, for the error message.
-
-    Returns:
-        The coordinates as a contiguous float64 array.
-
-    Raises:
-        ValueError: If ``coords`` does not have shape (N, 3) or is not
-            finite.
-    """
-    array = np.ascontiguousarray(coords, dtype=np.float64)
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3), got {array.shape}")
-    if not np.isfinite(array).all():
-        raise ValueError(f"{name} must be finite")
-    return array
 
 
 class PeriodicNeighbourIndex:
@@ -95,17 +73,10 @@ class PeriodicNeighbourIndex:
         """
         self._frac_coords = _as_coords(frac_coords, "frac_coords").copy()
         self._lattice_matrix = np.array(lattice_matrix, dtype=np.float64, order="C")
-        if self._lattice_matrix.shape != (3, 3):
-            raise ValueError(
-                f"lattice_matrix must have shape (3, 3), got {self._lattice_matrix.shape}"
-            )
-        if not np.isfinite(self._lattice_matrix).all():
-            raise ValueError("lattice_matrix must be finite")
-        # The test the distance functions apply, so that no lattice accepted
+        # The checks the distance functions apply, so that no lattice accepted
         # here gives them undefined distances. It also keeps sigma_min well
         # above zero: the relative volume is at most 1.5 times sigma_min.
-        if not _inverse_widths_are_finite(_inverse_widths(self._lattice_matrix.tolist())):
-            raise ValueError("lattice_matrix must not be singular, nearly singular or extremely elongated")
+        _check_lattice_matrix(self._lattice_matrix)
         self._lengths = np.linalg.norm(self._lattice_matrix, axis=1)
         unit_rows = self._lattice_matrix / self._lengths[:, np.newaxis]
         self._sigma_min = float(np.linalg.svd(unit_rows, compute_uv=False).min())

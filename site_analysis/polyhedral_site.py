@@ -476,9 +476,10 @@ class PolyhedralSite(Site):
         if self._triangles is None:
             if self._lattice_matrix is None:
                 raise RuntimeError(
-                    f"polyhedral_site {self.index} has no triangles and its vertex "
-                    "coordinates have no lattice: assign them with assign_vertex_coords "
-                    "or notify_structure_changed, or call set_triangles")
+                    f"Site {self.index} (vertices {self.vertex_indices}): has no "
+                    "triangles and its vertex coordinates have no lattice: assign "
+                    "them with assign_vertex_coords or notify_structure_changed, "
+                    "or call set_triangles")
             try:
                 self._triangles = _surface_triangles(
                     self.vertex_indices, vertex_coords, self._lattice_matrix, ())
@@ -581,7 +582,9 @@ class PolyhedralSite(Site):
             reference_center=d.get('reference_center'))
         if d.get('triangles') is not None:
             polyhedral_site.set_triangles(d['triangles'])
-        polyhedral_site._vertex_coords = d['vertex_coords']
+        polyhedral_site._vertex_coords = (
+            None if d['vertex_coords'] is None
+            else np.asarray(d['vertex_coords'], dtype=float))
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')
         return polyhedral_site

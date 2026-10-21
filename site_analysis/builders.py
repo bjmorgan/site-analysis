@@ -781,7 +781,8 @@ class TrajectoryBuilder:
                 sites overlap, or the atoms two sites share cannot be
                 triangulated identically on both. The message says that this
                 typically means the reference structure has multiple atoms
-                inside the same coordination environment.
+                inside the same coordination environment, or that the site
+                definitions give interpenetrating coordination environments.
             RuntimeError: If a site's reference vertices are degenerate.
         """
         if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
@@ -796,7 +797,10 @@ class TrajectoryBuilder:
         except ValueError as error:
             raise ValueError(
                 f"{error}. This typically means the reference structure has "
-                f"multiple atoms inside the same coordination environment.") from error
+                f"multiple atoms inside the same coordination environment, or "
+                f"that the site definitions (for example the cutoff or "
+                f"n_vertices) give interpenetrating coordination "
+                f"environments.") from error
         return True
 
     def _validate_unique_sites(self, sites: list[Site]) -> None:

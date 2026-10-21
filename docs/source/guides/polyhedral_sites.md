@@ -228,7 +228,7 @@ Transitions record the sites an atom left and entered, not faces, so in a cell t
 
 ## Containment
 
-A site's containment test uses the four planes of each of its tetrahedra (see [Site Boundaries](#site-boundaries)), recomputed from the current vertex coordinates on the site's first test after they change. A point may be given in any periodic image: each of its images in the cells that the site's vertices span is tested. A point exactly on a face shared by two sites is inside both, and goes to the first of them that the [site search](../concepts/site_collections.md#priority-based-assignment-spherical-and-polyhedral) tests.
+A site's containment test uses the four planes of each of its tetrahedra (see [Site Boundaries](#site-boundaries)), recomputed from the current vertex coordinates on the site's first test after they change. A point may be given in any periodic image: each of its images in the cells that the site's vertices span is tested. A point exactly on a face shared by two sites may be counted in both, since each site's copy of a shared atom can differ in the last bit, and goes to the first of them that the [site search](../concepts/site_collections.md#priority-based-assignment-spherical-and-polyhedral) tests.
 
 The test is the same with and without [numba](https://numba.pydata.org/), with identical results. When numba is installed, it runs as JIT-compiled code, which makes per-frame analysis of the argyrodite tutorial trajectory about three times faster:
 

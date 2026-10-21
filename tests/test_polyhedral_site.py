@@ -1,3 +1,4 @@
+import json
 import unittest
 import warnings
 
@@ -855,6 +856,23 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
         np.testing.assert_array_equal(reconstructed._triangles, _TETRAHEDRON_TRIANGLES)
 
+    def test_round_trip_through_json_gives_the_same_containment(self):
+        """A site restored from a dict that has been through JSON tests points as the original does."""
+        points = np.random.default_rng(0).uniform(0.3, 0.7, size=(200, 3))
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                original.set_triangles(_TETRAHEDRON_TRIANGLES)
+                original.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
+                site_dict = original.as_dict()
+                site_dict['vertex_coords'] = site_dict['vertex_coords'].tolist()
+                restored = PolyhedralSite.from_dict(json.loads(json.dumps(site_dict)))
+
+                expected = [original.contains_point(point) for point in points]
+                self.assertTrue(any(expected) and not all(expected))
+                self.assertEqual([restored.contains_point(point) for point in points], expected)
+
     def test_round_trip_without_triangles_gives_none(self):
         """A site with no triangles reloads with none."""
         original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
@@ -874,7 +892,9 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         site = PolyhedralSite.from_dict(site_dict)
 
         self.assertIsNone(site._triangles)
-        with self.assertRaisesRegex(RuntimeError, "assign_vertex_coords"):
+        with self.assertRaisesRegex(
+                RuntimeError,
+                r"^Site \d+ \(vertices \[0, 1, 2, 3\]\): has no triangles.*assign_vertex_coords"):
             site.contains_point(np.array([0.5, 0.5, 0.5]))
 
     def test_round_trip_preserves_reference_center(self):

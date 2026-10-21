@@ -590,11 +590,15 @@ builder = (builder.with_min_atom_distance(0)
 trajectory = builder.build()
 # ValueError: Sites 0 and 1 coincide: they have the same vertex atoms
 # at the same positions. This typically means the reference structure
-# has multiple atoms inside the same coordination environment.
+# has multiple atoms inside the same coordination environment, or that
+# the site definitions (for example the cutoff or n_vertices) give
+# interpenetrating coordination environments.
 
 # ValueError: Site 2 lies inside site 0: all its vertex atoms are
 # vertices of site 0. This typically means the reference structure
-# has multiple atoms inside the same coordination environment.
+# has multiple atoms inside the same coordination environment, or that
+# the site definitions (for example the cutoff or n_vertices) give
+# interpenetrating coordination environments.
 ```
 
 For dynamic Voronoi sites, and for polyhedral sites whenever the position-based check does not apply, the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral). The position-based check is used only when every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition; if any site has a vertex atom that was not (for example, sites added with `with_existing_sites`), the vertex-index check is used for all polyhedral sites:

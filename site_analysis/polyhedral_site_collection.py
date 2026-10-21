@@ -320,6 +320,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))
 
+
 def _site_triangles(
         site: PolyhedralSite,
         coords: np.ndarray,

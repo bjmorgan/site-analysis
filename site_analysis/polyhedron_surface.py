@@ -199,8 +199,8 @@ def _numpy_star_planes(
     through ``o``, and the triangle's own plane, with normal
     ``-(b - a) x (c - a)`` through ``a``. A query tests them in this
     order, so the edge planes, which reject most points outside a
-    tetrahedron, come first. When the centre is strictly on the inner side of every
-    triangle's plane, every normal points into its tetrahedron.
+    tetrahedron, come first. When the centre is strictly on the inner side
+    of every triangle's plane, every normal points into its tetrahedron.
 
     Args:
         vertex_coords: (N_vertices, 3) array of vertex positions.
@@ -681,12 +681,6 @@ class _SurfaceCache:
             triangles: (N_triangles, 3) int64 array of vertex indices per
                 surface triangle, wound as from ``_surface_triangles``.
             vertex_coords: (N_vertices, 3) array of vertex positions.
-
-        Raises:
-            RuntimeError: If the centre is not strictly on the inner side
-                of every triangle's plane.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, from ``_image_shifts``.
         """
         self.triangles: np.ndarray = triangles
         self._normals: np.ndarray
@@ -704,8 +698,6 @@ class _SurfaceCache:
             RuntimeError: If the centre is not strictly on the inner side
                 of every triangle's plane, with the triangles wound as
                 fixed, so that the triangles do not enclose it.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, from ``_image_shifts``.
         """
         planes = _numba_star_planes if HAS_NUMBA else _numpy_star_planes
         normals, ref_points, star_shaped, within_two_cells = planes(vertex_coords, self.triangles)

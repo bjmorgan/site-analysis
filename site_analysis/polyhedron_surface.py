@@ -216,9 +216,10 @@ def _numpy_star_planes(
         [0, 2).
     """
     centre = np.add.accumulate(vertex_coords, axis=0)[-1] / len(vertex_coords)
-    a = vertex_coords[triangles[:, 0]]
-    u = vertex_coords[triangles[:, 1]] - a
-    v = vertex_coords[triangles[:, 2]] - a
+    corners = vertex_coords[triangles]
+    a = corners[:, 0]
+    u = corners[:, 1] - a
+    v = corners[:, 2] - a
     normals = np.empty((len(triangles), 4, 3))
     ref_points = np.empty((len(triangles), 4, 3))
     normals[:, 3, 0] = u[:, 2] * v[:, 1] - u[:, 1] * v[:, 2]
@@ -229,12 +230,11 @@ def _numpy_star_planes(
     to_centre = centre - a
     centre_side = (normals[:, 3, 0] * to_centre[:, 0] + normals[:, 3, 1] * to_centre[:, 1]
                    + normals[:, 3, 2] * to_centre[:, 2])
-    for q in range(3):
-        p = vertex_coords[triangles[:, q]] - centre
-        r = vertex_coords[triangles[:, (q + 1) % 3]] - centre
-        normals[:, q, 0] = p[:, 1] * r[:, 2] - p[:, 2] * r[:, 1]
-        normals[:, q, 1] = p[:, 2] * r[:, 0] - p[:, 0] * r[:, 2]
-        normals[:, q, 2] = p[:, 0] * r[:, 1] - p[:, 1] * r[:, 0]
+    p = corners - centre
+    r = p[:, [1, 2, 0]]
+    normals[:, :3, 0] = p[..., 1] * r[..., 2] - p[..., 2] * r[..., 1]
+    normals[:, :3, 1] = p[..., 2] * r[..., 0] - p[..., 0] * r[..., 2]
+    normals[:, :3, 2] = p[..., 0] * r[..., 1] - p[..., 1] * r[..., 0]
     star_shaped = bool(np.all(centre_side > 0.0))
     within_two_cells = bool(np.all((0.0 <= vertex_coords) & (vertex_coords < 2.0)))
     return normals, ref_points, star_shaped, within_two_cells

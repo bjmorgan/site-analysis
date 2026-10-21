@@ -1,4 +1,5 @@
 import itertools
+import time
 import unittest
 from unittest.mock import patch
 
@@ -6,7 +7,8 @@ import numpy as np
 from scipy.spatial import ConvexHull, Delaunay
 
 from site_analysis._compat import HAS_NUMBA
-from site_analysis.polyhedron_surface import _SurfaceCache, _image_shifts, _surface_triangles
+from site_analysis.polyhedron_surface import (
+    _SurfaceCache, _first_overlap, _image_shifts, _surface_triangles)
 
 if HAS_NUMBA:
     from site_analysis.polyhedron_surface import (
@@ -48,6 +50,151 @@ def _hexagonal_prism(bottom_dents: list[float]) -> np.ndarray:
                         np.full(6, 0.3)], axis=1)
     bottom = hexagon + np.outer(bottom_dents, [0.0, 0.0, 1.0])
     return np.vstack([bottom, hexagon + [0.0, 0.0, 0.4]])
+
+
+# A 10 Angstrom cubic cell, in which cubes of edge 0.25 have corner i at
+# offsets ((i >> 2) & 1, (i >> 1) & 1, i & 1), and the standard deviation of
+# each fractional component of about 0.1 Angstrom of noise.
+_LATTICE = np.eye(3) * 10.0
+_EDGE = 0.25
+_CORNERS = np.array([[(i >> 2) & 1, (i >> 1) & 1, i & 1] for i in range(8)])
+_NOISE = 0.1 / 10.0 / np.sqrt(3)
+
+
+def _site(atoms: list[int], coords: np.ndarray,
+          shared: list[list[int]] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """The coordinates of a site and its surface triangles in the 10 Angstrom cell."""
+    return coords, _surface_triangles(atoms, coords, _LATTICE, shared or [])
+
+
+def _overlap(sites: list[tuple[np.ndarray, np.ndarray]]) -> tuple[int, int] | None:
+    """The first overlapping pair of sites given as (coordinates, triangles)."""
+    return _first_overlap([coords for coords, _ in sites], [t for _, t in sites])
+
+
+def _cube_grid(origins: list[tuple[int, int, int]], period: int, offset: float,
+               noise_seed: int | None = None) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Cubes on a periodic grid of atoms, sharing every face that two of them have.
+
+    Atom g, a point of the grid taken modulo ``period``, is at
+    ``offset + 0.25 g`` plus its own noise, so atoms shared by two cubes
+    move together.
+    """
+    rng = np.random.default_rng(noise_seed)
+    noise = (rng.normal(scale=_NOISE, size=(period ** 3, 3)) if noise_seed is not None
+             else np.zeros((period ** 3, 3)))
+    cubes = []
+    for origin in origins:
+        points = np.array(origin) + _CORNERS
+        atoms = (np.mod(points, period) @ [period ** 2, period, 1]).tolist()
+        faces = [[atoms[i] for i in range(8) if _CORNERS[i, axis] == side]
+                 for axis in range(3) for side in (0, 1)]
+        cubes.append((atoms, offset + _EDGE * points + noise[atoms], faces))
+    face_counts: dict[frozenset[int], int] = {}
+    for _, _, faces in cubes:
+        for face in faces:
+            face_counts[frozenset(face)] = face_counts.get(frozenset(face), 0) + 1
+    return [_site(atoms, coords, [f for f in faces if face_counts[frozenset(f)] > 1])
+            for atoms, coords, faces in cubes]
+
+
+def _rotate_about_line(points: np.ndarray, start: np.ndarray, end: np.ndarray,
+                       angle: float) -> np.ndarray:
+    """The points rotated by angle about the line through start and end."""
+    axis = (end - start) / np.linalg.norm(end - start)
+    p = points - start
+    rotated = (p * np.cos(angle) + np.cross(axis, p) * np.sin(angle)
+               + np.outer(p @ axis, axis) * (1.0 - np.cos(angle)))
+    return rotated + start
+
+
+class TestFirstOverlap(unittest.TestCase):
+
+    def test_cubes_sharing_a_square_do_not_overlap(self):
+        """Two cubes sharing a square, exact or noisy, do not overlap."""
+        for noise_seed in (None, 0, 1, 2):
+            with self.subTest(noise_seed=noise_seed):
+                cubes = _cube_grid([(0, 0, 0), (1, 0, 0)], period=4, offset=0.3,
+                                   noise_seed=noise_seed)
+                self.assertIsNone(_overlap(cubes))
+
+    def test_tetrahedron_on_half_of_a_noisy_square_does_not_overlap_the_cube(self):
+        """A tetrahedron sharing half of a noisy cube's square does not overlap the cube."""
+        for seed in range(10):
+            with self.subTest(seed=seed):
+                rng = np.random.default_rng(seed)
+                apex = [_EDGE / 3, _EDGE / 3, -0.8 * _EDGE]
+                coords = (0.3 + np.vstack([_EDGE * _CORNERS, apex])
+                          + rng.normal(scale=_NOISE, size=(9, 3)))
+                shared = [[0, 2, 4]]
+                cube = _site(list(range(8)), coords[:8], shared)
+                tetrahedron = _site([0, 2, 4, 8], coords[[0, 2, 4, 8]], shared)
+                self.assertIsNone(_overlap([cube, tetrahedron]))
+
+    def test_tetrahedra_on_one_side_of_a_shared_base_overlap(self):
+        """Two tetrahedra on the same base triangle, both apexes on the same side, overlap."""
+        coords = np.array([[0.3, 0.3, 0.3], [0.55, 0.3, 0.3], [0.3, 0.55, 0.3],
+                           [0.38, 0.38, 0.55], [0.4, 0.36, 0.45]])
+        shared = [[0, 1, 2]]
+        sites = [_site([0, 1, 2, 3], coords[[0, 1, 2, 3]], shared),
+                 _site([0, 1, 2, 4], coords[[0, 1, 2, 4]], shared)]
+        self.assertEqual(_overlap(sites), (0, 1))
+
+    def test_tetrahedron_cutting_a_corner_of_a_cube_overlaps_it(self):
+        """A tetrahedron sharing the three neighbours of a cube's corner, apex beyond it, overlaps the cube."""
+        rng = np.random.default_rng(3)
+        coords = (0.3 + np.vstack([_EDGE * _CORNERS, np.full(3, -0.5 * _EDGE)])
+                  + rng.normal(scale=_NOISE, size=(9, 3)))
+        shared = [[1, 2, 4]]
+        cube = _site(list(range(8)), coords[:8], shared)
+        self.assertIn((1, 2, 4), {tuple(sorted(t)) for t in cube[1].tolist()})
+        tetrahedron = _site([1, 2, 4, 8], coords[[1, 2, 4, 8]], shared)
+        self.assertEqual(_overlap([cube, tetrahedron]), (0, 1))
+
+    def test_interpenetrating_octahedra_sharing_an_edge_overlap(self):
+        """Two octahedra sharing an edge, one rotated by 90 degrees about it, overlap."""
+        octahedron = 0.5 + 0.15 * np.array([[1, 0, 0], [0, 1, 0], [-1, 0, 0],
+                                            [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=float)
+        rotated = _rotate_about_line(octahedron[2:], octahedron[0], octahedron[1], np.pi / 2)
+        sites = [_site(list(range(6)), octahedron),
+                 _site([0, 1, 6, 7, 8, 9], np.vstack([octahedron[:2], rotated]))]
+        self.assertEqual(_overlap(sites), (0, 1))
+
+    def test_cubes_sharing_a_square_across_the_cell_boundary(self):
+        """Cubes sharing a square across the boundary do not overlap; shifted to interpenetrate, they do."""
+        cubes = _cube_grid([(3, 0, 0), (0, 0, 0)], period=4, offset=0.0)
+        self.assertIsNone(_overlap(cubes))
+        (coords, triangles), (other_coords, _) = cubes
+        shifted = other_coords - [0.1, 0.0, 0.0]
+        atoms = (np.mod(_CORNERS, 4) @ [16, 4, 1]).tolist()
+        interpenetrating = _site(atoms, shifted, [[atoms[i] for i in range(4)]])
+        self.assertEqual(_overlap([(coords, triangles), interpenetrating]), (0, 1))
+
+    def test_site_spanning_more_than_a_cell_overlaps_its_own_image(self):
+        """An octahedron 1.2 cells long overlaps its image one cell along."""
+        coords = 0.5 + np.array([[0.6, 0, 0], [-0.6, 0, 0], [0, 0.1, 0],
+                                 [0, -0.1, 0], [0, 0, 0.1], [0, 0, -0.1]])
+        self.assertEqual(_overlap([_site(list(range(6)), coords)]), (0, 0))
+
+    def test_first_overlapping_pair_in_ascending_order(self):
+        """When sites 0 and 2 and sites 1 and 2 overlap, the pair (0, 2) is returned."""
+        base = np.array([[0.3, 0.3, 0.3], [0.55, 0.3, 0.3], [0.3, 0.55, 0.3]])
+        sites = [_site([0, 1, 2, 3], np.vstack([base, [0.35, 0.35, 0.55]])),
+                 _site([4, 5, 6, 7], np.vstack([base + [0.0, 0.0, 0.3], [0.35, 0.35, 0.75]])),
+                 _site([8, 9, 10, 11], np.vstack([base + [0.0, 0.0, 0.1], [0.35, 0.35, 0.8]]))]
+        self.assertEqual(_overlap(sites), (0, 2))
+
+    def test_no_sites_do_not_overlap(self):
+        """An empty set of sites gives None."""
+        self.assertIsNone(_first_overlap([], []))
+
+    def test_grid_of_noisy_cubes_filling_the_cell_does_not_overlap(self):
+        """A 4x4x4 grid of face-sharing noisy cubes filling the cell does not overlap, in under 2 s."""
+        cubes = _cube_grid(list(itertools.product(range(4), repeat=3)), period=4,
+                           offset=0.0, noise_seed=0)
+        start = time.perf_counter()
+        self.assertIsNone(_overlap(cubes))
+        self.assertLess(time.perf_counter() - start, 2.0)
 
 
 class TestSurfaceTriangles(unittest.TestCase):

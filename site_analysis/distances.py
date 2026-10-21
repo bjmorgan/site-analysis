@@ -16,8 +16,9 @@ import numpy as np
 from site_analysis._compat import HAS_NUMBA
 
 
-# Shift ranges are widened by this fraction of a cell, so that rounding
-# cannot leave out an image that might be the nearest.
+# Shift ranges are widened by this fraction of a cell at each end, which
+# exceeds the rounding in their ends for ranges of fewer than about 2**23
+# cells.
 _SHIFT_MARGIN = 1e-9
 
 # A cell whose volume is below this fraction of the product of its edge
@@ -34,8 +35,8 @@ _MIN_RELATIVE_VOLUME = 1e-8
 # below 1e4.
 _MAX_ELONGATION = 2.0 ** 50
 
-# Floats this large or larger are whole numbers, so they are their own
-# nearest integer. numba rounds to a 64-bit integer, which would overflow.
+# Floats this large or larger are whole numbers. The shift functions, which
+# return 64-bit integers, accept displacements smaller than this.
 _WHOLE_NUMBER_LIMIT = 2.0 ** 52
 
 # Boxes of more than this many shifts are searched by enumerating the ball
@@ -201,51 +202,88 @@ def _inverse_widths_are_finite(inverse_widths: tuple[float, float, float]) -> bo
 
 
 @_jitable
-def _round_half_up(f: float) -> int:
+def _round_half_up(f: _T) -> _T:
     """The whole number nearest ``f``, with halves rounded up.
 
     Args:
-        f: A finite number smaller than ``_WHOLE_NUMBER_LIMIT`` in
-            magnitude.
+        f: A finite number, or an array of them.
 
     Returns:
-        ``round(f)``, plus one if ``f`` is exactly halfway between two
-        whole numbers and ``round`` chose the lower (even) one.
+        ``np.rint(f)``, plus one where ``f`` is exactly halfway between two
+        whole numbers and ``np.rint`` chose the lower (even) one, as a
+        float of the same type as ``f``.
     """
-    n = round(f)
-    if f - n == 0.5:
-        n += 1
-    return n
+    n: _T = np.rint(f)
+    rounded: _T = n + (f - n == 0.5)
+    return rounded
 
 
 @_jitable
-def _wrap(f: float) -> float:
+def _wrap(f: _T) -> _T:
     """A fractional coordinate minus its nearest whole number.
 
     Args:
-        f: A finite fractional coordinate or displacement.
+        f: A finite fractional coordinate or displacement, or an array of
+            them.
 
     Returns:
-        ``f - round(f)``, in ``[-0.5, 0.5]``, with halves rounded to even.
+        ``f - np.rint(f)``, in ``[-0.5, 0.5]``, with halves rounded to
+        even, of the same type as ``f``.
     """
-    if abs(f) >= _WHOLE_NUMBER_LIMIT:
-        return 0.0
-    return f - round(f)
+    wrapped: _T = f - np.rint(f)
+    return wrapped
 
 
 @_jitable
-def _wrap_half_up(f: float) -> float:
+def _wrap_half_up(f: _T) -> _T:
     """A fractional coordinate minus its nearest whole number, halves rounded up.
 
     Args:
-        f: A finite number smaller than ``_WHOLE_NUMBER_LIMIT`` in
-            magnitude.
+        f: A finite number, or an array of them.
 
     Returns:
-        ``f - _round_half_up(f)``, in ``[-0.5, 0.5)``, exactly: the same
-        whichever whole number is added to ``f``.
+        ``f - _round_half_up(f)``, in ``[-0.5, 0.5)``, of the same type as
+        ``f``. Adding a whole number to ``f`` leaves the result unchanged
+        when the sum is exactly representable.
     """
-    return f - _round_half_up(f)
+    wrapped: _T = f - _round_half_up(f)
+    return wrapped
+
+
+@_jitable
+def _shift_interval(centre: _T, half_width: _T) -> tuple[_T, _T]:
+    """The interval of shifts ``n`` with ``|centre + n| <= half_width``, widened.
+
+    Each end is moved outwards by ``_SHIFT_MARGIN``, which exceeds the
+    rounding in the ends for intervals of fewer than about 2**23 cells.
+
+    Args:
+        centre: The coordinate before shifting, a float or an array.
+        half_width: The largest coordinate allowed after shifting, of the
+            same type as ``centre``.
+
+    Returns:
+        ``(lo, hi)``, the ends of the interval, of the same type as
+        ``centre``. The integer shifts in it run from ``ceil(lo)`` to
+        ``floor(hi)``.
+    """
+    return -half_width - centre - _SHIFT_MARGIN, half_width - centre + _SHIFT_MARGIN
+
+
+@_jitable
+def _shift_range(centre: float, half_width: float) -> tuple[int, int]:
+    """The integer shifts ``n`` with ``|centre + n| <= half_width``.
+
+    Args:
+        centre: The coordinate before shifting.
+        half_width: The largest coordinate allowed after shifting.
+
+    Returns:
+        ``(lo, hi)``, the inclusive range of shifts, the integers in the
+        interval from ``_shift_interval``.
+    """
+    lo, hi = _shift_interval(centre, half_width)
+    return math.ceil(lo), math.floor(hi)
 
 
 @_jitable
@@ -259,8 +297,8 @@ def _shift_bounds(
     """The box of integer shifts that holds every image within a distance.
 
     An image ``r + n`` at most ``d`` away has
-    ``|r_i + n_i| <= d * inverse_widths[i]`` on each axis. The ranges are widened
-    by ``_SHIFT_MARGIN`` so that rounding cannot leave out a shift.
+    ``|r_i + n_i| <= d * inverse_widths[i]`` on each axis, so the box is
+    the ``_shift_range`` of each axis.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -275,12 +313,10 @@ def _shift_bounds(
         on each axis. Each range contains 0 when ``d`` is the length of
         ``r``.
     """
-    return (math.ceil(-d * inverse_widths[0] - r0 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[0] - r0 + _SHIFT_MARGIN),
-            math.ceil(-d * inverse_widths[1] - r1 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[1] - r1 + _SHIFT_MARGIN),
-            math.ceil(-d * inverse_widths[2] - r2 - _SHIFT_MARGIN),
-            math.floor(d * inverse_widths[2] - r2 + _SHIFT_MARGIN))
+    lo0, hi0 = _shift_range(r0, d * inverse_widths[0])
+    lo1, hi1 = _shift_range(r1, d * inverse_widths[1])
+    lo2, hi2 = _shift_range(r2, d * inverse_widths[2])
+    return lo0, hi0, lo1, hi1, lo2, hi2
 
 
 @_inlined_jitable
@@ -294,9 +330,9 @@ def _search_box(
 ) -> tuple[float, int, int, int]:
     """Smallest squared length among the images that could be nearer, and its shift.
 
-    Evaluates every shift in the box from ``_shift_bounds``, which holds
-    every image no further away than the rounded image. Of images equally
-    near, the first evaluated is kept.
+    Evaluates every shift in the box from ``_shift_bounds``, which holds,
+    to within rounding, every image no further away than the rounded
+    image. Of images equally near, the first evaluated is kept.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -322,24 +358,6 @@ def _search_box(
                     best = candidate
                     s0, s1, s2 = n0, n1, n2
     return best, s0, s1, s2
-
-
-@_jitable
-def _shift_range(centre: float, half_width: float) -> tuple[int, int]:
-    """The integer shifts ``n`` with ``|centre + n| <= half_width``.
-
-    The range is widened by ``_SHIFT_MARGIN`` so that rounding cannot leave
-    out a shift.
-
-    Args:
-        centre: The coordinate before shifting.
-        half_width: The largest coordinate allowed after shifting.
-
-    Returns:
-        ``(lo, hi)``, the inclusive range of shifts.
-    """
-    return (math.ceil(-half_width - centre - _SHIFT_MARGIN),
-            math.floor(half_width - centre + _SHIFT_MARGIN))
 
 
 @_jitable
@@ -415,8 +433,9 @@ def _search_ball(
     elongated, thin or sheared cells far fewer images are visited than in
     the box from ``_shift_bounds``, which bounds each axis on its own. Has
     the same arguments as ``_search_box`` and finds the same smallest
-    squared length; of images equally near, the first visited is kept, so
-    its shift may differ from the one ``_search_box`` returns.
+    squared length to within rounding; of images equally near, the first
+    visited is kept, so its shift may differ from the one ``_search_box``
+    returns.
 
     Args:
         r0: First component of the rounded fractional displacement.
@@ -559,7 +578,11 @@ def _pair_distance(
     if not (abs(f0) < math.inf and abs(f1) < math.inf and abs(f2) < math.inf
             and _inverse_widths_are_finite(inverse_widths)):
         return math.nan
-    return math.sqrt(_nearest_image(_wrap(f0), _wrap(f1), _wrap(f2), rows, inverse_widths)[0])
+    # float() keeps the search in Python floats without numba, where the
+    # numpy scalars np.rint returns would slow every step; numba compiles it
+    # to nothing.
+    return math.sqrt(_nearest_image(float(_wrap(f0)), float(_wrap(f1)), float(_wrap(f2)),
+                                    rows, inverse_widths)[0])
 
 
 @_jitable
@@ -575,8 +598,8 @@ def _nearest_image_shift(
     The shift of the nearest image from ``_nearest_image``, started from
     the rounded image ``_wrap_half_up`` gives, relative to ``f`` rather
     than to that image. The search keeps the first of equally near
-    images, so starting from an image that is the same whichever cell
-    ``f`` is given in makes the shift so too.
+    images, so the shift is the same whichever cell ``f`` is given in,
+    when ``f`` in that cell is exactly representable.
 
     Args:
         f0: First component of the fractional displacement, finite and
@@ -592,10 +615,12 @@ def _nearest_image_shift(
         The integer shift ``n - _round_half_up(f)``, which takes ``f`` to
         its nearest image.
     """
+    # float() as in _pair_distance.
     _, n0, n1, n2 = _nearest_image(
-        _wrap_half_up(f0), _wrap_half_up(f1), _wrap_half_up(f2), rows, inverse_widths)
-    return (n0 - _round_half_up(f0), n1 - _round_half_up(f1),
-            n2 - _round_half_up(f2))
+        float(_wrap_half_up(f0)), float(_wrap_half_up(f1)), float(_wrap_half_up(f2)),
+        rows, inverse_widths)
+    return (n0 - int(_round_half_up(f0)), n1 - int(_round_half_up(f1)),
+            n2 - int(_round_half_up(f2)))
 
 
 if HAS_NUMBA:
@@ -1039,20 +1064,6 @@ def _paired_mic_distances_numpy(
     return distances
 
 
-def _rounded_half_up(f: np.ndarray) -> np.ndarray:
-    """The whole numbers nearest each element of ``f``, with halves rounded up.
-
-    Args:
-        f: Finite floats smaller than ``_WHOLE_NUMBER_LIMIT`` in magnitude.
-
-    Returns:
-        ``_round_half_up`` of each element, as floats of the same shape.
-    """
-    n = np.round(f)
-    n[f - n == 0.5] += 1.0
-    return n
-
-
 def _rounded_images(
     r: np.ndarray,
     rows: list[list[float]],
@@ -1078,9 +1089,8 @@ def _rounded_images(
     """
     best = _squared_length(r[:, 0], r[:, 1], r[:, 2], rows)
     d = np.sqrt(best)[:, np.newaxis]
-    per_axis = np.array(inverse_widths)
-    lo = np.ceil(-d * per_axis - r - _SHIFT_MARGIN)
-    hi = np.floor(d * per_axis - r + _SHIFT_MARGIN)
+    lo, hi = _shift_interval(r, d * np.array(inverse_widths))
+    lo, hi = np.ceil(lo), np.floor(hi)
     search = np.flatnonzero(np.any((lo != 0) | (hi != 0), axis=1))
     return best, lo, hi, search
 
@@ -1115,7 +1125,7 @@ def _distances_from_rounded_images(
     Returns:
         (K,) array of minimum-image distances.
     """
-    r = frac_displacements - np.round(frac_displacements)
+    r = _wrap(frac_displacements)
     best, lo, hi, search = _rounded_images(r, rows, inverse_widths)
     if search.size == 0:
         return np.asarray(np.sqrt(best))
@@ -1172,10 +1182,10 @@ def _nearest_image_shifts(
 
     For each displacement ``f``, the shift ``n`` such that ``f + n`` is
     the periodic image of ``f`` with the shortest Cartesian length, exact
-    for any cell. Of images equally near, the same one is chosen every
-    time, whichever periodic image ``f`` is given in, with and without
-    numba. Uses numba JIT compilation when available; the results are the
-    same without numba.
+    for any cell. Of images equally near, the same one is chosen with and
+    without numba, and whichever periodic image ``f`` is given in when
+    that image is exactly representable. Uses numba JIT compilation when
+    available; the results are the same without numba.
 
     Args:
         displacements: Fractional displacements, shape (N, 3).
@@ -1204,9 +1214,8 @@ def _nearest_image_shifts(
     # the nearest are searched one at a time; the others take the rounding
     # shift, as _nearest_image_shift would.
     rows, inverse_widths = _rows_and_inverse_widths(lattice_matrix)
-    rounded = _rounded_half_up(displacements)
-    shifts = -rounded.astype(np.int64)
-    *_, search = _rounded_images(displacements - rounded, rows, inverse_widths)
+    shifts = -_round_half_up(displacements).astype(np.int64)
+    *_, search = _rounded_images(_wrap_half_up(displacements), rows, inverse_widths)
     for p in search.tolist():
         f0, f1, f2 = displacements[p].tolist()
         shifts[p] = _nearest_image_shift(f0, f1, f2, rows, inverse_widths)

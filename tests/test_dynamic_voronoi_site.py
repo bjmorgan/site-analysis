@@ -9,9 +9,33 @@ from site_analysis.site import Site
 from site_analysis.atom import Atom
 
 class DynamicVoronoiSiteTestCase(unittest.TestCase):
-    
+
+    INVALID_REFERENCE_CENTRES = {
+        "NaN": [np.nan, 0.5, 0.6],
+        "infinite": [np.inf, 0.5, 0.6],
+        "two numbers": [0.4, 0.5],
+        "text": "abc",
+        "ragged": [[0.1, 0.2], [0.3]],
+        "complex": [1 + 1j, 0.0, 0.0],
+        "integer too large for a float": [10 ** 400, 0.0, 0.0],
+    }
+
     def setUp(self):
         Site._newid = 1
+
+    def test_init_rejects_a_reference_centre_that_is_not_three_finite_numbers(self):
+        """A reference centre that is not three finite numbers raises ValueError."""
+        for name, value in self.INVALID_REFERENCE_CENTRES.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(
+                        ValueError, "^reference_center must be three finite numbers, got "):
+                    DynamicVoronoiSite(reference_indices=[0, 1, 2, 3], reference_center=value)
+
+    def test_init_stores_the_reference_centre_as_a_float_array(self):
+        """A reference centre given as a list is stored as a float64 array."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3], reference_center=[0, 0.5, 1])
+        self.assertEqual(site.reference_center.dtype, np.float64)
+        np.testing.assert_array_equal(site.reference_center, [0.0, 0.5, 1.0])
         
     def test_dynamic_voronoi_site_is_initialised(self):
         reference_indices = [1, 2, 3, 4]
@@ -136,6 +160,35 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
 
         np.testing.assert_array_almost_equal(
             site.centre, [0.05, 0.5, 0.5])
+
+    def test_calculate_centre_in_an_unreduced_cell(self):
+        """The centre is the mean of the reference atoms' images nearest the
+        reference centre, found exactly in an unreduced cell."""
+        # Rows (1,0,0), (3,1,0), (0,0,1) scaled to Angstrom: an unreduced basis.
+        lattice_matrix = 4.0 * np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        site = DynamicVoronoiSite(
+            reference_indices=[0, 1, 2, 3],
+            reference_center=np.array([0.0, 0.0, 0.5]))
+        frac_coords = np.array([[0.6, 0.6, 0.5],
+                                [0.4, 0.0, 0.7],
+                                [0.5, 0.8, 0.4],
+                                [0.3, 0.0, 0.4]])
+
+        site.calculate_centre(frac_coords, lattice_matrix)
+
+        # The nearest images are (1.6, -0.4, 0.5), (0.4, 0, 0.7),
+        # (0.5, -0.2, 0.4) and (0.3, 0, 0.4); their mean, wrapped into [0, 1).
+        np.testing.assert_array_almost_equal(site.centre, [0.70, 0.85, 0.5])
+
+    def test_calculate_centre_rejects_non_finite_coordinates_without_reference_centre(self):
+        """A site without a reference centre rejects a NaN reference atom coordinate."""
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        frac_coords = np.array([[0.1, 0.1, 0.1],
+                                [0.2, 0.1, 0.1],
+                                [0.1, np.nan, 0.1],
+                                [0.1, 0.1, 0.2]])
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site.calculate_centre(frac_coords, Lattice.cubic(10.0).matrix)
 
     def test_centre_method(self):
         """Test that the centre method returns the calculated centre coordinates."""
@@ -424,6 +477,37 @@ class TestResetWithCalculatedCentre(unittest.TestCase):
 
         site.reset()
         self.assertIsNone(site._centre_coords)
+
+
+class DynamicVoronoiSiteReferenceCentreSerialisationTestCase(unittest.TestCase):
+    """Test reference centre serialisation for DynamicVoronoiSite."""
+
+    def setUp(self):
+        Site._newid = 0
+
+    def test_round_trip_preserves_reference_center(self):
+        """A reference centre survives as_dict -> from_dict."""
+        original = DynamicVoronoiSite(
+            reference_indices=[1, 2, 3], reference_center=np.array([0.25, 0.5, 0.75]))
+
+        reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
+
+        np.testing.assert_array_equal(
+            reconstructed.reference_center, original.reference_center)
+
+    def test_round_trip_without_reference_center_gives_none(self):
+        """A site with no reference centre reloads with none."""
+        original = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+
+        reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
+
+        self.assertIsNone(reconstructed.reference_center)
+
+    def test_from_dict_without_reference_center_key_gives_none(self):
+        """A dict written before reference centres were saved still loads."""
+        site = DynamicVoronoiSite.from_dict({'reference_indices': [4, 5, 6]})
+
+        self.assertIsNone(site.reference_center)
 
 
 if __name__ == '__main__':

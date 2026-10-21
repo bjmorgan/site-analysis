@@ -28,6 +28,7 @@ from typing import Any
 
 import numpy as np
 
+from site_analysis.distances import _nearest_image_shifts
 from site_analysis.neighbour_search import PeriodicNeighbourIndex
 
 # Candidates are screened on up to this many reference atoms of each
@@ -170,8 +171,26 @@ def _representatives(group: _SpeciesGroup, symmetries: np.ndarray) -> np.ndarray
     return np.array(representatives)
 
 
+def _minimum_images(displacements: np.ndarray, lattice_matrix: np.ndarray) -> np.ndarray:
+    """Fractional displacements moved to their shortest periodic images.
+
+    Args:
+        displacements: Fractional displacements, shape (..., 3).
+        lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
+
+    Returns:
+        The displacements plus the whole-cell shifts that make each the
+        shortest in Cartesian length, exactly in any cell; same shape.
+    """
+    flat = displacements.reshape(-1, 3)
+    images: np.ndarray = (flat + _nearest_image_shifts(flat, lattice_matrix)).reshape(
+        displacements.shape)
+    return images
+
+
 def _screen(candidates: np.ndarray,
-        groups: list[_SpeciesGroup]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        groups: list[_SpeciesGroup],
+        lattice_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Screen candidate translations on a sample of atoms.
 
     Each candidate first takes one refinement step on the sample: it moves
@@ -188,6 +207,7 @@ def _screen(candidates: np.ndarray,
     Args:
         candidates: Candidate translations, fractional, shape (M, 3).
         groups: The alignment species.
+        lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
 
     Returns:
         ``(passed, moved, rmsd)``: an (M,) boolean array, true where every
@@ -208,7 +228,7 @@ def _screen(candidates: np.ndarray,
             points = (group.sample[np.newaxis, :, :] + block[:, np.newaxis, :]) % 1.0
             nearest, _ = group.index.query_nearest(points.reshape(-1, 3))
             displacement = group.target[nearest].reshape(points.shape) - points
-            total += (displacement - np.round(displacement)).sum(axis=1)
+            total += _minimum_images(displacement, lattice_matrix).sum(axis=1)
         block = block + total / n_sampled
         moved[rows] = block
         for group in groups:
@@ -220,7 +240,9 @@ def _screen(candidates: np.ndarray,
     return passed, moved, np.sqrt(squares / n_sampled)
 
 
-def _refine(translation: np.ndarray, groups: list[_SpeciesGroup]) -> np.ndarray:
+def _refine(translation: np.ndarray,
+        groups: list[_SpeciesGroup],
+        lattice_matrix: np.ndarray) -> np.ndarray:
     """Refine a translation to minimise the RMSD for its pairing.
 
     Pairs each reference atom with its nearest target atom of the same
@@ -230,6 +252,7 @@ def _refine(translation: np.ndarray, groups: list[_SpeciesGroup]) -> np.ndarray:
     Args:
         translation: Starting translation, fractional, shape (3,).
         groups: The alignment species.
+        lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
 
     Returns:
         The refined translation, wrapped into the unit cell.
@@ -242,7 +265,7 @@ def _refine(translation: np.ndarray, groups: list[_SpeciesGroup]) -> np.ndarray:
             shifted = (group.reference + translation) % 1.0
             nearest, _ = group.index.query_nearest(shifted)
             displacement = group.target[nearest] - shifted
-            displacements.append(displacement - np.round(displacement))
+            displacements.append(_minimum_images(displacement, lattice_matrix))
             new_pairing.append(nearest)
         if pairing is not None and all(
                 np.array_equal(old, new) for old, new in zip(pairing, new_pairing)):
@@ -268,12 +291,14 @@ def _nearest_distances(translation: np.ndarray,
 
 
 def _alignment(candidate: np.ndarray,
-        groups: list[_SpeciesGroup]) -> tuple[np.ndarray, np.ndarray] | None:
+        groups: list[_SpeciesGroup],
+        lattice_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
     """Refine a candidate translation and check that it superimposes the structures.
 
     Args:
         candidate: Candidate translation, fractional, shape (3,).
         groups: The alignment species.
+        lattice_matrix: (3, 3) lattice matrix, rows as lattice vectors.
 
     Returns:
         (translation, distances), the refined translation and the
@@ -281,7 +306,7 @@ def _alignment(candidate: np.ndarray,
         nearest target atom of that species, if every distance is within
         its species' threshold; otherwise None.
     """
-    translation = _refine(candidate, groups)
+    translation = _refine(candidate, groups, lattice_matrix)
     distances = _nearest_distances(translation, groups)
     if all((d < group.threshold).all() for d, group in zip(distances, groups)):
         return translation, np.concatenate(distances)
@@ -430,14 +455,14 @@ class StructureAligner:
         anchor_group = min(groups, key=lambda group: (len(group.reference), group.name))
         representatives = _representatives(anchor_group, _symmetries(anchor_group, groups))
         candidates = (anchor_group.target[0] - anchor_group.reference[representatives]) % 1.0
-        passed, moved, rmsd = _screen(candidates, groups)
+        passed, moved, rmsd = _screen(candidates, groups, lattice_matrix)
         survivors = moved[passed]
         # Best fit first: translations that only nearly superimpose the
         # alignment atoms, such as near-symmetries of a slightly distorted
         # sublattice, fit measurably worse than the right one.
         best: tuple[np.ndarray, np.ndarray] | None = None
         for candidate in survivors[np.argsort(rmsd[passed], kind="stable")]:
-            best = _alignment(candidate, groups)
+            best = _alignment(candidate, groups, lattice_matrix)
             if best is not None:
                 break
         if best is None:

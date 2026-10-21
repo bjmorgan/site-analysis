@@ -73,7 +73,8 @@ class SphericalSiteInitTestCase(unittest.TestCase):
         np.testing.assert_array_equal(site.frac_coords, [0.1, 0.2, 0.3])
 
     def test_init_rejects_centre_that_is_not_three_finite_numbers(self):
-        for frac_coords in ([0.1, 0.2], [[0.1, 0.2, 0.3]], [np.nan, 0.2, 0.3]):
+        for frac_coords in ([0.1, 0.2], [[0.1, 0.2, 0.3]], [np.nan, 0.2, 0.3], "abc",
+                            [1 + 1j, 0.0, 0.0]):
             with self.subTest(frac_coords=frac_coords):
                 with self.assertRaisesRegex(ValueError, "frac_coords must be three finite numbers"):
                     SphericalSite(frac_coords=frac_coords, rcut=1.0)

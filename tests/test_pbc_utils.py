@@ -7,7 +7,6 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.site import Site
-from unittest.mock import patch
 from site_analysis.pbc_utils import apply_legacy_pbc_correction, unwrap_vertices_to_reference_center, correct_pbc
 
 
@@ -437,6 +436,77 @@ class TestReferenceBasedUnwrapping(unittest.TestCase):
 				np.testing.assert_array_almost_equal(coords.min(axis=0), [0.4, 0.4, 0.4])
 
 
+class TestExactUnwrapping(unittest.TestCase):
+	"""Tests that unwrapping finds the nearest image exactly in an unreduced cell."""
+
+	# Rows (1,0,0), (3,1,0), (0,0,1): an unreduced basis.
+	UNREDUCED = np.array([[1.0, 0.0, 0.0], [3.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+
+	def test_unreduced_cell_picks_the_nearest_image(self):
+		"""The nearest image of (0.6, 0.6, 0.5) to (0, 0, 0.5) is shifted by (1, -1, 0)."""
+		_, shifts = unwrap_vertices_to_reference_center(
+			np.array([[0.6, 0.6, 0.5]]), np.array([0.0, 0.0, 0.5]),
+			self.UNREDUCED, return_image_shifts=True)
+		np.testing.assert_array_equal(shifts, [[1, -1, 0]])
+
+	def test_vertex_half_a_cell_from_the_centre_unwraps_the_same_in_any_image(self):
+		"""A vertex exactly half a cell from the centre is unwrapped to the same image whichever whole-cell offset it is given with."""
+		cubic = np.eye(3) * 4.0
+		centre = np.array([0.25, 0.25, 0.25])
+		vertices = np.array([[0.75, 0.25, 0.75], [0.35, 0.25, 0.25]])
+		reference = unwrap_vertices_to_reference_center(vertices, centre, cubic)
+		for offset in ([1, 0, 0], [-1, 0, 0], [3, 0, -1], [-1, 2, 1]):
+			with self.subTest(offset=offset):
+				shifted = vertices + np.array([offset, [0, 0, 0]])
+				unwrapped = unwrap_vertices_to_reference_center(shifted, centre, cubic)
+				np.testing.assert_array_equal(unwrapped, reference)
+
+	def test_vertex_several_cells_away_in_an_unreduced_cell(self):
+		"""Whole-cell offsets of the vertex change the shift by the opposite amount."""
+		for offset in ([5, 0, 0], [-2, 5, 3], [0, -5, 0]):
+			with self.subTest(offset=offset):
+				_, shifts = unwrap_vertices_to_reference_center(
+					np.array([[0.6, 0.6, 0.5]]) + offset, np.array([0.0, 0.0, 0.5]),
+					self.UNREDUCED, return_image_shifts=True)
+				np.testing.assert_array_equal(shifts, [np.array([1, -1, 0]) - offset])
+
+	def test_non_finite_coordinates_raise(self):
+		"""Non-finite vertex coordinates are rejected by name."""
+		vertices = np.array([[0.1, 0.2, 0.3], [np.nan, 0.2, 0.3]])
+		with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+			unwrap_vertices_to_reference_center(
+				vertices, np.array([0.5, 0.5, 0.5]), Lattice.cubic(10.0).matrix)
+
+	def test_non_finite_reference_center_raises(self):
+		"""A non-finite reference centre is rejected by name."""
+		with self.assertRaisesRegex(
+				ValueError, "^reference_center must be three finite numbers, got "):
+			unwrap_vertices_to_reference_center(
+				np.array([[0.1, 0.2, 0.3]]), np.array([np.nan, 0.5, 0.5]),
+				Lattice.cubic(10.0).matrix)
+
+	def test_vertex_too_far_from_the_reference_centre_raises(self):
+		"""A displacement too large for the search is rejected by the user's argument names."""
+		cases = {
+			"2**52 cells away": (np.array([[2.0 ** 52, 0.2, 0.3]]), np.array([0.0, 0.5, 0.5]),
+				"^the displacement of each vertex from reference_center must be smaller than 2\\*\\*52 in magnitude$"),
+			"overflowing": (np.array([[1e308, 0.2, 0.3]]), np.array([-1e308, 0.5, 0.5]),
+				"^the displacement of each vertex from reference_center must be finite$"),
+		}
+		for name, (vertices, reference_center, message) in cases.items():
+			with self.subTest(name), np.errstate(over="ignore"):
+				with self.assertRaisesRegex(ValueError, message):
+					unwrap_vertices_to_reference_center(
+						vertices, reference_center, Lattice.cubic(10.0).matrix)
+
+	def test_singular_lattice_raises(self):
+		"""A singular lattice is rejected."""
+		lattice_matrix = np.array([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+		with self.assertRaises(ValueError):
+			unwrap_vertices_to_reference_center(
+				np.array([[0.1, 0.2, 0.3]]), np.array([0.5, 0.5, 0.5]), lattice_matrix)
+
+
 class TestCorrectPbc(unittest.TestCase):
 	"""Tests for the correct_pbc dispatch function."""
 
@@ -444,22 +514,21 @@ class TestCorrectPbc(unittest.TestCase):
 		self.lattice = Lattice.cubic(10.0)
 
 	def test_delegates_to_legacy_when_no_reference_center(self):
-		"""With no reference centre, delegates to apply_legacy_pbc_correction."""
+		"""With no reference centre, the coordinates are those of apply_legacy_pbc_correction."""
+		# The legacy correction takes 0.1 to 1.1, leaving the lowest z in [0, 1).
 		frac_coords = np.array([[0.1, 0.1, 0.9], [0.2, 0.2, 0.1]])
-		with patch('site_analysis.pbc_utils.apply_legacy_pbc_correction',
-				   return_value=frac_coords.copy()) as mock_legacy:
-			correct_pbc(frac_coords, None, self.lattice.matrix)
-			mock_legacy.assert_called_once()
+		corrected, _ = correct_pbc(frac_coords, None, self.lattice.matrix)
+		np.testing.assert_array_equal(corrected, apply_legacy_pbc_correction(frac_coords))
 
 	def test_delegates_to_unwrap_when_reference_center_provided(self):
-		"""With a reference centre, delegates to unwrap_vertices_to_reference_center."""
-		frac_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
+		"""With a reference centre, the coordinates and shifts are those of unwrap_vertices_to_reference_center."""
+		frac_coords = np.array([[0.1, 0.1, 0.1], [0.9, 0.2, 0.2]])
 		ref = np.array([0.15, 0.15, 0.15])
-		with patch('site_analysis.pbc_utils.unwrap_vertices_to_reference_center',
-				   return_value=(frac_coords.copy(), np.zeros((2, 3), dtype=np.int64))) as mock_unwrap:
-			correct_pbc(frac_coords, ref, self.lattice.matrix)
-			mock_unwrap.assert_called_once()
-			self.assertTrue(mock_unwrap.call_args.kwargs.get('return_image_shifts'))
+		corrected, shifts = correct_pbc(frac_coords, ref, self.lattice.matrix)
+		expected_coords, expected_shifts = unwrap_vertices_to_reference_center(
+			frac_coords, ref, self.lattice.matrix, return_image_shifts=True)
+		np.testing.assert_array_equal(corrected, expected_coords)
+		np.testing.assert_array_equal(shifts, expected_shifts)
 
 	def test_returns_int64_shifts_legacy_path(self):
 		"""Image shifts have int64 dtype for the legacy path."""
@@ -481,6 +550,14 @@ class TestCorrectPbc(unittest.TestCase):
 		self.assertEqual(corrected.shape, (0, 3))
 		self.assertEqual(shifts.shape, (0, 3))
 		self.assertEqual(shifts.dtype, np.int64)
+
+	def test_non_finite_coordinates_raise_without_reference_centre(self):
+		"""Non-finite coordinates are rejected by name on the spread-based path too."""
+		for name, value in (("NaN", np.nan), ("infinite", np.inf)):
+			with self.subTest(name):
+				frame = np.array([[0.1, 0.1, 0.9], [value, 0.2, 0.1]])
+				with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+					correct_pbc(frame, None, self.lattice.matrix)
 
 	def test_legacy_path_returns_consistent_shifts(self):
 		"""Shifts from the legacy path satisfy corrected = original + shifts."""
@@ -584,6 +661,19 @@ class TestNumbaUpdatePbcShifts(unittest.TestCase):
 		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
 		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
 		self.assertEqual(v_np, v_nb)
+
+	def test_agrees_with_numpy_non_finite_coordinate(self):
+		"""A NaN coordinate invalidates the cache, as it does without numba."""
+		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts
+		cached = np.array([[0.1, 0.2, 0.3],
+						   [0.4, 0.5, 0.6]])
+		new = cached.copy()
+		new[1, 2] = np.nan
+		shifts = np.zeros((2, 3), dtype=np.int64)
+		v_np, _, _ = _numpy_update_pbc_shifts(new, cached, shifts)
+		v_nb, _, _ = _numba_update_pbc_shifts(new, cached, shifts)
+		self.assertFalse(v_np)
+		self.assertEqual(v_nb, v_np)
 
 	def test_agrees_with_numpy_minimum_translated_into_the_unit_cell(self):
 		from site_analysis.pbc_utils import _numpy_update_pbc_shifts, _numba_update_pbc_shifts

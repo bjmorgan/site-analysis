@@ -55,7 +55,7 @@ Note that spherical sites are primarily included in `site_analysis` for compatib
 
 ### Polyhedral Sites
 
-Polyhedral sites are defined by a collection of vertex atoms that form a polyhedron. The site encompasses the volume within this polyhedron. This approach is especially useful for sites with coordination environments that correspond to common polyhedra (tetrahedra, octahedra, etc.).
+Polyhedral sites are defined by a collection of vertex atoms that form a polyhedron. The site is the polyhedron bounded by triangles over its vertex atoms. Neighbouring sites triangulate each face they share identically, so sites that share faces fill the space between them, and polyhedral sites must not overlap (overlapping sites raise `ValueError`; see [Site Boundaries](../guides/polyhedral_sites.md#site-boundaries)). This approach is especially useful for sites with coordination environments that correspond to common polyhedra (tetrahedra, octahedra, etc.).
 
 In close-packed lattices where the mobile ions occupy interstitial sites with well-defined coordination environments, polyhedral sites can completely fill space if the set of all coordination polyhedra is used. This makes them particularly valuable for analyzing systems like lithium-ion battery materials or ionic conductors.
 
@@ -71,6 +71,7 @@ In close-packed lattices where the mobile ions occupy interstitial sites with we
 - More complex to define
 - May not completely fill space in non-close-packed structures
 - Requires careful selection of vertex atoms
+- Must not overlap
 
 **Best for**:
 - When specific coordination environments are important

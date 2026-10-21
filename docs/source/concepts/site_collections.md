@@ -12,7 +12,7 @@ Each site collection type implements a different strategy for assigning atoms to
 
 ### Priority-Based Assignment (Spherical and Polyhedral)
 
-Spherical and polyhedral sites can overlap or leave gaps between them. These collections check sites one at a time and assign the atom to the first containing site found. To avoid unnecessary containment checks, a priority heuristic determines the order in which sites are tested:
+Spherical sites can overlap or leave gaps between them; polyhedral sites can leave gaps between them but must not overlap. These collections check sites one at a time and assign the atom to the first containing site found. To avoid unnecessary containment checks, a priority heuristic determines the order in which sites are tested:
 
 1. **Recent history**: the atom's most recently occupied site(s) are checked first
 2. **Learned transitions**: sites that atoms have previously transitioned to from the atom's most recent site, ordered by frequency
@@ -24,7 +24,7 @@ Polyhedral sites are ranked by their reference centres. If any polyhedral site h
 
 For spherical sites, the distance ranking stops at the largest site radius, since no site whose centre is further from the atom can contain it.
 
-Where sites overlap, the first containing site in this order claims the atom: an atom stays in a recent site if one contains it, otherwise goes to a learned transition destination that contains it, and otherwise goes to the containing site whose centre is nearest the atom (when sites are ranked by distance).
+Where spherical sites overlap, or an atom is exactly on a face shared by two polyhedral sites, the first containing site in this order claims the atom: an atom stays in a recent site if one contains it, otherwise goes to a learned transition destination that contains it, and otherwise goes to the containing site whose centre is nearest the atom (when sites are ranked by distance).
 
 This ordering means atoms that remain in or near their current site are resolved in a single check, and common transitions are tested early. In practice, this eliminates the majority of containment checks compared to a naive sequential scan.
 
@@ -32,7 +32,7 @@ If no site contains the atom, it is left unassigned (`None`).
 
 Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency).
 
-Polyhedral sites may overlap partially; a shared face of overlapping sites is found from the vertex atoms alone, and need not be a face of either polyhedron. A site whose vertex atoms are all vertices of another site under one lattice translation (including a site with the same vertex atoms) raises a `ValueError` when shared faces are found; the guide describes when that happens.
+Each polyhedral site is bounded by triangles over its vertex atoms, and sites that share a face triangulate it identically, so face-sharing sites fill the space between them. Polyhedral sites must not overlap: overlapping sites, a site that overlaps a periodic image of itself, coincident sites and a site whose vertex atoms are all vertices of another site under one lattice translation raise `ValueError` when shared faces are found, whatever the number of vertex atoms they share; see [Site Boundaries](../guides/polyhedral_sites.md#site-boundaries).
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 
@@ -46,7 +46,7 @@ The handling of spatial ambiguity is the key difference between collection types
 
 | Scenario | Spherical / Polyhedral | Voronoi / Dynamic Voronoi |
 |---|---|---|
-| Overlapping sites | Priority-based: atom stays in previous site if possible; otherwise, after learned transitions, it goes to the containing site with the nearest centre (see above) | Cannot occur (space is partitioned) |
+| Overlapping sites | Spherical: priority-based: atom stays in previous site if possible; otherwise, after learned transitions, it goes to the containing site with the nearest centre (see above). Polyhedral: not allowed (`ValueError` when shared faces are found) | Cannot occur (space is partitioned) |
 | Gaps between sites | Atom is unassigned (`None`) | Cannot occur (space is partitioned) |
 
 See the [sites concepts page](sites.md) for guidance on choosing a site type based on these trade-offs.

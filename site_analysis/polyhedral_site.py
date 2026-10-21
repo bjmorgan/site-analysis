@@ -41,10 +41,6 @@ class PolyhedralSite(Site):
     Attributes:
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
-        vertex_coords (np.ndarray or None): Unwrapped fractional coordinates
-            of the vertices (read-only), or None if none have been assigned.
-            Set using assign_vertex_coords() or notify_structure_changed();
-            coordinates notified are assigned when first read or tested.
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
 
     See Also:
@@ -136,9 +132,11 @@ class PolyhedralSite(Site):
     def vertex_coords(self) -> np.ndarray | None:
         """Unwrapped fractional coordinates of the vertices, or None if none have been assigned.
 
-        Coordinates notified with ``notify_structure_changed`` are assigned
-        (unwrapped and stored) when this is read, so it always gives the
-        coordinates of the most recent structure.
+        Read-only: set with ``assign_vertex_coords`` or
+        ``notify_structure_changed``. Coordinates notified with
+        ``notify_structure_changed`` are assigned (unwrapped and stored) when
+        this is read, so it always gives the coordinates of the most recent
+        structure.
 
         Returns:
             (n_vertices, 3) array in the order of ``vertex_indices``, or None.

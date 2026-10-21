@@ -546,8 +546,9 @@ class PolyhedralSite(Site):
         Raises:
             RuntimeError: If no vertex coordinates have been assigned, or
                 the vertices are degenerate.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, as they can in a strongly skewed or unreduced cell.
+            ValueError: If the vertices span more than 1000 cells, counted
+                over the three axes, as they can in a strongly skewed or
+                unreduced cell.
         """
         if algo is not None:
             warnings.warn(

@@ -212,11 +212,11 @@ if HAS_NUMBA:
             e2 = first[p, j, 2] - first[p, i, 2]
             first_squared_length = e0 * e0 + e1 * e1 + e2 * e2
             for second_edge in range(6):
-                i = _TETRAHEDRON_EDGES[second_edge, 0]
-                j = _TETRAHEDRON_EDGES[second_edge, 1]
-                f0 = second[p, j, 0] - second[p, i, 0]
-                f1 = second[p, j, 1] - second[p, i, 1]
-                f2 = second[p, j, 2] - second[p, i, 2]
+                a = _TETRAHEDRON_EDGES[second_edge, 0]
+                b = _TETRAHEDRON_EDGES[second_edge, 1]
+                f0 = second[p, b, 0] - second[p, a, 0]
+                f1 = second[p, b, 1] - second[p, a, 1]
+                f2 = second[p, b, 2] - second[p, a, 2]
                 n0 = e1 * f2 - e2 * f1
                 n1 = e2 * f0 - e0 * f2
                 n2 = e0 * f1 - e1 * f0

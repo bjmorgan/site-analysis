@@ -12,226 +12,27 @@ import warnings
 from collections.abc import Iterable
 
 import numpy as np
-from scipy.spatial import ConvexHull, Delaunay, QhullError
+from scipy.spatial import Delaunay, QhullError
 from site_analysis.site import Site, _as_index
-from site_analysis.tools import _SHIFTS
 from site_analysis.atom import Atom
-from site_analysis._compat import HAS_NUMBA
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
-from site_analysis.polyhedron_surface import _image_shifts
-
-if HAS_NUMBA:
-    import numba
-
-    @numba.njit(cache=True)
-    def _numba_update_hull_triangles(
-        vertex_coords: np.ndarray,
-        triangles: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
-        """JIT-compiled hull triangle normal and centre sign computation.
-
-        Args:
-            vertex_coords: (N_vertices, 3) array of vertex positions.
-            triangles: (N_triangles, 3) array of vertex indices per hull
-                triangle.
-
-        Returns:
-            Tuple of (triangle_normals, triangle_ref_points, centre_signs,
-            within_two_cells), where within_two_cells is True if every
-            vertex coordinate is in [0, 2).
-        """
-        n_triangles = triangles.shape[0]
-        n_vertices = vertex_coords.shape[0]
-        triangle_normals = np.empty((n_triangles, 3))
-        triangle_ref_points = np.empty((n_triangles, 3))
-        centre_signs = np.empty(n_triangles)
-
-        centre = np.zeros(3)
-        within_two_cells = True
-        for i in range(n_vertices):
-            for k in range(3):
-                centre[k] += vertex_coords[i, k]
-                if not (0.0 <= vertex_coords[i, k] < 2.0):
-                    within_two_cells = False
-        for k in range(3):
-            centre[k] /= n_vertices
-
-        for j in range(n_triangles):
-            i0 = triangles[j, 0]
-            i1 = triangles[j, 1]
-            i2 = triangles[j, 2]
-
-            # Edge vectors from vertex 2
-            e0x = vertex_coords[i0, 0] - vertex_coords[i2, 0]
-            e0y = vertex_coords[i0, 1] - vertex_coords[i2, 1]
-            e0z = vertex_coords[i0, 2] - vertex_coords[i2, 2]
-            e1x = vertex_coords[i1, 0] - vertex_coords[i2, 0]
-            e1y = vertex_coords[i1, 1] - vertex_coords[i2, 1]
-            e1z = vertex_coords[i1, 2] - vertex_coords[i2, 2]
-
-            # Cross product
-            triangle_normals[j, 0] = e0y * e1z - e0z * e1y
-            triangle_normals[j, 1] = e0z * e1x - e0x * e1z
-            triangle_normals[j, 2] = e0x * e1y - e0y * e1x
-
-            # Reference point (first vertex of triangle)
-            for k in range(3):
-                triangle_ref_points[j, k] = vertex_coords[i0, k]
-
-            # Centre sign
-            dot = 0.0
-            for k in range(3):
-                dot += triangle_normals[j, k] * (centre[k] - triangle_ref_points[j, k])
-            centre_signs[j] = np.sign(dot)
-
-        return triangle_normals, triangle_ref_points, centre_signs, within_two_cells
-
-    @numba.njit(cache=True)
-    def _numba_sn_query(
-        x: np.ndarray,
-        image_shifts: np.ndarray,
-        triangle_normals: np.ndarray,
-        triangle_ref_points: np.ndarray,
-        centre_signs: np.ndarray,
-    ) -> bool:
-        """JIT-compiled containment check using surface normals.
-
-        Wraps the point into [0, 1) and tests each of its images given by
-        the shifts: an image is inside when it lies on the same side as
-        the polyhedron centre for every hull triangle. Exits early on the
-        first failing triangle of an image, and on the first image inside.
-
-        Args:
-            x: (3,) fractional coordinates of the point, in any periodic
-                image.
-            image_shifts: (M, 3) integer array of whole-cell shifts from
-                the wrapped point to the images to test.
-            triangle_normals: (N_triangles, 3) precomputed outward triangle normals.
-            triangle_ref_points: (N_triangles, 3) reference vertex per triangle.
-            centre_signs: (N_triangles,) sign of centre dot product per triangle.
-
-        Returns:
-            True if any image is inside the polyhedron.
-        """
-        wrapped = np.empty(3)
-        for k in range(3):
-            wrapped[k] = x[k] - np.floor(x[k])
-        n_images = image_shifts.shape[0]
-        n_triangles = triangle_normals.shape[0]
-        for i in range(n_images):
-            all_match = True
-            for j in range(n_triangles):
-                dot = 0.0
-                for k in range(3):
-                    dot += ((wrapped[k] + image_shifts[i, k] - triangle_ref_points[j, k])
-                            * triangle_normals[j, k])
-                # dot == 0.0 means the point lies exactly on the triangle
-                # plane; np.sign(0.0) returns 0.0 which would never
-                # match centre_signs (always +/-1), so we skip the
-                # check to avoid falsely rejecting boundary points.
-                if dot != 0.0 and np.sign(dot) != centre_signs[j]:
-                    all_match = False
-                    break
-            if all_match:
-                return True
-        return False
-
-
-class _HullTriangleCache:
-    """Cached hull triangle topology and surface normal data for containment.
-
-    The topology (which vertex triples form each hull triangle) is computed
-    once from an initial ``ConvexHull`` and cached permanently -- it depends
-    only on vertex connectivity, not on coordinates. Per-timestep, the
-    triangle normals, reference points, centre signs and image shifts are
-    recomputed from new vertex coordinates using the cached topology.
-
-    Attributes:
-        triangles: (N_triangles, 3) array of vertex indices per hull
-            triangle.
-        image_shifts: (M, 3) integer array of whole-cell shifts from a
-            point in [0, 1) to its images that can lie inside the
-            polyhedron: the eight shifts with components in {0, 1} when
-            every vertex coordinate is in [0, 2), otherwise those from
-            ``_image_shifts``.
-    """
-
-    def __init__(self, vertex_coords: np.ndarray) -> None:
-        """Compute hull triangle topology from initial vertex coordinates.
-
-        Args:
-            vertex_coords: (N_vertices, 3) array of vertex positions.
-                Used to build a ConvexHull and extract triangle connectivity.
-
-        Raises:
-            RuntimeError: If numba is not installed.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, from ``_image_shifts``.
-        """
-        if not HAS_NUMBA:
-            raise RuntimeError(
-                "_HullTriangleCache requires numba. "
-                "Install it with: pip install site-analysis[fast]"
-            )
-        hull = ConvexHull(vertex_coords)
-        self.triangles: np.ndarray = hull.simplices
-        self._triangle_normals: np.ndarray
-        self._triangle_ref_points: np.ndarray
-        self._centre_signs: np.ndarray
-        self.image_shifts: np.ndarray
-        self.update(vertex_coords)
-
-    def update(self, vertex_coords: np.ndarray) -> None:
-        """Recompute triangle normals and image shifts from new coordinates.
-
-        Recomputes the triangle normals, reference points and centre signs
-        from the cached topology, and sets ``image_shifts``. Called once per
-        timestep after vertex coordinates are assigned.
-
-        Args:
-            vertex_coords: (N_vertices, 3) array of current vertex positions.
-
-        Raises:
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, from ``_image_shifts``.
-        """
-        (self._triangle_normals, self._triangle_ref_points, self._centre_signs,
-         within_two_cells) = _numba_update_hull_triangles(vertex_coords, self.triangles)
-        self.image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
-
-    def contains_point(self, x: np.ndarray) -> bool:
-        """Test whether an image of a point is inside the polyhedron.
-
-        The point is wrapped into [0, 1) and each of its images given by
-        ``image_shifts`` is tested.
-
-        Args:
-            x: (3,) fractional coordinates of the point, in any periodic
-                image.
-
-        Returns:
-            True if an image of the point is inside the polyhedron.
-        """
-        return bool(_numba_sn_query(
-            x,
-            self.image_shifts,
-            self._triangle_normals,
-            self._triangle_ref_points,
-            self._centre_signs,
-        ))
+from site_analysis.polyhedron_surface import _SurfaceCache, _surface_triangles
 
 
 class PolyhedralSite(Site):
     """Describes a site defined by the polyhedral volume enclosed by a set
     of vertex atoms.
 
-    A PolyhedralSite determines whether atoms are inside the site volume by
-    constructing a convex polyhedron from the vertex atoms and checking whether
-    points lie within this polyhedron. The containment algorithm is selected
-    automatically: when numba is available, a JIT-compiled surface normal method
-    with cached hull triangle topology is used; otherwise, falls back to
-    Delaunay tessellation via scipy.
+    The site is the polyhedron bounded by a fixed set of triangles over its
+    vertices: those set with ``set_triangles`` (as
+    ``PolyhedralSiteCollection.find_shared_faces`` does, so that sites
+    sharing a face triangulate it identically), or else the triangles of
+    the convex hull of the vertices in the first frame the site is tested
+    in. A point is inside the site when it is inside one of the tetrahedra
+    formed by the site's centre (the mean of its vertex coordinates) and a
+    triangle. Containment uses numba when it is installed and numpy
+    otherwise, with identical results.
 
     The polyhedron vertices are defined using atom indices in a structure, and
     their coordinates are assigned from the structure when needed. This allows the
@@ -293,9 +94,10 @@ class PolyhedralSite(Site):
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
         self.vertex_coords: np.ndarray | None = None
+        self._lattice_matrix: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
-        self._point_image_shifts: np.ndarray | None = None
-        self._hull_triangle_cache: _HullTriangleCache | None = None
+        self._triangles: np.ndarray | None = None
+        self._surface_cache: _SurfaceCache | None = None
         self._cache_stale: bool = True
         self._pending_frac_coords: np.ndarray | None = None
         self._pending_lattice_matrix: np.ndarray | None = None
@@ -315,13 +117,13 @@ class PolyhedralSite(Site):
         """Clear the recorded occupation data and cached geometry for this site.
 
         Clears the occupation data as in ``Site.reset``, and unsets the
-        vertex coordinates, Delaunay tessellation, image shifts of points
-        and PBC shift caches. The cached hull triangles are kept.
+        vertex coordinates, their lattice, the Delaunay tessellation and the
+        PBC shift caches. The triangles are kept.
         """
         super(PolyhedralSite, self).reset()
         self.vertex_coords = None
+        self._lattice_matrix = None
         self._delaunay = None
-        self._point_image_shifts = None
         self._cache_stale = True
         self._pending_frac_coords = None
         self._pending_lattice_matrix = None
@@ -333,7 +135,8 @@ class PolyhedralSite(Site):
         """Delaunay tessellation of the vertex coordinates for this site.
 
         This is calculated the first time the attribute is requested,
-        and then stored for reuse, unless the site is reset.
+        and then stored for reuse until the vertex coordinates are next
+        assigned or the site is reset. It does not decide containment.
 
         Returns:
             scipy.spatial.Delaunay
@@ -392,8 +195,9 @@ class PolyhedralSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Assign fractional coordinates to the polyhedra vertices.
 
-        Resets the cached Delaunay tessellation, so the next
-        ``contains_point`` call will recompute it.
+        Stores the lattice with the coordinates, clears the Delaunay
+        tessellation, and marks the containment planes to be recomputed on
+        the next ``contains_point`` call.
 
         Args:
             all_frac_coords: Full fractional coordinate array, shape
@@ -430,21 +234,19 @@ class PolyhedralSite(Site):
         """Apply PBC correction and store vertex coordinates.
 
         On the first call (or after an anomalous displacement invalidates
-        the cache), delegates to ``correct_pbc()`` for full PBC
-        unwrapping. On subsequent calls, updates the cached integer
-        image shifts incrementally by detecting coordinate wraps
-        (jumps of ~1.0), avoiding the expensive nearest-image search.
+        the cache), unwraps the coordinates as ``unwrapped_vertex_coords``
+        does. On subsequent calls, updates the cached integer image shifts
+        incrementally by detecting coordinate wraps (jumps of ~1.0),
+        avoiding the expensive nearest-image search.
 
-        Sets ``vertex_coords``, clears the Delaunay tessellation and the
-        image shifts of points, and marks the cached hull triangle normals
-        to be recomputed.
+        Sets ``vertex_coords``, stores the lattice, clears the Delaunay
+        tessellation, and marks the containment planes to be recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
                 shape ``(n_vertices, 3)``.
             lattice_matrix: (3, 3) lattice matrix where rows are
-                lattice vectors. Passed to ``correct_pbc()``; unused
-                by the incremental update path.
+                lattice vectors.
         """
         if self._pbc_image_shifts is not None and self._pbc_cached_raw_frac is not None:
             valid, vertex_coords, new_shifts = update_pbc_shifts(
@@ -452,21 +254,110 @@ class PolyhedralSite(Site):
             if valid:
                 self._pbc_image_shifts = new_shifts
                 self._pbc_cached_raw_frac = frac_coords.copy()
-                self.vertex_coords = vertex_coords
-                self._delaunay = None
-                self._point_image_shifts = None
-                self._cache_stale = True
+                self._set_vertex_coords(vertex_coords, lattice_matrix)
                 return
 
         # Full computation — first call only (or after anomalous displacement)
-        corrected, image_shifts = correct_pbc(
-            frac_coords, self.reference_center, lattice_matrix)
+        wrapped, corrected, image_shifts = self._unwrap(frac_coords, lattice_matrix)
         self._pbc_image_shifts = image_shifts
-        self._pbc_cached_raw_frac = frac_coords.copy()
-        self.vertex_coords = corrected
+        self._pbc_cached_raw_frac = wrapped
+        self._set_vertex_coords(corrected, lattice_matrix)
+
+    def _set_vertex_coords(self,
+            vertex_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> None:
+        """Store unwrapped vertex coordinates and the lattice they are in.
+
+        Clears the Delaunay tessellation and marks the containment planes
+        to be recomputed.
+
+        Args:
+            vertex_coords: (n_vertices, 3) unwrapped fractional coordinates.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+        """
+        self.vertex_coords = vertex_coords
+        self._lattice_matrix = lattice_matrix
         self._delaunay = None
-        self._point_image_shifts = None
         self._cache_stale = True
+
+    def _unwrap(self,
+            frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Wrap vertex coordinates into [0, 1), then unwrap them around the site.
+
+        Args:
+            frac_coords: Fractional coordinates of the vertices, shape
+                ``(n_vertices, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Returns:
+            Tuple of ``(wrapped, unwrapped, image_shifts)``: the wrapped
+            coordinates, the coordinates unwrapped by ``correct_pbc``, and
+            the integer image shifts from the wrapped coordinates, as
+            returned by ``correct_pbc``.
+
+        Raises:
+            ValueError: If the coordinates are not finite, or
+                ``correct_pbc`` rejects them.
+        """
+        wrapped = frac_coords - np.floor(frac_coords)
+        unwrapped, image_shifts = correct_pbc(wrapped, self.reference_center, lattice_matrix)
+        return wrapped, unwrapped, image_shifts
+
+    def unwrapped_vertex_coords(self,
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray) -> np.ndarray:
+        """Unwrapped fractional coordinates of this site's vertices in a structure.
+
+        The vertex coordinates are wrapped into [0, 1), then unwrapped
+        around the site by ``correct_pbc``: to their images nearest the
+        reference centre, or by the spread-based correction if the site has
+        none. The result is the coordinates ``assign_vertex_coords`` stores
+        for a site with no earlier coordinates. The site is not changed.
+
+        Args:
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+
+        Returns:
+            (n_vertices, 3) array of the unwrapped coordinates, in the order
+            of ``vertex_indices``.
+
+        Raises:
+            ValueError: If the vertex coordinates are not finite, or
+                ``correct_pbc`` rejects them.
+        """
+        _, unwrapped, _ = self._unwrap(all_frac_coords[self.vertex_indices], lattice_matrix)
+        return unwrapped
+
+    def set_triangles(self, triangles: np.ndarray) -> None:
+        """Set the triangles that bound this site.
+
+        Containment uses these triangles from the next ``contains_point``
+        call on. They are kept when the site is reset.
+
+        Args:
+            triangles: (T, 3) array of local vertex indices (positions in
+                ``vertex_indices``) per triangle, each wound so that
+                ``(b - a) x (c - a)`` points away from the site's centre,
+                as from ``PolyhedralSiteCollection.find_shared_faces``.
+
+        Raises:
+            ValueError: If ``triangles`` is not a (T, 3) array of integers
+                from 0 to one less than the number of vertices.
+        """
+        array = np.array(triangles, dtype=np.int64)
+        if (array.ndim != 2 or array.shape[1] != 3
+                or not np.all((array >= 0) & (array < len(self.vertex_indices)))):
+            raise ValueError(
+                "triangles must be a (T, 3) array of local vertex indices from 0 to "
+                f"{len(self.vertex_indices) - 1}, got {triangles!r}")
+        self._triangles = array
+        self._surface_cache = None
 
     def get_vertex_species(self,
             species: list[str]) -> list[str]:
@@ -492,9 +383,11 @@ class PolyhedralSite(Site):
         [0, 1), and each of its images that can lie inside the vertices'
         bounding box is tested, in every cell the vertices span.
 
-        The containment algorithm is selected automatically based on available
-        dependencies. When numba is installed, uses a JIT-compiled surface
-        normal method. Otherwise, falls back to Delaunay tessellation.
+        The site is bounded by its triangles (see the class description).
+        If none have been set, they are fixed on the first call from the
+        convex hull of the vertices in the lattice they were assigned with.
+        The containment planes are recomputed on the first call after the
+        vertex coordinates change.
 
         Args:
             x: Fractional coordinates of the point to test (length 3 array).
@@ -508,8 +401,11 @@ class PolyhedralSite(Site):
             True if the point is inside the polyhedron.
 
         Raises:
-            RuntimeError: If no vertex coordinates have been assigned, or
-                the vertices are degenerate.
+            RuntimeError: If no vertex coordinates have been assigned; if
+                no triangles have been set and the coordinates were set
+                without a lattice; if the vertices are degenerate; or if
+                the site is too distorted for its triangles to enclose its
+                centre.
             ValueError: If the vertices span more than 1000 cells, counted
                 over the three axes, as they can in a strongly skewed or
                 unreduced cell.
@@ -535,35 +431,55 @@ class PolyhedralSite(Site):
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
-        try:
-            if HAS_NUMBA:
-                if self._hull_triangle_cache is None:
-                    self._hull_triangle_cache = _HullTriangleCache(self.vertex_coords)
-                    self._cache_stale = False
-                elif self._cache_stale:
-                    self._hull_triangle_cache.update(self.vertex_coords)
-                    self._cache_stale = False
-                return self._hull_triangle_cache.contains_point(x)
-            if self._point_image_shifts is None:
-                self._point_image_shifts = _image_shifts(self.vertex_coords)
-            return self._contains_point_delaunay(
-                (x - np.floor(x)) + self._point_image_shifts)
-        except QhullError as e:
-            raise RuntimeError(
-                f"Degenerate vertex geometry for polyhedral_site {self.index} "
-                f"(vertices {self.vertex_indices})"
-            ) from e
-   
-    def _contains_point_delaunay(self, x: np.ndarray) -> bool:
-        """Test containment using Delaunay tessellation.
+        surface = self._surface_cache
+        if surface is None or self._cache_stale:
+            surface = self._refreshed_surface_cache(self.vertex_coords)
+        return surface.contains_point(x)
+
+    def _refreshed_surface_cache(self, vertex_coords: np.ndarray) -> _SurfaceCache:
+        """Compute the containment planes for the current vertex coordinates.
+
+        Fixes the triangles from the convex hull first if none are set.
 
         Args:
-            x: Fractional coordinates as (3,) or (N, 3) array.
+            vertex_coords: (N_vertices, 3) array of the current vertex
+                coordinates.
 
         Returns:
-            True if any point is inside a simplex of the tessellation.
+            The site's surface cache, up to date with ``vertex_coords``.
+
+        Raises:
+            RuntimeError: If no triangles are set and the coordinates were
+                set without a lattice; if the vertices are degenerate; or if
+                the site is too distorted for its triangles to enclose its
+                centre.
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, from ``_image_shifts``.
         """
-        return bool(np.any(self.delaunay.find_simplex(x) >= 0))
+        if self._triangles is None:
+            if self._lattice_matrix is None:
+                raise RuntimeError(
+                    f"polyhedral_site {self.index} has no triangles and its vertex "
+                    "coordinates have no lattice: assign them with assign_vertex_coords "
+                    "or notify_structure_changed, or call set_triangles")
+            try:
+                self._triangles = _surface_triangles(
+                    self.vertex_indices, vertex_coords, self._lattice_matrix, ())
+            except QhullError as error:
+                raise RuntimeError(
+                    f"Degenerate vertex geometry for polyhedral_site {self.index} "
+                    f"(vertices {self.vertex_indices})"
+                ) from error
+        try:
+            if self._surface_cache is None:
+                self._surface_cache = _SurfaceCache(self._triangles, vertex_coords)
+            else:
+                self._surface_cache.update(vertex_coords)
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"Site {self.index} (vertices {self.vertex_indices}): {error}") from error
+        self._cache_stale = False
+        return self._surface_cache
 
     def contains_atom(self,
             atom: Atom,

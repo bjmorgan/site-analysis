@@ -1,7 +1,12 @@
 import itertools
 import unittest
+from collections import Counter
 import numpy as np
 from pymatgen.core import Lattice, Structure
+from scipy.spatial import Delaunay
+from site_analysis import TrajectoryBuilder
+from site_analysis._compat import HAS_NUMBA
+from site_analysis.faces import Face
 from site_analysis.polyhedral_site_collection import (
     PolyhedralSiteCollection,
     construct_neighbouring_sites,
@@ -12,8 +17,10 @@ from site_analysis.tools import get_coordination_indices
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.atom import Atom
 from site_analysis.site import Site
+from site_analysis.trajectory import Trajectory
+from tests.test_faces import build_cubes, displaced, simple_cubic_cubes
+from tests.test_helpers import interstitial_structure
 from unittest.mock import patch, Mock, PropertyMock, MagicMock
-
 
 class PolyhedralSiteCollectionTestCase(unittest.TestCase):
 
@@ -99,14 +106,19 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         self.assertEqual(collection.sites, [self.site1, self.site2, self.site3])
 
     def test_analyse_structure(self):
-        """Test that analyse_structure notifies sites and updates occupations."""
+        """Test that analyse_structure finds shared faces, notifies sites and updates occupations."""
         # Setup mocks
         with patch.object(Atom, 'assign_coords') as mock_assign_coords, \
+             patch.object(PolyhedralSiteCollection, 'find_shared_faces') as mock_find, \
              patch.object(PolyhedralSite, 'notify_structure_changed') as mock_notify, \
              patch.object(PolyhedralSiteCollection, 'assign_site_occupations') as mock_assign:
 
             # Call method
             self.collection.analyse_structure(self.atoms, self.structure)
+
+            # Verify the shared faces were found from the structure
+            mock_find.assert_called_once()
+            np.testing.assert_array_equal(mock_find.call_args[0][0], self.structure.frac_coords)
 
             # Verify each atom's coordinates were assigned
             self.assertEqual(mock_assign_coords.call_count, 3)
@@ -295,7 +307,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         ])
         
         # Mock contains_point to control test behaviour
-        with patch.object(PolyhedralSite, 'contains_point') as mock_contains_point:
+        with patch.object(PolyhedralSiteCollection, 'find_shared_faces'), \
+                patch.object(PolyhedralSite, 'contains_point') as mock_contains_point:
             # Configure mock to return true for each site with its matching point
             mock_contains_point.side_effect = [True, True, True]
             
@@ -329,7 +342,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         frac_coords = self.structure.frac_coords
         lattice_matrix = self.lattice.matrix
 
-        with patch.object(PolyhedralSite, 'notify_structure_changed') as mock_notify, \
+        with patch.object(PolyhedralSiteCollection, 'find_shared_faces'), \
+             patch.object(PolyhedralSite, 'notify_structure_changed') as mock_notify, \
              patch.object(PolyhedralSite, 'contains_point', return_value=True):
             self.collection.sites_contain_points(points, frac_coords, lattice_matrix)
             self.assertEqual(mock_notify.call_count, 3)
@@ -782,6 +796,252 @@ class TestAssignmentToSitesSpanningMoreThanTwoCells(unittest.TestCase):
         site.notify_structure_changed(frac_coords, lattice_matrix)
         collection.assign_site_occupations([atom], lattice_matrix)
         self.assertEqual(atom.in_site, site.index)
+
+
+
+# Containment with numba where it is installed, and with numpy.
+BACKENDS = [True, False] if HAS_NUMBA else [False]
+
+
+def containing_sites(sites, points):
+    """The number of sites containing each point."""
+    return np.array([sum(site.contains_point(point) for site in sites) for point in points])
+
+
+def noisy_frames(structure, n_frames=3, sigma=0.1):
+    """Frames of a structure with every atom displaced by seeded Gaussian noise (sigma in Angstrom)."""
+    return [displaced(structure, sigma, seed=seed) for seed in range(n_frames)]
+
+
+class TestSpaceFilling(unittest.TestCase):
+    """Sites that share faces divide the space between them exactly."""
+
+    N_POINTS = 3000
+
+    def assert_space_filling(self, analyse, sites, frames):
+        rng = np.random.default_rng(0)
+        for frame_number, frame in enumerate(frames):
+            analyse(frame)
+            points = rng.random((self.N_POINTS, 3))
+            counts = containing_sites(sites, points)
+            with self.subTest(frame=frame_number):
+                self.assertEqual(Counter(counts.tolist()), {1: self.N_POINTS})
+
+    def assert_cube_grid_fills_space(self, reference_centres):
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                structure, sites = simple_cubic_cubes(4)
+                if not reference_centres:
+                    for site in sites:
+                        site.reference_center = None
+                collection = PolyhedralSiteCollection(sites)
+                self.assert_space_filling(
+                    lambda frame: collection.analyse_structure([], frame),
+                    sites, noisy_frames(structure))
+
+    def test_noisy_cubes_with_reference_centres(self):
+        self.assert_cube_grid_fills_space(reference_centres=True)
+
+    def test_noisy_cubes_without_reference_centres(self):
+        self.assert_cube_grid_fills_space(reference_centres=False)
+
+    def test_noisy_cubes_built_from_a_reference(self):
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                target, trajectory = build_cubes((3, 3, 3))
+                self.assert_space_filling(
+                    trajectory.analyse_structure, trajectory.sites, noisy_frames(target))
+
+
+class TestConvexSitesMatchTheirHulls(unittest.TestCase):
+    """Sites whose faces are all triangles contain the points of their convex hulls."""
+
+    def test_fcc_tetrahedra_and_octahedra(self):
+        structure = interstitial_structure()
+        frame = displaced(structure, 0.1)
+        rng = np.random.default_rng(1)
+        points = rng.random((500, 3))
+        shifts = np.array(list(itertools.product((-1, 0, 1, 2), repeat=3)))
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                trajectory = (TrajectoryBuilder()
+                              .with_structure(structure)
+                              .with_reference_structure(structure)
+                              .with_mobile_species("Li")
+                              .with_polyhedral_sites(centre_species="Li", vertex_species="O",
+                                                     cutoff=2.0, n_vertices=4)
+                              .with_polyhedral_sites(centre_species="Na", vertex_species="O",
+                                                     cutoff=2.2, n_vertices=6)
+                              .build())
+                trajectory.analyse_structure(frame)
+                for site in trajectory.sites:
+                    contained = [site.contains_point(point) for point in points]
+                    hull = Delaunay(site.vertex_coords)
+                    expected = [bool(np.any(hull.find_simplex(point + shifts) >= 0))
+                                for point in points]
+                    self.assertEqual(contained, expected)
+
+
+class TestBackendsAgree(unittest.TestCase):
+
+    def test_numba_and_numpy_assign_every_atom_to_the_same_site(self):
+        if not HAS_NUMBA:
+            self.skipTest("numba not available")
+        structure, _ = simple_cubic_cubes(4)
+        rng = np.random.default_rng(2)
+        lithium = rng.random((40, 3))
+        with_lithium = Structure(structure.lattice,
+                                 structure.species + ["Li"] * len(lithium),
+                                 np.vstack([structure.frac_coords, lithium]))
+        frames = noisy_frames(with_lithium, n_frames=5, sigma=0.15)
+        trajectories = []
+        for has_numba in (True, False):
+            with patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                _, sites = simple_cubic_cubes(4)
+                trajectory = Trajectory(sites=sites,
+                                        atoms=atoms_from_structure(with_lithium, "Li"))
+                trajectory.trajectory_from_structures(frames, progress=False)
+                trajectories.append([atom.trajectory for atom in trajectory.atoms])
+        self.assertEqual(trajectories[0], trajectories[1])
+        self.assertNotIn(None, [site for atom in trajectories[0] for site in atom])
+
+
+def two_cubes(push=0.0):
+    """Two cubes of O atoms sharing the square at x = 6 Angstrom in a 12 Angstrom cell.
+
+    Atom 0, a corner of the left cube's unshared square at x = 4 Angstrom,
+    is moved by ``push`` Angstrom along x.
+
+    Returns:
+        ``(structure, sites)``.
+    """
+    corners = [(x, y, z) for x in (4.0, 6.0, 8.0) for y in (5.0, 7.0) for z in (5.0, 7.0)]
+    corners[0] = (4.0 + push, 5.0, 5.0)
+    structure = Structure(Lattice.cubic(12.0), ["O"] * 12, corners, coords_are_cartesian=True)
+    Site.reset_index(0)
+    sites = [PolyhedralSite(vertex_indices=list(range(0, 8)),
+                            reference_center=np.array([5.0, 6.0, 6.0]) / 12.0),
+             PolyhedralSite(vertex_indices=list(range(4, 12)),
+                            reference_center=np.array([7.0, 6.0, 6.0]) / 12.0)]
+    return structure, sites
+
+
+def triangles_on(site, atoms):
+    """The site's triangles whose atoms are all in a set of atoms, as sets of atom indices."""
+    return {frozenset(site.vertex_indices[i] for i in triangle)
+            for triangle in site._triangles.tolist()
+            if {site.vertex_indices[i] for i in triangle} <= set(atoms)}
+
+
+class TestFindSharedFacesSetsTriangles(unittest.TestCase):
+
+    def test_shared_squares_are_triangulated_identically(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+        shared = [4, 5, 6, 7]
+        self.assertEqual(len(triangles_on(sites[0], shared)), 2)
+        self.assertEqual(triangles_on(sites[0], shared), triangles_on(sites[1], shared))
+
+    def test_a_second_structure_replaces_the_triangles(self):
+        outward, sites = two_cubes(push=-0.1)
+        inward, _ = two_cubes(push=0.1)
+        collection = PolyhedralSiteCollection(sites)
+        collection.find_shared_faces(outward.frac_coords, outward.lattice.matrix)
+        unshared, shared = [0, 1, 2, 3], [4, 5, 6, 7]
+        before = triangles_on(sites[0], unshared), triangles_on(sites[0], shared)
+        collection.find_shared_faces(inward.frac_coords, inward.lattice.matrix)
+        after = triangles_on(sites[0], unshared), triangles_on(sites[0], shared)
+        # Moving atom 0 from outside to inside the square's plane moves the hull's diagonal.
+        self.assertNotEqual(after[0], before[0])
+        self.assertEqual(after[1], before[1])
+
+    def test_failed_finding_keeps_the_faces_and_triangles(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+        faces = collection.shared_faces()
+        triangles = [site._triangles.copy() for site in sites]
+        # Fold the left cube through the shared square into the right cube.
+        coords = structure.frac_coords.copy()
+        coords[:4, 0] += 3.0 / 12.0
+        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap$"):
+            collection.find_shared_faces(coords, structure.lattice.matrix)
+        self.assertEqual(collection.shared_faces(), faces)
+        for site, expected in zip(sites, triangles):
+            np.testing.assert_array_equal(site._triangles, expected)
+
+    def test_site_overlapping_its_own_image_is_named(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        with patch('site_analysis.polyhedral_site_collection._first_overlap',
+                   return_value=(1, 1)):
+            with self.assertRaisesRegex(
+                    ValueError, "^Site 1 overlaps a periodic image of itself$"):
+                collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+
+    def test_shared_atoms_that_cannot_be_triangulated_identically_name_both_sites(self):
+        # A cube, and a site on four of its corners, no three on one square, and an outside atom.
+        corners = [(x, y, z) for x in (4.0, 6.0) for y in (4.0, 6.0) for z in (4.0, 6.0)]
+        structure = Structure(Lattice.cubic(10.0), ["O"] * 9, corners + [(2.0, 2.0, 7.0)],
+                              coords_are_cartesian=True)
+        Site.reset_index(0)
+        sites = [PolyhedralSite(vertex_indices=list(range(8)),
+                                reference_center=np.array([0.5, 0.5, 0.5])),
+                 PolyhedralSite(vertex_indices=[0, 3, 5, 6, 8],
+                                reference_center=np.array([0.4, 0.4, 0.5]))]
+        collection = PolyhedralSiteCollection(sites)
+        with self.assertRaisesRegex(
+                ValueError,
+                r"^Sites 0 and 1: Shared atoms \[0, 3, 5, 6\] cannot be triangulated "
+                r"identically .*; the sites may overlap$"):
+            collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+        with self.assertRaisesRegex(RuntimeError, "find_shared_faces"):
+            collection.shared_faces()
+
+
+class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):
+
+    def test_first_analysis_finds_the_shared_faces_of_its_structure(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        collection.analyse_structure([], structure)
+        self.assertEqual(collection.shared_faces(), (Face((0, 1), (4, 5, 6, 7)),))
+
+    def test_later_analysis_keeps_the_shared_faces(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        collection.analyse_structure([], structure)
+        with patch.object(PolyhedralSiteCollection, 'find_shared_faces') as find:
+            collection.analyse_structure([], displaced(structure, 0.1))
+        find.assert_not_called()
+
+    def test_sites_contain_points_finds_the_shared_faces_of_its_structure(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        points = np.array([[5.0, 6.0, 6.0], [7.0, 6.0, 6.0]]) / 12.0
+        self.assertTrue(collection.sites_contain_points(
+            points, structure.frac_coords, structure.lattice.matrix))
+        self.assertEqual(collection.shared_faces(), (Face((0, 1), (4, 5, 6, 7)),))
+
+    def test_too_distorted_site_names_itself(self):
+        # One tetrahedron; in the second frame its apex has moved through its base.
+        base = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5)]
+        def frame(apex_x):
+            return Structure(Lattice.cubic(10.0), ["O"] * 4 + ["Li"],
+                             [*base, (apex_x, 5.0, 5.0), (4.9, 5.0, 5.0)],
+                             coords_are_cartesian=True)
+        Site.reset_index(0)
+        trajectory = Trajectory(sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3])],
+                                atoms=[Atom(index=4)])
+        trajectory.analyse_structure(frame(3.4))
+        with self.assertRaisesRegex(
+                RuntimeError,
+                r"^Site 0 \(vertices \[0, 1, 2, 3\]\): polyhedron is too distorted"):
+            trajectory.analyse_structure(frame(6.6))
 
 
 if __name__ == '__main__':

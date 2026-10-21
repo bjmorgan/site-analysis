@@ -777,10 +777,12 @@ class TrajectoryBuilder:
             finite. False otherwise.
 
         Raises:
-            ValueError: If two sites coincide or one lies inside another. The
-                message says that this typically means the reference
-                structure has multiple atoms inside the same coordination
-                environment.
+            ValueError: If two sites coincide, one lies inside another, two
+                sites overlap, or the atoms two sites share cannot be
+                triangulated identically on both. The message says that this
+                typically means the reference structure has multiple atoms
+                inside the same coordination environment.
+            RuntimeError: If a site's reference vertices are degenerate.
         """
         if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
             return False
@@ -840,8 +842,9 @@ class TrajectoryBuilder:
         using the previously configured site generators. When every site is
         polyhedral and every vertex atom of every site was mapped from the
         reference structure by a ``with_polyhedral_sites`` definition, it
-        also finds the faces the sites share from the reference geometry;
-        otherwise the shared faces are not found until
+        also finds the faces the sites share, and fixes each site's
+        triangles, from the reference geometry; otherwise they are found
+        from the first structure analysed, or when
         ``Trajectory.find_shared_faces`` is called.
         
         Sites are created first, then the atoms, then the trajectory, so a
@@ -864,12 +867,15 @@ class TrajectoryBuilder:
                 spherical site whose centre is not three finite numbers or
                 whose radius is negative or NaN, a polyhedral site with a
                 vertex index that is not an atom of the structure, or
-                duplicate, coincident or nested sites.
+                duplicate, coincident, nested or overlapping sites.
             ValueError: Mapping failures: coordination environments that
                 cannot be found or mapped one-to-one to the target structure
                 (see "Mapping Conflicts" in the reference workflow guide).
             TypeError: Mixed site types (the message names the types), or a
                 commitment radius that is not a number.
+            RuntimeError: A polyhedral site whose reference vertices are
+                degenerate, when the shared faces are found from the
+                reference geometry.
         """
         # Validate basic requirements
         if not self._structure:

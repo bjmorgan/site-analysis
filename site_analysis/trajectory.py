@@ -231,7 +231,13 @@ class Trajectory:
 
         Raises:
             ValueError: If the sites are polyhedral and a site has a vertex
-                index that is not an atom of the structure.
+                index that is not an atom of the structure, or no shared
+                faces have been found and finding them from the structure
+                fails (see ``find_shared_faces``).
+            RuntimeError: If the sites are polyhedral and finding the shared
+                faces fails on degenerate vertex geometry, or a site tested
+                for an atom is too distorted for its triangles to enclose
+                its centre.
         """
         self.site_collection.analyse_structure(self.atoms, structure)
         
@@ -263,13 +269,17 @@ class Trajectory:
 
     def find_shared_faces(self,
             structure: Structure) -> None:
-        """Find the faces shared by pairs of polyhedral sites.
+        """Find the faces shared by pairs of polyhedral sites, and fix each site's triangles.
 
         Two sites share a face when they share three or more vertex atoms
-        under one lattice translation. The structure's atoms must be in the
-        trajectory's atom order, so that its atom indices are the sites'
-        vertex indices. The result replaces any earlier one, and is kept by
-        ``reset()``.
+        under one lattice translation. Each site's triangles are fixed from
+        the structure, with each shared face triangulated identically by the
+        sites sharing it (see ``PolyhedralSiteCollection.find_shared_faces``).
+        The structure's atoms must be in the trajectory's atom order, so
+        that its atom indices are the sites' vertex indices. The result
+        replaces any earlier one, and is kept by ``reset()``. If no shared
+        faces have been found when a structure is first analysed, they are
+        found from that structure.
 
         Args:
             structure: A pymatgen Structure object.
@@ -277,9 +287,13 @@ class Trajectory:
         Raises:
             TypeError: If the sites are not polyhedral.
             ValueError: If a site has a vertex index that is not an atom of
-                the structure, the vertex coordinates are not finite, or two
-                sites coincide or one lies inside another. The earlier result
-                is then kept.
+                the structure; the vertex coordinates are not finite; two
+                sites coincide or one lies inside another; the atoms two
+                sites share cannot be triangulated identically on both; or
+                two sites, or a site and a periodic image of itself,
+                overlap. The earlier result is then kept.
+            RuntimeError: If a site's vertices are degenerate. The earlier
+                result is then kept.
         """
         self._polyhedral_site_collection().find_shared_faces(
             structure.frac_coords, structure.lattice.matrix)
@@ -569,7 +583,13 @@ class Trajectory:
 
         Raises:
             ValueError: If the sites are polyhedral and a site has a vertex
-                index that is not an atom of the structure.
+                index that is not an atom of the structure, or no shared
+                faces have been found and finding them from the structure
+                fails (see ``find_shared_faces``).
+            RuntimeError: If the sites are polyhedral and finding the shared
+                faces fails on degenerate vertex geometry, or a site tested
+                for an atom is too distorted for its triangles to enclose
+                its centre.
         """
         self.analyse_structure(structure)
         if self._commitment_radii is None:
@@ -783,7 +803,13 @@ class Trajectory:
 
         Raises:
             ValueError: If the sites are polyhedral and a site has a vertex
-                index that is not an atom of a structure.
+                index that is not an atom of a structure, or no shared
+                faces have been found and finding them from the first
+                structure fails (see ``find_shared_faces``).
+            RuntimeError: If the sites are polyhedral and finding the shared
+                faces fails on degenerate vertex geometry, or a site tested
+                for an atom is too distorted for its triangles to enclose
+                its centre.
         """
         generator: Iterable[tuple[int, Structure]] = enumerate(structures, 1)
         if progress:

@@ -269,6 +269,26 @@ def _numpy_star_query(
     return bool(np.any(np.all(dots >= 0.0, axis=2)))
 
 
+class _SharedFaceError(ValueError):
+    """A shared atom set that cannot be triangulated identically on a site.
+
+    Attributes:
+        atoms: Atom indices of the shared set, in ascending order.
+    """
+
+    def __init__(self, atoms: Sequence[int], vertex_indices: Sequence[int]) -> None:
+        """Describe the shared atom set and the site's vertices.
+
+        Args:
+            atoms: Atom indices of the shared set, in ascending order.
+            vertex_indices: Atom indices of the site's vertices.
+        """
+        super().__init__(
+            f"Shared atoms {list(atoms)} cannot be triangulated identically on the site "
+            f"with vertices {list(vertex_indices)}")
+        self.atoms: tuple[int, ...] = tuple(atoms)
+
+
 def _surface_triangles(
     vertex_indices: Sequence[int],
     coords: np.ndarray,
@@ -315,8 +335,8 @@ def _surface_triangles(
         ``vertex_indices``) per triangle.
 
     Raises:
-        ValueError: If a shared atom set is not a face of the site that
-            can be triangulated identically by the rules above, or if
+        _SharedFaceError: If a shared atom set is not a face of the site
+            that can be triangulated identically by the rules above, or if
             fixing its triangles would remove a triangle of an earlier
             shared atom set.
     """
@@ -328,9 +348,7 @@ def _surface_triangles(
         face = frozenset(local[atom] for atom in atoms)
         replaced, added = _shared_face_triangles(face, triangles, cartesian, vertex_indices)
         if replaced is None or (replaced - set(added)) & fixed:
-            raise ValueError(
-                f"Shared atoms {atoms} cannot be triangulated identically on the site "
-                f"with vertices {list(vertex_indices)}")
+            raise _SharedFaceError(atoms, vertex_indices)
         triangles = [t for t in triangles if t not in replaced] + added
         fixed.update(t for t in added if t <= face)
     ordered = np.array([sorted(t) for t in triangles], dtype=np.int64)

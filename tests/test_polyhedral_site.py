@@ -268,6 +268,52 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "^triangles must be"):
                     self.site.set_triangles(triangles)
 
+    def test_set_triangles_rejects_triangles_that_do_not_close_a_surface(self):
+        """set_triangles raises ValueError unless every edge is in exactly two triangles."""
+        cases = {
+            "no triangles": np.zeros((0, 3), dtype=int),
+            "one triangle": _TETRAHEDRON_TRIANGLES[:1],
+            "a missing triangle": _TETRAHEDRON_TRIANGLES[:3],
+            "a repeated vertex": np.vstack([_TETRAHEDRON_TRIANGLES[:3], [[0, 0, 1]]]),
+        }
+        for name, triangles in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, "^triangles must form a closed surface"):
+                    self.site.set_triangles(triangles)
+
+    def test_contains_point_rejects_a_point_that_is_not_three_finite_numbers(self):
+        """contains_point raises ValueError for a point that is not three finite numbers."""
+        cases = {
+            "NaN": [np.nan, 0.5, 0.5],
+            "infinite": [np.inf, 0.5, 0.5],
+            "two numbers": [0.5, 0.5],
+            "four numbers": [0.5, 0.5, 0.5, 0.5],
+        }
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
+                for name, point in cases.items():
+                    with self.subTest(name):
+                        with self.assertRaisesRegex(ValueError, "three finite numbers"):
+                            site.contains_point(np.array(point))
+
+    def test_triangles_that_do_not_enclose_the_centre_name_the_site_and_their_winding(self):
+        """Triangles wound towards the centre raise RuntimeError naming the site and the winding."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                Site._newid = 7
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
+                site.set_triangles(_TETRAHEDRON_TRIANGLES[:, [0, 2, 1]])
+                with self.assertRaisesRegex(
+                        RuntimeError,
+                        r"^Site 7 \(vertices \[0, 1, 2, 3\]\): the triangles as set do not "
+                        r"enclose the centre: each must be wound away from it$"):
+                    site.contains_point(np.array([0.5, 0.5, 0.5]))
+
     def test_contains_point_with_triangles_needs_no_lattice(self):
         """Coordinates restored without a lattice can be tested when the triangles are restored too."""
         site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
@@ -522,19 +568,19 @@ class TestContainmentImageLimit(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba), \
-                    patch.object(_SurfaceCache, 'update', autospec=True,
-                                 side_effect=_SurfaceCache.update) as update:
+                    patch.object(_SurfaceCache, '_set_planes', autospec=True,
+                                 side_effect=_SurfaceCache._set_planes) as set_planes:
                 site = PolyhedralSite(vertex_indices=[0, 1, 2, 3],
                                       reference_center=np.array([0.5, 0.5, 0.5]))
                 site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
-                self.assertEqual(update.call_count, 0)
+                self.assertEqual(set_planes.call_count, 0)
                 for _ in range(3):
                     site.contains_point(np.array([0.5, 0.5, 0.5]))
-                self.assertEqual(update.call_count, 1)
+                self.assertEqual(set_planes.call_count, 1)
                 site.assign_vertex_coords(_TETRAHEDRON + 0.01, lattice_matrix)
-                self.assertEqual(update.call_count, 1)
+                self.assertEqual(set_planes.call_count, 1)
                 site.contains_point(np.array([0.5, 0.5, 0.5]))
-                self.assertEqual(update.call_count, 2)
+                self.assertEqual(set_planes.call_count, 2)
 
 
 class TestContainmentOfPointsInAnyImage(unittest.TestCase):
@@ -552,6 +598,37 @@ class TestContainmentOfPointsInAnyImage(unittest.TestCase):
                 for point in ([0.5, 0.5, 0.5], [1.5, 0.5, 0.5], [-0.5, 2.5, 0.5]):
                     with self.subTest(numba=has_numba, point=point):
                         self.assertTrue(site.contains_point(np.array(point)))
+
+
+class TestUnwrappedVertexCoords(unittest.TestCase):
+
+    # A tetrahedron around the origin, each vertex given in a different image.
+    STRADDLING = np.array([[0.95, 0.95, 0.95], [1.05, 0.95, 0.95],
+                           [-0.05, 1.05, 0.95], [0.95, 0.95, 2.05]])
+    LATTICE = Lattice.cubic(10.0).matrix
+
+    def test_unwrapped_vertex_coords_are_those_assign_vertex_coords_stores(self):
+        """With or without a reference centre, the result is what a fresh site stores."""
+        for reference_center in (None, np.zeros(3), np.ones(3)):
+            with self.subTest(reference_center=reference_center):
+                unwrapped = PolyhedralSite(
+                    vertex_indices=[0, 1, 2, 3], reference_center=reference_center,
+                ).unwrapped_vertex_coords(self.STRADDLING, self.LATTICE)
+                assigned = PolyhedralSite(
+                    vertex_indices=[0, 1, 2, 3], reference_center=reference_center)
+                assigned.assign_vertex_coords(self.STRADDLING, self.LATTICE)
+                np.testing.assert_array_equal(unwrapped, assigned.vertex_coords)
+                self.assertLess(np.ptp(unwrapped, axis=0).max(), 0.2)
+
+    def test_unwrapped_vertex_coords_does_not_change_the_site(self):
+        """The call stores nothing on a fresh site and keeps the coordinates of one that has them."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site.unwrapped_vertex_coords(self.STRADDLING, self.LATTICE)
+        self.assertIsNone(site.vertex_coords)
+        site.assign_vertex_coords(self.STRADDLING, self.LATTICE)
+        before = site.vertex_coords.copy()
+        site.unwrapped_vertex_coords(self.STRADDLING + 1.0, self.LATTICE)
+        np.testing.assert_array_equal(site.vertex_coords, before)
 
 
 class TestNotifyStructureChanged(unittest.TestCase):

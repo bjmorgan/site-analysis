@@ -256,7 +256,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         """
         if self._shared_faces is None:
             raise RuntimeError(
-                "Shared faces have not been found: call Trajectory.find_shared_faces(structure)")
+                "Shared faces have not been found: analyse a structure, or call "
+                "find_shared_faces with one")
         return self._shared_faces
 
     def site_adjacency(self) -> csr_array:
@@ -344,7 +345,9 @@ def _site_triangles(
 
     Raises:
         ValueError: If the atoms of a shared face cannot be triangulated
-            identically on the site, naming the two sites that share it.
+            identically on the site, naming the sites that share it and, if
+            it clashes with an earlier shared face, the sites sharing that
+            face too.
         RuntimeError: If the site's vertices are degenerate.
     """
     try:
@@ -352,11 +355,16 @@ def _site_triangles(
             site.vertex_indices, coords, lattice_matrix,
             [face.vertex_indices for face in faces])
     except _SharedFaceError as error:
-        face = next(face for face in faces if face.vertex_indices == error.atoms)
-        i, j = face.site_indices
+        faces_by_atoms = {face.vertex_indices: face for face in faces}
+        face = faces_by_atoms[error.atoms]
+        named = set(face.site_indices)
+        if error.earlier is not None:
+            named.update(faces_by_atoms[error.earlier].site_indices)
+        *leading, last = sorted(named)
+        first, second = face.site_indices
         raise ValueError(
-            f"Sites {i} and {j}: {error}; the sites may overlap"
-            f"{_narrow_cell_hint(sites_by_index[i], sites_by_index[j])}") from error
+            f"Sites {', '.join(map(str, leading))} and {last}: {error}; the sites may overlap"
+            f"{_narrow_cell_hint(sites_by_index[first], sites_by_index[second])}") from error
     except QhullError as error:
         raise RuntimeError(
             f"Degenerate vertex geometry for polyhedral_site {site.index} "

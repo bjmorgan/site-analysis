@@ -1,4 +1,5 @@
 import itertools
+import re
 import unittest
 from collections import Counter
 from unittest.mock import patch
@@ -262,6 +263,16 @@ class TestSurfaceTriangles(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
             _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [{a, b, c}, {a, b, d}])
 
+    def test_shared_atoms_clashing_with_an_earlier_face_name_both_sets(self):
+        """A shared set whose triangles would change an earlier shared face's names both sets."""
+        a, b, c, d = (_CUBE_INDICES[i] for i in _TOP)
+        with self.assertRaisesRegex(
+                ValueError,
+                rf"^Shared atoms {re.escape(str(sorted((a, b, c))))} cannot be triangulated "
+                rf"identically on the site with vertices {re.escape(str(_CUBE_INDICES))} without "
+                rf"changing the triangles of shared atoms {re.escape(str(sorted((a, b, d))))}$"):
+            _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [{a, b, c}, {a, b, d}])
+
     def test_part_of_a_hexagonal_face_cannot_be_triangulated_identically(self):
         """Four atoms of a hexagonal prism's hexagon, which its triangles do not cover, raise ValueError."""
         # Denting alternate corners of the bottom hexagon fixes its triangles
@@ -372,6 +383,18 @@ class TestSurfaceCache(unittest.TestCase):
                 cache = _SurfaceCache(triangles, _CUBE)
                 with self.assertRaisesRegex(RuntimeError, "too distorted"):
                     cache.update(distorted)
+
+    def test_triangles_wound_towards_the_centre_do_not_enclose_it(self):
+        """Creating the cache with inward-wound triangles raises RuntimeError naming the winding."""
+        triangles = _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [])
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
+                with self.assertRaisesRegex(
+                        RuntimeError,
+                        "^the triangles as set do not enclose the centre: each must be wound "
+                        "away from it$"):
+                    _SurfaceCache(triangles[:, [0, 2, 1]], _CUBE)
 
     def test_image_shifts_for_vertices_within_two_cells(self):
         """Vertices with every coordinate in [0, 2) give the eight shifts with components in {0, 1}."""

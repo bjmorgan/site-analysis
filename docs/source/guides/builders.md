@@ -579,7 +579,7 @@ trajectory = builder.build()
 builder.with_min_atom_distance(0)
 ```
 
-**Duplicate sites**: After generating sites, the builder checks that no two sites are duplicates. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
+**Duplicate and overlapping sites**: After generating sites, the builder checks that no two sites are duplicates, and that polyhedral sites do not overlap. Duplicates indicate that the reference structure has multiple atoms inside the same coordination environment.
 
 When every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition, the builder finds duplicates by position. Two sites with the same vertex atoms under one lattice translation raise a `ValueError` that they coincide, and a site all of whose vertex atoms are vertices of another site under one lattice translation raises a `ValueError` that it lies inside that site. Sites with the same vertex atoms in different periodic images (for example cubes in a cell two sites wide) are distinct.
 
@@ -600,6 +600,8 @@ trajectory = builder.build()
 # the site definitions (for example the cutoff or n_vertices) give
 # interpenetrating coordination environments.
 ```
+
+Finding the shared faces from the reference geometry (see [Shared Faces and Adjacency](polyhedral_sites.md#shared-faces-and-adjacency)) also raises a `ValueError`, with the same explanation appended, for two sites that overlap with positive volume (`Sites 0 and 1 overlap`), for a site that overlaps a periodic image of itself, and for shared atoms that cannot be triangulated identically on both sites (`cannot be triangulated identically`, naming the sites that share them). It raises a `RuntimeError` for a site whose reference vertices are degenerate.
 
 For dynamic Voronoi sites, and for polyhedral sites whenever the position-based check does not apply, the builder instead checks that no two sites share the same `reference_indices` (dynamic Voronoi) or `vertex_indices` (polyhedral). The position-based check is used only when every site is polyhedral and every vertex atom of every site was mapped from the reference structure by a `with_polyhedral_sites` definition; if any site has a vertex atom that was not (for example, sites added with `with_existing_sites`), the vertex-index check is used for all polyhedral sites:
 

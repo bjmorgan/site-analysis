@@ -1016,8 +1016,31 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
                 r"^Sites 0 and 1: Shared atoms \[0, 3, 5, 6\] cannot be triangulated "
                 r"identically .*; the sites may overlap$"):
             collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
-        with self.assertRaisesRegex(RuntimeError, "find_shared_faces"):
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "^Shared faces have not been found: analyse a structure, or call "
+                "find_shared_faces with one$"):
             collection.shared_faces()
+
+    def test_shared_faces_that_cannot_both_be_triangulated_identically_name_every_site(self):
+        # Two cubes sharing a square, and a tetrahedron on three of the square's corners.
+        corners = [(x, y, z) for x in (4.0, 6.0, 8.0) for y in (4.0, 6.0) for z in (4.0, 6.0)]
+        structure = Structure(Lattice.cubic(10.0), ["O"] * 13, corners + [(7.0, 5.0, 5.0)],
+                              coords_are_cartesian=True)
+        Site.reset_index(0)
+        sites = [PolyhedralSite(vertex_indices=list(range(0, 8)),
+                                reference_center=np.array([0.5, 0.5, 0.5])),
+                 PolyhedralSite(vertex_indices=list(range(4, 12)),
+                                reference_center=np.array([0.7, 0.5, 0.5])),
+                 PolyhedralSite(vertex_indices=[5, 6, 7, 12],
+                                reference_center=np.array([0.65, 0.55, 0.55]))]
+        collection = PolyhedralSiteCollection(sites)
+        with self.assertRaisesRegex(
+                ValueError,
+                r"^Sites 0, 1 and 2: Shared atoms \[5, 6, 7\] cannot be triangulated identically "
+                r"on the site with vertices \[0, 1, 2, 3, 4, 5, 6, 7\] without changing the "
+                r"triangles of shared atoms \[4, 5, 6, 7\]; the sites may overlap$"):
+            collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
 
 
 class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):

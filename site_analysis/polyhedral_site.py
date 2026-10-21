@@ -17,7 +17,8 @@ from site_analysis.site import Site, _as_index
 from site_analysis.atom import Atom
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
-from site_analysis.polyhedron_surface import _SurfaceCache, _surface_triangles
+from site_analysis.polyhedron_surface import (
+    _SurfaceCache, _check_closed_surface, _surface_triangles)
 
 
 class PolyhedralSite(Site):
@@ -201,7 +202,8 @@ class PolyhedralSite(Site):
 
         Stores a reference to the full coordinate array so that
         PBC-corrected vertex coordinates can be computed on demand
-        when ``contains_point`` is next called.
+        when ``contains_point`` is next called or ``vertex_coords`` is
+        next read.
 
         Args:
             all_frac_coords: Full fractional coordinate array from the
@@ -230,8 +232,8 @@ class PolyhedralSite(Site):
 
         Note:
             For bulk analysis prefer ``notify_structure_changed``, which
-            pre-extracts coordinates once and defers PBC correction
-            until the site is actually queried.
+            stores the structure's coordinates and defers their extraction
+            and PBC correction until the site is actually queried.
         """
         frac_coords = all_frac_coords[self.vertex_indices]
         self._store_vertex_coords(frac_coords, lattice_matrix)
@@ -368,11 +370,13 @@ class PolyhedralSite(Site):
             triangles: (T, 3) array of local vertex indices (positions in
                 ``vertex_indices``) per triangle, each wound so that
                 ``(b - a) x (c - a)`` points away from the site's centre,
-                as from ``PolyhedralSiteCollection.find_shared_faces``.
+                as ``PolyhedralSiteCollection.find_shared_faces`` sets them.
 
         Raises:
             ValueError: If ``triangles`` is not a (T, 3) array of integers
-                from 0 to one less than the number of vertices.
+                from 0 to one less than the number of vertices, or the
+                triangles do not form a closed surface, with every edge in
+                exactly two of them.
         """
         array = np.asarray(triangles)
         if (not np.issubdtype(array.dtype, np.integer)
@@ -381,6 +385,7 @@ class PolyhedralSite(Site):
             raise ValueError(
                 "triangles must be a (T, 3) array of local vertex indices from 0 to "
                 f"{len(self.vertex_indices) - 1}, got {triangles!r}")
+        _check_closed_surface(array)
         self._triangles = array.astype(np.int64)
         self._surface_cache = None
 
@@ -428,13 +433,15 @@ class PolyhedralSite(Site):
         Raises:
             RuntimeError: If no vertex coordinates have been assigned; if
                 no triangles have been set and the coordinates were set
-                without a lattice; if the vertices are degenerate; or if
-                the site is too distorted for its triangles to enclose its
-                centre.
-            ValueError: If coordinates notified with
-                ``notify_structure_changed`` are not finite, or if the
-                vertices span more than 1000 cells, counted over the three
-                axes, as they can in a strongly skewed or unreduced cell.
+                without a lattice; if the vertices are degenerate; if the
+                triangles set on the site do not enclose its centre on its
+                first test; or if the site is too distorted for its
+                triangles to enclose its centre.
+            ValueError: If ``x`` is not three finite numbers; if
+                coordinates notified with ``notify_structure_changed`` are
+                not finite; or if the vertices span more than 1000 cells,
+                counted over the three axes, as they can in a strongly
+                skewed or unreduced cell.
         """
         if algo is not None:
             warnings.warn(
@@ -476,9 +483,10 @@ class PolyhedralSite(Site):
 
         Raises:
             RuntimeError: If no triangles are set and the coordinates were
-                set without a lattice; if the vertices are degenerate; or if
-                the site is too distorted for its triangles to enclose its
-                centre.
+                set without a lattice; if the vertices are degenerate; if
+                the triangles do not enclose the centre when the planes are
+                first computed; or if the site is too distorted for its
+                triangles to enclose its centre.
             ValueError: If the vertices span more than 1000 cells, counted
                 over the three axes.
         """
@@ -572,8 +580,9 @@ class PolyhedralSite(Site):
         label, reference centre and triangles. A dict without a
         ``reference_center`` or ``triangles`` key, as written by earlier
         versions, gives a site with no reference centre or no triangles. A
-        site restored without triangles cannot test containment until its
-        vertex coordinates are assigned with a lattice. A collection of
+        site restored without triangles cannot test containment until
+        triangles are set with ``set_triangles`` or its vertex coordinates
+        are assigned with a lattice. A collection of
         restored sites that has not found its shared faces replaces their
         triangles on its first analysis; calling ``find_shared_faces`` with
         the original structure first keeps them.

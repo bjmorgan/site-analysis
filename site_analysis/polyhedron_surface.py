@@ -130,7 +130,13 @@ if HAS_NUMBA:
         Returns:
             True if an image is on the non-negative side of all four
             planes of a tetrahedron.
+
+        Raises:
+            ValueError: If ``x`` is not three finite numbers.
         """
+        if x.shape[0] != 3 or not (np.isfinite(x[0]) and np.isfinite(x[1])
+                                   and np.isfinite(x[2])):
+            raise ValueError("point must be three finite numbers")
         w0 = x[0] - np.floor(x[0])
         w1 = x[1] - np.floor(x[1])
         w2 = x[2] - np.floor(x[2])
@@ -320,8 +326,8 @@ def _numpy_star_planes(
     planes through the centre ``o`` and each edge, with normals
     ``(a - o) x (b - o)``, ``(b - o) x (c - o)`` and ``(c - o) x (a - o)``
     through ``o``, and the triangle's own plane, with normal
-    ``-(b - a) x (c - a)`` through ``a``. A query tests them in this
-    order, so the edge planes, which reject most points outside a
+    ``-(b - a) x (c - a)`` through ``a``. The numba query tests them in
+    this order, so the edge planes, which reject most points outside a
     tetrahedron, come first. When the centre is strictly on the inner side
     of every triangle's plane, every normal points into its tetrahedron.
 
@@ -385,7 +391,12 @@ def _numpy_star_query(
     Returns:
         True if an image is on the non-negative side of all four planes of
         a tetrahedron.
+
+    Raises:
+        ValueError: If ``x`` is not three finite numbers.
     """
+    if x.shape != (3,) or not np.isfinite(x).all():
+        raise ValueError("point must be three finite numbers")
     images = (x - np.floor(x)) + image_shifts
     d = images[:, np.newaxis, np.newaxis, :] - ref_points
     dots = d[..., 0] * normals[..., 0] + d[..., 1] * normals[..., 1] + d[..., 2] * normals[..., 2]
@@ -397,19 +408,32 @@ class _SharedFaceError(ValueError):
 
     Attributes:
         atoms: Atom indices of the shared set, in ascending order.
+        earlier: Atom indices, in ascending order, of the earlier shared set
+            whose triangles the set would change, or None if the set cannot
+            be triangulated identically on its own.
     """
 
-    def __init__(self, atoms: Sequence[int], vertex_indices: Sequence[int]) -> None:
+    def __init__(
+        self,
+        atoms: Sequence[int],
+        vertex_indices: Sequence[int],
+        earlier: Sequence[int] | None = None,
+    ) -> None:
         """Describe the shared atom set and the site's vertices.
 
         Args:
             atoms: Atom indices of the shared set, in ascending order.
             vertex_indices: Atom indices of the site's vertices.
+            earlier: Atom indices, in ascending order, of the earlier shared
+                set whose triangles the set would change, if any.
         """
-        super().__init__(
-            f"Shared atoms {list(atoms)} cannot be triangulated identically on the site "
-            f"with vertices {list(vertex_indices)}")
+        message = (f"Shared atoms {list(atoms)} cannot be triangulated identically on the site "
+                   f"with vertices {list(vertex_indices)}")
+        if earlier is not None:
+            message += f" without changing the triangles of shared atoms {list(earlier)}"
+        super().__init__(message)
         self.atoms: tuple[int, ...] = tuple(atoms)
+        self.earlier: tuple[int, ...] | None = None if earlier is None else tuple(earlier)
 
 
 def _surface_triangles(
@@ -463,25 +487,57 @@ def _surface_triangles(
         _SharedFaceError: If a shared atom set is not a face of the site
             that can be triangulated identically by the rules above, or if
             fixing its triangles would remove a triangle of an earlier
-            shared atom set.
+            shared atom set, which the error names.
     """
     local = {atom: i for i, atom in enumerate(vertex_indices)}
     cartesian = coords @ lattice_matrix
     triangles: list[frozenset[int]] = [frozenset(t) for t in ConvexHull(cartesian).simplices.tolist()]
-    fixed: set[frozenset[int]] = set()
+    fixed: dict[frozenset[int], list[int]] = {}
     for atoms in sorted((sorted(s) for s in shared_atom_sets)):
         face = frozenset(local[atom] for atom in atoms)
         replaced, added = _shared_face_triangles(face, triangles, cartesian, vertex_indices)
-        if replaced is None or (replaced - set(added)) & fixed:
+        if replaced is None:
             raise _SharedFaceError(atoms, vertex_indices)
+        clashing = (replaced - set(added)) & fixed.keys()
+        if clashing:
+            raise _SharedFaceError(atoms, vertex_indices, min(fixed[t] for t in clashing))
         triangles = [t for t in triangles if t not in replaced] + added
-        fixed.update(t for t in added if t <= face)
+        fixed.update((t, atoms) for t in added if t <= face)
     ordered = np.array([sorted(t) for t in triangles], dtype=np.int64)
     a, b, c = (coords[ordered[:, k]] for k in range(3))
     normal = np.cross(b - a, c - a)
     inward = np.einsum("ij,ij->i", normal, a - coords.mean(axis=0)) < 0.0
     ordered[inward] = ordered[inward][:, [0, 2, 1]]
     return ordered
+
+
+def _check_closed_surface(triangles: np.ndarray) -> None:
+    """Check that triangles close a surface: every edge is in exactly two of them.
+
+    Args:
+        triangles: (N_triangles, 3) integer array of vertex indices per
+            triangle.
+
+    Raises:
+        ValueError: If there are no triangles, a triangle repeats a vertex,
+            or an edge is in any number of triangles other than two.
+    """
+    if len(triangles) == 0:
+        raise ValueError("triangles must form a closed surface, got no triangles")
+    repeated = ((triangles[:, 0] == triangles[:, 1]) | (triangles[:, 1] == triangles[:, 2])
+                | (triangles[:, 0] == triangles[:, 2]))
+    if repeated.any():
+        raise ValueError(
+            f"triangles must form a closed surface: triangle "
+            f"{triangles[repeated][0].tolist()} repeats a vertex")
+    edges = np.sort(np.concatenate([triangles[:, [0, 1]], triangles[:, [1, 2]],
+                                    triangles[:, [0, 2]]]), axis=1)
+    unique, counts = np.unique(edges, axis=0, return_counts=True)
+    odd = counts != 2
+    if odd.any():
+        raise ValueError(
+            f"triangles must form a closed surface: edge {unique[odd][0].tolist()} is in "
+            f"{counts[odd][0]} triangles, not two")
 
 
 def _shared_face_triangles(
@@ -812,12 +868,21 @@ class _SurfaceCache:
             triangles: (N_triangles, 3) int64 array of vertex indices per
                 surface triangle, wound as from ``_surface_triangles``.
             vertex_coords: (N_vertices, 3) array of vertex positions.
+
+        Raises:
+            RuntimeError: If the centre is not strictly on the inner side
+                of every triangle's plane, so that the triangles, as set,
+                do not enclose it.
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, counted over the three axes.
         """
         self.triangles: np.ndarray = triangles
         self._normals: np.ndarray
         self._ref_points: np.ndarray
         self.image_shifts: np.ndarray
-        self.update(vertex_coords)
+        if not self._set_planes(vertex_coords):
+            raise RuntimeError(
+                "the triangles as set do not enclose the centre: each must be wound away from it")
 
     def update(self, vertex_coords: np.ndarray) -> None:
         """Recompute the containment planes and image shifts from new coordinates.
@@ -828,16 +893,37 @@ class _SurfaceCache:
         Raises:
             RuntimeError: If the centre is not strictly on the inner side
                 of every triangle's plane, with the triangles wound as
-                fixed, so that the triangles do not enclose it.
+                fixed, so that the triangles no longer enclose it.
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, counted over the three axes.
+        """
+        if not self._set_planes(vertex_coords):
+            raise RuntimeError(
+                "polyhedron is too distorted for its triangles to enclose its centre")
+
+    def _set_planes(self, vertex_coords: np.ndarray) -> bool:
+        """Compute the containment planes and image shifts, if the centre is enclosed.
+
+        Args:
+            vertex_coords: (N_vertices, 3) array of current vertex positions.
+
+        Returns:
+            True if the centre is strictly on the inner side of every
+            triangle's plane, and the planes and image shifts were set.
+            False, with nothing changed, otherwise.
+
+        Raises:
+            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+                cells, counted over the three axes.
         """
         planes = _numba_star_planes if HAS_NUMBA else _numpy_star_planes
         normals, ref_points, star_shaped, within_two_cells = planes(vertex_coords, self.triangles)
         if not star_shaped:
-            raise RuntimeError(
-                "polyhedron is too distorted for its triangles to enclose its centre")
+            return False
         self.image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
         self._normals = normals
         self._ref_points = ref_points
+        return True
 
     def contains_point(self, x: np.ndarray) -> bool:
         """Test whether an image of a point is inside the polyhedron.

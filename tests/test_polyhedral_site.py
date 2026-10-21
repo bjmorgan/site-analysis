@@ -55,7 +55,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def test_reset(self):
         site = self.site
         site._delaunay = 'foo'
-        site.vertex_coords = 'bar'
+        site._vertex_coords = 'bar'
         site.contains_atoms = [1]
         site.trajectory = [2]
         site.transitions = Counter([4])
@@ -104,7 +104,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                   [0.2, 0.3, 0.4],
                                   [0.8, 0.0, 0.8],
                                   [0.5, 0.5, 0.5]])
-        site.vertex_coords = vertex_coords
+        site._vertex_coords = vertex_coords
         with patch('site_analysis.polyhedral_site.Delaunay', autospec=True) as mock_Delaunay:
             mock_Delaunay.return_value = 'mock Delaunay'
             d = site.delaunay
@@ -117,7 +117,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                                   [0.2, 0.3, 0.4],
                                   [0.8, 0.0, 0.8],
                                   [0.5, 0.5, 0.5]])
-        site.vertex_coords = vertex_coords
+        site._vertex_coords = vertex_coords
         site._delaunay = 'foo'
         with patch('site_analysis.polyhedral_site.Delaunay', autospec=True) as mock_Delaunay:
             d = site.delaunay
@@ -267,18 +267,12 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "^triangles must be"):
                     self.site.set_triangles(triangles)
 
-    def test_contains_point_without_a_lattice_or_triangles_raises(self):
-        """Coordinates set directly, without a lattice or triangles, cannot be tested."""
-        site = self.site
-        site.vertex_coords = _TETRAHEDRON
-        with self.assertRaisesRegex(RuntimeError, "assign_vertex_coords"):
-            site.contains_point(np.array([0.5, 0.5, 0.5]))
-
     def test_contains_point_with_triangles_needs_no_lattice(self):
-        """Coordinates set directly can be tested once triangles are set."""
-        site = self.site
-        site.set_triangles(_TETRAHEDRON_TRIANGLES)
-        site.vertex_coords = _TETRAHEDRON
+        """Coordinates restored without a lattice can be tested when the triangles are restored too."""
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        site_dict['vertex_coords'] = _TETRAHEDRON
+        site_dict['triangles'] = _TETRAHEDRON_TRIANGLES.tolist()
+        site = PolyhedralSite.from_dict(site_dict)
         self.assertTrue(site.contains_point(np.array([0.5, 0.5, 0.5])))
 
     def test_too_distorted_site_names_itself(self):
@@ -368,10 +362,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def test_centre(self):
         site = self.site
-        site.vertex_coords = np.array([[0.4, 0.4, 0.4],
-                                       [0.4, 0.6, 0.6],
-                                       [0.6, 0.6, 0.4],
-                                       [0.6, 0.4, 0.6]])
+        _assign_tetrahedron(site)
         expected_centre = np.array([0.5, 0.5, 0.5])
         np.testing.assert_array_equal(site.centre, expected_centre)
         
@@ -502,11 +493,12 @@ class TestContainmentImageLimit(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-                site.vertex_coords = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
-                                                     [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
-                site.set_triangles(_surface_triangles(
-                    site.vertex_indices, site.vertex_coords, np.eye(3), ()))
+                site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+                site_dict['vertex_coords'] = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
+                                                             [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+                site_dict['triangles'] = _surface_triangles(
+                    range(4), site_dict['vertex_coords'], np.eye(3), ()).tolist()
+                site = PolyhedralSite.from_dict(site_dict)
                 with self.assertRaisesRegex(ValueError, r"vertices span \[1001, 1, 1\] cells"):
                     site.contains_point(np.array([0.5, 0.5, 0.5]))
 
@@ -580,6 +572,43 @@ class TestNotifyStructureChanged(unittest.TestCase):
         self.assertIsNone(site._pending_frac_coords)
         self.assertIsNone(site._pending_lattice_matrix)
         self.assertIsNotNone(site.vertex_coords)
+
+    def test_vertex_coords_after_notify_are_the_new_frame(self):
+        """Reading vertex_coords after notify_structure_changed gives the notified frame's coordinates."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+        site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
+        np.testing.assert_allclose(site.vertex_coords, _TETRAHEDRON + 0.01)
+
+    def test_as_dict_after_notify_contains_the_new_frame(self):
+        """as_dict after notify_structure_changed, with no containment test, has the notified coordinates."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site.notify_structure_changed(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
+        np.testing.assert_allclose(site.as_dict()['vertex_coords'], _TETRAHEDRON)
+
+    def test_delaunay_after_notify_reflects_the_new_frame(self):
+        """The Delaunay tessellation after notify_structure_changed is of the notified coordinates."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+        site.delaunay
+        site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
+        np.testing.assert_allclose(site.delaunay.points, _TETRAHEDRON + 0.01)
+
+    def test_centre_after_notify_is_the_new_frame(self):
+        """The centre after notify_structure_changed is that of the notified coordinates."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+        site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
+        np.testing.assert_allclose(site.centre, [0.51, 0.51, 0.51])
+
+    def test_vertex_coords_cannot_be_assigned(self):
+        """vertex_coords is read-only: coordinates are assigned with a lattice."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        with self.assertRaises(AttributeError):
+            site.vertex_coords = _TETRAHEDRON
 
     def test_assign_from_pending_uses_vertex_indices(self):
         """_assign_from_pending extracts the correct rows via vertex_indices."""
@@ -750,11 +779,11 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
     def test_as_dict_includes_vertex_coords_when_set(self):
         """Test as_dict includes vertex_coords when they exist."""
         site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        site.vertex_coords = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        _assign_tetrahedron(site)
 
         site_dict = site.as_dict()
 
-        np.testing.assert_array_equal(site_dict['vertex_coords'], site.vertex_coords)
+        np.testing.assert_array_equal(site_dict['vertex_coords'], _TETRAHEDRON)
 
     def test_as_dict_includes_none_vertex_coords_when_not_set(self):
         """Test as_dict includes None for vertex_coords when not set."""
@@ -808,7 +837,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
     def test_round_trip_serialisation(self):
         """Test as_dict -> from_dict preserves site data."""
         original = PolyhedralSite(vertex_indices=[10, 11, 12, 13], label="original")
-        original.vertex_coords = np.array([[0.2, 0.2, 0.2], [0.8, 0.8, 0.8]])
+        _assign_tetrahedron(original)
 
         site_dict = original.as_dict()
         reconstructed = PolyhedralSite.from_dict(site_dict)

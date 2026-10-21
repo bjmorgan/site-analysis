@@ -41,8 +41,10 @@ class PolyhedralSite(Site):
     Attributes:
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
-        vertex_coords (np.ndarray or None): Fractional coordinates of the vertices.
-            Set using assign_vertex_coords() or notify_structure_changed().
+        vertex_coords (np.ndarray or None): Unwrapped fractional coordinates
+            of the vertices (read-only), or None if none have been assigned.
+            Set using assign_vertex_coords() or notify_structure_changed();
+            coordinates notified are assigned when first read or tested.
         reference_center (np.ndarray or None): Optional reference centre for PBC handling.
 
     See Also:
@@ -93,7 +95,7 @@ class PolyhedralSite(Site):
 
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
-        self.vertex_coords: np.ndarray | None = None
+        self._vertex_coords: np.ndarray | None = None
         self._lattice_matrix: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
         self._triangles: np.ndarray | None = None
@@ -121,7 +123,7 @@ class PolyhedralSite(Site):
         PBC shift caches. The triangles are kept.
         """
         super(PolyhedralSite, self).reset()
-        self.vertex_coords = None
+        self._vertex_coords = None
         self._lattice_matrix = None
         self._delaunay = None
         self._cache_stale = True
@@ -131,21 +133,43 @@ class PolyhedralSite(Site):
         self._pbc_cached_raw_frac = None
  
     @property
+    def vertex_coords(self) -> np.ndarray | None:
+        """Unwrapped fractional coordinates of the vertices, or None if none have been assigned.
+
+        Coordinates notified with ``notify_structure_changed`` are assigned
+        (unwrapped and stored) when this is read, so it always gives the
+        coordinates of the most recent structure.
+
+        Returns:
+            (n_vertices, 3) array in the order of ``vertex_indices``, or None.
+
+        Raises:
+            ValueError: If notified coordinates are assigned and are not
+                finite.
+        """
+        if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
+            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
+        return self._vertex_coords
+
+    @property
     def delaunay(self) -> Delaunay:
         """Delaunay tessellation of the vertex coordinates for this site.
 
         This is calculated the first time the attribute is requested,
         and then stored for reuse until the vertex coordinates are next
-        assigned or the site is reset. It does not decide containment.
+        assigned (including coordinates notified with
+        ``notify_structure_changed``) or the site is reset. It does not
+        decide containment.
 
         Returns:
             scipy.spatial.Delaunay
 
         """
-        if not self._delaunay:
-            if self.vertex_coords is None:
+        vertex_coords = self.vertex_coords
+        if self._delaunay is None:
+            if vertex_coords is None:
                 raise RuntimeError("Vertex coordinates have not been assigned.")
-            self._delaunay = Delaunay(self.vertex_coords)
+            self._delaunay = Delaunay(vertex_coords)
         return self._delaunay
 
     @property
@@ -276,7 +300,7 @@ class PolyhedralSite(Site):
             lattice_matrix: (3, 3) lattice matrix where rows are lattice
                 vectors.
         """
-        self.vertex_coords = vertex_coords
+        self._vertex_coords = vertex_coords
         self._lattice_matrix = lattice_matrix
         self._delaunay = None
         self._cache_stale = True
@@ -424,13 +448,13 @@ class PolyhedralSite(Site):
             )
         if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
             self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
-        if self.vertex_coords is None:
+        if self._vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
         surface = self._surface_cache
         if surface is None or self._cache_stale:
-            surface = self._refreshed_surface_cache(self.vertex_coords)
+            surface = self._refreshed_surface_cache(self._vertex_coords)
         return surface.contains_point(x)
 
     def _refreshed_surface_cache(self, vertex_coords: np.ndarray) -> _SurfaceCache:
@@ -559,7 +583,7 @@ class PolyhedralSite(Site):
             reference_center=d.get('reference_center'))
         if d.get('triangles') is not None:
             polyhedral_site.set_triangles(d['triangles'])
-        polyhedral_site.vertex_coords = d['vertex_coords']
+        polyhedral_site._vertex_coords = d['vertex_coords']
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')
         return polyhedral_site
@@ -576,9 +600,10 @@ class PolyhedralSite(Site):
             (np.array): (3,) numpy array.
  
         """
-        if self.vertex_coords is None:
+        vertex_coords = self.vertex_coords
+        if vertex_coords is None:
             raise RuntimeError("Vertex coordinates have not been assigned.")
-        centre_coords = np.mean(self.vertex_coords, axis=0)
+        centre_coords = np.mean(vertex_coords, axis=0)
         return np.array(centre_coords) 
 
     @classmethod

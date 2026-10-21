@@ -1,5 +1,6 @@
 import itertools
 import unittest
+from collections import Counter
 from unittest.mock import patch
 
 import numpy as np
@@ -276,6 +277,39 @@ class TestSurfaceTriangles(unittest.TestCase):
         self.assertEqual(on_bottom, {(0, 1, 4), (0, 4, 5), (1, 2, 3), (1, 3, 4)})
         with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
             _surface_triangles(list(range(20, 32)), coords, np.eye(3), [{20, 21, 22}])
+
+    def test_hexagon_whose_angular_order_is_not_its_hull_boundary_cannot_be_triangulated_identically(self):
+        """A noisy hexagon whose atoms, ordered by angle, do not follow the boundary of its hull triangles raises ValueError."""
+        coords = _hexagonal_prism([0.0] * 6) + np.random.default_rng(199).normal(scale=0.06, size=(12, 3))
+        inside = [t for t in ConvexHull(coords).simplices.tolist() if max(t) < 6]
+        self.assertEqual(len(inside), 4)
+        self.assertEqual(set().union(*inside), set(range(6)))
+        edges = Counter(frozenset(e) for t in inside for e in itertools.combinations(t, 2))
+        centred = coords[:6] - coords[:6].mean(axis=0)
+        _, _, vt = np.linalg.svd(centred)
+        order = np.argsort(np.arctan2(centred @ vt[1], centred @ vt[0])).tolist()
+        self.assertNotEqual({e for e, n in edges.items() if n == 1},
+                            {frozenset(pair) for pair in zip(order, order[1:] + order[:1])})
+        with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
+            _surface_triangles(list(range(20, 32)), coords, np.eye(3), [set(range(20, 26))])
+
+    def test_noisy_shared_hexagon_is_fanned_identically_by_both_sites(self):
+        """Two hexagonal prisms sharing a hexagon with 0.1 Angstrom of noise give it the same four triangles."""
+        angles = np.arange(6) * np.pi / 3
+        hexagon = np.stack([0.5 + 0.25 * np.cos(angles), 0.5 + 0.25 * np.sin(angles),
+                            np.full(6, 0.2)], axis=1)
+        layers = np.vstack([hexagon, hexagon + [0.0, 0.0, 0.3], hexagon + [0.0, 0.0, 0.6]])
+        shared = list(range(6, 12))
+        for seed in range(20):
+            with self.subTest(seed=seed):
+                coords = layers + np.random.default_rng(seed).normal(scale=_NOISE, size=layers.shape)
+                on_hexagon = []
+                for atoms in (list(range(0, 12)), list(range(6, 18))):
+                    triples = _atom_triples(
+                        _surface_triangles(atoms, coords[atoms], _LATTICE, [shared]), atoms)
+                    on_hexagon.append({t for t in triples if set(t) <= set(shared)})
+                self.assertEqual(len(on_hexagon[0]), 4)
+                self.assertEqual(on_hexagon[0], on_hexagon[1])
 
     def test_three_atoms_with_no_fourth_atom_of_a_face_cannot_be_triangulated_identically(self):
         """Three atoms of an octahedron's equator, which are no part of a face, raise ValueError."""

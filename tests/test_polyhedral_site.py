@@ -503,6 +503,19 @@ class TestContainmentImageLimit(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, r"vertices span \[1001, 1, 1\] cells"):
                     site.contains_point(np.array([0.5, 0.5, 0.5]))
 
+    def test_site_spanning_too_many_cells_names_itself(self):
+        """The ValueError for a site spanning 1001 cells names the site and its vertices."""
+        site_dict = PolyhedralSite(vertex_indices=[3, 5, 8, 9]).as_dict()
+        site_dict['vertex_coords'] = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
+                                                     [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        site_dict['triangles'] = _surface_triangles(
+            range(4), site_dict['vertex_coords'], np.eye(3), ()).tolist()
+        Site._newid = 7
+        site = PolyhedralSite.from_dict(site_dict)
+        with self.assertRaisesRegex(
+                ValueError, r"^Site 7 \(vertices \[3, 5, 8, 9\]\): vertices span \[1001, 1, 1\]"):
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
+
     def test_containment_planes_are_computed_once_per_vertex_assignment(self):
         """The planes are computed on the first test after each assignment only."""
         lattice_matrix = Lattice.cubic(10.0).matrix
@@ -604,6 +617,29 @@ class TestNotifyStructureChanged(unittest.TestCase):
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
         site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
         np.testing.assert_allclose(site.centre, [0.51, 0.51, 0.51])
+
+    def test_non_finite_notified_frame_raises_on_every_test(self):
+        """A non-finite notified frame raises on each containment test, never using the previous frame."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+        site.contains_point(np.array([0.5, 0.5, 0.5]))
+        non_finite = _TETRAHEDRON.copy()
+        non_finite[0, 0] = np.nan
+        site.notify_structure_changed(non_finite, lattice_matrix)
+        for _ in range(2):
+            with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+                site.contains_point(np.array([0.5, 0.5, 0.5]))
+        with self.assertRaisesRegex(ValueError, "^frac_coords must be finite$"):
+            site.vertex_coords
+
+    def test_assigned_coordinates_replace_notified_coordinates(self):
+        """Coordinates assigned after notify_structure_changed replace the notified ones."""
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
+        site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
+        np.testing.assert_allclose(site.vertex_coords, _TETRAHEDRON)
 
     def test_vertex_coords_cannot_be_assigned(self):
         """vertex_coords is read-only: coordinates are assigned with a lattice."""

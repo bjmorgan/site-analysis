@@ -217,7 +217,8 @@ class PolyhedralSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Assign fractional coordinates to the polyhedra vertices.
 
-        Stores the lattice with the coordinates, clears the Delaunay
+        Stores the lattice with the coordinates, clears any coordinates
+        notified with ``notify_structure_changed`` and the Delaunay
         tessellation, and marks the containment planes to be recomputed on
         the next ``contains_point`` call.
 
@@ -240,13 +241,14 @@ class PolyhedralSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Compute PBC-corrected vertex coords from pending data.
 
+        The pending data is cleared when the coordinates are stored, so
+        pending data that cannot be stored stays pending.
+
         Args:
             all_frac_coords: Full fractional coordinate array.
             lattice_matrix: (3, 3) lattice matrix where rows are
                 lattice vectors.
         """
-        self._pending_frac_coords = None
-        self._pending_lattice_matrix = None
         frac_coords = all_frac_coords[self.vertex_indices]
         self._store_vertex_coords(frac_coords, lattice_matrix)
 
@@ -261,8 +263,9 @@ class PolyhedralSite(Site):
         incrementally by detecting coordinate wraps (jumps of ~1.0),
         avoiding the expensive nearest-image search.
 
-        Sets ``vertex_coords``, stores the lattice, clears the Delaunay
-        tessellation, and marks the containment planes to be recomputed.
+        Sets ``vertex_coords``, stores the lattice, clears any notified
+        coordinates and the Delaunay tessellation, and marks the
+        containment planes to be recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
@@ -290,8 +293,9 @@ class PolyhedralSite(Site):
             lattice_matrix: np.ndarray) -> None:
         """Store unwrapped vertex coordinates and the lattice they are in.
 
-        Clears the Delaunay tessellation and marks the containment planes
-        to be recomputed.
+        Clears any coordinates notified with ``notify_structure_changed``
+        and the Delaunay tessellation, and marks the containment planes to
+        be recomputed.
 
         Args:
             vertex_coords: (n_vertices, 3) unwrapped fractional coordinates.
@@ -300,6 +304,8 @@ class PolyhedralSite(Site):
         """
         self._vertex_coords = vertex_coords
         self._lattice_matrix = lattice_matrix
+        self._pending_frac_coords = None
+        self._pending_lattice_matrix = None
         self._delaunay = None
         self._cache_stale = True
 
@@ -425,9 +431,10 @@ class PolyhedralSite(Site):
                 without a lattice; if the vertices are degenerate; or if
                 the site is too distorted for its triangles to enclose its
                 centre.
-            ValueError: If the vertices span more than 1000 cells, counted
-                over the three axes, as they can in a strongly skewed or
-                unreduced cell.
+            ValueError: If coordinates notified with
+                ``notify_structure_changed`` are not finite, or if the
+                vertices span more than 1000 cells, counted over the three
+                axes, as they can in a strongly skewed or unreduced cell.
         """
         if algo is not None:
             warnings.warn(
@@ -472,6 +479,8 @@ class PolyhedralSite(Site):
                 set without a lattice; if the vertices are degenerate; or if
                 the site is too distorted for its triangles to enclose its
                 centre.
+            ValueError: If the vertices span more than 1000 cells, counted
+                over the three axes.
         """
         if self._triangles is None:
             if self._lattice_matrix is None:
@@ -493,8 +502,8 @@ class PolyhedralSite(Site):
                 self._surface_cache = _SurfaceCache(self._triangles, vertex_coords)
             else:
                 self._surface_cache.update(vertex_coords)
-        except RuntimeError as error:
-            raise RuntimeError(
+        except (RuntimeError, ValueError) as error:
+            raise type(error)(
                 f"Site {self.index} (vertices {self.vertex_indices}): {error}") from error
         self._cache_stale = False
         return self._surface_cache
@@ -564,7 +573,10 @@ class PolyhedralSite(Site):
         ``reference_center`` or ``triangles`` key, as written by earlier
         versions, gives a site with no reference centre or no triangles. A
         site restored without triangles cannot test containment until its
-        vertex coordinates are assigned with a lattice.
+        vertex coordinates are assigned with a lattice. A collection of
+        restored sites that has not found its shared faces replaces their
+        triangles on its first analysis; calling ``find_shared_faces`` with
+        the original structure first keeps them.
 
         Args:
             d (dict): The dict representation of this site.

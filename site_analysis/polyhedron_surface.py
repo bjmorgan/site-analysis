@@ -11,6 +11,8 @@ which bounds the site exactly while it is star-shaped about its centre.
 
 from __future__ import annotations
 
+import itertools
+from collections import Counter
 from collections.abc import Collection, Sequence
 
 import numpy as np
@@ -433,7 +435,9 @@ def _surface_triangles(
       atoms are the set, and there are two fewer triangles than atoms) are
       re-triangulated as a fan: the atoms are ordered by angle around their
       best-fit plane, starting from the lowest atom index, and each
-      consecutive pair forms a triangle with that first atom.
+      consecutive pair forms a triangle with that first atom. The pairs of
+      atoms adjacent in that order, the last and first included, must be
+      the edges that belong to only one of the hull triangles.
 
     Every triangle is then wound so that its normal ``(b - a) x (c - a)``
     in ``coords`` points away from the centre (the mean of ``coords``),
@@ -520,6 +524,10 @@ def _shared_face_triangles(
     centred = cartesian[ids] - cartesian[ids].mean(axis=0)
     _, _, vt = np.linalg.svd(centred)
     order = ids[np.argsort(np.arctan2(centred @ vt[1], centred @ vt[0]))].tolist()
+    edges = Counter(frozenset(edge) for t in inside for edge in itertools.combinations(t, 2))
+    if ({edge for edge, n in edges.items() if n == 1}
+            != {frozenset(pair) for pair in zip(order, order[1:] + order[:1])}):
+        return None, []
     start = min(range(len(order)), key=lambda k: vertex_indices[order[k]])
     order = order[start:] + order[:start]
     fan = [frozenset((order[0], order[k], order[k + 1])) for k in range(1, len(order) - 1)]

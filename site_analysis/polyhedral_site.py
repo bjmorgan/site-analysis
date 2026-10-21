@@ -19,6 +19,7 @@ from site_analysis.atom import Atom
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
+from site_analysis.polyhedron_surface import _image_shifts
 
 if HAS_NUMBA:
     import numba
@@ -135,43 +136,6 @@ if HAS_NUMBA:
             if all_match:
                 return True
         return False
-
-
-# The most cells a polyhedral site's vertices may span, counted over all
-# three axes, for the site to test the images of a point in each of them.
-_MAX_IMAGE_SHIFTS = 1000
-
-
-def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
-    """Whole-cell shifts from a point in [0, 1) to its images that can lie inside a polyhedron.
-
-    An image ``x + n`` of a point ``x`` in [0, 1) lies inside the
-    vertices' bounding box only if ``floor(min_k) <= n_k <= floor(max_k)``
-    along each axis ``k``, where ``min_k`` and ``max_k`` are the lowest and
-    highest vertex coordinates.
-
-    Args:
-        vertex_coords: (N_vertices, 3) array of finite vertex positions.
-
-    Returns:
-        (M, 3) integer array of the shifts, one for each cell the bounding
-        box meets.
-
-    Raises:
-        ValueError: If the bounding box meets more than
-            ``_MAX_IMAGE_SHIFTS`` cells, as it can for a site in a
-            strongly skewed or unreduced cell.
-    """
-    lower = np.floor(vertex_coords.min(axis=0)).astype(np.int64)
-    upper = np.floor(vertex_coords.max(axis=0)).astype(np.int64)
-    cells = upper - lower + 1
-    if np.prod(cells, dtype=np.float64) > _MAX_IMAGE_SHIFTS:
-        raise ValueError(
-            f"vertices span {cells.tolist()} cells along the lattice axes, more than "
-            f"the {_MAX_IMAGE_SHIFTS} cells in which a site's images can be tested; "
-            "use a reduced cell")
-    axes = [np.arange(lo, hi + 1) for lo, hi in zip(lower, upper)]
-    return np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
 
 
 class _HullTriangleCache:

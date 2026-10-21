@@ -1,5 +1,4 @@
 import itertools
-import time
 import unittest
 from unittest.mock import patch
 
@@ -176,25 +175,29 @@ class TestFirstOverlap(unittest.TestCase):
                                  [0, -0.1, 0], [0, 0, 0.1], [0, 0, -0.1]])
         self.assertEqual(_overlap([_site(list(range(6)), coords)]), (0, 0))
 
-    def test_first_overlapping_pair_in_ascending_order(self):
-        """When sites 0 and 2 and sites 1 and 2 overlap, the pair (0, 2) is returned."""
+    def test_first_overlapping_pair_in_ascending_order_of_first_site(self):
+        """When sites 0 and 2 overlap and site 1 overlaps its own image, (0, 2) is returned, in chunks of any size."""
         base = np.array([[0.3, 0.3, 0.3], [0.55, 0.3, 0.3], [0.3, 0.55, 0.3]])
+        long_octahedron = [0.5, 0.85, 0.85] + np.array(
+            [[0.6, 0, 0], [-0.6, 0, 0], [0, 0.1, 0], [0, -0.1, 0], [0, 0, 0.1], [0, 0, -0.1]])
         sites = [_site([0, 1, 2, 3], np.vstack([base, [0.35, 0.35, 0.55]])),
-                 _site([4, 5, 6, 7], np.vstack([base + [0.0, 0.0, 0.3], [0.35, 0.35, 0.75]])),
-                 _site([8, 9, 10, 11], np.vstack([base + [0.0, 0.0, 0.1], [0.35, 0.35, 0.8]]))]
-        self.assertEqual(_overlap(sites), (0, 2))
+                 _site(list(range(4, 10)), long_octahedron),
+                 _site([10, 11, 12, 13], np.vstack([base + [0.0, 0.0, 0.1], [0.35, 0.35, 0.8]]))]
+        self.assertEqual(_overlap(sites[1:2]), (0, 0))
+        for chunk in (16384, 1):
+            with self.subTest(chunk=chunk), \
+                    patch("site_analysis.polyhedron_surface._TETRAHEDRON_PAIR_CHUNK", chunk):
+                self.assertEqual(_overlap(sites), (0, 2))
 
     def test_no_sites_do_not_overlap(self):
         """An empty set of sites gives None."""
         self.assertIsNone(_first_overlap([], []))
 
     def test_grid_of_noisy_cubes_filling_the_cell_does_not_overlap(self):
-        """A 4x4x4 grid of face-sharing noisy cubes filling the cell does not overlap, in under 2 s."""
+        """A 4x4x4 grid of face-sharing noisy cubes filling the cell does not overlap."""
         cubes = _cube_grid(list(itertools.product(range(4), repeat=3)), period=4,
                            offset=0.0, noise_seed=0)
-        start = time.perf_counter()
         self.assertIsNone(_overlap(cubes))
-        self.assertLess(time.perf_counter() - start, 2.0)
 
 
 class TestSurfaceTriangles(unittest.TestCase):

@@ -396,6 +396,8 @@ _SEPARATION_MARGIN = 1e-9
 _PARALLEL_EDGES = 1e-12
 # The most tetrahedron pairs, before bounding-box filtering, tested at once.
 _TETRAHEDRON_PAIR_CHUNK = 16384
+# The most pairs of sites whose bounding boxes are compared at once.
+_BOX_PAIR_BLOCK = 1 << 20
 # Vertex indices of the faces and of the edges of a tetrahedron.
 _TETRAHEDRON_FACES = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]])
 _TETRAHEDRON_EDGES = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
@@ -419,8 +421,10 @@ def _first_overlap(
     larger of the two projected extents, so tetrahedra that only touch at
     a face, edge or vertex do not overlap. Works in fractional
     coordinates, as positive-volume intersection is invariant under the
-    linear map to Cartesian coordinates. The bounding boxes of all pairs
-    are compared at once, in arrays of shape ``(N_sites, N_sites)``.
+    linear map to Cartesian coordinates. The bounding boxes are compared
+    in blocks of rows ``i`` against every ``j``, so that the memory needed
+    grows with the number of sites and with the number of pairs whose
+    boxes meet.
 
     Args:
         vertex_coords: Unwrapped fractional coordinates of each site's
@@ -435,7 +439,8 @@ def _first_overlap(
     """
     if not vertex_coords:
         return None
-    tetrahedra = np.concatenate([_star_tetrahedra(c, t) for c, t in zip(vertex_coords, triangles)])
+    tetrahedra = np.concatenate([_star_tetrahedra(c, t)
+                                 for c, t in zip(vertex_coords, triangles, strict=True)])
     counts = np.array([len(t) for t in triangles], dtype=np.int64)
     offsets = np.cumsum(counts) - counts
     first, second, shifts = _bounding_box_translations(
@@ -492,8 +497,11 @@ def _bounding_box_translations(
     ``t`` when ``ceil(lower_i - upper_j) <= t <= floor(upper_i - lower_j)``
     along each axis.
 
+    Compares blocks of ``max(1, _BOX_PAIR_BLOCK // N)`` rows ``i`` at a
+    time against every ``j >= i``.
+
     Args:
-        lower: (N, 3) array of the lowest coordinates of each box.
+        lower: (N, 3) array of the lowest coordinates of each box, N >= 1.
         upper: (N, 3) array of the highest coordinates of each box.
 
     Returns:
@@ -502,11 +510,20 @@ def _bounding_box_translations(
         integer translations of the second box, excluding the zero
         translation of a box with itself.
     """
-    meet = np.triu(np.ones((len(lower), len(lower)), dtype=bool))
-    for axis in range(3):
-        meet &= (np.floor(upper[:, np.newaxis, axis] - lower[np.newaxis, :, axis])
-                 >= np.ceil(lower[:, np.newaxis, axis] - upper[np.newaxis, :, axis]))
-    first, second = np.nonzero(meet)
+    n = len(lower)
+    block = max(1, _BOX_PAIR_BLOCK // n)
+    first_blocks, second_blocks = [], []
+    for start in range(0, n, block):
+        rows = np.arange(start, min(start + block, n))
+        meet = rows[:, np.newaxis] <= np.arange(start, n)
+        for axis in range(3):
+            meet &= (np.floor(upper[rows, np.newaxis, axis] - lower[np.newaxis, start:, axis])
+                     >= np.ceil(lower[rows, np.newaxis, axis] - upper[np.newaxis, start:, axis]))
+        block_first, block_second = np.nonzero(meet)
+        first_blocks.append(block_first + start)
+        second_blocks.append(block_second + start)
+    first = np.concatenate(first_blocks)
+    second = np.concatenate(second_blocks)
     low = np.ceil(lower[first] - upper[second]).astype(np.int64)
     sizes = np.floor(upper[first] - lower[second]).astype(np.int64) - low + 1
     per_pair = np.prod(sizes, axis=1)

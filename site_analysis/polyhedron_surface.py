@@ -149,6 +149,127 @@ if HAS_NUMBA:
                     return True
         return False
 
+    @numba.njit(cache=True)
+    def _numba_tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+        """JIT-compiled test of whether each pair of tetrahedra intersects with positive volume.
+
+        Gives the result of ``_numpy_tetrahedra_overlap`` with the same
+        arithmetic, testing each pair's axes in turn and stopping at the
+        first that separates the pair.
+
+        Args:
+            first: (P, 4, 3) array of the vertices of the first tetrahedron
+                of each pair.
+            second: (P, 4, 3) array of the vertices of the second
+                tetrahedron of each pair.
+
+        Returns:
+            (P,) boolean array, True where no axis separates the pair.
+        """
+        overlapping = np.empty(first.shape[0], dtype=np.bool_)
+        for p in range(first.shape[0]):
+            overlapping[p] = _numba_pair_overlaps(first, second, p)
+        return overlapping
+
+    @numba.njit(cache=True)
+    def _numba_pair_overlaps(first: np.ndarray, second: np.ndarray, p: int) -> bool:
+        """JIT-compiled test of whether one pair of tetrahedra intersects with positive volume.
+
+        Tests the axes of ``_numpy_tetrahedra_overlap`` in the same order:
+        the face normals of the first tetrahedron and then of the second,
+        then the cross products of each edge of the first with each edge
+        of the second, skipping those of parallel edges.
+
+        Args:
+            first: (P, 4, 3) array of the vertices of the first tetrahedron
+                of each pair.
+            second: (P, 4, 3) array of the vertices of the second
+                tetrahedron of each pair.
+            p: Index of the pair.
+
+        Returns:
+            True if no axis separates the pair.
+        """
+        for face in range(8):
+            tetrahedron = first if face < 4 else second
+            i = _TETRAHEDRON_FACES[face % 4, 0]
+            j = _TETRAHEDRON_FACES[face % 4, 1]
+            k = _TETRAHEDRON_FACES[face % 4, 2]
+            u0 = tetrahedron[p, j, 0] - tetrahedron[p, i, 0]
+            u1 = tetrahedron[p, j, 1] - tetrahedron[p, i, 1]
+            u2 = tetrahedron[p, j, 2] - tetrahedron[p, i, 2]
+            v0 = tetrahedron[p, k, 0] - tetrahedron[p, i, 0]
+            v1 = tetrahedron[p, k, 1] - tetrahedron[p, i, 1]
+            v2 = tetrahedron[p, k, 2] - tetrahedron[p, i, 2]
+            if _numba_separated(u1 * v2 - u2 * v1, u2 * v0 - u0 * v2, u0 * v1 - u1 * v0,
+                                first, second, p):
+                return False
+        for first_edge in range(6):
+            i = _TETRAHEDRON_EDGES[first_edge, 0]
+            j = _TETRAHEDRON_EDGES[first_edge, 1]
+            e0 = first[p, j, 0] - first[p, i, 0]
+            e1 = first[p, j, 1] - first[p, i, 1]
+            e2 = first[p, j, 2] - first[p, i, 2]
+            first_squared_length = e0 * e0 + e1 * e1 + e2 * e2
+            for second_edge in range(6):
+                i = _TETRAHEDRON_EDGES[second_edge, 0]
+                j = _TETRAHEDRON_EDGES[second_edge, 1]
+                f0 = second[p, j, 0] - second[p, i, 0]
+                f1 = second[p, j, 1] - second[p, i, 1]
+                f2 = second[p, j, 2] - second[p, i, 2]
+                n0 = e1 * f2 - e2 * f1
+                n1 = e2 * f0 - e0 * f2
+                n2 = e0 * f1 - e1 * f0
+                parallel = (n0 * n0 + n1 * n1 + n2 * n2
+                            <= _PARALLEL_EDGES ** 2 * first_squared_length
+                            * (f0 * f0 + f1 * f1 + f2 * f2))
+                if not parallel and _numba_separated(n0, n1, n2, first, second, p):
+                    return False
+        return True
+
+    @numba.njit(cache=True)
+    def _numba_separated(
+        a0: float,
+        a1: float,
+        a2: float,
+        first: np.ndarray,
+        second: np.ndarray,
+        p: int,
+    ) -> bool:
+        """JIT-compiled test of whether an axis separates the projections of a pair of tetrahedra.
+
+        Performs the arithmetic of ``_separated`` for one axis and one
+        pair.
+
+        Args:
+            a0: First component of the axis.
+            a1: Second component of the axis.
+            a2: Third component of the axis.
+            first: (P, 4, 3) array of the vertices of the first tetrahedron
+                of each pair.
+            second: (P, 4, 3) array of the vertices of the second
+                tetrahedron of each pair.
+            p: Index of the pair.
+
+        Returns:
+            True if the projections onto the axis overlap by no more than
+            ``_SEPARATION_MARGIN`` times the larger projected extent.
+        """
+        first_lower = first_upper = a0 * first[p, 0, 0] + a1 * first[p, 0, 1] + a2 * first[p, 0, 2]
+        second_lower = second_upper = (a0 * second[p, 0, 0] + a1 * second[p, 0, 1]
+                                       + a2 * second[p, 0, 2])
+        for v in range(1, 4):
+            projection = a0 * first[p, v, 0] + a1 * first[p, v, 1] + a2 * first[p, v, 2]
+            first_lower = min(first_lower, projection)
+            first_upper = max(first_upper, projection)
+            projection = a0 * second[p, v, 0] + a1 * second[p, v, 1] + a2 * second[p, v, 2]
+            second_lower = min(second_lower, projection)
+            second_upper = max(second_upper, projection)
+        overlap = min(first_upper, second_upper) - max(first_lower, second_lower)
+        extent = max(first_upper - first_lower, second_upper - second_lower)
+        separated: bool = overlap <= _SEPARATION_MARGIN * extent
+        return separated
+
 
 # The most cells a polyhedral site's vertices may span, counted over all
 # three axes, for the site to test the images of a point in each of them.
@@ -442,7 +563,8 @@ def _first_overlap(
     linear map to Cartesian coordinates. The bounding boxes are compared
     in blocks of rows ``i`` against every ``j``, so that the memory needed
     grows with the number of sites and with the number of pairs whose
-    boxes meet.
+    boxes meet. Tests the tetrahedra with a numba kernel when numba is
+    installed and with numpy otherwise, with identical results.
 
     Args:
         vertex_coords: Unwrapped fractional coordinates of each site's
@@ -461,6 +583,7 @@ def _first_overlap(
                                  for c, t in zip(vertex_coords, triangles, strict=True)])
     counts = np.array([len(t) for t in triangles], dtype=np.int64)
     offsets = np.cumsum(counts) - counts
+    tetrahedra_overlap = _numba_tetrahedra_overlap if HAS_NUMBA else _numpy_tetrahedra_overlap
     first, second, shifts = _bounding_box_translations(
         np.array([c.min(axis=0) for c in vertex_coords]),
         np.array([c.max(axis=0) for c in vertex_coords]))
@@ -479,7 +602,7 @@ def _first_overlap(
         shift = shifts[rows]
         meet = np.all((tetrahedron_lower[a] <= tetrahedron_upper[b] + shift)
                       & (tetrahedron_lower[b] + shift <= tetrahedron_upper[a]), axis=1)
-        overlapping = _tetrahedra_overlap(
+        overlapping = tetrahedra_overlap(
             tetrahedra[a[meet]], tetrahedra[b[meet]] + shift[meet][:, np.newaxis, :])
         if overlapping.any():
             row = rows[meet][np.argmax(overlapping)]
@@ -553,7 +676,7 @@ def _bounding_box_translations(
     return first[pairs][keep], second[pairs][keep], shifts[keep]
 
 
-def _tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+def _numpy_tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
     """Whether each pair of tetrahedra intersects with positive volume.
 
     By the separating axis theorem, two tetrahedra are disjoint exactly

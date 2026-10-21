@@ -11,7 +11,8 @@ from site_analysis.polyhedron_surface import (
 
 if HAS_NUMBA:
     from site_analysis.polyhedron_surface import (
-        _numba_star_planes, _numba_star_query, _numpy_star_planes, _numpy_star_query)
+        _numba_star_planes, _numba_star_query, _numba_tetrahedra_overlap, _numpy_star_planes,
+        _numpy_star_query, _numpy_tetrahedra_overlap)
 
 # Containment with numba where it is installed, and with numpy.
 BACKENDS = [True, False] if HAS_NUMBA else [False]
@@ -387,6 +388,141 @@ class TestNumbaMatchesNumpy(unittest.TestCase):
             for point in rng.uniform(-1.0, 2.0, (300, 3)):
                 self.assertEqual(bool(_numba_star_query(point, shifts, normals, refs)),
                                  _numpy_star_query(point, shifts, normals, refs))
+
+
+def _shuffled_vertices(rng: np.random.Generator, tetrahedra: np.ndarray) -> np.ndarray:
+    """The tetrahedra with the order of each one's vertices shuffled."""
+    order = np.argsort(rng.random(tetrahedra.shape[:2]), axis=1)
+    return np.take_along_axis(tetrahedra, order[:, :, np.newaxis], axis=1)
+
+
+def _tetrahedra_sharing(rng: np.random.Generator, n_pairs: int,
+                        n_shared: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pairs of tetrahedra sharing n_shared vertices, on opposite sides of a plane through them.
+
+    The second tetrahedron's copies of the shared vertices are round-tripped
+    through ``(x + 3.0) - 3.0``, so they can differ from the first's in the
+    last bit.
+
+    Returns:
+        The first and second tetrahedra of each pair, and the unit normal
+        of each plane, pointing from the second towards the first.
+    """
+    normals = rng.normal(size=(n_pairs, 3))
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+    in_plane = rng.uniform(-0.2, 0.2, (n_pairs, 8 - n_shared, 3))
+    in_plane -= np.sum(in_plane * normals[:, np.newaxis], axis=2, keepdims=True) * normals[:, np.newaxis]
+    points = rng.uniform(0.3, 0.7, (n_pairs, 1, 3)) + in_plane
+    heights = rng.uniform(0.05, 0.3, (n_pairs, 8 - 2 * n_shared, 1)) * normals[:, np.newaxis]
+    shared = points[:, :n_shared]
+    first = np.concatenate([shared, points[:, n_shared:4] + heights[:, :4 - n_shared]], axis=1)
+    second = np.concatenate([(shared + 3.0) - 3.0, points[:, 4:] - heights[:, 4 - n_shared:]], axis=1)
+    return _shuffled_vertices(rng, first), _shuffled_vertices(rng, second), normals
+
+
+def _crossing_wedges(rng: np.random.Generator, n_pairs: int) -> tuple[np.ndarray, np.ndarray]:
+    """Pairs of tetrahedra whose facing edges cross at angles of 1e-8 to 1e-4 radians.
+
+    The first tetrahedron rests on its lowest edge. The second is the first
+    turned upside down, so that its highest edge faces the first's lowest,
+    rotated about the vertical by the angle, and moved down (apart) or up
+    (into the first) by 0.05 times the angle, so that only the cross
+    product of the two facing edges separates the pairs moved apart.
+
+    Returns:
+        The first and second tetrahedra of each pair.
+    """
+    wedge = np.array([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0], [-0.1, 0.3, 0.3], [0.15, -0.3, 0.4]])
+    angles = 10.0 ** rng.uniform(-8.0, -4.0, (n_pairs, 1))
+    gaps = 0.05 * angles * rng.choice([-1.0, 1.0], (n_pairs, 1))
+    second = np.stack([wedge[:, 0] * np.cos(angles) - wedge[:, 1] * np.sin(angles),
+                       wedge[:, 0] * np.sin(angles) + wedge[:, 1] * np.cos(angles),
+                       -wedge[:, 2] - gaps], axis=2)
+    return np.broadcast_to(wedge + 0.5, second.shape).copy(), second + 0.5
+
+
+@unittest.skipUnless(HAS_NUMBA, "numba is not installed")
+class TestNumbaOverlapMatchesNumpy(unittest.TestCase):
+    """Tests that both backends find the same overlapping tetrahedra."""
+
+    def _assert_identical(self, first: np.ndarray, second: np.ndarray) -> np.ndarray:
+        """Assert that both backends give the same overlaps, and return them."""
+        numba_result = _numba_tetrahedra_overlap(first, second)
+        numpy_result = _numpy_tetrahedra_overlap(first, second)
+        self.assertTrue(np.array_equal(numba_result, numpy_result),
+                        f"{np.count_nonzero(numba_result != numpy_result)} pairs differ")
+        return numpy_result
+
+    def _assert_mixed(self, overlapping: np.ndarray) -> None:
+        """Assert that some pairs overlap and some do not."""
+        self.assertTrue(overlapping.any())
+        self.assertFalse(overlapping.all())
+
+    def test_random_pairs_are_identical(self):
+        """Both backends agree on 20,000 pairs of random tetrahedra in the unit cube."""
+        rng = np.random.default_rng(10)
+        overlapping = self._assert_identical(rng.uniform(0.0, 1.0, (20000, 4, 3)),
+                                             rng.uniform(0.0, 1.0, (20000, 4, 3)))
+        self._assert_mixed(overlapping)
+
+    def test_pairs_sharing_a_face_edge_or_vertex_are_identical_and_do_not_overlap(self):
+        """Both backends find that tetrahedra touching at a face, an edge or a vertex do not overlap."""
+        rng = np.random.default_rng(11)
+        for n_shared in (3, 2, 1):
+            with self.subTest(n_shared=n_shared):
+                first, second, _ = _tetrahedra_sharing(rng, 3000, n_shared)
+                self.assertFalse(self._assert_identical(first, second).any())
+
+    def test_pairs_pushed_into_contact_are_identical(self):
+        """Both backends agree on touching tetrahedra pushed into each other by 1e-12 to 1e-6."""
+        rng = np.random.default_rng(12)
+        for n_shared in (3, 2, 1):
+            with self.subTest(n_shared=n_shared):
+                first, second, normals = _tetrahedra_sharing(rng, 3000, n_shared)
+                push = 10.0 ** rng.uniform(-12.0, -6.0, (3000, 1, 1)) * normals[:, np.newaxis]
+                self._assert_mixed(self._assert_identical(first, second + push))
+
+    def test_translated_copies_are_identical(self):
+        """Both backends agree on tetrahedra and their translated copies, whose edges are parallel."""
+        rng = np.random.default_rng(13)
+        dyadic = rng.integers(0, 64, (5000, 4, 3)) / 64.0
+        dyadic_shifts = rng.integers(-32, 33, (5000, 1, 3)) / 64.0
+        tetrahedra = rng.uniform(0.0, 1.0, (5000, 4, 3))
+        shifts = rng.uniform(-0.6, 0.6, (5000, 1, 3))
+        for first, second in ((dyadic, dyadic + dyadic_shifts), (tetrahedra, tetrahedra + shifts)):
+            with self.subTest(dyadic=first is dyadic):
+                self._assert_mixed(self._assert_identical(first, second))
+
+    def test_edges_crossing_at_small_angles_are_identical(self):
+        """Both backends agree on tetrahedra separated only by the cross product of nearly parallel edges."""
+        first, second = _crossing_wedges(np.random.default_rng(16), 5000)
+        self._assert_mixed(self._assert_identical(first, second))
+
+    def test_mixed_pairs_are_identical(self):
+        """Both backends agree on tetrahedra of many sizes at many separations, some flat or collapsed to points."""
+        rng = np.random.default_rng(14)
+        first, second = (rng.uniform(0.0, 1.0, (20000, 1, 3))
+                         + rng.uniform(0.01, 0.5, (20000, 1, 1)) * rng.uniform(-1.0, 1.0, (20000, 4, 3))
+                         for _ in range(2))
+        kind = rng.integers(0, 10, 20000)
+        first[kind == 0, 3] = first[kind == 0, 0]
+        second[kind == 1] = second[kind == 1, :1]
+        first[kind == 2] = first[kind == 2, :1]
+        second[kind == 2] = second[kind == 2, :1]
+        self._assert_mixed(self._assert_identical(first, second))
+
+    def test_first_overlap_is_identical(self):
+        """Both backends give the same first overlapping pair of a grid of cubes, some displaced."""
+        cubes = _cube_grid(list(itertools.product(range(4), repeat=3)), period=4,
+                           offset=0.0, noise_seed=0)
+        for i, shift in ((9, [0.03, 0.0, 0.0]), (30, [0.0, -0.02, 0.0]), (50, [0.0, 0.0, 0.04])):
+            cubes[i] = (cubes[i][0] + shift, cubes[i][1])
+        results = {}
+        for has_numba in (True, False):
+            with patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
+                results[has_numba] = _overlap(cubes)
+        self.assertIsNotNone(results[False])
+        self.assertEqual(results[True], results[False])
 
 
 class TestImageShifts(unittest.TestCase):

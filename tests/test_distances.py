@@ -828,6 +828,7 @@ class TestNumbaAcceleration(unittest.TestCase):
                     frac1[:small_n], frac2[:small_n], lattice_matrix)
                 np.testing.assert_array_equal(small, large[:small_n])
 
+
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")
 class TestNearestImageShiftsNumba(unittest.TestCase):
     """Nearest-image shifts are the same with and without numba."""

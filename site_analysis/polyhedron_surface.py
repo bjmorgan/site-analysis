@@ -81,12 +81,12 @@ if HAS_NUMBA:
             nz = uy * vx - ux * vy
             if not nx * (c0 - ax) + ny * (c1 - ay) + nz * (c2 - az) > 0.0:
                 star_shaped = False
-            normals[t, 0, 0] = nx
-            normals[t, 0, 1] = ny
-            normals[t, 0, 2] = nz
-            ref_points[t, 0, 0] = ax
-            ref_points[t, 0, 1] = ay
-            ref_points[t, 0, 2] = az
+            normals[t, 3, 0] = nx
+            normals[t, 3, 1] = ny
+            normals[t, 3, 2] = nz
+            ref_points[t, 3, 0] = ax
+            ref_points[t, 3, 1] = ay
+            ref_points[t, 3, 2] = az
             for q in range(3):
                 i0 = triangles[t, q]
                 i1 = triangles[t, (q + 1) % 3]
@@ -96,12 +96,12 @@ if HAS_NUMBA:
                 rx = vertex_coords[i1, 0] - c0
                 ry = vertex_coords[i1, 1] - c1
                 rz = vertex_coords[i1, 2] - c2
-                normals[t, q + 1, 0] = py * rz - pz * ry
-                normals[t, q + 1, 1] = pz * rx - px * rz
-                normals[t, q + 1, 2] = px * ry - py * rx
-                ref_points[t, q + 1, 0] = c0
-                ref_points[t, q + 1, 1] = c1
-                ref_points[t, q + 1, 2] = c2
+                normals[t, q, 0] = py * rz - pz * ry
+                normals[t, q, 1] = pz * rx - px * rz
+                normals[t, q, 2] = px * ry - py * rx
+                ref_points[t, q, 0] = c0
+                ref_points[t, q, 1] = c1
+                ref_points[t, q, 2] = c2
         return normals, ref_points, star_shaped, within_two_cells
 
     @numba.njit(cache=True)
@@ -193,11 +193,13 @@ def _numpy_star_planes(
 ) -> tuple[np.ndarray, np.ndarray, bool, bool]:
     """Inward planes of the tetrahedra formed by a polyhedron's centre and its surface triangles.
 
-    For each triangle ``(a, b, c)`` the four planes are the triangle's own
-    plane, with normal ``-(b - a) x (c - a)`` through ``a``, and the planes
-    through the centre and each edge, with normals ``(a - o) x (b - o)``,
-    ``(b - o) x (c - o)`` and ``(c - o) x (a - o)`` through the centre
-    ``o``. When the centre is strictly on the inner side of every
+    For each triangle ``(a, b, c)`` the four planes are, in order, the
+    planes through the centre ``o`` and each edge, with normals
+    ``(a - o) x (b - o)``, ``(b - o) x (c - o)`` and ``(c - o) x (a - o)``
+    through ``o``, and the triangle's own plane, with normal
+    ``-(b - a) x (c - a)`` through ``a``. A query tests them in this
+    order, so the edge planes, which reject most points outside a
+    tetrahedron, come first. When the centre is strictly on the inner side of every
     triangle's plane, every normal points into its tetrahedron.
 
     Args:
@@ -219,20 +221,20 @@ def _numpy_star_planes(
     v = vertex_coords[triangles[:, 2]] - a
     normals = np.empty((len(triangles), 4, 3))
     ref_points = np.empty((len(triangles), 4, 3))
-    normals[:, 0, 0] = u[:, 2] * v[:, 1] - u[:, 1] * v[:, 2]
-    normals[:, 0, 1] = u[:, 0] * v[:, 2] - u[:, 2] * v[:, 0]
-    normals[:, 0, 2] = u[:, 1] * v[:, 0] - u[:, 0] * v[:, 1]
-    ref_points[:, 0] = a
-    ref_points[:, 1:] = centre
+    normals[:, 3, 0] = u[:, 2] * v[:, 1] - u[:, 1] * v[:, 2]
+    normals[:, 3, 1] = u[:, 0] * v[:, 2] - u[:, 2] * v[:, 0]
+    normals[:, 3, 2] = u[:, 1] * v[:, 0] - u[:, 0] * v[:, 1]
+    ref_points[:, :3] = centre
+    ref_points[:, 3] = a
     to_centre = centre - a
-    centre_side = (normals[:, 0, 0] * to_centre[:, 0] + normals[:, 0, 1] * to_centre[:, 1]
-                   + normals[:, 0, 2] * to_centre[:, 2])
+    centre_side = (normals[:, 3, 0] * to_centre[:, 0] + normals[:, 3, 1] * to_centre[:, 1]
+                   + normals[:, 3, 2] * to_centre[:, 2])
     for q in range(3):
         p = vertex_coords[triangles[:, q]] - centre
         r = vertex_coords[triangles[:, (q + 1) % 3]] - centre
-        normals[:, q + 1, 0] = p[:, 1] * r[:, 2] - p[:, 2] * r[:, 1]
-        normals[:, q + 1, 1] = p[:, 2] * r[:, 0] - p[:, 0] * r[:, 2]
-        normals[:, q + 1, 2] = p[:, 0] * r[:, 1] - p[:, 1] * r[:, 0]
+        normals[:, q, 0] = p[:, 1] * r[:, 2] - p[:, 2] * r[:, 1]
+        normals[:, q, 1] = p[:, 2] * r[:, 0] - p[:, 0] * r[:, 2]
+        normals[:, q, 2] = p[:, 0] * r[:, 1] - p[:, 1] * r[:, 0]
     star_shaped = bool(np.all(centre_side > 0.0))
     within_two_cells = bool(np.all((0.0 <= vertex_coords) & (vertex_coords < 2.0)))
     return normals, ref_points, star_shaped, within_two_cells
@@ -283,9 +285,9 @@ def _surface_triangles(
     - three atoms ``{a, b, c}`` that are half of a four-atom face
       ``{a, b, c, d}`` the hull split along the other diagonal replace the
       hull's two triangles there with ``{a, b, c}`` and the leftover
-      triangle ``{a, c, d}``; ``d`` is the atom, of those for which
-      exactly two hull triangles have all their atoms in
-      ``{a, b, c, d}``, nearest the plane of ``{a, b, c}``;
+      triangle ``{a, c, d}``, where ``d`` is the vertex nearest the plane
+      of ``{a, b, c}`` and exactly two hull triangles have all their atoms
+      in ``{a, b, c, d}``;
     - four or more atoms whose hull triangles cover them (the triangles'
       atoms are the set, and there are two fewer triangles than atoms) are
       re-triangulated as a fan: the atoms are ordered by angle around their
@@ -358,15 +360,14 @@ def _shared_face_triangles(
     if len(face) == 3:
         if face in triangles:
             return {face}, [face]
-        others = sorted({i for t in triangles if len(t & face) == 2 for i in t - face})
-        quads = {d: [t for t in triangles if t <= face | {d}] for d in others}
-        candidates = [d for d in others if len(quads[d]) == 2]
-        if not candidates:
-            return None, []
         a, b, c = (cartesian[i] for i in sorted(face))
-        normal = np.cross(b - a, c - a)
-        d = min(candidates, key=lambda i: abs(float(normal @ (cartesian[i] - a))))
-        first, second = quads[d]
+        others = np.array([i for i in range(len(cartesian)) if i not in face])
+        distances = np.abs((cartesian[others] - a) @ np.cross(b - a, c - a))
+        d = int(others[np.argmin(distances)])
+        quad = [t for t in triangles if t <= face | {d}]
+        if len(quad) != 2:
+            return None, []
+        first, second = quad
         leftover = (face - (first & second)) | {d}
         return {first, second}, [face, leftover]
     inside = [t for t in triangles if t <= face]

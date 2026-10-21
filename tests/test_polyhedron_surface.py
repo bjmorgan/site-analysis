@@ -41,6 +41,15 @@ def _top_face_diagonal(coords: np.ndarray) -> frozenset[int]:
     return frozenset(on_top[0] & on_top[1])
 
 
+def _hexagonal_prism(bottom_dents: list[float]) -> np.ndarray:
+    """A hexagonal prism, its bottom hexagon (atoms 0-5) with each corner moved up by its dent."""
+    angles = np.arange(6) * np.pi / 3
+    hexagon = np.stack([0.5 + 0.2 * np.cos(angles), 0.5 + 0.2 * np.sin(angles),
+                        np.full(6, 0.3)], axis=1)
+    bottom = hexagon + np.outer(bottom_dents, [0.0, 0.0, 1.0])
+    return np.vstack([bottom, hexagon + [0.0, 0.0, 0.4]])
+
+
 class TestSurfaceTriangles(unittest.TestCase):
 
     def test_cube_surface_is_twelve_outward_triangles(self):
@@ -103,17 +112,26 @@ class TestSurfaceTriangles(unittest.TestCase):
 
     def test_part_of_a_hexagonal_face_cannot_be_triangulated_identically(self):
         """Four atoms of a hexagonal prism's hexagon, which its triangles do not cover, raise ValueError."""
-        angles = np.arange(6) * np.pi / 3
-        hexagon = np.stack([0.5 + 0.2 * np.cos(angles), 0.5 + 0.2 * np.sin(angles),
-                            np.full(6, 0.3)], axis=1)
         # Denting alternate corners of the bottom hexagon fixes its triangles
         # as the central triangle {0, 2, 4} and three ears.
-        bottom = hexagon.copy()
-        bottom[1::2, 2] += 1e-6
-        coords = np.vstack([bottom, hexagon + [0.0, 0.0, 0.4]])
-        vertex_indices = list(range(20, 32))
+        coords = _hexagonal_prism([0.0, 1e-6, 0.0, 1e-6, 0.0, 1e-6])
         with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
-            _surface_triangles(vertex_indices, coords, np.eye(3), [{20, 21, 22, 23}])
+            _surface_triangles(list(range(20, 32)), coords, np.eye(3), [{20, 21, 22, 23}])
+
+    def test_ear_of_a_hexagonal_face_cannot_be_triangulated_identically(self):
+        """A shared ear {0, 1, 2} of a hexagon split into {0, 1, 4}, {0, 4, 5}, {1, 2, 3}, {1, 3, 4} raises ValueError."""
+        coords = _hexagonal_prism([1e-6, 0.0, 2e-6, 1e-6, 0.0, 2e-6])
+        on_bottom = {tuple(sorted(t)) for t in ConvexHull(coords).simplices if max(t) < 6}
+        self.assertEqual(on_bottom, {(0, 1, 4), (0, 4, 5), (1, 2, 3), (1, 3, 4)})
+        with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
+            _surface_triangles(list(range(20, 32)), coords, np.eye(3), [{20, 21, 22}])
+
+    def test_three_atoms_with_no_fourth_atom_of_a_face_cannot_be_triangulated_identically(self):
+        """Three atoms of an octahedron's equator, which are no part of a face, raise ValueError."""
+        coords = 0.5 + 0.2 * np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0],
+                                       [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=float)
+        with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
+            _surface_triangles(list(range(6)), coords, np.eye(3), [{0, 1, 2}])
 
 
 class TestSurfaceCache(unittest.TestCase):

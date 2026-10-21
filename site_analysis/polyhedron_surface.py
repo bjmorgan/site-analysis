@@ -563,6 +563,8 @@ def _tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
     ``_SEPARATION_MARGIN`` times the larger projected extent; the cross
     products of edges whose cross product is no longer than
     ``_PARALLEL_EDGES`` times the product of their lengths are skipped.
+    The face normals are tested first, and the cross products of edges
+    only for the pairs no face normal separates.
 
     Args:
         first: (P, 4, 3) array of the vertices of the first tetrahedron of
@@ -575,24 +577,45 @@ def _tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
     """
     first_vertices, second_vertices = (np.ascontiguousarray(np.moveaxis(t, 2, 0))
                                        for t in (first, second))
-    face_normals = [
+    face_normals = np.concatenate([
         _cross(t[:, :, _TETRAHEDRON_FACES[:, 1]] - t[:, :, _TETRAHEDRON_FACES[:, 0]],
                t[:, :, _TETRAHEDRON_FACES[:, 2]] - t[:, :, _TETRAHEDRON_FACES[:, 0]])
-        for t in (first_vertices, second_vertices)]
+        for t in (first_vertices, second_vertices)], axis=2)
+    overlapping = ~np.any(_separated(face_normals, first_vertices, second_vertices), axis=1)
+    first_vertices, second_vertices = first_vertices[:, overlapping], second_vertices[:, overlapping]
     first_edges, second_edges = (t[:, :, _TETRAHEDRON_EDGES[:, 1]] - t[:, :, _TETRAHEDRON_EDGES[:, 0]]
                                  for t in (first_vertices, second_vertices))
     edge_normals = _cross(first_edges[:, :, :, np.newaxis], second_edges[:, :, np.newaxis, :])
     parallel = (np.sum(edge_normals ** 2, axis=0)
                 <= _PARALLEL_EDGES ** 2 * np.sum(first_edges ** 2, axis=0)[:, :, np.newaxis]
                 * np.sum(second_edges ** 2, axis=0)[:, np.newaxis, :])
-    axes = np.concatenate([*face_normals, edge_normals.reshape(3, -1, 36)], axis=2)
-    first_lower, first_upper = _projection_bounds(axes, first_vertices)
-    second_lower, second_upper = _projection_bounds(axes, second_vertices)
+    separated = _separated(edge_normals.reshape(3, -1, 36), first_vertices, second_vertices)
+    overlapping[overlapping] = ~np.any(separated & ~parallel.reshape(-1, 36), axis=1)
+    return overlapping
+
+
+def _separated(axes: np.ndarray, first: np.ndarray, second: np.ndarray) -> np.ndarray:
+    """Whether each axis separates the projections of each pair of tetrahedra.
+
+    Args:
+        axes: (3, P, A) array of the axes of each of P pairs, with their
+            components along the first axis.
+        first: (3, P, 4) array of the vertices of the first tetrahedron of
+            each pair, with their components along the first axis.
+        second: (3, P, 4) array of the vertices of the second tetrahedron
+            of each pair.
+
+    Returns:
+        (P, A) boolean array, True where the projections onto an axis
+        overlap by no more than ``_SEPARATION_MARGIN`` times the larger
+        projected extent.
+    """
+    first_lower, first_upper = _projection_bounds(axes, first)
+    second_lower, second_upper = _projection_bounds(axes, second)
     overlap = np.minimum(first_upper, second_upper) - np.maximum(first_lower, second_lower)
     extent = np.maximum(first_upper - first_lower, second_upper - second_lower)
-    separated = overlap <= _SEPARATION_MARGIN * extent
-    separated[:, 8:] &= ~parallel.reshape(-1, 36)
-    return ~np.any(separated, axis=1)
+    separated: np.ndarray = overlap <= _SEPARATION_MARGIN * extent
+    return separated
 
 
 def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:

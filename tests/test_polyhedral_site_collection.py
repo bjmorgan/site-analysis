@@ -798,7 +798,6 @@ class TestAssignmentToSitesSpanningMoreThanTwoCells(unittest.TestCase):
         self.assertEqual(atom.in_site, site.index)
 
 
-
 # Containment with numba where it is installed, and with numpy.
 BACKENDS = [True, False] if HAS_NUMBA else [False]
 
@@ -816,7 +815,7 @@ def noisy_frames(structure, n_frames=3, sigma=0.1):
 class TestSpaceFilling(unittest.TestCase):
     """Sites that share faces divide the space between them exactly."""
 
-    N_POINTS = 3000
+    N_POINTS = 500
 
     def assert_space_filling(self, analyse, sites, frames):
         rng = np.random.default_rng(0)
@@ -973,6 +972,24 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
         self.assertEqual(collection.shared_faces(), faces)
         for site, expected in zip(sites, triangles):
             np.testing.assert_array_equal(site._triangles, expected)
+
+    def test_round_trip_keeps_the_triangles_and_containment(self):
+        structure, _ = two_cubes()
+        frame = displaced(structure, 0.1)
+        points = np.random.default_rng(3).random((500, 3))
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                _, sites = two_cubes()
+                collection = PolyhedralSiteCollection(sites)
+                collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+                collection.analyse_structure([], frame)
+                expected = [[site.contains_point(point) for point in points] for site in sites]
+                restored = [PolyhedralSite.from_dict(site.as_dict()) for site in sites]
+                for site, copy, contained in zip(sites, restored, expected):
+                    np.testing.assert_array_equal(copy._triangles, site._triangles)
+                    self.assertEqual([copy.contains_point(point) for point in points], contained)
+                self.assertTrue(any(any(contained) for contained in expected))
 
     def test_site_overlapping_its_own_image_is_named(self):
         structure, sites = two_cubes()

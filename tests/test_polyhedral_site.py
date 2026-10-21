@@ -1,7 +1,6 @@
 import unittest
 import warnings
 
-
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.polyhedron_surface import _SurfaceCache, _surface_triangles
 from site_analysis._compat import HAS_NUMBA
@@ -260,6 +259,8 @@ class PolyhedralSiteTestCase(unittest.TestCase):
             "one triangle as a flat list": [0, 1, 2],
             "index beyond the vertices": [[0, 1, 4]],
             "negative index": [[0, 1, -1]],
+            "floats": [[0.0, 1.0, 2.0]],
+            "booleans": [[True, False, True]],
         }
         for name, triangles in cases.items():
             with self.subTest(name):
@@ -815,6 +816,37 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         self.assertEqual(reconstructed.vertex_indices, original.vertex_indices)
         self.assertEqual(reconstructed.label, original.label)
         np.testing.assert_array_equal(reconstructed.vertex_coords, original.vertex_coords)
+
+    def test_round_trip_preserves_triangles(self):
+        """Triangles set on a site survive as_dict -> from_dict."""
+        original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        original.set_triangles(_TETRAHEDRON_TRIANGLES)
+
+        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+
+        np.testing.assert_array_equal(reconstructed._triangles, _TETRAHEDRON_TRIANGLES)
+
+    def test_round_trip_without_triangles_gives_none(self):
+        """A site with no triangles reloads with none."""
+        original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+
+        site_dict = original.as_dict()
+        reconstructed = PolyhedralSite.from_dict(site_dict)
+
+        self.assertIsNone(site_dict['triangles'])
+        self.assertIsNone(reconstructed._triangles)
+
+    def test_from_dict_without_triangles_key_gives_none(self):
+        """A dict written before triangles were saved still loads, without triangles."""
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        site_dict['vertex_coords'] = _TETRAHEDRON
+        del site_dict['triangles']
+
+        site = PolyhedralSite.from_dict(site_dict)
+
+        self.assertIsNone(site._triangles)
+        with self.assertRaisesRegex(RuntimeError, "assign_vertex_coords"):
+            site.contains_point(np.array([0.5, 0.5, 0.5]))
 
     def test_round_trip_preserves_reference_center(self):
         """A reference centre survives as_dict -> from_dict."""

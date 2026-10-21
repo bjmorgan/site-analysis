@@ -83,9 +83,8 @@ class TestSimpleCubicValidation(unittest.TestCase):
     def test_numba_and_numpy_produce_identical_trajectories(self):
         """Run analysis with both paths and compare atom trajectories.
 
-        Boundary-point disagreements (where one method returns None and the
-        other returns a site index) are expected for points exactly on a face
-        and are reported but not treated as failures.
+        The two paths perform the same arithmetic, so every atom is assigned
+        to the same site, or to none, in every frame.
         """
         # Run with numba (default)
         numba_atoms, numba_sites, numba_time = _run_polyhedral_analysis(
@@ -100,26 +99,14 @@ class TestSimpleCubicValidation(unittest.TestCase):
 
         # Compare atom trajectories
         self.assertEqual(len(numba_atoms), len(numpy_atoms))
-        boundary_disagreements = 0
-        real_disagreements = 0
-        for i, (n, d) in enumerate(zip(numba_atoms, numpy_atoms)):
-            for frame, (nf, df) in enumerate(zip(n, d)):
-                if nf != df:
-                    if nf is None or df is None:
-                        # One method found the point inside, the other didn't —
-                        # boundary point noise
-                        boundary_disagreements += 1
-                    else:
-                        # Both found the point but in different sites
-                        real_disagreements += 1
-
-        total_frames = sum(len(t) for t in numba_atoms)
-        if boundary_disagreements > 0:
-            print(f"\n  Boundary disagreements: {boundary_disagreements}/{total_frames} frames")
+        disagreements = sum(
+            nf != df
+            for n, d in zip(numba_atoms, numpy_atoms, strict=True)
+            for nf, df in zip(n, d, strict=True))
         self.assertEqual(
-            real_disagreements,
+            disagreements,
             0,
-            f"{real_disagreements} frames assigned to different sites",
+            f"{disagreements} atom frames assigned differently",
         )
 
         # Report timing

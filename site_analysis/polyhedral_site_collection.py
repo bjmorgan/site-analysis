@@ -111,7 +111,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         all_frac_coords = structure.frac_coords
         lattice_matrix = structure.lattice.matrix
         self.validate_atom_count(len(all_frac_coords))
-        self._find_shared_faces_if_not_found(all_frac_coords, lattice_matrix)
+        if self._shared_faces is None:
+            self.find_shared_faces(all_frac_coords, lattice_matrix)
         for a in atoms:
             a.assign_coords(all_frac_coords)
         for s in self.sites:
@@ -244,25 +245,6 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         for site, site_triangles in zip(sites, triangles):
             site.set_triangles(site_triangles)
 
-    def _find_shared_faces_if_not_found(self,
-            frac_coords: np.ndarray,
-            lattice_matrix: np.ndarray) -> None:
-        """Find the shared faces from a structure if none have been found.
-
-        Args:
-            frac_coords: Fractional coordinates of the atoms, shape
-                ``(n_atoms, 3)``, indexed by atom index.
-            lattice_matrix: (3, 3) lattice matrix where rows are lattice
-                vectors.
-
-        Raises:
-            ValueError: If finding the shared faces fails (see
-                ``find_shared_faces``).
-            RuntimeError: If a site's vertices are degenerate.
-        """
-        if self._shared_faces is None:
-            self.find_shared_faces(frac_coords, lattice_matrix)
-
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of sites.
 
@@ -332,7 +314,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 f"got {len(points)}"
             )
         self.validate_atom_count(len(all_frac_coords))
-        self._find_shared_faces_if_not_found(all_frac_coords, lattice_matrix)
+        if self._shared_faces is None:
+            self.find_shared_faces(all_frac_coords, lattice_matrix)
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))

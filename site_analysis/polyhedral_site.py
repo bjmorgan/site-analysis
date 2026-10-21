@@ -297,10 +297,6 @@ class PolyhedralSite(Site):
             coordinates, the coordinates unwrapped by ``correct_pbc``, and
             the integer image shifts from the wrapped coordinates, as
             returned by ``correct_pbc``.
-
-        Raises:
-            ValueError: If the coordinates are not finite, or
-                ``correct_pbc`` rejects them.
         """
         wrapped = frac_coords - np.floor(frac_coords)
         unwrapped, image_shifts = correct_pbc(wrapped, self.reference_center, lattice_matrix)
@@ -350,13 +346,14 @@ class PolyhedralSite(Site):
             ValueError: If ``triangles`` is not a (T, 3) array of integers
                 from 0 to one less than the number of vertices.
         """
-        array = np.array(triangles, dtype=np.int64)
-        if (array.ndim != 2 or array.shape[1] != 3
+        array = np.asarray(triangles)
+        if (not np.issubdtype(array.dtype, np.integer)
+                or array.ndim != 2 or array.shape[1] != 3
                 or not np.all((array >= 0) & (array < len(self.vertex_indices)))):
             raise ValueError(
                 "triangles must be a (T, 3) array of local vertex indices from 0 to "
                 f"{len(self.vertex_indices) - 1}, got {triangles!r}")
-        self._triangles = array
+        self._triangles = array.astype(np.int64)
         self._surface_cache = None
 
     def get_vertex_species(self,
@@ -453,8 +450,6 @@ class PolyhedralSite(Site):
                 set without a lattice; if the vertices are degenerate; or if
                 the site is too distorted for its triangles to enclose its
                 centre.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, from ``_image_shifts``.
         """
         if self._triangles is None:
             if self._lattice_matrix is None:
@@ -521,8 +516,10 @@ class PolyhedralSite(Site):
 
         Besides the attributes of :class:`~site_analysis.site.Site`, it contains
         the ``vertex_indices``, the ``vertex_coords`` (``None`` if not yet
-        assigned) and the ``reference_center`` as a list of three floats
-        (``None`` if the site has none).
+        assigned), the ``reference_center`` as a list of three floats
+        (``None`` if the site has none) and the ``triangles`` that bound the
+        site as a list of local vertex index triples (``None`` if none have
+        been fixed).
 
         Returns:
             dict: dictionary representation of this site.
@@ -532,6 +529,7 @@ class PolyhedralSite(Site):
         d['vertex_coords'] = self.vertex_coords
         d['reference_center'] = (
             None if self.reference_center is None else self.reference_center.tolist())
+        d['triangles'] = None if self._triangles is None else self._triangles.tolist()
         return d
 
     @classmethod
@@ -539,9 +537,11 @@ class PolyhedralSite(Site):
         """Create a PolyhedralSite object from a dict representation.
 
         Restores the vertex indices, vertex coordinates, contained atoms,
-        label and reference centre. A dict without a ``reference_center``
-        key, as written by earlier versions, gives a site with no reference
-        centre.
+        label, reference centre and triangles. A dict without a
+        ``reference_center`` or ``triangles`` key, as written by earlier
+        versions, gives a site with no reference centre or no triangles. A
+        site restored without triangles cannot test containment until its
+        vertex coordinates are assigned with a lattice.
 
         Args:
             d (dict): The dict representation of this site.
@@ -551,11 +551,14 @@ class PolyhedralSite(Site):
 
         Raises:
             ValueError: If ``reference_center`` is not None and not three
-                finite numbers.
+                finite numbers, or ``triangles`` is not None and not
+                accepted by ``set_triangles``.
         """
         polyhedral_site = cls(
             vertex_indices=d['vertex_indices'],
             reference_center=d.get('reference_center'))
+        if d.get('triangles') is not None:
+            polyhedral_site.set_triangles(d['triangles'])
         polyhedral_site.vertex_coords = d['vertex_coords']
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')

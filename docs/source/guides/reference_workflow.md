@@ -137,7 +137,7 @@ The `mapping_species` parameter controls which atoms are used to define site geo
 
 ### Periodic Boundary Condition Handling
 
-The Reference-Based Sites workflow provides control over how periodic boundary conditions are handled when creating polyhedral and dynamic Voronoi sites. **Reference centre unwrapping is enabled by default** and is the recommended approach for all use cases.
+The Reference-Based Sites workflow gives each polyhedral and dynamic Voronoi site a reference centre: the position of its central atom in the reference structure (aligned when alignment is on). Each site's vertices, or reference atoms, are unwrapped to their periodic images nearest its reference centre, which works correctly even in small supercells where sites span more than half the cell. For polyhedral sites, the reference centres also rank candidate sites by distance from each atom in the site search.
 
 ```python
 trajectory = (TrajectoryBuilder()
@@ -148,41 +148,14 @@ trajectory = (TrajectoryBuilder()
         centre_species="Li",
         vertex_species="O",
         cutoff=2.5,
-        n_vertices=4,
-        use_reference_centers=True  # Default: reference centre unwrapping
-    )
-    .build())
-
-# Alternative: spread-based detection (advanced usage only)
-trajectory = (TrajectoryBuilder()
-    .with_structure(target_structure)
-    .with_reference_structure(reference_structure)
-    .with_mobile_species("Li")
-    .with_polyhedral_sites(
-        centre_species="Li",
-        vertex_species="O",
-        cutoff=2.5,
-        n_vertices=4,
-        use_reference_centers=False  # Use spread-based method
+        n_vertices=4
     )
     .build())
 ```
 
-#### PBC Handling Methods
+The `use_reference_centers` parameter of `with_polyhedral_sites`, `with_dynamic_voronoi_sites`, the `create_trajectory_with_*` functions and `ReferenceBasedSites.create_*_sites` defaults to `True`. Passing `use_reference_centers=False`, which creates sites without reference centres that fall back to spread-based detection, is deprecated: it issues a `FutureWarning` and will be removed in version 2.0.
 
-The `use_reference_centers` parameter controls which of two methods is used:
-
-- **Reference centre unwrapping** (`use_reference_centers=True`, default): Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images. This method works correctly even in small supercells where sites may legitimately span more than 50% of unit cell dimensions.
-
-- **Spread-based detection** (`use_reference_centers=False`): Identifies wrapped sites based on the spatial distribution of reference atoms. This method should only be used when you are confident that all sites have spans well below 0.5 times the simulation cell dimensions in all directions, and is inappropriate for relatively small simulation cells. For polyhedral sites, it also makes the site search fall back to the neighbours of an atom's most recent site, then list order, instead of ranking sites by distance.
-
-#### When to Use Each Method
-
-**Default choice (recommended)**: Use reference centre unwrapping for all analyses. This method handles small supercells correctly and is robust across different system types.
-
-**Advanced usage only**: The spread-based method is no faster, since after the first frame both methods update the unwrapping in the same way, and for polyhedral sites the site search fallback can make assignment slower. It should only be used when you have verified that all coordination environments remain well below half the simulation cell dimensions throughout your analysis.
-
-For detailed explanations of both methods, their trade-offs, and guidance on when to use each approach, see {doc}`../concepts/pbc_handling`.
+For details of both methods, see {doc}`../concepts/pbc_handling`.
 
 ## Best Practices
 

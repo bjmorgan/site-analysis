@@ -142,7 +142,7 @@ trajectory = Trajectory(sites=sites, atoms=atoms)
 
 ### Creating Sites from Vertex Indices
 
-For complete control, specify vertex atoms directly:
+For complete control, specify vertex atoms directly, with a reference centre for each site:
 
 ```python
 from site_analysis.polyhedral_site import PolyhedralSite
@@ -151,22 +151,23 @@ from site_analysis.polyhedral_site import PolyhedralSite
 site1_vertices = [10, 15, 22, 28]  # Indices of O atoms forming tetrahedron
 site2_vertices = [11, 16, 23, 29, 35, 41]  # Indices for octahedron
 
-# Create individual polyhedral sites
-site1 = PolyhedralSite(vertex_indices=site1_vertices, label="tet_1")
-site2 = PolyhedralSite(vertex_indices=site2_vertices, label="oct_1")
+# Reference centres: the fractional coordinates of each site's central atom
+site1_centre = structure[2].frac_coords  # Central atom of the tetrahedron
+site2_centre = structure[3].frac_coords  # Central atom of the octahedron
 
-# Create from lists of vertex indices
-vertex_lists = [[10, 15, 22, 28], [11, 16, 23, 29, 35, 41]]
-sites = PolyhedralSite.sites_from_vertex_indices(
-    vertex_indices=vertex_lists,
-    label="polyhedral"
-)
+# Create individual polyhedral sites
+site1 = PolyhedralSite(vertex_indices=site1_vertices, label="tet_1",
+                       reference_center=site1_centre)
+site2 = PolyhedralSite(vertex_indices=site2_vertices, label="oct_1",
+                       reference_center=site2_centre)
 
 # Use in trajectory
-trajectory = Trajectory(sites=sites, atoms=atoms)
+trajectory = Trajectory(sites=[site1, site2], atoms=atoms)
 ```
 
 This approach is useful when you have pre-identified coordination environments or need to work with non-standard polyhedra.
+
+Each site's vertices are unwrapped to their periodic images nearest its reference centre (see [Periodic Boundary Conditions](../concepts/pbc_handling.md)). Creating a site without a reference centre is deprecated and issues a `FutureWarning`; such a site falls back to spread-based detection, and version 2.0 will require `reference_center`. `PolyhedralSite.sites_from_vertex_indices()`, which creates sites from vertex indices alone, without reference centres, is deprecated in favour of `TrajectoryBuilder.with_polyhedral_sites()` (or `PolyhedralSite` with `reference_center`), and issues a `FutureWarning`.
 
 Vertex indices are Python or numpy integers; `PolyhedralSite` raises `TypeError` for any other value, including a `bool`. Every structure the trajectory analyses must have an atom for every vertex index: `analyse_structure()` (and so `append_timestep()`) and `TrajectoryBuilder.build()` raise `ValueError` ("Site {index} has vertex index {k}, but the structure has {n} atoms") naming the first such site in index order. `PolyhedralSiteCollection.validate_atom_count(n_atoms)` makes the same check.
 
@@ -186,7 +187,7 @@ Overlapping polyhedral sites are not supported. Sites that interpenetrate may ra
 
 Two polyhedral sites share a face when they have three or more vertex atoms in common under one lattice translation: the same atoms, translated by one lattice vector, are vertices of both. These atoms are triangulated identically on both sites, by the rules described below; finding the shared faces raises `ValueError` when they cannot be. A shared face is a `Face` with `site_indices`, the indices of the two sites, and `vertex_indices`, the indices of the atoms, both in ascending order. Creating a `Face` stores its indices as `int` and raises `TypeError` for an index that is not a Python or numpy integer, including a `bool`.
 
-No tolerance is involved. The faces depend on which periodic image of each vertex atom is nearest its site's reference centre (or, for a site without a reference centre, on the spread-based unwrapping of its vertices), so a structure distorted enough to change that image changes the faces.
+No tolerance is involved. The faces depend on which periodic image of each vertex atom is nearest its site's reference centre (or, for a site without a reference centre, which is deprecated, on the spread-based unwrapping of its vertices), so a structure distorted enough to change that image changes the faces.
 
 In a cell two sites wide, two neighbouring sites share two faces, one on each side.
 

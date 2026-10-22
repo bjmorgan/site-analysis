@@ -30,8 +30,9 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
         
     Warning:
         This algorithm can produce incorrect results for sites spanning
-        periodic boundaries in small unit cells. Consider using reference
-        centre-based approaches for robust PBC handling.
+        periodic boundaries in small unit cells. Sites without a reference
+        centre, which use it, are deprecated, and it will be removed with
+        them in version 2.0.
     """
     corrected_coords: np.ndarray = frac_coords.copy()
     for dim in range(3):

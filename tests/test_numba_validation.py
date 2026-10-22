@@ -1,8 +1,8 @@
-"""Validation tests comparing numba and Delaunay containment paths.
+"""Validation tests comparing the numba and numpy containment paths.
 
 These tests run the full trajectory analysis pipeline on real MD data
-and verify that the numba surface normal method produces identical
-results to the Delaunay fallback. They also report timing for both paths.
+and verify that the numba containment kernels produce identical results
+to the numpy ones. They also report timing for both paths.
 
 These tests are skipped if numba is not available.
 """
@@ -72,7 +72,7 @@ def _run_polyhedral_analysis(structures):
 
 @unittest.skipUnless(HAS_NUMBA, "numba not available")
 class TestSimpleCubicValidation(unittest.TestCase):
-    """Validate numba vs Delaunay on simple cubic Li trajectory."""
+    """Validate numba vs numpy on simple cubic Li trajectory."""
 
     @classmethod
     def setUpClass(cls):
@@ -80,59 +80,46 @@ class TestSimpleCubicValidation(unittest.TestCase):
 
         cls.structures = Xdatcar(str(SIMPLE_XDATCAR)).structures
 
-    def test_numba_and_delaunay_produce_identical_trajectories(self):
+    def test_numba_and_numpy_produce_identical_trajectories(self):
         """Run analysis with both paths and compare atom trajectories.
 
-        Boundary-point disagreements (where one method returns None and the
-        other returns a site index) are expected for points exactly on a face
-        and are reported but not treated as failures.
+        The two paths perform the same arithmetic, so every atom is assigned
+        to the same site, or to none, in every frame.
         """
         # Run with numba (default)
         numba_atoms, numba_sites, numba_time = _run_polyhedral_analysis(
             self.structures
         )
 
-        # Run with Delaunay fallback
-        with patch("site_analysis.polyhedral_site.HAS_NUMBA", False):
-            delaunay_atoms, delaunay_sites, delaunay_time = _run_polyhedral_analysis(
+        # Run with numpy containment
+        with patch("site_analysis.polyhedron_surface.HAS_NUMBA", False):
+            numpy_atoms, numpy_sites, numpy_time = _run_polyhedral_analysis(
                 self.structures
             )
 
         # Compare atom trajectories
-        self.assertEqual(len(numba_atoms), len(delaunay_atoms))
-        boundary_disagreements = 0
-        real_disagreements = 0
-        for i, (n, d) in enumerate(zip(numba_atoms, delaunay_atoms)):
-            for frame, (nf, df) in enumerate(zip(n, d)):
-                if nf != df:
-                    if nf is None or df is None:
-                        # One method found the point inside, the other didn't —
-                        # boundary point noise
-                        boundary_disagreements += 1
-                    else:
-                        # Both found the point but in different sites
-                        real_disagreements += 1
-
-        total_frames = sum(len(t) for t in numba_atoms)
-        if boundary_disagreements > 0:
-            print(f"\n  Boundary disagreements: {boundary_disagreements}/{total_frames} frames")
+        self.assertEqual(len(numba_atoms), len(numpy_atoms))
+        disagreements = sum(
+            nf != df
+            for n, d in zip(numba_atoms, numpy_atoms, strict=True)
+            for nf, df in zip(n, d, strict=True))
         self.assertEqual(
-            real_disagreements,
+            disagreements,
             0,
-            f"{real_disagreements} frames assigned to different sites",
+            f"{disagreements} atom frames assigned differently",
         )
 
         # Report timing
         print(f"\nSimple cubic ({len(self.structures)} frames):")
         print(f"  Numba:   {numba_time:.4f}s")
-        print(f"  Delaunay: {delaunay_time:.4f}s")
-        if delaunay_time > 0:
-            print(f"  Speedup: {delaunay_time / numba_time:.1f}x")
+        print(f"  numpy: {numpy_time:.4f}s")
+        if numpy_time > 0:
+            print(f"  Speedup: {numpy_time / numba_time:.1f}x")
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba not available")
 class TestArgyroditeValidation(unittest.TestCase):
-    """Validate numba vs Delaunay on argyrodite Li6PS5Cl trajectory."""
+    """Validate numba vs numpy on argyrodite Li6PS5Cl trajectory."""
 
     @classmethod
     def setUpClass(cls):
@@ -205,19 +192,19 @@ class TestArgyroditeValidation(unittest.TestCase):
         atom_trajectories = [atom.trajectory[:] for atom in trajectory.atoms]
         return atom_trajectories, elapsed
 
-    def test_numba_and_delaunay_produce_identical_trajectories(self):
+    def test_numba_and_numpy_produce_identical_trajectories(self):
         """Run argyrodite analysis with both paths and compare."""
         # Run with numba
         numba_atoms, numba_time = self._run_argyrodite_analysis()
 
-        # Run with Delaunay fallback
-        with patch("site_analysis.polyhedral_site.HAS_NUMBA", False):
-            delaunay_atoms, delaunay_time = self._run_argyrodite_analysis()
+        # Run with numpy containment
+        with patch("site_analysis.polyhedron_surface.HAS_NUMBA", False):
+            numpy_atoms, numpy_time = self._run_argyrodite_analysis()
 
         # Compare atom trajectories
-        self.assertEqual(len(numba_atoms), len(delaunay_atoms))
+        self.assertEqual(len(numba_atoms), len(numpy_atoms))
         mismatches = 0
-        for i, (n, d) in enumerate(zip(numba_atoms, delaunay_atoms)):
+        for i, (n, d) in enumerate(zip(numba_atoms, numpy_atoms)):
             if n != d:
                 mismatches += 1
         self.assertEqual(
@@ -229,9 +216,9 @@ class TestArgyroditeValidation(unittest.TestCase):
         # Report timing
         print(f"\nArgyrodite Li6PS5Cl ({len(self.structures)} frames):")
         print(f"  Numba:   {numba_time:.2f}s")
-        print(f"  Delaunay: {delaunay_time:.2f}s")
-        if delaunay_time > 0:
-            print(f"  Speedup: {delaunay_time / numba_time:.1f}x")
+        print(f"  numpy: {numpy_time:.2f}s")
+        if numpy_time > 0:
+            print(f"  Speedup: {numpy_time / numba_time:.1f}x")
 
 
 if __name__ == "__main__":

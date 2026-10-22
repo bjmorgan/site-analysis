@@ -10,7 +10,8 @@ specific functionality for polyhedral sites, including:
 - Maintaining a map of neighbouring polyhedral sites that share three or
   more vertex indices
 - Finding the faces that pairs of sites share, and which sites are
-  adjacent through a shared face
+  adjacent through a shared face, and fixing each site's triangles so that
+  sites sharing a face triangulate it identically
 - Optimised atom assignment via the PriorityAssignmentMixin
 - Distance-ranked site ordering when reference centres are available
 
@@ -22,12 +23,14 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
+import warnings
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 
-from .faces import Face, _find_shared_faces
+from .faces import Face, _find_shared_faces, _narrow_cell_hint
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
+from .polyhedron_surface import _SharedFaceError
 from .atom import Atom
 from pymatgen.core import Structure
 import numpy as np
@@ -89,8 +92,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             structure: Structure) -> None:
         """Analyse a structure to assign atoms to polyhedral sites.
 
-        Assigns coordinates to atoms, notifies sites of the new
-        structure, and assigns atoms to sites.
+        Finds the shared faces from the structure, as ``find_shared_faces``
+        does, if none have been found. Then assigns coordinates to atoms,
+        notifies sites of the new structure, and assigns atoms to sites.
 
         Args:
             atoms: List of Atom objects to be assigned to sites.
@@ -98,13 +102,19 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Raises:
             ValueError: If a site has a vertex index that is not an atom of
-                the structure.
+                the structure, or finding the shared faces fails (see
+                ``find_shared_faces``).
+            RuntimeError: If finding the shared faces fails on degenerate
+                vertex geometry, or a site tested for an atom is too
+                distorted for its triangles to enclose its centre.
         """
         all_frac_coords = structure.frac_coords
+        lattice_matrix = structure.lattice.matrix
         self.validate_atom_count(len(all_frac_coords))
+        if self._shared_faces is None:
+            self.find_shared_faces(all_frac_coords, lattice_matrix)
         for a in atoms:
             a.assign_coords(all_frac_coords)
-        lattice_matrix = structure.lattice.matrix
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         self.assign_site_occupations(atoms, lattice_matrix)
@@ -179,12 +189,19 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
     def find_shared_faces(self,
             frac_coords: np.ndarray,
             lattice_matrix: np.ndarray) -> None:
-        """Find the faces shared by pairs of sites.
+        """Find the faces shared by pairs of sites, and fix each site's triangles.
 
         Two sites share a face when they share three or more vertex atoms
-        under one lattice translation. The result replaces any earlier one,
-        and is kept when the collection is reset. If the search raises an
-        error, the earlier result is kept.
+        under one lattice translation. Each site's triangles are then fixed
+        with ``PolyhedralSite.fix_triangles``: the convex hull of its
+        vertices, with each face it shares triangulated by a rule that
+        depends only on the face's atoms, so that the sites sharing it
+        triangulate it identically. The faces and triangles replace any
+        earlier ones, and are kept when the collection is reset. If the
+        faces differ from those found before, a ``UserWarning`` says so,
+        with the numbers of faces added and removed. If an error is
+        raised, the earlier faces are kept, as are the triangles of the
+        sites not yet fixed. Overlapping sites are not supported.
 
         Args:
             frac_coords: Fractional coordinates of the atoms, shape
@@ -194,14 +211,42 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Raises:
             ValueError: If a site has a vertex index that is not an atom of
-                the structure (see ``validate_atom_count``), the vertex
-                coordinates are not finite, or two sites coincide or one
-                lies inside another.
+                the structure (see ``validate_atom_count``); the vertex
+                coordinates are not finite; two sites coincide or one lies
+                inside another; or the atoms two sites share cannot be
+                triangulated identically on both, naming the two sites.
+            RuntimeError: If a site's vertices are degenerate, or its
+                triangles do not enclose its centre, as when the fan of a
+                shared face folds through it.
         """
         frac_coords = np.asarray(frac_coords, dtype=float)
+        lattice_matrix = np.asarray(lattice_matrix, dtype=float)
         self.validate_atom_count(len(frac_coords))
-        self._shared_faces = _find_shared_faces(
-            self.sites, frac_coords, np.asarray(lattice_matrix, dtype=float))
+        faces = _find_shared_faces(self.sites, frac_coords, lattice_matrix)
+        if self._shared_faces is not None and set(faces) != set(self._shared_faces):
+            added = len(set(faces) - set(self._shared_faces))
+            removed = len(set(self._shared_faces) - set(faces))
+            warnings.warn(
+                f"The shared faces differ from those found before ({added} added, {removed} "
+                "removed), so the connectivity of the sites has changed",
+                UserWarning, stacklevel=2)
+        sites_by_index = {site.index: site for site in self.sites}
+        faces_by_site: defaultdict[int, list[Face]] = defaultdict(list)
+        for face in faces:
+            for i in face.site_indices:
+                faces_by_site[i].append(face)
+        for index in sorted(sites_by_index):
+            site_faces = faces_by_site[index]
+            try:
+                sites_by_index[index].fix_triangles(
+                    frac_coords, lattice_matrix, [face.vertex_indices for face in site_faces])
+            except _SharedFaceError as error:
+                face = next(face for face in site_faces if face.vertex_indices == error.atoms)
+                i, j = face.site_indices
+                raise ValueError(
+                    f"Sites {i} and {j}: {error}; the sites may overlap"
+                    f"{_narrow_cell_hint(sites_by_index[i], sites_by_index[j])}") from error
+        self._shared_faces = faces
 
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of sites.
@@ -214,7 +259,8 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         """
         if self._shared_faces is None:
             raise RuntimeError(
-                "Shared faces have not been found: call Trajectory.find_shared_faces(structure)")
+                "Shared faces have not been found: analyse a structure, or call "
+                "find_shared_faces with one")
         return self._shared_faces
 
     def site_adjacency(self) -> csr_array:
@@ -243,6 +289,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             lattice_matrix: np.ndarray) -> bool:
         """Check whether the set of sites contain corresponding points.
 
+        Finds the shared faces from the structure, as ``find_shared_faces``
+        does, if none have been found.
+
         Args:
             points: (N, 3) array of fractional coordinates.
                 One coordinate per site being checked.
@@ -256,8 +305,12 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Raises:
             ValueError: If the number of points does not match the number
-                of sites, or a site has a vertex index that is not an atom
-                of the structure.
+                of sites, a site has a vertex index that is not an atom
+                of the structure, or finding the shared faces fails (see
+                ``find_shared_faces``).
+            RuntimeError: If finding the shared faces fails on degenerate
+                vertex geometry, or a site is too distorted for its
+                triangles to enclose its centre.
         """
         if len(points) != len(self.sites):
             raise ValueError(
@@ -265,9 +318,12 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
                 f"got {len(points)}"
             )
         self.validate_atom_count(len(all_frac_coords))
+        if self._shared_faces is None:
+            self.find_shared_faces(all_frac_coords, lattice_matrix)
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))
+
 
 def _collect_reference_centres(
         sites: list[PolyhedralSite],

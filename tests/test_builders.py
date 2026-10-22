@@ -1421,6 +1421,12 @@ class TestTrajectoryBuilder(unittest.TestCase):
 class TestBuilderValidation(unittest.TestCase):
 	"""Tests for builder validation of reference structures and duplicate sites."""
 
+	SHARED_FACE_HINT = (
+		"This typically means the reference structure has multiple atoms inside "
+		"the same coordination environment, or that the site definitions (for "
+		"example the cutoff or n_vertices) give interpenetrating coordination "
+		"environments.")
+
 	def _make_argyrodite_ref(self, mg_coord):
 		"""Build an argyrodite reference with a given Mg coordinate."""
 		lattice = Lattice.cubic(a=10.155)
@@ -1596,7 +1602,7 @@ class TestBuilderValidation(unittest.TestCase):
 		with self.assertRaises(ValueError) as ctx:
 			builder.build()
 		self.assertIn("coincide", str(ctx.exception))
-		self.assertIn("multiple atoms inside the same coordination environment", str(ctx.exception))
+		self.assertIn(self.SHARED_FACE_HINT, str(ctx.exception))
 
 	def test_duplicate_existing_polyhedral_sites_raises(self):
 		"""Polyhedral sites without reference coordinates are checked by vertex indices."""

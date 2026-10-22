@@ -24,7 +24,7 @@ For faster polyhedral site analysis and distance calculations, you can install w
 pip install site-analysis[fast]
 ```
 
-This enables JIT-compiled containment testing, which typically gives a ~7x speedup when analysing polyhedral sites. It also speeds up the minimum-image distance calculations used throughout the package.
+This enables JIT-compiled containment testing, which makes per-frame analysis of the argyrodite tutorial trajectory with polyhedral sites about three times faster, with identical results. It also speeds up the minimum-image distance calculations used throughout the package.
 
 ## Installing from Source
 

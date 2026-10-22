@@ -462,8 +462,8 @@ class TrajectoryBuilder:
                 Default is True.
 
                 * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference center for each site and unwraps vertex coordinates
-                  relative to this center. Correctly handles sites that naturally
+                  a reference centre for each site and unwraps vertex coordinates
+                  relative to this centre. Correctly handles sites that naturally
                   span >50% of unit cell dimensions, even in small simulation cells.
                 * ``False`` (advanced usage) -- Spread-based PBC correction. If
                   vertex coordinates span >50% of the unit cell in any dimension,
@@ -569,8 +569,8 @@ class TrajectoryBuilder:
                 Default is True.
 
                 * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference center for each site and unwraps vertex coordinates
-                  relative to this center. Correctly handles sites that naturally
+                  a reference centre for each site and unwraps vertex coordinates
+                  relative to this centre. Correctly handles sites that naturally
                   span >50% of unit cell dimensions, even in small simulation cells.
                 * ``False`` (advanced usage) -- Spread-based PBC correction. If
                   vertex coordinates span >50% of the unit cell in any dimension,
@@ -777,10 +777,13 @@ class TrajectoryBuilder:
             finite. False otherwise.
 
         Raises:
-            ValueError: If two sites coincide or one lies inside another. The
-                message says that this typically means the reference
-                structure has multiple atoms inside the same coordination
-                environment.
+            ValueError: If two sites coincide, one lies inside another, or
+                the atoms two sites share cannot be triangulated identically
+                on both. The message says that this
+                typically means the reference structure has multiple atoms
+                inside the same coordination environment, or that the site
+                definitions give interpenetrating coordination environments.
+            RuntimeError: If a site's reference vertices are degenerate.
         """
         if rbs is None or not isinstance(site_collection, PolyhedralSiteCollection):
             return False
@@ -794,7 +797,10 @@ class TrajectoryBuilder:
         except ValueError as error:
             raise ValueError(
                 f"{error}. This typically means the reference structure has "
-                f"multiple atoms inside the same coordination environment.") from error
+                f"multiple atoms inside the same coordination environment, or "
+                f"that the site definitions (for example the cutoff or "
+                f"n_vertices) give interpenetrating coordination "
+                f"environments.") from error
         return True
 
     def _validate_unique_sites(self, sites: list[Site]) -> None:
@@ -840,8 +846,9 @@ class TrajectoryBuilder:
         using the previously configured site generators. When every site is
         polyhedral and every vertex atom of every site was mapped from the
         reference structure by a ``with_polyhedral_sites`` definition, it
-        also finds the faces the sites share from the reference geometry;
-        otherwise the shared faces are not found until
+        also finds the faces the sites share, and fixes each site's
+        triangles, from the reference geometry; otherwise they are found
+        from the first structure analysed, or when
         ``Trajectory.find_shared_faces`` is called.
         
         Sites are created first, then the atoms, then the trajectory, so a
@@ -864,12 +871,16 @@ class TrajectoryBuilder:
                 spherical site whose centre is not three finite numbers or
                 whose radius is negative or NaN, a polyhedral site with a
                 vertex index that is not an atom of the structure, or
-                duplicate, coincident or nested sites.
+                duplicate, coincident or nested sites, or shared atoms that
+                cannot be triangulated identically on both sites.
             ValueError: Mapping failures: coordination environments that
                 cannot be found or mapped one-to-one to the target structure
                 (see "Mapping Conflicts" in the reference workflow guide).
             TypeError: Mixed site types (the message names the types), or a
                 commitment radius that is not a number.
+            RuntimeError: A polyhedral site whose reference vertices are
+                degenerate, when the shared faces are found from the
+                reference geometry.
         """
         # Validate basic requirements
         if not self._structure:
@@ -1059,7 +1070,7 @@ def create_trajectory_with_polyhedral_sites(
             version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        use_reference_centers: Whether to use reference centers for 
+        use_reference_centers: Whether to use reference centres for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
             
@@ -1144,7 +1155,7 @@ def create_trajectory_with_dynamic_voronoi_sites(
             version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        use_reference_centers: Whether to use reference centers for 
+        use_reference_centers: Whether to use reference centres for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
             

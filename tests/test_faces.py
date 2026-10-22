@@ -399,7 +399,8 @@ class SharedFacesApiTestCase(unittest.TestCase):
         self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (0, 1, 2)),))
         # Atom 0 moves half a cell, so each site unwraps it to a different image.
         coords[0, 0] += 0.5
-        trajectory.find_shared_faces(Structure(structure.lattice, structure.species, coords))
+        with self.assertWarnsRegex(UserWarning, "connectivity of the sites has changed"):
+            trajectory.find_shared_faces(Structure(structure.lattice, structure.species, coords))
         self.assertEqual(trajectory.shared_faces(), ())
 
     def test_failed_finding_leaves_the_earlier_result(self):
@@ -506,6 +507,25 @@ class FccInterstitialsTestCase(unittest.TestCase):
                             for face in faces))
 
 
+class AutomaticSharedFacesTestCase(unittest.TestCase):
+
+    def test_first_analysis_finds_the_shared_faces_of_its_structure(self):
+        structure, sites = simple_cubic_cubes(3)
+        expected = shared_faces_of(structure, sites)
+        trajectory = Trajectory(sites=sites, atoms=[Atom(index=0)])
+        trajectory.analyse_structure(displaced(structure, 0.1))
+        self.assertEqual(trajectory.shared_faces(), expected)
+
+    def test_coincident_sites_raise_from_analysis(self):
+        Site.reset_index(0)
+        sites = [PolyhedralSite(vertex_indices=list(range(8)),
+                                reference_center=np.array([0.5, 0.5, 0.5]))
+                 for _ in range(2)]
+        trajectory = Trajectory(sites=sites, atoms=[Atom(index=0)])
+        with self.assertRaisesRegex(ValueError, "Sites 0 and 1 coincide"):
+            trajectory.analyse_structure(FindSharedFacesErrorsTestCase.cube_structure())
+
+
 class BuilderSharedFacesTestCase(unittest.TestCase):
 
     def test_reference_with_coordinates_outside_the_cell_and_no_alignment(self):
@@ -567,21 +587,29 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                       .with_polyhedral_sites(centre_species="Li", vertex_species="O",
                                              cutoff=2.8, n_vertices=8)
                       .build())
-        from_reference = trajectory.shared_faces()
-        self.assertEqual(len(from_reference), 24)
-        trajectory.find_shared_faces(target)
-        self.assertNotEqual(trajectory.shared_faces(), from_reference)
+        self.assertEqual(len(trajectory.shared_faces()), 24)
+        # The moved atom leaves the target's cubes unable to share their faces.
+        with self.assertWarns(UserWarning), \
+                self.assertRaisesRegex(ValueError, "the sites may overlap"):
+            trajectory.find_shared_faces(target)
 
     def test_existing_site_on_vertices_of_generated_sites_shares_faces(self):
         unit = Structure(Lattice.cubic(3.0), ["O", "Li"],
                          [[0, 0, 0], [0.5, 0.5, 0.5]])
         structure = unit * (3, 3, 3)
+        # Leave the cube from (1, 0, 0) to (2, 1, 1) cell units empty for the existing site.
+        empty = next(i for i, site in enumerate(structure)
+                     if np.allclose(site.frac_coords * 3, [1.5, 0.5, 0.5]))
+        structure.remove_sites([empty])
         oxygen = [i for i, site in enumerate(structure) if site.species_string == "O"]
         by_position = {tuple(np.round(structure[i].frac_coords * 3).astype(int) % 3): i
                        for i in oxygen}
         face = [by_position[(1, y, z)] for y in (0, 1) for z in (0, 1)]
         Site.reset_index(1000)
-        existing = PolyhedralSite(vertex_indices=[*face, by_position[(2, 2, 2)]])
+        # The empty cube as an existing site, sharing a square with each of its six neighbours.
+        existing = PolyhedralSite(
+            vertex_indices=[by_position[(x, y, z)] for x in (1, 2) for y in (0, 1) for z in (0, 1)],
+            reference_center=np.array([1.5, 0.5, 0.5]) / 3)
         trajectory = (TrajectoryBuilder()
                       .with_structure(structure)
                       .with_reference_structure(structure)
@@ -591,8 +619,8 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                       .with_existing_sites([existing])
                       .build())
         existing_faces = [f for f in trajectory.shared_faces() if 1000 in f.site_indices]
-        self.assertEqual(len(existing_faces), 2)
-        self.assertEqual({f.vertex_indices for f in existing_faces}, {tuple(sorted(face))})
+        self.assertEqual([len(f.vertex_indices) for f in existing_faces], [4] * 6)
+        self.assertIn(tuple(sorted(face)), {f.vertex_indices for f in existing_faces})
 
     def test_mixing_with_existing_sites_finds_none(self):
         unit = Structure(Lattice.cubic(3.0), ["O", "Li"],

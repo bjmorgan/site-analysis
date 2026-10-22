@@ -1084,6 +1084,16 @@ class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):
         collection.analyse_structure([], inward)
         self.assertEqual([site.as_dict()['triangles'] for site in sites], triangles)
 
+    def test_sites_contain_points_accepts_lists(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                self.assertTrue(collection.sites_contain_points(
+                    [[5.0 / 12.0, 0.5, 0.5], [7.0 / 12.0, 0.5, 0.5]],
+                    structure.frac_coords, structure.lattice.matrix))
+
     def test_sites_contain_points_finds_the_shared_faces_of_its_structure(self):
         structure, sites = two_cubes()
         collection = PolyhedralSiteCollection(sites)

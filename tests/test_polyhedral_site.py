@@ -70,7 +70,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def test_reset_keeps_the_triangles(self):
         """reset() keeps the triangles set on the site."""
         site = self.site
-        site._set_triangles(_TETRAHEDRON_TRIANGLES)
+        site.set_triangles(_TETRAHEDRON_TRIANGLES)
         site.reset()
         self.assertEqual(site.as_dict()['triangles'], _TETRAHEDRON_TRIANGLES.tolist())
 
@@ -232,17 +232,42 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                 site = PolyhedralSite(vertex_indices=range(5))
                 site.assign_vertex_coords(vertices, Lattice.cubic(10.0).matrix)
                 self.assertTrue(site.contains_point(point))
-                site._set_triangles(folded)
+                site.set_triangles(folded)
                 self.assertFalse(site.contains_point(point))
                 self.assertTrue(site.contains_point(np.array([0.5, 0.5, 0.45])))
 
     def test_set_triangles_stores_a_copy(self):
-        """Changing the array passed to _set_triangles does not change the site's triangles."""
+        """Changing the array passed to set_triangles does not change the site's triangles."""
         site = self.site
         triangles = _TETRAHEDRON_TRIANGLES.copy()
-        site._set_triangles(triangles)
+        site.set_triangles(triangles)
         triangles[0] = [0, 0, 0]
         self.assertEqual(site.as_dict()['triangles'], _TETRAHEDRON_TRIANGLES.tolist())
+
+    def test_set_triangles_rejects_triangles_that_are_not_vertex_triples(self):
+        """set_triangles raises ValueError unless given (T, 3) local vertex indices."""
+        cases = {
+            "pairs": [[0, 1], [1, 2]],
+            "one triangle as a flat list": [0, 1, 2],
+            "index beyond the vertices": [[0, 1, 4]],
+            "negative index": [[0, 1, -1]],
+            "floats": [[0.0, 1.0, 2.0]],
+            "booleans": [[True, False, True]],
+        }
+        for name, triangles in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, "^triangles must be"):
+                    self.site.set_triangles(triangles)
+
+    def test_contains_point_accepts_a_list(self):
+        """A point given as a list of three numbers is tested like an array."""
+        for has_numba in BACKENDS:
+            with self.subTest(numba=has_numba), \
+                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
+                self.assertTrue(site.contains_point(_TETRAHEDRON.mean(axis=0).tolist()))
+                self.assertFalse(site.contains_point([0.9, 0.9, 0.9]))
 
     def test_contains_point_rejects_a_point_that_is_not_three_finite_numbers(self):
         """contains_point raises ValueError for a point that is not three finite numbers."""
@@ -879,7 +904,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
     def test_round_trip_preserves_triangles(self):
         """Triangles set on a site survive as_dict -> from_dict."""
         original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        original._set_triangles(_TETRAHEDRON_TRIANGLES)
+        original.set_triangles(_TETRAHEDRON_TRIANGLES)
 
         reconstructed = PolyhedralSite.from_dict(original.as_dict())
 
@@ -892,7 +917,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
                 original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-                original._set_triangles(_TETRAHEDRON_TRIANGLES)
+                original.set_triangles(_TETRAHEDRON_TRIANGLES)
                 original.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
                 site_dict = original.as_dict()
                 site_dict['vertex_coords'] = site_dict['vertex_coords'].tolist()

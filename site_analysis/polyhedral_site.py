@@ -18,17 +18,18 @@ from site_analysis.atom import Atom
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 from site_analysis.polyhedron_surface import (
-    _ContainmentPlanes, _containment_planes, _hull_triangles)
+    _containment_planes, _contains_point, _hull_triangles)
 
 
 class PolyhedralSite(Site):
     """A site defined by the polyhedral volume enclosed by a set of vertex atoms.
 
     The site is the polyhedron bounded by a fixed set of triangles over its
-    vertices: those ``PolyhedralSiteCollection.find_shared_faces`` sets, so
-    that sites sharing a face triangulate it identically, or else the
-    triangles of the convex hull of the vertices in the first frame the
-    site is tested in. A point is inside the site when it is inside one of
+    vertices: those set with ``set_triangles`` (as
+    ``PolyhedralSiteCollection.find_shared_faces`` does, so that sites
+    sharing a face triangulate it identically), or else the triangles of
+    the convex hull of the vertices in the first frame the site is tested
+    in. A point is inside the site when it is inside one of
     the tetrahedra formed by the site's centre (the mean of its vertex
     coordinates) and a triangle. Containment uses numba when it is
     installed and numpy otherwise, with identical results.
@@ -93,7 +94,7 @@ class PolyhedralSite(Site):
         self._vertex_coords: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
         self._triangles: np.ndarray | None = None
-        self._planes: _ContainmentPlanes | None = None
+        self._planes: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
         self._pending: tuple[np.ndarray, np.ndarray] | None = None
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
@@ -344,7 +345,7 @@ class PolyhedralSite(Site):
         _, unwrapped, _ = self._unwrap(all_frac_coords[self.vertex_indices], lattice_matrix)
         return unwrapped
 
-    def _set_triangles(self, triangles: np.ndarray) -> None:
+    def set_triangles(self, triangles: np.ndarray) -> None:
         """Set the triangles that bound this site.
 
         Containment uses these triangles from the next ``contains_point``
@@ -356,8 +357,19 @@ class PolyhedralSite(Site):
                 each wound so that ``(b - a) x (c - a)`` points away from
                 the site's centre, as ``PolyhedralSiteCollection.find_shared_faces``
                 sets them. A copy is stored.
+
+        Raises:
+            ValueError: If ``triangles`` is not a (T, 3) array of integers
+                from 0 to one less than the number of vertices.
         """
-        self._triangles = np.array(triangles, dtype=np.int64)
+        array = np.asarray(triangles)
+        if (not np.issubdtype(array.dtype, np.integer)
+                or array.ndim != 2 or array.shape[1] != 3
+                or not np.all((array >= 0) & (array < len(self.vertex_indices)))):
+            raise ValueError(
+                "triangles must be a (T, 3) array of local vertex indices from 0 to "
+                f"{len(self.vertex_indices) - 1}, got {triangles!r}")
+        self._triangles = array.astype(np.int64)
         self._planes = None
 
     def get_vertex_species(self,
@@ -390,7 +402,7 @@ class PolyhedralSite(Site):
         on the first call after the vertex coordinates change.
 
         Args:
-            x: Fractional coordinates of the point to test (length 3 array).
+            x: Fractional coordinates of the point to test, three numbers.
             algo: Deprecated. Previously selected the algorithm. Now ignored;
                 the best available method is used automatically.
             pbc_images: Deprecated. Previously images of the point to test
@@ -433,9 +445,11 @@ class PolyhedralSite(Site):
             )
         if self._planes is None:
             self._planes = self._computed_planes(self._vertex_coords)
-        return self._planes.contains_point(x)
+        return _contains_point(x, *self._planes)
 
-    def _computed_planes(self, vertex_coords: np.ndarray) -> _ContainmentPlanes:
+    def _computed_planes(
+        self, vertex_coords: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute the containment planes for vertex coordinates.
 
         Fixes the triangles from the convex hull of ``vertex_coords`` first
@@ -446,7 +460,8 @@ class PolyhedralSite(Site):
                 coordinates.
 
         Returns:
-            The containment planes for ``vertex_coords``.
+            The containment planes for ``vertex_coords``, as from
+            ``_containment_planes``.
 
         Raises:
             RuntimeError: If the vertices are degenerate, or the site is
@@ -545,13 +560,14 @@ class PolyhedralSite(Site):
 
         Raises:
             ValueError: If ``reference_center`` is not None and not three
-                finite numbers.
+                finite numbers, or ``triangles`` is not None and not
+                accepted by ``set_triangles``.
         """
         polyhedral_site = cls(
             vertex_indices=d['vertex_indices'],
             reference_center=d.get('reference_center'))
         if d.get('triangles') is not None:
-            polyhedral_site._set_triangles(d['triangles'])
+            polyhedral_site.set_triangles(d['triangles'])
         if d['vertex_coords'] is not None:
             polyhedral_site._set_vertex_coords(np.asarray(d['vertex_coords'], dtype=float))
         polyhedral_site.contains_atoms = d['contains_atoms']

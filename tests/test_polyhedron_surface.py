@@ -9,7 +9,8 @@ from scipy.spatial import ConvexHull, Delaunay
 
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.polyhedron_surface import (
-    _containment_planes, _first_overlap, _hull_triangles, _image_shifts, _surface_triangles)
+    _containment_planes, _contains_point, _first_overlap, _hull_triangles, _image_shifts,
+    _surface_triangles)
 
 if HAS_NUMBA:
     from site_analysis.polyhedron_surface import (
@@ -362,7 +363,7 @@ class TestContainmentPlanes(unittest.TestCase):
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
                 planes = _containment_planes(triangles, _CUBE)
                 np.testing.assert_array_equal(
-                    [planes.contains_point(p) for p in points], expected)
+                    [_contains_point(p, *planes) for p in points], expected)
 
     def test_bent_cube_is_bounded_by_its_fixed_triangles(self):
         """A point in the dent of a bent cube is outside, though inside its convex hull."""
@@ -379,8 +380,8 @@ class TestContainmentPlanes(unittest.TestCase):
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
                 planes = _containment_planes(triangles, bent)
-                self.assertFalse(planes.contains_point(in_dent))
-                self.assertTrue(planes.contains_point(below_dent))
+                self.assertFalse(_contains_point(in_dent, *planes))
+                self.assertTrue(_contains_point(below_dent, *planes))
 
     def test_contains_point_in_another_image(self):
         """A point given in another periodic image is contained."""
@@ -389,7 +390,7 @@ class TestContainmentPlanes(unittest.TestCase):
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
                 planes = _containment_planes(triangles, _CUBE)
-                self.assertTrue(planes.contains_point(np.array([1.5, -0.5, 2.5])))
+                self.assertTrue(_contains_point(np.array([1.5, -0.5, 2.5]), *planes))
 
     def test_vertex_moved_past_the_centre_is_too_distorted(self):
         """Moving a vertex past the centre raises RuntimeError."""
@@ -409,7 +410,7 @@ class TestContainmentPlanes(unittest.TestCase):
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
                 planes = _containment_planes(triangles, _CUBE + 1.0)
-                self.assertEqual({tuple(s) for s in planes.image_shifts},
+                self.assertEqual({tuple(s) for s in planes[2]},
                                  set(itertools.product((0, 1), repeat=3)))
 
     def test_image_shifts_for_vertices_beyond_two_cells(self):
@@ -419,7 +420,7 @@ class TestContainmentPlanes(unittest.TestCase):
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
                 planes = _containment_planes(triangles, _CUBE - [0.5, 0.0, 0.0])
-                self.assertEqual({tuple(s) for s in planes.image_shifts}, {(-1, 0, 0), (0, 0, 0)})
+                self.assertEqual({tuple(s) for s in planes[2]}, {(-1, 0, 0), (0, 0, 0)})
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba is not installed")

@@ -32,7 +32,7 @@ If no site contains the atom, it is left unassigned (`None`).
 
 Polyhedral sites can share faces, and the trajectory can report which sites do; see [Shared Faces and Adjacency](../guides/polyhedral_sites.md#shared-faces-and-adjacency).
 
-Each polyhedral site is bounded by triangles over its vertex atoms, and sites that share a face triangulate it identically, so face-sharing sites fill the space between them. Polyhedral sites must not overlap: overlapping sites, a site that overlaps a periodic image of itself, coincident sites and a site whose vertex atoms are all vertices of another site under one lattice translation raise `ValueError` when shared faces are found, whatever the number of vertex atoms they share; see [Site Boundaries](../guides/polyhedral_sites.md#site-boundaries).
+Each polyhedral site is bounded by triangles over its vertex atoms, and sites that share a face triangulate it identically, so face-sharing sites fill the space between them. Overlapping polyhedral sites are not supported; coincident sites, and a site whose vertex atoms are all vertices of another site under one lattice translation, raise `ValueError` when shared faces are found; see [Site Boundaries](../guides/polyhedral_sites.md#site-boundaries).
 
 ### Nearest-Centre Assignment (Voronoi and Dynamic Voronoi)
 
@@ -46,7 +46,7 @@ The handling of spatial ambiguity is the key difference between collection types
 
 | Scenario | Spherical / Polyhedral | Voronoi / Dynamic Voronoi |
 |---|---|---|
-| Overlapping sites | Spherical: priority-based: atom stays in previous site if possible; otherwise, after learned transitions, it goes to the containing site with the nearest centre (see above). Polyhedral: not allowed (`ValueError` when shared faces are found) | Cannot occur (space is partitioned) |
+| Overlapping sites | Spherical: priority-based: atom stays in previous site if possible; otherwise, after learned transitions, it goes to the containing site with the nearest centre (see above). Polyhedral: not supported | Cannot occur (space is partitioned) |
 | Gaps between sites | Atom is unassigned (`None`) | Cannot occur (space is partitioned) |
 
 See the [sites concepts page](sites.md) for guidance on choosing a site type based on these trade-offs.

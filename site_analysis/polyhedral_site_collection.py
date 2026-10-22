@@ -29,12 +29,11 @@ from collections.abc import Iterable
 from .faces import Face, _find_shared_faces, _narrow_cell_hint
 from .site_collection import SiteCollection, PriorityAssignmentMixin
 from .polyhedral_site import PolyhedralSite
-from .polyhedron_surface import _SharedFaceError, _first_overlap, _surface_triangles
+from .polyhedron_surface import _SharedFaceError
 from .atom import Atom
 from pymatgen.core import Structure
 import numpy as np
 from scipy.sparse import csr_array
-from scipy.spatial import QhullError
 
 
 class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteCollection):
@@ -193,14 +192,13 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
         Two sites share a face when they share three or more vertex atoms
         under one lattice translation. Each site's triangles are then fixed
-        from its vertex coordinates unwrapped as by
-        ``PolyhedralSite.unwrapped_vertex_coords``: the convex hull of its
+        with ``PolyhedralSite.fix_triangles``: the convex hull of its
         vertices, with each face it shares triangulated by a rule that
         depends only on the face's atoms, so that the sites sharing it
-        triangulate it identically (see ``PolyhedralSite.set_triangles``).
-        The faces and triangles replace any earlier ones, and are kept when
-        the collection is reset. If an error is raised, the earlier faces
-        and triangles are kept.
+        triangulate it identically. The faces and triangles replace any
+        earlier ones, and are kept when the collection is reset. If an
+        error is raised, the earlier faces are kept, as are the triangles
+        of the sites not yet fixed. Overlapping sites are not supported.
 
         Args:
             frac_coords: Fractional coordinates of the atoms, shape
@@ -212,38 +210,33 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             ValueError: If a site has a vertex index that is not an atom of
                 the structure (see ``validate_atom_count``); the vertex
                 coordinates are not finite; two sites coincide or one lies
-                inside another; the atoms two sites share cannot be
-                triangulated identically on both; or two sites, or a site
-                and a periodic image of itself, overlap with positive
-                volume.
-            RuntimeError: If a site's vertices are degenerate.
+                inside another; or the atoms two sites share cannot be
+                triangulated identically on both, naming the two sites.
+            RuntimeError: If a site's vertices are degenerate, or its
+                triangles do not enclose its centre, as when the fan of a
+                shared face folds through it.
         """
         frac_coords = np.asarray(frac_coords, dtype=float)
         lattice_matrix = np.asarray(lattice_matrix, dtype=float)
         self.validate_atom_count(len(frac_coords))
         faces = _find_shared_faces(self.sites, frac_coords, lattice_matrix)
-        sites = sorted(self.sites, key=lambda site: site.index)
-        sites_by_index = {site.index: site for site in sites}
+        sites_by_index = {site.index: site for site in self.sites}
         faces_by_site: defaultdict[int, list[Face]] = defaultdict(list)
         for face in faces:
             for i in face.site_indices:
                 faces_by_site[i].append(face)
-        coords = [site.unwrapped_vertex_coords(frac_coords, lattice_matrix) for site in sites]
-        triangles = [
-            _site_triangles(site, site_coords, lattice_matrix,
-                            faces_by_site[site.index], sites_by_index)
-            for site, site_coords in zip(sites, coords)]
-        overlap = _first_overlap(coords, triangles)
-        if overlap is not None:
-            first, second = sites[overlap[0]], sites[overlap[1]]
-            if first is second:
-                message = f"Site {first.index} overlaps a periodic image of itself"
-            else:
-                message = f"Sites {first.index} and {second.index} overlap"
-            raise ValueError(message + _narrow_cell_hint(first, second))
+        for index in sorted(sites_by_index):
+            site_faces = faces_by_site[index]
+            try:
+                sites_by_index[index].fix_triangles(
+                    frac_coords, lattice_matrix, [face.vertex_indices for face in site_faces])
+            except _SharedFaceError as error:
+                face = next(face for face in site_faces if face.vertex_indices == error.atoms)
+                i, j = face.site_indices
+                raise ValueError(
+                    f"Sites {i} and {j}: {error}; the sites may overlap"
+                    f"{_narrow_cell_hint(sites_by_index[i], sites_by_index[j])}") from error
         self._shared_faces = faces
-        for site, site_triangles in zip(sites, triangles):
-            site.set_triangles(site_triangles)
 
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of sites.
@@ -320,55 +313,6 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         for s in self.sites:
             s.notify_structure_changed(all_frac_coords, lattice_matrix)
         return all(s.contains_point(p) for s, p in zip(self.sites, points))
-
-
-def _site_triangles(
-        site: PolyhedralSite,
-        coords: np.ndarray,
-        lattice_matrix: np.ndarray,
-        faces: list[Face],
-        sites_by_index: dict[int, PolyhedralSite]) -> np.ndarray:
-    """Surface triangles of a site, triangulating each face it shares by its atoms alone.
-
-    Args:
-        site: The site.
-        coords: (N_vertices, 3) unwrapped fractional coordinates of the
-            site's vertices.
-        lattice_matrix: (3, 3) lattice matrix where rows are lattice
-            vectors.
-        faces: The faces the site shares with other sites.
-        sites_by_index: Every site of the collection, by site index.
-
-    Returns:
-        (N_triangles, 3) int64 array of local vertex indices per triangle,
-        as from ``_surface_triangles``.
-
-    Raises:
-        ValueError: If the atoms of a shared face cannot be triangulated
-            identically on the site, naming the sites that share it and, if
-            it clashes with an earlier shared face, the sites sharing that
-            face too.
-        RuntimeError: If the site's vertices are degenerate.
-    """
-    try:
-        return _surface_triangles(
-            site.vertex_indices, coords, lattice_matrix,
-            [face.vertex_indices for face in faces])
-    except _SharedFaceError as error:
-        faces_by_atoms = {face.vertex_indices: face for face in faces}
-        face = faces_by_atoms[error.atoms]
-        named = set(face.site_indices)
-        if error.earlier is not None:
-            named.update(faces_by_atoms[error.earlier].site_indices)
-        *leading, last = sorted(named)
-        first, second = face.site_indices
-        raise ValueError(
-            f"Sites {', '.join(map(str, leading))} and {last}: {error}; the sites may overlap"
-            f"{_narrow_cell_hint(sites_by_index[first], sites_by_index[second])}") from error
-    except QhullError as error:
-        raise RuntimeError(
-            f"Degenerate vertex geometry for polyhedral_site {site.index} "
-            f"(vertices {site.vertex_indices})") from error
 
 
 def _collect_reference_centres(

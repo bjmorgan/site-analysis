@@ -777,9 +777,9 @@ class TrajectoryBuilder:
             finite. False otherwise.
 
         Raises:
-            ValueError: If two sites coincide, one lies inside another, two
-                sites overlap, or the atoms two sites share cannot be
-                triangulated identically on both. The message says that this
+            ValueError: If two sites coincide, one lies inside another, or
+                the atoms two sites share cannot be triangulated identically
+                on both. The message says that this
                 typically means the reference structure has multiple atoms
                 inside the same coordination environment, or that the site
                 definitions give interpenetrating coordination environments.
@@ -871,7 +871,8 @@ class TrajectoryBuilder:
                 spherical site whose centre is not three finite numbers or
                 whose radius is negative or NaN, a polyhedral site with a
                 vertex index that is not an atom of the structure, or
-                duplicate, coincident, nested or overlapping sites.
+                duplicate, coincident or nested sites, or shared atoms that
+                cannot be triangulated identically on both sites.
             ValueError: Mapping failures: coordination environments that
                 cannot be found or mapped one-to-one to the target structure
                 (see "Mapping Conflicts" in the reference workflow guide).

@@ -288,12 +288,11 @@ class Trajectory:
             TypeError: If the sites are not polyhedral.
             ValueError: If a site has a vertex index that is not an atom of
                 the structure; the vertex coordinates are not finite; two
-                sites coincide or one lies inside another; the atoms two
-                sites share cannot be triangulated identically on both; or
-                two sites, or a site and a periodic image of itself,
-                overlap. The earlier result is then kept.
-            RuntimeError: If a site's vertices are degenerate. The earlier
-                result is then kept.
+                sites coincide or one lies inside another; or the atoms two
+                sites share cannot be triangulated identically on both. The
+                shared faces found earlier are then kept.
+            RuntimeError: If a site's vertices are degenerate. The shared
+                faces found earlier are then kept.
         """
         self._polyhedral_site_collection().find_shared_faces(
             structure.frac_coords, structure.lattice.matrix)

@@ -157,130 +157,6 @@ if HAS_NUMBA:
                     return True
         return False
 
-    @numba.njit(cache=True)
-    def _numba_tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
-        """JIT-compiled test of whether each pair of tetrahedra intersects with positive volume.
-
-        Gives the result of ``_numpy_tetrahedra_overlap`` with the same
-        arithmetic, testing each pair's axes in turn and stopping at the
-        first that separates the pair.
-
-        Args:
-            first: (P, 4, 3) array of the vertices of the first tetrahedron
-                of each pair.
-            second: (P, 4, 3) array of the vertices of the second
-                tetrahedron of each pair.
-
-        Returns:
-            (P,) boolean array, True where no axis separates the pair.
-        """
-        overlapping = np.empty(first.shape[0], dtype=np.bool_)
-        for p in range(first.shape[0]):
-            overlapping[p] = _numba_pair_overlaps(first, second, p)
-        return overlapping
-
-    @numba.njit(cache=True)
-    def _numba_pair_overlaps(first: np.ndarray, second: np.ndarray, p: int) -> bool:
-        """JIT-compiled test of whether one pair of tetrahedra intersects with positive volume.
-
-        Tests the axes of ``_numpy_tetrahedra_overlap`` in the same order:
-        the face normals of the first tetrahedron and then of the second,
-        then the cross products of each edge of the first with each edge
-        of the second, skipping those of parallel edges.
-
-        Args:
-            first: (P, 4, 3) array of the vertices of the first tetrahedron
-                of each pair.
-            second: (P, 4, 3) array of the vertices of the second
-                tetrahedron of each pair.
-            p: Index of the pair.
-
-        Returns:
-            True if no axis separates the pair.
-        """
-        for face in range(8):
-            tetrahedron = first if face < 4 else second
-            i = _TETRAHEDRON_FACES[face % 4, 0]
-            j = _TETRAHEDRON_FACES[face % 4, 1]
-            k = _TETRAHEDRON_FACES[face % 4, 2]
-            u0 = tetrahedron[p, j, 0] - tetrahedron[p, i, 0]
-            u1 = tetrahedron[p, j, 1] - tetrahedron[p, i, 1]
-            u2 = tetrahedron[p, j, 2] - tetrahedron[p, i, 2]
-            v0 = tetrahedron[p, k, 0] - tetrahedron[p, i, 0]
-            v1 = tetrahedron[p, k, 1] - tetrahedron[p, i, 1]
-            v2 = tetrahedron[p, k, 2] - tetrahedron[p, i, 2]
-            if _numba_separated(u1 * v2 - u2 * v1, u2 * v0 - u0 * v2, u0 * v1 - u1 * v0,
-                                first, second, p):
-                return False
-        for first_edge in range(6):
-            i = _TETRAHEDRON_EDGES[first_edge, 0]
-            j = _TETRAHEDRON_EDGES[first_edge, 1]
-            e0 = first[p, j, 0] - first[p, i, 0]
-            e1 = first[p, j, 1] - first[p, i, 1]
-            e2 = first[p, j, 2] - first[p, i, 2]
-            first_squared_length = e0 * e0 + e1 * e1 + e2 * e2
-            for second_edge in range(6):
-                a = _TETRAHEDRON_EDGES[second_edge, 0]
-                b = _TETRAHEDRON_EDGES[second_edge, 1]
-                f0 = second[p, b, 0] - second[p, a, 0]
-                f1 = second[p, b, 1] - second[p, a, 1]
-                f2 = second[p, b, 2] - second[p, a, 2]
-                n0 = e1 * f2 - e2 * f1
-                n1 = e2 * f0 - e0 * f2
-                n2 = e0 * f1 - e1 * f0
-                parallel = (n0 * n0 + n1 * n1 + n2 * n2
-                            <= _PARALLEL_EDGES ** 2 * first_squared_length
-                            * (f0 * f0 + f1 * f1 + f2 * f2))
-                if not parallel and _numba_separated(n0, n1, n2, first, second, p):
-                    return False
-        return True
-
-    @numba.njit(cache=True)
-    def _numba_separated(
-        a0: float,
-        a1: float,
-        a2: float,
-        first: np.ndarray,
-        second: np.ndarray,
-        p: int,
-    ) -> bool:
-        """JIT-compiled test of whether an axis separates the projections of a pair of tetrahedra.
-
-        Performs the arithmetic of ``_separated`` for one axis and one
-        pair.
-
-        Args:
-            a0: First component of the axis.
-            a1: Second component of the axis.
-            a2: Third component of the axis.
-            first: (P, 4, 3) array of the vertices of the first tetrahedron
-                of each pair.
-            second: (P, 4, 3) array of the vertices of the second
-                tetrahedron of each pair.
-            p: Index of the pair.
-
-        Returns:
-            True if the projections onto the axis overlap by no more than
-            ``_SEPARATION_MARGIN`` times the larger projected extent.
-        """
-        first_lower = first_upper = a0 * first[p, 0, 0] + a1 * first[p, 0, 1] + a2 * first[p, 0, 2]
-        second_lower = second_upper = (a0 * second[p, 0, 0] + a1 * second[p, 0, 1]
-                                       + a2 * second[p, 0, 2])
-        for v in range(1, 4):
-            projection = a0 * first[p, v, 0] + a1 * first[p, v, 1] + a2 * first[p, v, 2]
-            first_lower = min(first_lower, projection)
-            first_upper = max(first_upper, projection)
-            projection = a0 * second[p, v, 0] + a1 * second[p, v, 1] + a2 * second[p, v, 2]
-            second_lower = min(second_lower, projection)
-            second_upper = max(second_upper, projection)
-        overlap = min(first_upper, second_upper) - max(first_lower, second_lower)
-        extent = max(first_upper - first_lower, second_upper - second_lower)
-        separated: bool = overlap <= _SEPARATION_MARGIN * extent
-        return separated
-
-
-# The most cells a polyhedral site's vertices may span, counted over all
-# three axes, for the site to test the images of a point in each of them.
 _MAX_IMAGE_SHIFTS = 1000
 
 
@@ -408,32 +284,19 @@ class _SharedFaceError(ValueError):
 
     Attributes:
         atoms: Atom indices of the shared set, in ascending order.
-        earlier: Atom indices, in ascending order, of the earlier shared set
-            whose triangles the set would change, or None if the set cannot
-            be triangulated identically on its own.
     """
 
-    def __init__(
-        self,
-        atoms: Sequence[int],
-        vertex_indices: Sequence[int],
-        earlier: Sequence[int] | None = None,
-    ) -> None:
+    def __init__(self, atoms: Sequence[int], vertex_indices: Sequence[int]) -> None:
         """Describe the shared atom set and the site's vertices.
 
         Args:
             atoms: Atom indices of the shared set, in ascending order.
             vertex_indices: Atom indices of the site's vertices.
-            earlier: Atom indices, in ascending order, of the earlier shared
-                set whose triangles the set would change, if any.
         """
-        message = (f"Shared atoms {list(atoms)} cannot be triangulated identically on the site "
-                   f"with vertices {list(vertex_indices)}")
-        if earlier is not None:
-            message += f" without changing the triangles of shared atoms {list(earlier)}"
-        super().__init__(message)
+        super().__init__(
+            f"Shared atoms {list(atoms)} cannot be triangulated identically on the site "
+            f"with vertices {list(vertex_indices)}")
         self.atoms: tuple[int, ...] = tuple(atoms)
-        self.earlier: tuple[int, ...] | None = None if earlier is None else tuple(earlier)
 
 
 def _surface_triangles(
@@ -446,32 +309,28 @@ def _surface_triangles(
 
     Starts from the convex hull of the vertices' Cartesian coordinates.
     Each shared atom set, taken in ascending order of its sorted atoms,
-    then fixes the triangles over its atoms. The rules below refer to the
-    current triangles, which are the hull's as changed by the earlier
-    shared atom sets:
+    then fixes the triangles over its atoms:
 
-    - three atoms that are a current triangle are kept;
-    - three atoms ``{a, b, c}`` that are half of a four-atom face
-      ``{a, b, c, d}`` split along the other diagonal replace the two
-      current triangles there with ``{a, b, c}`` and the leftover
-      triangle ``{a, c, d}``, where ``d`` is the vertex nearest the plane
-      of ``{a, b, c}`` and exactly two current triangles have all their
-      atoms in ``{a, b, c, d}``;
-    - four or more atoms whose current triangles cover them (the
-      triangles' atoms are the set, and there are two fewer triangles than
-      atoms) are re-triangulated as a fan: the atoms are ordered by angle
-      around their best-fit plane, starting from the lowest atom index,
-      and each consecutive pair forms a triangle with that first atom. The
-      pairs of atoms adjacent in that order, the last and first included,
-      must be the edges that belong to only one of those triangles.
+    - three atoms that are a hull triangle are kept;
+    - four or more atoms whose hull triangles cover them (the triangles'
+      atoms are the set, and there are two fewer triangles than atoms) are
+      re-triangulated as a fan: the atoms are ordered by angle around their
+      best-fit plane, starting from the lowest atom index, and each
+      consecutive pair forms a triangle with that first atom. The pairs of
+      atoms adjacent in that order, the last and first included, must be
+      the edges that belong to only one of those triangles.
 
     Every triangle is then wound so that its normal ``(b - a) x (c - a)``
     in ``coords`` points away from the centre (the mean of ``coords``),
-    whatever the handedness of the lattice.
+    whatever the handedness of the lattice. The wound triangles must then
+    form a consistently oriented surface, each edge traversed once in each
+    direction, which they do exactly when the centre is strictly inside
+    every triangle's plane; a fan that folds through the centre does not.
 
-    Each shared atom set is taken to be a face of the site: a set that is
-    not either raises ValueError here or makes the sites sharing it
-    overlap, which ``_first_overlap`` detects.
+    Each shared atom set is taken to be a face of the site. A set that is
+    not raises ValueError, unless the hull happens to have it as a face
+    anyway, as when two sites interpenetrate; overlapping sites are not
+    supported.
 
     Args:
         vertex_indices: Atom indices of the site's vertices.
@@ -487,25 +346,24 @@ def _surface_triangles(
 
     Raises:
         _SharedFaceError: If a shared atom set is not a face of the site
-            that can be triangulated identically by the rules above, or if
-            fixing its triangles would remove a triangle of an earlier
-            shared atom set, which the error names.
+            that can be triangulated identically by the rules above.
+        RuntimeError: If the wound triangles are not consistently
+            oriented, so that they do not enclose the centre.
     """
     local = {atom: i for i, atom in enumerate(vertex_indices)}
     cartesian = coords @ lattice_matrix
     triangles: list[frozenset[int]] = [frozenset(t) for t in ConvexHull(cartesian).simplices.tolist()]
-    fixed: dict[frozenset[int], list[int]] = {}
     for atoms in sorted((sorted(s) for s in shared_atom_sets)):
         face = frozenset(local[atom] for atom in atoms)
         replaced, added = _shared_face_triangles(face, triangles, cartesian, vertex_indices)
         if replaced is None:
             raise _SharedFaceError(atoms, vertex_indices)
-        clashing = (replaced - set(added)) & fixed.keys()
-        if clashing:
-            raise _SharedFaceError(atoms, vertex_indices, min(fixed[t] for t in clashing))
         triangles = [t for t in triangles if t not in replaced] + added
-        fixed.update((t, atoms) for t in added if t <= face)
-    return _wound_away_from_centre(triangles, coords)
+    wound = _wound_away_from_centre(triangles, coords)
+    directed = np.concatenate([wound[:, [0, 1]], wound[:, [1, 2]], wound[:, [2, 0]]])
+    if len(np.unique(directed, axis=0)) != len(directed):
+        raise RuntimeError("polyhedron is too distorted for its triangles to enclose its centre")
+    return wound
 
 
 def _hull_triangles(coords: np.ndarray) -> np.ndarray:
@@ -572,18 +430,7 @@ def _shared_face_triangles(
         A face that is already a triangle replaces and adds itself.
     """
     if len(face) == 3:
-        if face in triangles:
-            return {face}, [face]
-        a, b, c = (cartesian[i] for i in sorted(face))
-        others = np.array([i for i in range(len(cartesian)) if i not in face])
-        distances = np.abs((cartesian[others] - a) @ np.cross(b - a, c - a))
-        d = int(others[np.argmin(distances)])
-        quad = [t for t in triangles if t <= face | {d}]
-        if len(quad) != 2:
-            return None, []
-        first, second = quad
-        leftover = (face - (first & second)) | {d}
-        return {first, second}, [face, leftover]
+        return ({face}, [face]) if face in triangles else (None, [])
     inside = [t for t in triangles if t <= face]
     if len(face) < 4 or len(inside) != len(face) - 2 or frozenset().union(*inside) != face:
         return None, []
@@ -599,255 +446,6 @@ def _shared_face_triangles(
     order = order[start:] + order[:start]
     fan = [frozenset((order[0], order[k], order[k + 1])) for k in range(1, len(order) - 1)]
     return set(inside), fan
-
-
-# Overlap of two projections, as a fraction of the larger projected
-# extent, at or below which an axis separates two tetrahedra.
-_SEPARATION_MARGIN = 1e-9
-# Length of the cross product of two edges, as a fraction of the product
-# of their lengths, at or below which the edges are parallel and give no
-# separating axis.
-_PARALLEL_EDGES = 1e-12
-# The most tetrahedron pairs, before bounding-box filtering, tested at once.
-_TETRAHEDRON_PAIR_CHUNK = 16384
-# The most pairs of sites whose bounding boxes are compared at once.
-_BOX_PAIR_BLOCK = 1 << 20
-# Vertex indices of the faces and of the edges of a tetrahedron.
-_TETRAHEDRON_FACES = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]])
-_TETRAHEDRON_EDGES = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
-
-
-def _first_overlap(
-    vertex_coords: Sequence[np.ndarray],
-    triangles: Sequence[np.ndarray],
-) -> tuple[int, int] | None:
-    """The first pair of polyhedral sites that overlap with positive volume.
-
-    Each site is the union of the tetrahedra formed by its centre (the
-    mean of its vertex coordinates) and each of its surface triangles.
-    Every pair of sites ``(i, j)`` with ``i <= j``, and every integer
-    lattice translation ``t`` for which the bounding boxes of site ``i``
-    and of site ``j`` translated by ``t`` meet, is tested, except a site
-    with itself untranslated. Two tetrahedra overlap when their
-    projections onto every candidate separating axis (the face normals of
-    both, and the cross products of an edge of each, skipping those of
-    parallel edges) overlap by more than ``_SEPARATION_MARGIN`` times the
-    larger of the two projected extents, so tetrahedra that only touch at
-    a face, edge or vertex do not overlap. Works in fractional
-    coordinates, as positive-volume intersection is invariant under the
-    linear map to Cartesian coordinates. The bounding boxes are compared
-    in blocks of rows ``i`` against every ``j``, so that the memory needed
-    grows with the number of sites and with the number of pairs whose
-    boxes meet. Tests the tetrahedra with a numba kernel when numba is
-    installed and with numpy otherwise, with identical results.
-
-    Args:
-        vertex_coords: Unwrapped fractional coordinates of each site's
-            vertices, each of shape ``(N_vertices, 3)``.
-        triangles: Each site's ``(N_triangles, 3)`` array of local vertex
-            indices per surface triangle, as from ``_surface_triangles``.
-
-    Returns:
-        The first overlapping pair ``(i, j)`` in ascending order of ``i``,
-        then ``j``, where ``i == j`` for a site that overlaps a periodic
-        image of itself, or None if no sites overlap.
-    """
-    if not vertex_coords:
-        return None
-    tetrahedra = np.concatenate([_star_tetrahedra(c, t)
-                                 for c, t in zip(vertex_coords, triangles, strict=True)])
-    counts = np.array([len(t) for t in triangles], dtype=np.int64)
-    offsets = np.cumsum(counts) - counts
-    tetrahedra_overlap = _numba_tetrahedra_overlap if HAS_NUMBA else _numpy_tetrahedra_overlap
-    first, second, shifts = _bounding_box_translations(
-        np.array([c.min(axis=0) for c in vertex_coords]),
-        np.array([c.max(axis=0) for c in vertex_coords]))
-    tetrahedron_lower = tetrahedra.min(axis=1)
-    tetrahedron_upper = tetrahedra.max(axis=1)
-    pair_counts = counts[first] * counts[second]
-    cumulative = np.concatenate([[0], np.cumsum(pair_counts)])
-    start = 0
-    while start < len(first):
-        stop = max(start + 1, int(np.searchsorted(
-            cumulative, cumulative[start] + _TETRAHEDRON_PAIR_CHUNK, side="right")) - 1)
-        rows = np.repeat(np.arange(start, stop), pair_counts[start:stop])
-        k = np.arange(len(rows)) - (cumulative[rows] - cumulative[start])
-        a = offsets[first[rows]] + k // counts[second[rows]]
-        b = offsets[second[rows]] + k % counts[second[rows]]
-        shift = shifts[rows]
-        meet = np.all((tetrahedron_lower[a] <= tetrahedron_upper[b] + shift)
-                      & (tetrahedron_lower[b] + shift <= tetrahedron_upper[a]), axis=1)
-        overlapping = tetrahedra_overlap(
-            tetrahedra[a[meet]], tetrahedra[b[meet]] + shift[meet][:, np.newaxis, :])
-        if overlapping.any():
-            row = rows[meet][np.argmax(overlapping)]
-            return int(first[row]), int(second[row])
-        start = stop
-    return None
-
-
-def _star_tetrahedra(vertex_coords: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """The tetrahedra formed by a polyhedron's centre and each of its surface triangles.
-
-    Args:
-        vertex_coords: (N_vertices, 3) array of vertex positions.
-        triangles: (N_triangles, 3) array of vertex indices per surface
-            triangle.
-
-    Returns:
-        (N_triangles, 4, 3) array of the vertices of each tetrahedron: the
-        centre (the mean of the vertex coordinates), then the triangle's
-        three vertices.
-    """
-    centre = np.broadcast_to(vertex_coords.mean(axis=0), (len(triangles), 1, 3))
-    return np.concatenate([centre, vertex_coords[triangles]], axis=1)
-
-
-def _bounding_box_translations(
-    lower: np.ndarray,
-    upper: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Pairs of boxes, and the lattice translations of the second, for which the boxes meet.
-
-    The box of ``i`` meets that of ``j`` translated by the integer vector
-    ``t`` when ``ceil(lower_i - upper_j) <= t <= floor(upper_i - lower_j)``
-    along each axis.
-
-    Compares blocks of ``max(1, _BOX_PAIR_BLOCK // N)`` rows ``i`` at a
-    time against every ``j >= i``.
-
-    Args:
-        lower: (N, 3) array of the lowest coordinates of each box, N >= 1.
-        upper: (N, 3) array of the highest coordinates of each box.
-
-    Returns:
-        Tuple of (first, second, shifts): the indices ``i <= j`` of each
-        pair, in ascending order of ``i`` then ``j``, and the (M, 3)
-        integer translations of the second box, excluding the zero
-        translation of a box with itself.
-    """
-    n = len(lower)
-    block = max(1, _BOX_PAIR_BLOCK // n)
-    first_blocks, second_blocks = [], []
-    for start in range(0, n, block):
-        rows = np.arange(start, min(start + block, n))
-        meet = rows[:, np.newaxis] <= np.arange(start, n)
-        for axis in range(3):
-            meet &= (np.floor(upper[rows, np.newaxis, axis] - lower[np.newaxis, start:, axis])
-                     >= np.ceil(lower[rows, np.newaxis, axis] - upper[np.newaxis, start:, axis]))
-        block_first, block_second = np.nonzero(meet)
-        first_blocks.append(block_first + start)
-        second_blocks.append(block_second + start)
-    first = np.concatenate(first_blocks)
-    second = np.concatenate(second_blocks)
-    low = np.ceil(lower[first] - upper[second]).astype(np.int64)
-    sizes = np.floor(upper[first] - lower[second]).astype(np.int64) - low + 1
-    per_pair = np.prod(sizes, axis=1)
-    pairs = np.repeat(np.arange(len(first)), per_pair)
-    k = np.arange(len(pairs)) - np.repeat(np.cumsum(per_pair) - per_pair, per_pair)
-    ny, nz = sizes[pairs, 1], sizes[pairs, 2]
-    shifts = low[pairs] + np.stack([k // (ny * nz), (k // nz) % ny, k % nz], axis=1)
-    keep = (first[pairs] != second[pairs]) | np.any(shifts != 0, axis=1)
-    return first[pairs][keep], second[pairs][keep], shifts[keep]
-
-
-def _numpy_tetrahedra_overlap(first: np.ndarray, second: np.ndarray) -> np.ndarray:
-    """Whether each pair of tetrahedra intersects with positive volume.
-
-    By the separating axis theorem, two tetrahedra are disjoint exactly
-    when their projections are disjoint along a face normal of either or
-    along the cross product of an edge of each. An axis separates them
-    here when their projections overlap by no more than
-    ``_SEPARATION_MARGIN`` times the larger projected extent; the cross
-    products of edges whose cross product is no longer than
-    ``_PARALLEL_EDGES`` times the product of their lengths are skipped.
-    The face normals are tested first, and the cross products of edges
-    only for the pairs no face normal separates.
-
-    Args:
-        first: (P, 4, 3) array of the vertices of the first tetrahedron of
-            each pair.
-        second: (P, 4, 3) array of the vertices of the second tetrahedron
-            of each pair.
-
-    Returns:
-        (P,) boolean array, True where no axis separates the pair.
-    """
-    first_vertices, second_vertices = (np.ascontiguousarray(np.moveaxis(t, 2, 0))
-                                       for t in (first, second))
-    face_normals = np.concatenate([
-        _cross(t[:, :, _TETRAHEDRON_FACES[:, 1]] - t[:, :, _TETRAHEDRON_FACES[:, 0]],
-               t[:, :, _TETRAHEDRON_FACES[:, 2]] - t[:, :, _TETRAHEDRON_FACES[:, 0]])
-        for t in (first_vertices, second_vertices)], axis=2)
-    overlapping = ~np.any(_separated(face_normals, first_vertices, second_vertices), axis=1)
-    first_vertices, second_vertices = first_vertices[:, overlapping], second_vertices[:, overlapping]
-    first_edges, second_edges = (t[:, :, _TETRAHEDRON_EDGES[:, 1]] - t[:, :, _TETRAHEDRON_EDGES[:, 0]]
-                                 for t in (first_vertices, second_vertices))
-    edge_normals = _cross(first_edges[:, :, :, np.newaxis], second_edges[:, :, np.newaxis, :])
-    parallel = (np.sum(edge_normals ** 2, axis=0)
-                <= _PARALLEL_EDGES ** 2 * np.sum(first_edges ** 2, axis=0)[:, :, np.newaxis]
-                * np.sum(second_edges ** 2, axis=0)[:, np.newaxis, :])
-    separated = _separated(edge_normals.reshape(3, -1, 36), first_vertices, second_vertices)
-    overlapping[overlapping] = ~np.any(separated & ~parallel.reshape(-1, 36), axis=1)
-    return overlapping
-
-
-def _separated(axes: np.ndarray, first: np.ndarray, second: np.ndarray) -> np.ndarray:
-    """Whether each axis separates the projections of each pair of tetrahedra.
-
-    Args:
-        axes: (3, P, A) array of the axes of each of P pairs, with their
-            components along the first axis.
-        first: (3, P, 4) array of the vertices of the first tetrahedron of
-            each pair, with their components along the first axis.
-        second: (3, P, 4) array of the vertices of the second tetrahedron
-            of each pair.
-
-    Returns:
-        (P, A) boolean array, True where the projections onto an axis
-        overlap by no more than ``_SEPARATION_MARGIN`` times the larger
-        projected extent.
-    """
-    first_lower, first_upper = _projection_bounds(axes, first)
-    second_lower, second_upper = _projection_bounds(axes, second)
-    overlap = np.minimum(first_upper, second_upper) - np.maximum(first_lower, second_lower)
-    extent = np.maximum(first_upper - first_lower, second_upper - second_lower)
-    separated: np.ndarray = overlap <= _SEPARATION_MARGIN * extent
-    return separated
-
-
-def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    """Cross products of vectors stored with their components along the first axis.
-
-    Args:
-        u: (3, ...) array of vectors.
-        v: (3, ...) array of vectors, broadcastable against ``u``.
-
-    Returns:
-        (3, ...) array of the cross products ``u x v``.
-    """
-    return np.stack([u[1] * v[2] - u[2] * v[1],
-                     u[2] * v[0] - u[0] * v[2],
-                     u[0] * v[1] - u[1] * v[0]])
-
-
-def _projection_bounds(axes: np.ndarray, vertices: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """The lowest and highest projections of each tetrahedron's vertices onto its axes.
-
-    Args:
-        axes: (3, P, A) array of the axes of each of P tetrahedra, with
-            their components along the first axis.
-        vertices: (3, P, 4) array of the vertices of each tetrahedron,
-            with their components along the first axis.
-
-    Returns:
-        Tuple of (lower, upper), (P, A) arrays of the lowest and highest
-        projections.
-    """
-    projections = np.stack([
-        axes[0] * vertices[0, :, v, np.newaxis] + axes[1] * vertices[1, :, v, np.newaxis]
-        + axes[2] * vertices[2, :, v, np.newaxis] for v in range(4)])
-    return projections.min(axis=0), projections.max(axis=0)
 
 
 def _containment_planes(

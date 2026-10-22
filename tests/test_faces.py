@@ -506,19 +506,6 @@ class FccInterstitialsTestCase(unittest.TestCase):
                             for face in faces))
 
 
-def same_side_tetrahedra():
-    """Two Li atoms, each in a tetrahedron of O atoms, both on the same side of one O triangle.
-
-    Atoms 0 and 1 are Li; atoms 2, 3 and 4 are the shared triangle in the
-    plane x = 5 Angstrom, and atoms 5 and 6 the tetrahedra's apices.
-    """
-    triangle = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5)]
-    apices = [(6.6, 6.2, 5.0), (6.6, 3.8, 5.0)]
-    lithium = [np.mean([*triangle, apex], axis=0) for apex in apices]
-    return Structure(Lattice.cubic(10.0), ["Li"] * 2 + ["O"] * 5,
-                     [*lithium, *triangle, *apices], coords_are_cartesian=True)
-
-
 class AutomaticSharedFacesTestCase(unittest.TestCase):
 
     def test_first_analysis_finds_the_shared_faces_of_its_structure(self):
@@ -536,40 +523,6 @@ class AutomaticSharedFacesTestCase(unittest.TestCase):
         trajectory = Trajectory(sites=sites, atoms=[Atom(index=0)])
         with self.assertRaisesRegex(ValueError, "Sites 0 and 1 coincide"):
             trajectory.analyse_structure(FindSharedFacesErrorsTestCase.cube_structure())
-
-
-class OverlappingSitesTestCase(unittest.TestCase):
-
-    @staticmethod
-    def trajectory():
-        Site.reset_index(0)
-        return Trajectory(sites=[PolyhedralSite(vertex_indices=[2, 3, 4, 5]),
-                                 PolyhedralSite(vertex_indices=[2, 3, 4, 6])],
-                          atoms=[Atom(index=0)])
-
-    def test_find_shared_faces_names_both_sites(self):
-        with self.assertRaisesRegex(
-                ValueError,
-                "^Sites 0 and 1 overlap; neither site has a reference centre, and unwrapping "
-                "without one can choose the wrong image of a vertex of a site that spans half "
-                "the cell or more along a lattice vector: set reference centres$"):
-            self.trajectory().find_shared_faces(same_side_tetrahedra())
-
-    def test_first_analysis_names_both_sites(self):
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap"):
-            self.trajectory().analyse_structure(same_side_tetrahedra())
-
-    def test_build_names_both_sites(self):
-        structure = same_side_tetrahedra()
-        builder = (TrajectoryBuilder()
-                   .with_structure(structure)
-                   .with_reference_structure(structure)
-                   .with_mobile_species("Li")
-                   .with_polyhedral_sites(centre_species="Li", vertex_species="O",
-                                          cutoff=1.7, n_vertices=4))
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap") as context:
-            builder.build()
-        self.assertIn("This typically means the reference structure", str(context.exception))
 
 
 class BuilderSharedFacesTestCase(unittest.TestCase):
@@ -651,9 +604,10 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                        for i in oxygen}
         face = [by_position[(1, y, z)] for y in (0, 1) for z in (0, 1)]
         Site.reset_index(1000)
-        # A square pyramid in the empty cube, on its face shared with the cube below x = 1.
-        existing = PolyhedralSite(vertex_indices=[*face, by_position[(2, 0, 0)]],
-                                  reference_center=np.array([1.2, 0.5, 0.5]) / 3)
+        # The empty cube as an existing site, sharing a square with each of its six neighbours.
+        existing = PolyhedralSite(
+            vertex_indices=[by_position[(x, y, z)] for x in (1, 2) for y in (0, 1) for z in (0, 1)],
+            reference_center=np.array([1.5, 0.5, 0.5]) / 3)
         trajectory = (TrajectoryBuilder()
                       .with_structure(structure)
                       .with_reference_structure(structure)
@@ -663,8 +617,7 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                       .with_existing_sites([existing])
                       .build())
         existing_faces = [f for f in trajectory.shared_faces() if 1000 in f.site_indices]
-        # The square, and a triangle on each of two cubes next to the empty cube.
-        self.assertEqual(sorted(len(f.vertex_indices) for f in existing_faces), [3, 3, 4])
+        self.assertEqual([len(f.vertex_indices) for f in existing_faces], [4] * 6)
         self.assertIn(tuple(sorted(face)), {f.vertex_indices for f in existing_faces})
 
     def test_mixing_with_existing_sites_finds_none(self):

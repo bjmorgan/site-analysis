@@ -928,7 +928,7 @@ def two_cubes(push=0.0):
 def triangles_on(site, atoms):
     """The site's triangles whose atoms are all in a set of atoms, as sets of atom indices."""
     return {frozenset(site.vertex_indices[i] for i in triangle)
-            for triangle in site.as_dict()['triangles']
+            for triangle in site._triangles.tolist()
             if {site.vertex_indices[i] for i in triangle} <= set(atoms)}
 
 
@@ -955,30 +955,7 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
         self.assertNotEqual(after[0], before[0])
         self.assertEqual(after[1], before[1])
 
-    def test_failed_finding_keeps_the_faces_and_triangles(self):
-        structure, sites = two_cubes()
-        collection = PolyhedralSiteCollection(sites)
-        collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
-        faces = collection.shared_faces()
-        triangles = [site.as_dict()['triangles'] for site in sites]
-        # Fold the left cube through the shared square into the right cube.
-        coords = structure.frac_coords.copy()
-        coords[:4, 0] += 3.0 / 12.0
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap$"):
-            collection.find_shared_faces(coords, structure.lattice.matrix)
-        self.assertEqual(collection.shared_faces(), faces)
-        self.assertEqual([site.as_dict()['triangles'] for site in sites], triangles)
-
-    def test_overlapping_sites_are_named_by_index_whatever_their_order(self):
-        structure, sites = two_cubes()
-        collection = PolyhedralSiteCollection(sites[::-1])
-        # Fold the left cube through the shared square into the right cube.
-        coords = structure.frac_coords.copy()
-        coords[:4, 0] += 3.0 / 12.0
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap$"):
-            collection.find_shared_faces(coords, structure.lattice.matrix)
-
-    def test_shared_face_folding_through_a_site_centre_is_an_overlap(self):
+    def test_shared_face_folding_through_a_site_centre_is_too_distorted(self):
         # Two sites on either side of a bent square; the fan of the square
         # from its lowest atom folds through the centre of the thinner site 1.
         coords = [(4.0, 4.0, 5.3), (6.0, 4.0, 5.0), (6.0, 6.0, 5.3), (4.0, 6.0, 5.0),
@@ -990,13 +967,13 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
                  PolyhedralSite(vertex_indices=[0, 1, 2, 3, 5],
                                 reference_center=np.array([0.5, 0.5, 0.53]))]
         collection = PolyhedralSiteCollection(sites)
-        for has_numba in BACKENDS:
-            with self.subTest(numba=has_numba), \
-                    patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap$"):
-                    collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+        with self.assertRaisesRegex(
+                RuntimeError,
+                r"^Site 1 \(vertices \[0, 1, 2, 3, 5\]\): polyhedron is too distorted for its "
+                r"triangles to enclose its centre$"):
+            collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
 
-    def test_round_trip_keeps_the_triangles_and_containment(self):
+    def test_restored_sites_in_a_collection_regain_their_containment(self):
         structure, _ = two_cubes()
         frame = displaced(structure, 0.1)
         points = np.random.default_rng(3).random((500, 3))
@@ -1008,20 +985,12 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
                 collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
                 collection.analyse_structure([], frame)
                 expected = [[site.contains_point(point) for point in points] for site in sites]
-                restored = [PolyhedralSite.from_dict(site.as_dict()) for site in sites]
-                for site, copy, contained in zip(sites, restored, expected):
-                    self.assertEqual(copy.as_dict()['triangles'], site.as_dict()['triangles'])
+                restored = PolyhedralSiteCollection(
+                    [PolyhedralSite.from_dict(site.as_dict()) for site in sites])
+                restored.analyse_structure([], frame)
+                for copy, contained in zip(restored.sites, expected):
                     self.assertEqual([copy.contains_point(point) for point in points], contained)
                 self.assertTrue(any(any(contained) for contained in expected))
-
-    def test_site_overlapping_its_own_image_is_named(self):
-        structure, sites = two_cubes()
-        collection = PolyhedralSiteCollection(sites)
-        with patch('site_analysis.polyhedral_site_collection._first_overlap',
-                   return_value=(1, 1)):
-            with self.assertRaisesRegex(
-                    ValueError, "^Site 1 overlaps a periodic image of itself$"):
-                collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
 
     def test_shared_atoms_that_cannot_be_triangulated_identically_name_both_sites(self):
         # A cube, and a site on four of its corners, no three on one square, and an outside atom.
@@ -1045,27 +1014,6 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
                 "find_shared_faces with one$"):
             collection.shared_faces()
 
-    def test_shared_faces_that_cannot_both_be_triangulated_identically_name_every_site(self):
-        # Two cubes sharing a square, and a tetrahedron on three of the square's corners.
-        corners = [(x, y, z) for x in (4.0, 6.0, 8.0) for y in (4.0, 6.0) for z in (4.0, 6.0)]
-        structure = Structure(Lattice.cubic(10.0), ["O"] * 13, corners + [(7.0, 5.0, 5.0)],
-                              coords_are_cartesian=True)
-        Site.reset_index(0)
-        sites = [PolyhedralSite(vertex_indices=list(range(0, 8)),
-                                reference_center=np.array([0.5, 0.5, 0.5])),
-                 PolyhedralSite(vertex_indices=list(range(4, 12)),
-                                reference_center=np.array([0.7, 0.5, 0.5])),
-                 PolyhedralSite(vertex_indices=[5, 6, 7, 12],
-                                reference_center=np.array([0.65, 0.55, 0.55]))]
-        collection = PolyhedralSiteCollection(sites)
-        with self.assertRaisesRegex(
-                ValueError,
-                r"^Sites 0, 1 and 2: Shared atoms \[5, 6, 7\] cannot be triangulated identically "
-                r"on the site with vertices \[0, 1, 2, 3, 4, 5, 6, 7\] without changing the "
-                r"triangles of shared atoms \[4, 5, 6, 7\]; the sites may overlap$"):
-            collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
-
-
 class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):
 
     def test_first_analysis_finds_the_shared_faces_of_its_structure(self):
@@ -1079,10 +1027,10 @@ class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):
         inward, _ = two_cubes(push=0.1)
         collection = PolyhedralSiteCollection(sites)
         collection.analyse_structure([], outward)
-        triangles = [site.as_dict()['triangles'] for site in sites]
+        triangles = [site._triangles.tolist() for site in sites]
         # Finding the faces from this structure would move the left cube's hull diagonal.
         collection.analyse_structure([], inward)
-        self.assertEqual([site.as_dict()['triangles'] for site in sites], triangles)
+        self.assertEqual([site._triangles.tolist() for site in sites], triangles)
 
     def test_sites_contain_points_accepts_lists(self):
         structure, sites = two_cubes()

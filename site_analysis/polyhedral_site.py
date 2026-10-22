@@ -9,7 +9,7 @@ or octahedral sites.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable, Sequence
 
 import numpy as np
 from scipy.spatial import Delaunay, QhullError
@@ -18,14 +18,14 @@ from site_analysis.atom import Atom
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 from site_analysis.polyhedron_surface import (
-    _containment_planes, _contains_point, _hull_triangles)
+    _containment_planes, _contains_point, _hull_triangles, _surface_triangles)
 
 
 class PolyhedralSite(Site):
     """A site defined by the polyhedral volume enclosed by a set of vertex atoms.
 
     The site is the polyhedron bounded by a fixed set of triangles over its
-    vertices: those set with ``set_triangles`` (as
+    vertices: those fixed with ``fix_triangles`` (as
     ``PolyhedralSiteCollection.find_shared_faces`` does, so that sites
     sharing a face triangulate it identically), or else the triangles of
     the convex hull of the vertices in the first frame the site is tested
@@ -251,7 +251,7 @@ class PolyhedralSite(Site):
         """Apply PBC correction and store vertex coordinates.
 
         On the first call (or after an anomalous displacement invalidates
-        the cache), unwraps the coordinates as ``unwrapped_vertex_coords``
+        the cache), unwraps the coordinates as ``_unwrapped_vertex_coords``
         does. On subsequent calls, updates the cached integer image shifts
         incrementally by detecting coordinate wraps (jumps of ~1.0),
         avoiding the expensive nearest-image search.
@@ -317,7 +317,7 @@ class PolyhedralSite(Site):
         unwrapped, image_shifts = correct_pbc(wrapped, self.reference_center, lattice_matrix)
         return wrapped, unwrapped, image_shifts
 
-    def unwrapped_vertex_coords(self,
+    def _unwrapped_vertex_coords(self,
             all_frac_coords: np.ndarray,
             lattice_matrix: np.ndarray) -> np.ndarray:
         """Unwrapped fractional coordinates of this site's vertices in a structure.
@@ -345,31 +345,50 @@ class PolyhedralSite(Site):
         _, unwrapped, _ = self._unwrap(all_frac_coords[self.vertex_indices], lattice_matrix)
         return unwrapped
 
-    def set_triangles(self, triangles: np.ndarray) -> None:
-        """Set the triangles that bound this site.
+    def fix_triangles(self,
+            all_frac_coords: np.ndarray,
+            lattice_matrix: np.ndarray,
+            shared_faces: Sequence[Collection[int]]) -> None:
+        """Fix the triangles that bound this site from a structure.
 
-        Containment uses these triangles from the next ``contains_point``
-        call on. They are kept when the site is reset.
+        The triangles are those of the convex hull of the vertices,
+        unwrapped as ``assign_vertex_coords`` would unwrap them, with each
+        shared face triangulated by a rule that depends only on its atoms
+        (see ``polyhedron_surface._surface_triangles``), so that the sites
+        sharing it give it the same triangles. Containment uses the
+        triangles from the next ``contains_point`` call on, in every frame,
+        and they are kept when the site is reset. The vertex coordinates
+        are not assigned.
 
         Args:
-            triangles: (T, 3) array of local vertex indices (positions in
-                ``vertex_indices``) per triangle, forming a closed surface,
-                each wound so that ``(b - a) x (c - a)`` points away from
-                the site's centre, as ``PolyhedralSiteCollection.find_shared_faces``
-                sets them. A copy is stored.
+            all_frac_coords: Full fractional coordinate array, shape
+                ``(n_atoms, 3)``.
+            lattice_matrix: (3, 3) lattice matrix where rows are lattice
+                vectors.
+            shared_faces: The atom indices of each face this site shares
+                with another site, every atom being one of
+                ``vertex_indices``.
 
         Raises:
-            ValueError: If ``triangles`` is not a (T, 3) array of integers
-                from 0 to one less than the number of vertices.
+            ValueError: If the vertex coordinates are not finite, or the
+                atoms of a shared face cannot be triangulated identically
+                on this site, naming the atoms.
+            RuntimeError: If the vertices are degenerate, or the triangles
+                do not enclose the site's centre (the mean of its vertex
+                coordinates), as when the fan of a shared face folds
+                through it; both name the site.
         """
-        array = np.asarray(triangles)
-        if (not np.issubdtype(array.dtype, np.integer)
-                or array.ndim != 2 or array.shape[1] != 3
-                or not np.all((array >= 0) & (array < len(self.vertex_indices)))):
-            raise ValueError(
-                "triangles must be a (T, 3) array of local vertex indices from 0 to "
-                f"{len(self.vertex_indices) - 1}, got {triangles!r}")
-        self._triangles = array.astype(np.int64)
+        coords = self._unwrapped_vertex_coords(all_frac_coords, lattice_matrix)
+        try:
+            self._triangles = _surface_triangles(
+                self.vertex_indices, coords, lattice_matrix, shared_faces)
+        except QhullError as error:
+            raise RuntimeError(
+                f"Degenerate vertex geometry for polyhedral_site {self.index} "
+                f"(vertices {self.vertex_indices})") from error
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"Site {self.index} (vertices {self.vertex_indices}): {error}") from error
         self._planes = None
 
     def get_vertex_species(self,
@@ -523,10 +542,8 @@ class PolyhedralSite(Site):
 
         Besides the attributes of :class:`~site_analysis.site.Site`, it contains
         the ``vertex_indices``, the ``vertex_coords`` (``None`` if not yet
-        assigned), the ``reference_center`` as a list of three floats
-        (``None`` if the site has none) and the ``triangles`` that bound the
-        site as a list of local vertex index triples (``None`` if none have
-        been fixed).
+        assigned) and the ``reference_center`` as a list of three floats
+        (``None`` if the site has none).
 
         Returns:
             dict: dictionary representation of this site.
@@ -536,7 +553,6 @@ class PolyhedralSite(Site):
         d['vertex_coords'] = self.vertex_coords
         d['reference_center'] = (
             None if self.reference_center is None else self.reference_center.tolist())
-        d['triangles'] = None if self._triangles is None else self._triangles.tolist()
         return d
 
     @classmethod
@@ -544,13 +560,11 @@ class PolyhedralSite(Site):
         """Create a PolyhedralSite object from a dict representation.
 
         Restores the vertex indices, vertex coordinates, contained atoms,
-        label, reference centre and triangles. A dict without a
-        ``reference_center`` or ``triangles`` key, as written by earlier
-        versions, gives a site with no reference centre or no triangles. A
-        collection of restored sites that has not found its shared faces
-        replaces their triangles on its first analysis; calling
-        ``find_shared_faces`` with the original structure first keeps
-        them.
+        label and reference centre. A dict without a ``reference_center``
+        key, as written by earlier versions, gives a site with no reference
+        centre. The restored site has no triangles: a collection of
+        restored sites fixes them when it finds its shared faces, and a
+        site on its own takes its convex hull.
 
         Args:
             d (dict): The dict representation of this site.
@@ -560,14 +574,11 @@ class PolyhedralSite(Site):
 
         Raises:
             ValueError: If ``reference_center`` is not None and not three
-                finite numbers, or ``triangles`` is not None and not
-                accepted by ``set_triangles``.
+                finite numbers.
         """
         polyhedral_site = cls(
             vertex_indices=d['vertex_indices'],
             reference_center=d.get('reference_center'))
-        if d.get('triangles') is not None:
-            polyhedral_site.set_triangles(d['triangles'])
         if d['vertex_coords'] is not None:
             polyhedral_site._set_vertex_coords(np.asarray(d['vertex_coords'], dtype=float))
         polyhedral_site.contains_atoms = d['contains_atoms']

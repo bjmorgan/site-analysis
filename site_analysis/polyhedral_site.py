@@ -464,7 +464,7 @@ class PolyhedralSite(Site):
             )
         if self._planes is None:
             self._planes = self._computed_planes(self._vertex_coords)
-        return _contains_point(x, *self._planes)
+        return _contains_point(x, self._planes)
 
     def _computed_planes(
         self, vertex_coords: np.ndarray,

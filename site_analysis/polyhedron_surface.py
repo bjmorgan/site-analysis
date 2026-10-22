@@ -133,9 +133,10 @@ if HAS_NUMBA:
             planes of a tetrahedron.
 
         Raises:
-            ValueError: If ``x`` is not finite.
+            ValueError: If ``x`` is not three finite numbers.
         """
-        if not (np.isfinite(x[0]) and np.isfinite(x[1]) and np.isfinite(x[2])):
+        if x.shape[0] != 3 or not (np.isfinite(x[0]) and np.isfinite(x[1])
+                                   and np.isfinite(x[2])):
             raise ValueError("point must be three finite numbers")
         w0 = x[0] - np.floor(x[0])
         w1 = x[1] - np.floor(x[1])
@@ -158,6 +159,8 @@ if HAS_NUMBA:
         return False
 
 _MAX_IMAGE_SHIFTS = 1000
+_FLOAT64 = np.dtype(np.float64)
+_NDARRAY = np.ndarray
 
 
 def _image_shifts(vertex_coords: np.ndarray) -> np.ndarray:
@@ -269,9 +272,9 @@ def _numpy_star_query(
         a tetrahedron.
 
     Raises:
-        ValueError: If ``x`` is not finite.
+        ValueError: If ``x`` is not three finite numbers.
     """
-    if not np.isfinite(x).all():
+    if x.shape != (3,) or not np.isfinite(x).all():
         raise ValueError("point must be three finite numbers")
     images = (x - np.floor(x)) + image_shifts
     d = images[:, np.newaxis, np.newaxis, :] - ref_points
@@ -467,13 +470,14 @@ def _containment_planes(
             positions.
 
     Returns:
-        Tuple of ``(normals, ref_points, image_shifts)``, the arguments of
-        ``_contains_point``: (N_triangles, 4, 3) inward plane normals,
-        (N_triangles, 4, 3) a point on each plane, and the (M, 3) integer
-        whole-cell shifts from a point in [0, 1) to its images that can
-        lie inside the polyhedron: the eight shifts with components in
-        {0, 1} when every vertex coordinate is in [0, 2), otherwise those
-        from ``_image_shifts``.
+        Tuple of ``(image_shifts, normals, ref_points)``, the arguments of
+        the query kernels after the point, for ``_contains_point``: the
+        (M, 3) integer whole-cell shifts from a point in [0, 1) to its
+        images that can lie inside the polyhedron (the eight shifts with
+        components in {0, 1} when every vertex coordinate is in [0, 2),
+        otherwise those from ``_image_shifts``), the (N_triangles, 4, 3)
+        inward plane normals, and (N_triangles, 4, 3) a point on each
+        plane.
 
     Raises:
         RuntimeError: If the centre is not strictly on the inner side of
@@ -487,31 +491,21 @@ def _containment_planes(
     if not star_shaped:
         raise RuntimeError("polyhedron is too distorted for its triangles to enclose its centre")
     image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
-    return normals, ref_points, image_shifts
+    return image_shifts, normals, ref_points
 
 
-def _contains_point(
-    x: np.ndarray,
-    normals: np.ndarray,
-    ref_points: np.ndarray,
-    image_shifts: np.ndarray,
-) -> bool:
+def _contains_point(x: np.ndarray, planes: tuple[np.ndarray, np.ndarray, np.ndarray]) -> bool:
     """Test whether an image of a point is inside a polyhedron.
 
-    The point is wrapped into [0, 1) and each of its images given by
-    ``image_shifts`` is tested. Uses the numba kernel when numba is
+    The point is wrapped into [0, 1) and each of its images that can lie
+    inside the polyhedron is tested. Uses the numba kernel when numba is
     installed and numpy otherwise, with identical results.
 
     Args:
         x: Fractional coordinates of the point, three numbers, in any
             periodic image.
-        normals: (N_triangles, 4, 3) inward plane normals, from
-            ``_containment_planes``.
-        ref_points: (N_triangles, 4, 3) a point on each plane, from
-            ``_containment_planes``.
-        image_shifts: (M, 3) integer array of whole-cell shifts from the
-            wrapped point to the images to test, from
-            ``_containment_planes``.
+        planes: The polyhedron's containment planes for the current
+            frame, from ``_containment_planes``.
 
     Returns:
         True if an image of the point is in the tetrahedron formed by the
@@ -520,8 +514,7 @@ def _contains_point(
     Raises:
         ValueError: If ``x`` is not three finite numbers.
     """
-    point = np.asarray(x, dtype=np.float64)
-    if point.shape != (3,):
-        raise ValueError(f"point must be three finite numbers, got {x!r}")
+    if x.__class__ is not _NDARRAY or x.dtype is not _FLOAT64:
+        x = np.asarray(x, dtype=np.float64)
     query = _numba_star_query if HAS_NUMBA else _numpy_star_query
-    return bool(query(point, image_shifts, normals, ref_points))
+    return query(x, *planes)

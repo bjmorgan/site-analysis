@@ -55,7 +55,7 @@ class Face:
 
 
 def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:
-    """Describe the narrow-cell cause of a face error that has no reference centres.
+    """Describe how unwrapping without reference centres can cause a face error.
 
     Args:
         first: One of the two sites in the error.
@@ -66,8 +66,9 @@ def _narrow_cell_hint(first: PolyhedralSite, second: PolyhedralSite) -> str:
         has a reference centre.
     """
     if first.reference_center is None and second.reference_center is None:
-        return ("; neither site has a reference centre, so this can come "
-                "from ambiguous unwrapping in a narrow cell: "
+        return ("; neither site has a reference centre, and unwrapping "
+                "without one can choose the wrong image of a vertex of a site "
+                "that spans half the cell or more along a lattice vector: "
                 "set reference centres")
     return ""
 

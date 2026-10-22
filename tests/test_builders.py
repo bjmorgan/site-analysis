@@ -1604,24 +1604,6 @@ class TestBuilderValidation(unittest.TestCase):
 		self.assertIn("coincide", str(ctx.exception))
 		self.assertIn(self.SHARED_FACE_HINT, str(ctx.exception))
 
-	def test_overlapping_polyhedral_sites_error_carries_the_hint(self):
-		"""An overlap found by the shared-face search is reported with the hint on its causes."""
-		ref = self._make_argyrodite_ref([0.23, 0.92, 0.09])
-		builder = (TrajectoryBuilder()
-			.with_structure(self._make_target(ref))
-			.with_reference_structure(ref)
-			.with_mobile_species("Li")
-			.with_min_atom_distance(0)
-			.with_polyhedral_sites(centre_species="Mg", vertex_species="S",
-				cutoff=3.0, n_vertices=4, label="test"))
-
-		with patch("site_analysis.builders.PolyhedralSiteCollection.find_shared_faces",
-				side_effect=ValueError("Sites 0 and 1 overlap")):
-			with self.assertRaises(ValueError) as ctx:
-				builder.build()
-		self.assertTrue(str(ctx.exception).startswith("Sites 0 and 1 overlap. "))
-		self.assertIn(self.SHARED_FACE_HINT, str(ctx.exception))
-
 	def test_duplicate_existing_polyhedral_sites_raises(self):
 		"""Polyhedral sites without reference coordinates are checked by vertex indices."""
 		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])

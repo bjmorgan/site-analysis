@@ -197,7 +197,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         ``PolyhedralSite.unwrapped_vertex_coords``: the convex hull of its
         vertices, with each face it shares triangulated by a rule that
         depends only on the face's atoms, so that the sites sharing it
-        triangulate it identically (see ``PolyhedralSite.set_triangles``).
+        triangulate it identically.
         The faces and triangles replace any earlier ones, and are kept when
         the collection is reset. If an error is raised, the earlier faces
         and triangles are kept.
@@ -243,7 +243,7 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
             raise ValueError(message + _narrow_cell_hint(first, second))
         self._shared_faces = faces
         for site, site_triangles in zip(sites, triangles):
-            site.set_triangles(site_triangles)
+            site._set_triangles(site_triangles)
 
     def shared_faces(self) -> tuple[Face, ...]:
         """Return the faces shared by pairs of sites.

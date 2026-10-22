@@ -4,7 +4,7 @@
 
 A **site** is a fundamental abstraction in `site_analysis` that represents a bounded volume within a crystal structure that can contain zero, one, or multiple mobile ions. Sites provide a way to discretise continuous atomic trajectories into a more interpretable representation based on site occupation and transitions.
 
-When analyzing ion migration in solids, it's often useful to think about ions moving between specific locations ("sites") in the crystal structure. These sites typically correspond to local energy minima, where ions tend to reside for extended periods before jumping to adjacent sites. The `site_analysis` package lets you define these sites in various ways and then analyze how mobile ions move between them.
+When analysing ion migration in solids, it's often useful to think about ions moving between specific locations ("sites") in the crystal structure. These sites typically correspond to local energy minima, where ions tend to reside for extended periods before jumping to adjacent sites. The `site_analysis` package lets you define these sites in various ways and then analyse how mobile ions move between them.
 
 ## Core Site Properties
 
@@ -23,7 +23,7 @@ The `site_analysis` package provides four different site types, each with specif
 
 ### Spherical Sites
 
-Spherical sites are the simplest site type, defined by a center position and radius. They represent spherical volumes within the crystal structure.
+Spherical sites are the simplest site type, defined by a centre position and radius. They represent spherical volumes within the crystal structure.
 
 **Advantages**:
 - Conceptually simple and intuitive
@@ -37,7 +37,7 @@ Spherical sites are the simplest site type, defined by a center position and rad
 - Less physically meaningful than geometry-based approaches
 - Generally inferior to other site types for most analyses
 
-The radius parameter for spherical sites presents a fundamental trade-off. When using non-overlapping spheres, the sites naturally cannot fill all the available space in a crystal structure. This leads to "null" regions where mobile ions are not assigned to any site. These regions often include the transition paths between sites, which can be problematic for analyzing diffusion mechanisms, as ions may temporarily exist in an unassigned state during transitions.
+The radius parameter for spherical sites presents a fundamental trade-off. When using non-overlapping spheres, the sites naturally cannot fill all the available space in a crystal structure. This leads to "null" regions where mobile ions are not assigned to any site. These regions often include the transition paths between sites, which can be problematic for analysing diffusion mechanisms, as ions may temporarily exist in an unassigned state during transitions.
 
 To mitigate this issue, one might be tempted to increase the site radii to ensure fuller coverage of space. However, this introduces a new problem: overlapping sites. When spheres overlap, a mobile ion might simultaneously satisfy the containment criteria for multiple sites, creating ambiguity in site assignment.
 
@@ -57,7 +57,7 @@ Note that spherical sites are primarily included in `site_analysis` for compatib
 
 Polyhedral sites are defined by a collection of vertex atoms that form a polyhedron. The site is the polyhedron bounded by triangles over its vertex atoms. Neighbouring sites triangulate each face they share identically, so sites that share faces fill the space between them, and polyhedral sites must not overlap (overlapping sites raise `ValueError`; see [Site Boundaries](../guides/polyhedral_sites.md#site-boundaries)). This approach is especially useful for sites with coordination environments that correspond to common polyhedra (tetrahedra, octahedra, etc.).
 
-In close-packed lattices where the mobile ions occupy interstitial sites with well-defined coordination environments, polyhedral sites can completely fill space if the set of all coordination polyhedra is used. This makes them particularly valuable for analyzing systems like lithium-ion battery materials or ionic conductors.
+In close-packed lattices where the mobile ions occupy interstitial sites with well-defined coordination environments, polyhedral sites can completely fill space if the set of all coordination polyhedra is used. This makes them particularly valuable for analysing systems like lithium-ion battery materials or ionic conductors.
 
 **Advantages**:
 - Accurately represents coordination environments
@@ -81,7 +81,7 @@ In close-packed lattices where the mobile ions occupy interstitial sites with we
 
 ### Voronoi Sites
 
-Voronoi sites divide space into regions where each point in a region is closer to its site center than to any other site center. This creates a complete partitioning of space with no gaps or overlaps.
+Voronoi sites divide space into regions where each point in a region is closer to its site centre than to any other site centre. This creates a complete partitioning of space with no gaps or overlaps.
 
 **Advantages**:
 - Completely fills space (no gaps or overlaps)
@@ -90,13 +90,13 @@ Voronoi sites divide space into regions where each point in a region is closer t
 - Computationally efficient spatial partitioning
 
 **Limitations**:
-- Site shapes are determined by neighbor positions, not customisable
+- Site shapes are determined by neighbour positions, not customisable
 - Not directly tied to coordination environments
-- Fixed center positions may not adapt to structural changes
+- Fixed centre positions may not adapt to structural changes
 - May not accurately reflect physical site shapes in complex environments
 - Purely mathematical partitioning that doesn't consider chemical bonding
 - Poor representation of elongated or asymmetric sites (will tend toward regular polyhedra)
-- Site boundaries determined solely by proximity to site centers, regardless of actual physical site shapes
+- Site boundaries determined solely by proximity to site centres, regardless of actual physical site shapes
 
 **Best for**:
 - Complete spatial discretisation
@@ -106,7 +106,7 @@ Voronoi sites divide space into regions where each point in a region is closer t
 
 ### Dynamic Voronoi Sites
 
-Dynamic Voronoi sites extend the Voronoi approach by calculating site centers dynamically based on the positions of reference atoms. This allows the sites to adapt to structural changes and distortions.
+Dynamic Voronoi sites extend the Voronoi approach by calculating site centres dynamically based on the positions of reference atoms. This allows the sites to adapt to structural changes and distortions.
 
 **Advantages**:
 - Adapts to structural changes and distortions
@@ -137,9 +137,9 @@ Specifically, each site maintains a `transitions` counter dictionary where:
 
 For example, if site A has recorded 3 transitions to site B (with index 5) and 2 transitions to site C (with index 8), its transitions counter would contain `{5: 3, 8: 2}`.
 
-Note that the package only explicitly tracks transitions *to* other sites. If you need to analyze transitions *from* specific sites, you would need to construct this data from the complete set of transitions *to* data.
+Note that the package only explicitly tracks transitions *to* other sites. If you need to analyse transitions *from* specific sites, you would need to construct this data from the complete set of transitions *to* data.
 
-This transition data forms the basis for analyzing diffusion mechanisms, including:
+This transition data forms the basis for analysing diffusion mechanisms, including:
 - Preferred migration pathways
 - Frequency of specific site-to-site jumps
 - Construction of diffusion networks
@@ -151,14 +151,14 @@ The choice of site type depends on your specific research questions and the natu
 
 | If you want to... | Consider using... |
 |-------------------|-------------------|
-| Analyze specific coordination environments | Polyhedral sites |
+| Analyse specific coordination environments | Polyhedral sites |
 | Ensure complete spatial coverage with no gaps | Voronoi or Polyhedral sites |
 | Account for framework flexibility or distortion | Dynamic Voronoi sites |
-| Analyze systems with mixed site geometries | Polyhedral sites |
+| Analyse systems with mixed site geometries | Polyhedral sites |
 | Balance accuracy and computational efficiency | Voronoi sites |
 | Perform detailed mechanistic analysis | Polyhedral or Dynamic Voronoi sites |
-| Analyze close-packed structures with well-defined interstitial sites | Polyhedral sites |
-| Analyze systems with irregularly shaped physical sites | Polyhedral sites |
+| Analyse close-packed structures with well-defined interstitial sites | Polyhedral sites |
+| Analyse systems with irregularly shaped physical sites | Polyhedral sites |
 | Compare with published results using spherical site definitions | Spherical sites |
 
 While spherical sites are included for compatibility with published literature that uses this approach, they are generally not recommended for most analyses. Polyhedral or Voronoi sites typically provide more accurate and physically meaningful results.

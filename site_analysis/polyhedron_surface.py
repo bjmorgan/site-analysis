@@ -6,7 +6,8 @@ neighbouring site triangulated by a rule that depends only on the shared
 atoms, so that both sites give the face the same triangles. A point is
 inside the site when it is inside one of the tetrahedra formed by the
 site's centre (the mean of its vertex coordinates) and a surface triangle,
-which bounds the site exactly while it is star-shaped about its centre.
+which bounds the site exactly while it is strictly star-shaped about its
+centre: the centre is strictly on the inner side of every triangle's plane.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from __future__ import annotations
 import itertools
 from collections import Counter
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.spatial import ConvexHull
@@ -446,22 +448,24 @@ def _surface_triangles(
 
     Starts from the convex hull of the vertices' Cartesian coordinates.
     Each shared atom set, taken in ascending order of its sorted atoms,
-    then fixes the triangles over its atoms:
+    then fixes the triangles over its atoms. The rules below refer to the
+    current triangles, which are the hull's as changed by the earlier
+    shared atom sets:
 
-    - three atoms that are a hull triangle are kept;
+    - three atoms that are a current triangle are kept;
     - three atoms ``{a, b, c}`` that are half of a four-atom face
-      ``{a, b, c, d}`` the hull split along the other diagonal replace the
-      hull's two triangles there with ``{a, b, c}`` and the leftover
+      ``{a, b, c, d}`` split along the other diagonal replace the two
+      current triangles there with ``{a, b, c}`` and the leftover
       triangle ``{a, c, d}``, where ``d`` is the vertex nearest the plane
-      of ``{a, b, c}`` and exactly two hull triangles have all their atoms
-      in ``{a, b, c, d}``;
-    - four or more atoms whose hull triangles cover them (the triangles'
-      atoms are the set, and there are two fewer triangles than atoms) are
-      re-triangulated as a fan: the atoms are ordered by angle around their
-      best-fit plane, starting from the lowest atom index, and each
-      consecutive pair forms a triangle with that first atom. The pairs of
-      atoms adjacent in that order, the last and first included, must be
-      the edges that belong to only one of the hull triangles.
+      of ``{a, b, c}`` and exactly two current triangles have all their
+      atoms in ``{a, b, c, d}``;
+    - four or more atoms whose current triangles cover them (the
+      triangles' atoms are the set, and there are two fewer triangles than
+      atoms) are re-triangulated as a fan: the atoms are ordered by angle
+      around their best-fit plane, starting from the lowest atom index,
+      and each consecutive pair forms a triangle with that first atom. The
+      pairs of atoms adjacent in that order, the last and first included,
+      must be the edges that belong to only one of those triangles.
 
     Every triangle is then wound so that its normal ``(b - a) x (c - a)``
     in ``coords`` points away from the centre (the mean of ``coords``),
@@ -503,41 +507,50 @@ def _surface_triangles(
             raise _SharedFaceError(atoms, vertex_indices, min(fixed[t] for t in clashing))
         triangles = [t for t in triangles if t not in replaced] + added
         fixed.update((t, atoms) for t in added if t <= face)
+    return _wound_away_from_centre(triangles, coords)
+
+
+def _hull_triangles(coords: np.ndarray) -> np.ndarray:
+    """Triangles of the convex hull of a polyhedron's vertices, wound away from its centre.
+
+    The hull is computed from ``coords`` as given. Its faces are the same
+    in any coordinates related to them by an invertible linear map, such
+    as fractional and Cartesian coordinates, but a flat face of four or
+    more vertices may be split into triangles differently.
+
+    Args:
+        coords: (N_vertices, 3) coordinates of the vertices.
+
+    Returns:
+        (N_triangles, 3) int64 array of vertex indices per triangle, each
+        wound so that ``(b - a) x (c - a)`` points away from the centre
+        (the mean of ``coords``).
+
+    Raises:
+        scipy.spatial.QhullError: If the vertices are degenerate.
+    """
+    hull = [frozenset(t) for t in ConvexHull(coords).simplices.tolist()]
+    return _wound_away_from_centre(hull, coords)
+
+
+def _wound_away_from_centre(triangles: Sequence[frozenset[int]], coords: np.ndarray) -> np.ndarray:
+    """Triangles as an array, each wound so that its normal points away from the centre.
+
+    Args:
+        triangles: Vertex indices of each triangle.
+        coords: (N_vertices, 3) coordinates of the vertices.
+
+    Returns:
+        (N_triangles, 3) int64 array of vertex indices per triangle, each
+        wound so that ``(b - a) x (c - a)`` in ``coords`` points away from
+        the centre (the mean of ``coords``).
+    """
     ordered = np.array([sorted(t) for t in triangles], dtype=np.int64)
     a, b, c = (coords[ordered[:, k]] for k in range(3))
     normal = np.cross(b - a, c - a)
     inward = np.einsum("ij,ij->i", normal, a - coords.mean(axis=0)) < 0.0
     ordered[inward] = ordered[inward][:, [0, 2, 1]]
     return ordered
-
-
-def _check_closed_surface(triangles: np.ndarray) -> None:
-    """Check that triangles close a surface: every edge is in exactly two of them.
-
-    Args:
-        triangles: (N_triangles, 3) integer array of vertex indices per
-            triangle.
-
-    Raises:
-        ValueError: If there are no triangles, a triangle repeats a vertex,
-            or an edge is in any number of triangles other than two.
-    """
-    if len(triangles) == 0:
-        raise ValueError("triangles must form a closed surface, got no triangles")
-    repeated = ((triangles[:, 0] == triangles[:, 1]) | (triangles[:, 1] == triangles[:, 2])
-                | (triangles[:, 0] == triangles[:, 2]))
-    if repeated.any():
-        raise ValueError(
-            f"triangles must form a closed surface: triangle "
-            f"{triangles[repeated][0].tolist()} repeats a vertex")
-    edges = np.sort(np.concatenate([triangles[:, [0, 1]], triangles[:, [1, 2]],
-                                    triangles[:, [0, 2]]]), axis=1)
-    unique, counts = np.unique(edges, axis=0, return_counts=True)
-    odd = counts != 2
-    if odd.any():
-        raise ValueError(
-            f"triangles must form a closed surface: edge {unique[odd][0].tolist()} is in "
-            f"{counts[odd][0]} triangles, not two")
 
 
 def _shared_face_triangles(
@@ -839,21 +852,18 @@ def _projection_bounds(axes: np.ndarray, vertices: np.ndarray) -> tuple[np.ndarr
     return projections.min(axis=0), projections.max(axis=0)
 
 
-class _SurfaceCache:
-    """Fixed surface triangles of a polyhedron and its per-frame containment planes.
+@dataclass(frozen=True, eq=False, slots=True)
+class _ContainmentPlanes:
+    """Containment planes of a polyhedron in one frame.
 
-    The triangles are fixed when the cache is created. Each update
-    recomputes, from the current vertex coordinates, the four inward
-    planes of the tetrahedron formed by the centre (the mean of the
-    vertex coordinates) and each triangle, and the image shifts. Works in
+    The four inward planes of the tetrahedron formed by the centre (the
+    mean of the vertex coordinates) and each surface triangle, in
     fractional coordinates, as containment is invariant under the linear
-    map to Cartesian coordinates. Uses numba kernels when numba is
-    installed and numpy otherwise, with identical results.
+    map to Cartesian coordinates. Made by ``_containment_planes``.
 
     Attributes:
-        triangles: (N_triangles, 3) array of vertex indices per surface
-            triangle, each wound so that ``(b - a) x (c - a)`` points away
-            from the centre.
+        normals: (N_triangles, 4, 3) inward plane normals.
+        ref_points: (N_triangles, 4, 3) a point on each plane.
         image_shifts: (M, 3) integer array of whole-cell shifts from a
             point in [0, 1) to its images that can lie inside the
             polyhedron: the eight shifts with components in {0, 1} when
@@ -861,75 +871,16 @@ class _SurfaceCache:
             ``_image_shifts``.
     """
 
-    def __init__(self, triangles: np.ndarray, vertex_coords: np.ndarray) -> None:
-        """Fix the triangles and compute the planes for the initial coordinates.
-
-        Args:
-            triangles: (N_triangles, 3) int64 array of vertex indices per
-                surface triangle, wound as from ``_surface_triangles``.
-            vertex_coords: (N_vertices, 3) array of vertex positions.
-
-        Raises:
-            RuntimeError: If the centre is not strictly on the inner side
-                of every triangle's plane, so that the triangles, as set,
-                do not enclose it.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, counted over the three axes.
-        """
-        self.triangles: np.ndarray = triangles
-        self._normals: np.ndarray
-        self._ref_points: np.ndarray
-        self.image_shifts: np.ndarray
-        if not self._set_planes(vertex_coords):
-            raise RuntimeError(
-                "the triangles as set do not enclose the centre: each must be wound away from it")
-
-    def update(self, vertex_coords: np.ndarray) -> None:
-        """Recompute the containment planes and image shifts from new coordinates.
-
-        Args:
-            vertex_coords: (N_vertices, 3) array of current vertex positions.
-
-        Raises:
-            RuntimeError: If the centre is not strictly on the inner side
-                of every triangle's plane, with the triangles wound as
-                fixed, so that the triangles no longer enclose it.
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, counted over the three axes.
-        """
-        if not self._set_planes(vertex_coords):
-            raise RuntimeError(
-                "polyhedron is too distorted for its triangles to enclose its centre")
-
-    def _set_planes(self, vertex_coords: np.ndarray) -> bool:
-        """Compute the containment planes and image shifts, if the centre is enclosed.
-
-        Args:
-            vertex_coords: (N_vertices, 3) array of current vertex positions.
-
-        Returns:
-            True if the centre is strictly on the inner side of every
-            triangle's plane, and the planes and image shifts were set.
-            False, with nothing changed, otherwise.
-
-        Raises:
-            ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
-                cells, counted over the three axes.
-        """
-        planes = _numba_star_planes if HAS_NUMBA else _numpy_star_planes
-        normals, ref_points, star_shaped, within_two_cells = planes(vertex_coords, self.triangles)
-        if not star_shaped:
-            return False
-        self.image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
-        self._normals = normals
-        self._ref_points = ref_points
-        return True
+    normals: np.ndarray
+    ref_points: np.ndarray
+    image_shifts: np.ndarray
 
     def contains_point(self, x: np.ndarray) -> bool:
         """Test whether an image of a point is inside the polyhedron.
 
         The point is wrapped into [0, 1) and each of its images given by
-        ``image_shifts`` is tested.
+        ``image_shifts`` is tested. Uses the numba kernel when numba is
+        installed and numpy otherwise, with identical results.
 
         Args:
             x: (3,) fractional coordinates of the point, in any periodic
@@ -938,6 +889,40 @@ class _SurfaceCache:
         Returns:
             True if an image of the point is in the tetrahedron formed by
             the centre and one of the triangles.
+
+        Raises:
+            ValueError: If ``x`` is not three finite numbers.
         """
         query = _numba_star_query if HAS_NUMBA else _numpy_star_query
-        return bool(query(x, self.image_shifts, self._normals, self._ref_points))
+        return bool(query(x, self.image_shifts, self.normals, self.ref_points))
+
+
+def _containment_planes(triangles: np.ndarray, vertex_coords: np.ndarray) -> _ContainmentPlanes:
+    """Containment planes of a polyhedron bounded by fixed triangles, in one frame.
+
+    Uses the numba kernel when numba is installed and numpy otherwise,
+    with identical results.
+
+    Args:
+        triangles: (N_triangles, 3) int64 array of vertex indices per
+            surface triangle, each wound so that ``(b - a) x (c - a)``
+            points away from the centre, as from ``_surface_triangles``.
+        vertex_coords: (N_vertices, 3) array of the current vertex
+            positions.
+
+    Returns:
+        The planes and image shifts for these coordinates.
+
+    Raises:
+        RuntimeError: If the centre is not strictly on the inner side of
+            every triangle's plane, so that the triangles do not enclose
+            it.
+        ValueError: If the vertices span more than ``_MAX_IMAGE_SHIFTS``
+            cells, counted over the three axes.
+    """
+    planes = _numba_star_planes if HAS_NUMBA else _numpy_star_planes
+    normals, ref_points, star_shaped, within_two_cells = planes(vertex_coords, triangles)
+    if not star_shaped:
+        raise RuntimeError("polyhedron is too distorted for its triangles to enclose its centre")
+    image_shifts = _SHIFTS if within_two_cells else _image_shifts(vertex_coords)
+    return _ContainmentPlanes(normals, ref_points, image_shifts)

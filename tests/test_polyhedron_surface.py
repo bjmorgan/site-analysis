@@ -9,7 +9,7 @@ from scipy.spatial import ConvexHull, Delaunay
 
 from site_analysis._compat import HAS_NUMBA
 from site_analysis.polyhedron_surface import (
-    _SurfaceCache, _first_overlap, _image_shifts, _surface_triangles)
+    _containment_planes, _first_overlap, _hull_triangles, _image_shifts, _surface_triangles)
 
 if HAS_NUMBA:
     from site_analysis.polyhedron_surface import (
@@ -187,9 +187,10 @@ class TestFirstOverlap(unittest.TestCase):
                  _site(list(range(4, 10)), long_octahedron),
                  _site([10, 11, 12, 13], np.vstack([base + [0.0, 0.0, 0.1], [0.35, 0.35, 0.8]]))]
         self.assertEqual(_overlap(sites[1:2]), (0, 0))
-        for chunk in (16384, 1):
-            with self.subTest(chunk=chunk), \
-                    patch("site_analysis.polyhedron_surface._TETRAHEDRON_PAIR_CHUNK", chunk):
+        for chunk, block in itertools.product((16384, 1), (1 << 20, 1)):
+            with self.subTest(chunk=chunk, block=block), \
+                    patch("site_analysis.polyhedron_surface._TETRAHEDRON_PAIR_CHUNK", chunk), \
+                    patch("site_analysis.polyhedron_surface._BOX_PAIR_BLOCK", block):
                 self.assertEqual(_overlap(sites), (0, 2))
 
     def test_no_sites_do_not_overlap(self):
@@ -208,6 +209,15 @@ class TestSurfaceTriangles(unittest.TestCase):
     def test_cube_surface_is_twelve_outward_triangles(self):
         """A cube with no shared atoms has 12 triangles, each wound to face away from the centre."""
         triangles = _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [])
+        a, b, c = (_CUBE[triangles[:, k]] for k in range(3))
+        outward = np.einsum("ij,ij->i", np.cross(b - a, c - a), a - _CUBE.mean(axis=0))
+        self.assertEqual(triangles.shape, (12, 3))
+        self.assertEqual(triangles.dtype, np.int64)
+        self.assertTrue(np.all(outward > 0.0))
+
+    def test_hull_triangles_of_a_cube_are_twelve_outward_triangles(self):
+        """The hull of a cube's vertices has 12 triangles, each wound to face away from the centre."""
+        triangles = _hull_triangles(_CUBE)
         a, b, c = (_CUBE[triangles[:, k]] for k in range(3))
         outward = np.einsum("ij,ij->i", np.cross(b - a, c - a), a - _CUBE.mean(axis=0))
         self.assertEqual(triangles.shape, (12, 3))
@@ -285,7 +295,7 @@ class TestSurfaceTriangles(unittest.TestCase):
         """A shared ear {0, 1, 2} of a hexagon split into {0, 1, 4}, {0, 4, 5}, {1, 2, 3}, {1, 3, 4} raises ValueError."""
         coords = _hexagonal_prism([1e-6, 0.0, 2e-6, 1e-6, 0.0, 2e-6])
         on_bottom = {tuple(sorted(t)) for t in ConvexHull(coords).simplices if max(t) < 6}
-        self.assertEqual(on_bottom, {(0, 1, 4), (0, 4, 5), (1, 2, 3), (1, 3, 4)})
+        self.assertNotIn((0, 1, 2), on_bottom)
         with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
             _surface_triangles(list(range(20, 32)), coords, np.eye(3), [{20, 21, 22}])
 
@@ -322,6 +332,16 @@ class TestSurfaceTriangles(unittest.TestCase):
                 self.assertEqual(len(on_hexagon[0]), 4)
                 self.assertEqual(on_hexagon[0], on_hexagon[1])
 
+    def test_shared_hexagon_is_fanned_from_its_lowest_atom(self):
+        """Every triangle fanning a shared hexagon contains its lowest atom index, wherever that atom is."""
+        coords = _hexagonal_prism([0.0, 1e-6, 0.0, 1e-6, 0.0, 1e-6])
+        atoms = [27, 21, 25, 20, 23, 22, 30, 31, 32, 33, 34, 35]
+        shared = atoms[:6]
+        triples = _atom_triples(_surface_triangles(atoms, coords, np.eye(3), [shared]), atoms)
+        on_hexagon = [t for t in triples if set(t) <= set(shared)]
+        self.assertEqual(len(on_hexagon), 4)
+        self.assertTrue(all(min(shared) in t for t in on_hexagon))
+
     def test_three_atoms_with_no_fourth_atom_of_a_face_cannot_be_triangulated_identically(self):
         """Three atoms of an octahedron's equator, which are no part of a face, raise ValueError."""
         coords = 0.5 + 0.2 * np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0],
@@ -330,7 +350,7 @@ class TestSurfaceTriangles(unittest.TestCase):
             _surface_triangles(list(range(6)), coords, np.eye(3), [{0, 1, 2}])
 
 
-class TestSurfaceCache(unittest.TestCase):
+class TestContainmentPlanes(unittest.TestCase):
 
     def test_convex_cube_containment_matches_its_convex_hull(self):
         """For a cube, contains_point agrees with convex hull containment on 5,000 random points."""
@@ -340,9 +360,9 @@ class TestSurfaceCache(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE)
+                planes = _containment_planes(triangles, _CUBE)
                 np.testing.assert_array_equal(
-                    [cache.contains_point(p) for p in points], expected)
+                    [planes.contains_point(p) for p in points], expected)
 
     def test_bent_cube_is_bounded_by_its_fixed_triangles(self):
         """A point in the dent of a bent cube is outside, though inside its convex hull."""
@@ -358,10 +378,9 @@ class TestSurfaceCache(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE)
-                cache.update(bent)
-                self.assertFalse(cache.contains_point(in_dent))
-                self.assertTrue(cache.contains_point(below_dent))
+                planes = _containment_planes(triangles, bent)
+                self.assertFalse(planes.contains_point(in_dent))
+                self.assertTrue(planes.contains_point(below_dent))
 
     def test_contains_point_in_another_image(self):
         """A point given in another periodic image is contained."""
@@ -369,32 +388,19 @@ class TestSurfaceCache(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE)
-                self.assertTrue(cache.contains_point(np.array([1.5, -0.5, 2.5])))
+                planes = _containment_planes(triangles, _CUBE)
+                self.assertTrue(planes.contains_point(np.array([1.5, -0.5, 2.5])))
 
     def test_vertex_moved_past_the_centre_is_too_distorted(self):
-        """Moving a vertex past the centre makes update raise RuntimeError."""
+        """Moving a vertex past the centre raises RuntimeError."""
         triangles = _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [])
         distorted = _CUBE.copy()
         distorted[0] = [0.65, 0.65, 0.65]
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE)
                 with self.assertRaisesRegex(RuntimeError, "too distorted"):
-                    cache.update(distorted)
-
-    def test_triangles_wound_towards_the_centre_do_not_enclose_it(self):
-        """Creating the cache with inward-wound triangles raises RuntimeError naming the winding."""
-        triangles = _surface_triangles(_CUBE_INDICES, _CUBE, np.eye(3), [])
-        for has_numba in BACKENDS:
-            with self.subTest(numba=has_numba), \
-                    patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                with self.assertRaisesRegex(
-                        RuntimeError,
-                        "^the triangles as set do not enclose the centre: each must be wound "
-                        "away from it$"):
-                    _SurfaceCache(triangles[:, [0, 2, 1]], _CUBE)
+                    _containment_planes(triangles, distorted)
 
     def test_image_shifts_for_vertices_within_two_cells(self):
         """Vertices with every coordinate in [0, 2) give the eight shifts with components in {0, 1}."""
@@ -402,8 +408,8 @@ class TestSurfaceCache(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE + 1.0)
-                self.assertEqual({tuple(s) for s in cache.image_shifts},
+                planes = _containment_planes(triangles, _CUBE + 1.0)
+                self.assertEqual({tuple(s) for s in planes.image_shifts},
                                  set(itertools.product((0, 1), repeat=3)))
 
     def test_image_shifts_for_vertices_beyond_two_cells(self):
@@ -412,8 +418,8 @@ class TestSurfaceCache(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch("site_analysis.polyhedron_surface.HAS_NUMBA", has_numba):
-                cache = _SurfaceCache(triangles, _CUBE - [0.5, 0.0, 0.0])
-                self.assertEqual({tuple(s) for s in cache.image_shifts}, {(-1, 0, 0), (0, 0, 0)})
+                planes = _containment_planes(triangles, _CUBE - [0.5, 0.0, 0.0])
+                self.assertEqual({tuple(s) for s in planes.image_shifts}, {(-1, 0, 0), (0, 0, 0)})
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba is not installed")

@@ -462,8 +462,8 @@ class TrajectoryBuilder:
                 Default is True.
 
                 * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference center for each site and unwraps vertex coordinates
-                  relative to this center. Correctly handles sites that naturally
+                  a reference centre for each site and unwraps vertex coordinates
+                  relative to this centre. Correctly handles sites that naturally
                   span >50% of unit cell dimensions, even in small simulation cells.
                 * ``False`` (advanced usage) -- Spread-based PBC correction. If
                   vertex coordinates span >50% of the unit cell in any dimension,
@@ -569,8 +569,8 @@ class TrajectoryBuilder:
                 Default is True.
 
                 * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference center for each site and unwraps vertex coordinates
-                  relative to this center. Correctly handles sites that naturally
+                  a reference centre for each site and unwraps vertex coordinates
+                  relative to this centre. Correctly handles sites that naturally
                   span >50% of unit cell dimensions, even in small simulation cells.
                 * ``False`` (advanced usage) -- Spread-based PBC correction. If
                   vertex coordinates span >50% of the unit cell in any dimension,
@@ -1069,7 +1069,7 @@ def create_trajectory_with_polyhedral_sites(
             version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        use_reference_centers: Whether to use reference centers for 
+        use_reference_centers: Whether to use reference centres for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
             
@@ -1154,7 +1154,7 @@ def create_trajectory_with_dynamic_voronoi_sites(
             version 2.0.
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
-        use_reference_centers: Whether to use reference centers for 
+        use_reference_centers: Whether to use reference centres for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
             Default is True.
             

@@ -548,7 +548,11 @@ class OverlappingSitesTestCase(unittest.TestCase):
                           atoms=[Atom(index=0)])
 
     def test_find_shared_faces_names_both_sites(self):
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap; neither site has"):
+        with self.assertRaisesRegex(
+                ValueError,
+                "^Sites 0 and 1 overlap; neither site has a reference centre, and unwrapping "
+                "without one can choose the wrong image of a vertex of a site that spans half "
+                "the cell or more along a lattice vector: set reference centres$"):
             self.trajectory().find_shared_faces(same_side_tetrahedra())
 
     def test_first_analysis_names_both_sites(self):
@@ -563,8 +567,9 @@ class OverlappingSitesTestCase(unittest.TestCase):
                    .with_mobile_species("Li")
                    .with_polyhedral_sites(centre_species="Li", vertex_species="O",
                                           cutoff=1.7, n_vertices=4))
-        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap"):
+        with self.assertRaisesRegex(ValueError, "^Sites 0 and 1 overlap") as context:
             builder.build()
+        self.assertIn("This typically means the reference structure", str(context.exception))
 
 
 class BuilderSharedFacesTestCase(unittest.TestCase):

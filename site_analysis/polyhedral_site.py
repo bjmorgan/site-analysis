@@ -18,22 +18,20 @@ from site_analysis.atom import Atom
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
 from site_analysis.polyhedron_surface import (
-    _SurfaceCache, _check_closed_surface, _surface_triangles)
+    _ContainmentPlanes, _containment_planes, _hull_triangles)
 
 
 class PolyhedralSite(Site):
-    """Describes a site defined by the polyhedral volume enclosed by a set
-    of vertex atoms.
+    """A site defined by the polyhedral volume enclosed by a set of vertex atoms.
 
     The site is the polyhedron bounded by a fixed set of triangles over its
-    vertices: those set with ``set_triangles`` (as
-    ``PolyhedralSiteCollection.find_shared_faces`` does, so that sites
-    sharing a face triangulate it identically), or else the triangles of
-    the convex hull of the vertices in the first frame the site is tested
-    in. A point is inside the site when it is inside one of the tetrahedra
-    formed by the site's centre (the mean of its vertex coordinates) and a
-    triangle. Containment uses numba when it is installed and numpy
-    otherwise, with identical results.
+    vertices: those ``PolyhedralSiteCollection.find_shared_faces`` sets, so
+    that sites sharing a face triangulate it identically, or else the
+    triangles of the convex hull of the vertices in the first frame the
+    site is tested in. A point is inside the site when it is inside one of
+    the tetrahedra formed by the site's centre (the mean of its vertex
+    coordinates) and a triangle. Containment uses numba when it is
+    installed and numpy otherwise, with identical results.
 
     The polyhedron vertices are defined using atom indices in a structure, and
     their coordinates are assigned from the structure when needed. This allows the
@@ -93,13 +91,10 @@ class PolyhedralSite(Site):
         super(PolyhedralSite, self).__init__(label=label)
         self.vertex_indices = vertex_indices
         self._vertex_coords: np.ndarray | None = None
-        self._lattice_matrix: np.ndarray | None = None
         self._delaunay: Delaunay | None = None
         self._triangles: np.ndarray | None = None
-        self._surface_cache: _SurfaceCache | None = None
-        self._cache_stale: bool = True
-        self._pending_frac_coords: np.ndarray | None = None
-        self._pending_lattice_matrix: np.ndarray | None = None
+        self._planes: _ContainmentPlanes | None = None
+        self._pending: tuple[np.ndarray, np.ndarray] | None = None
         self._pbc_image_shifts: np.ndarray | None = None
         self._pbc_cached_raw_frac: np.ndarray | None = None
         self.reference_center = reference_center
@@ -116,16 +111,15 @@ class PolyhedralSite(Site):
         """Clear the recorded occupation data and cached geometry for this site.
 
         Clears the occupation data as in ``Site.reset``, and unsets the
-        vertex coordinates, their lattice, the Delaunay tessellation and the
-        PBC shift caches. The triangles are kept.
+        vertex coordinates, any notified coordinates, the Delaunay
+        tessellation, the containment planes and the PBC shift caches. The
+        triangles are kept.
         """
         super(PolyhedralSite, self).reset()
         self._vertex_coords = None
-        self._lattice_matrix = None
         self._delaunay = None
-        self._cache_stale = True
-        self._pending_frac_coords = None
-        self._pending_lattice_matrix = None
+        self._planes = None
+        self._pending = None
         self._pbc_image_shifts = None
         self._pbc_cached_raw_frac = None
  
@@ -146,8 +140,8 @@ class PolyhedralSite(Site):
             ValueError: If notified coordinates are assigned and are not
                 finite.
         """
-        if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
-            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
+        if self._pending is not None:
+            self._assign_from_pending(*self._pending)
         return self._vertex_coords
 
     @property
@@ -173,8 +167,7 @@ class PolyhedralSite(Site):
 
     @property
     def coordination_number(self) -> int:
-        """Coordination number for this site, defined as the number of 
-        vertices
+        """Coordination number for this site: the number of vertices.
 
         Returns:
             int
@@ -184,8 +177,7 @@ class PolyhedralSite(Site):
     
     @property
     def cn(self) -> int:
-        """Coordination number for this site, defined as the number of
-        vertices
+        """Coordination number for this site: the number of vertices.
 
         Convenience property for coordination_number()
 
@@ -211,18 +203,16 @@ class PolyhedralSite(Site):
             lattice_matrix: (3, 3) lattice matrix where rows are
                 lattice vectors.
         """
-        self._pending_frac_coords = all_frac_coords
-        self._pending_lattice_matrix = lattice_matrix
+        self._pending = (all_frac_coords, lattice_matrix)
 
     def assign_vertex_coords(self,
             all_frac_coords: np.ndarray,
             lattice_matrix: np.ndarray) -> None:
         """Assign fractional coordinates to the polyhedra vertices.
 
-        Stores the lattice with the coordinates, clears any coordinates
-        notified with ``notify_structure_changed`` and the Delaunay
-        tessellation, and marks the containment planes to be recomputed on
-        the next ``contains_point`` call.
+        Clears any coordinates notified with ``notify_structure_changed``
+        and the Delaunay tessellation, and marks the containment planes to
+        be recomputed on the next ``contains_point`` call.
 
         Args:
             all_frac_coords: Full fractional coordinate array, shape
@@ -265,9 +255,9 @@ class PolyhedralSite(Site):
         incrementally by detecting coordinate wraps (jumps of ~1.0),
         avoiding the expensive nearest-image search.
 
-        Sets ``vertex_coords``, stores the lattice, clears any notified
-        coordinates and the Delaunay tessellation, and marks the
-        containment planes to be recomputed.
+        Sets ``vertex_coords``, clears any notified coordinates and the
+        Delaunay tessellation, and marks the containment planes to be
+        recomputed.
 
         Args:
             frac_coords: Raw fractional coordinates of the vertices,
@@ -281,35 +271,29 @@ class PolyhedralSite(Site):
             if valid:
                 self._pbc_image_shifts = new_shifts
                 self._pbc_cached_raw_frac = frac_coords.copy()
-                self._set_vertex_coords(vertex_coords, lattice_matrix)
+                self._set_vertex_coords(vertex_coords)
                 return
 
         # Full computation — first call only (or after anomalous displacement)
         wrapped, corrected, image_shifts = self._unwrap(frac_coords, lattice_matrix)
         self._pbc_image_shifts = image_shifts
         self._pbc_cached_raw_frac = wrapped
-        self._set_vertex_coords(corrected, lattice_matrix)
+        self._set_vertex_coords(corrected)
 
-    def _set_vertex_coords(self,
-            vertex_coords: np.ndarray,
-            lattice_matrix: np.ndarray) -> None:
-        """Store unwrapped vertex coordinates and the lattice they are in.
+    def _set_vertex_coords(self, vertex_coords: np.ndarray) -> None:
+        """Store unwrapped vertex coordinates.
 
-        Clears any coordinates notified with ``notify_structure_changed``
-        and the Delaunay tessellation, and marks the containment planes to
-        be recomputed.
+        Clears any coordinates notified with ``notify_structure_changed``,
+        the Delaunay tessellation and the containment planes, which are
+        recomputed on the next ``contains_point`` call.
 
         Args:
             vertex_coords: (n_vertices, 3) unwrapped fractional coordinates.
-            lattice_matrix: (3, 3) lattice matrix where rows are lattice
-                vectors.
         """
         self._vertex_coords = vertex_coords
-        self._lattice_matrix = lattice_matrix
-        self._pending_frac_coords = None
-        self._pending_lattice_matrix = None
+        self._pending = None
         self._delaunay = None
-        self._cache_stale = True
+        self._planes = None
 
     def _unwrap(self,
             frac_coords: np.ndarray,
@@ -360,7 +344,7 @@ class PolyhedralSite(Site):
         _, unwrapped, _ = self._unwrap(all_frac_coords[self.vertex_indices], lattice_matrix)
         return unwrapped
 
-    def set_triangles(self, triangles: np.ndarray) -> None:
+    def _set_triangles(self, triangles: np.ndarray) -> None:
         """Set the triangles that bound this site.
 
         Containment uses these triangles from the next ``contains_point``
@@ -368,26 +352,13 @@ class PolyhedralSite(Site):
 
         Args:
             triangles: (T, 3) array of local vertex indices (positions in
-                ``vertex_indices``) per triangle, each wound so that
-                ``(b - a) x (c - a)`` points away from the site's centre,
-                as ``PolyhedralSiteCollection.find_shared_faces`` sets them.
-
-        Raises:
-            ValueError: If ``triangles`` is not a (T, 3) array of integers
-                from 0 to one less than the number of vertices, or the
-                triangles do not form a closed surface, with every edge in
-                exactly two of them.
+                ``vertex_indices``) per triangle, forming a closed surface,
+                each wound so that ``(b - a) x (c - a)`` points away from
+                the site's centre, as ``PolyhedralSiteCollection.find_shared_faces``
+                sets them. A copy is stored.
         """
-        array = np.asarray(triangles)
-        if (not np.issubdtype(array.dtype, np.integer)
-                or array.ndim != 2 or array.shape[1] != 3
-                or not np.all((array >= 0) & (array < len(self.vertex_indices)))):
-            raise ValueError(
-                "triangles must be a (T, 3) array of local vertex indices from 0 to "
-                f"{len(self.vertex_indices) - 1}, got {triangles!r}")
-        _check_closed_surface(array)
-        self._triangles = array.astype(np.int64)
-        self._surface_cache = None
+        self._triangles = np.array(triangles, dtype=np.int64)
+        self._planes = None
 
     def get_vertex_species(self,
             species: list[str]) -> list[str]:
@@ -410,14 +381,13 @@ class PolyhedralSite(Site):
         """Test whether a specific point is enclosed by this polyhedral site.
 
         The point may be given in any periodic image. It is wrapped into
-        [0, 1), and each of its images that can lie inside the vertices'
-        bounding box is tested, in every cell the vertices span.
+        [0, 1), and each of its images that can lie inside the site is
+        tested.
 
         The site is bounded by its triangles (see the class description).
         If none have been set, they are fixed on the first call from the
-        convex hull of the vertices in the lattice they were assigned with.
-        The containment planes are recomputed on the first call after the
-        vertex coordinates change.
+        convex hull of the vertices. The containment planes are recomputed
+        on the first call after the vertex coordinates change.
 
         Args:
             x: Fractional coordinates of the point to test (length 3 array).
@@ -432,11 +402,8 @@ class PolyhedralSite(Site):
 
         Raises:
             RuntimeError: If no vertex coordinates have been assigned; if
-                no triangles have been set and the coordinates were set
-                without a lattice; if the vertices are degenerate; if the
-                triangles set on the site do not enclose its centre on its
-                first test; or if the site is too distorted for its
-                triangles to enclose its centre.
+                the vertices are degenerate; or if the site is too
+                distorted for its triangles to enclose its centre.
             ValueError: If ``x`` is not three finite numbers; if
                 coordinates notified with ``notify_structure_changed`` are
                 not finite; or if the vertices span more than 1000 cells,
@@ -458,63 +425,48 @@ class PolyhedralSite(Site):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        if self._pending_frac_coords is not None and self._pending_lattice_matrix is not None:
-            self._assign_from_pending(self._pending_frac_coords, self._pending_lattice_matrix)
+        if self._pending is not None:
+            self._assign_from_pending(*self._pending)
         if self._vertex_coords is None:
             raise RuntimeError(
                 f'no vertex coordinates set for polyhedral_site {self.index}'
             )
-        surface = self._surface_cache
-        if surface is None or self._cache_stale:
-            surface = self._refreshed_surface_cache(self._vertex_coords)
-        return surface.contains_point(x)
+        if self._planes is None:
+            self._planes = self._computed_planes(self._vertex_coords)
+        return self._planes.contains_point(x)
 
-    def _refreshed_surface_cache(self, vertex_coords: np.ndarray) -> _SurfaceCache:
-        """Compute the containment planes for the current vertex coordinates.
+    def _computed_planes(self, vertex_coords: np.ndarray) -> _ContainmentPlanes:
+        """Compute the containment planes for vertex coordinates.
 
-        Fixes the triangles from the convex hull first if none are set.
+        Fixes the triangles from the convex hull of ``vertex_coords`` first
+        if none are set.
 
         Args:
             vertex_coords: (N_vertices, 3) array of the current vertex
                 coordinates.
 
         Returns:
-            The site's surface cache, up to date with ``vertex_coords``.
+            The containment planes for ``vertex_coords``.
 
         Raises:
-            RuntimeError: If no triangles are set and the coordinates were
-                set without a lattice; if the vertices are degenerate; if
-                the triangles do not enclose the centre when the planes are
-                first computed; or if the site is too distorted for its
-                triangles to enclose its centre.
+            RuntimeError: If the vertices are degenerate, or the site is
+                too distorted for its triangles to enclose its centre.
             ValueError: If the vertices span more than 1000 cells, counted
                 over the three axes.
         """
         if self._triangles is None:
-            if self._lattice_matrix is None:
-                raise RuntimeError(
-                    f"Site {self.index} (vertices {self.vertex_indices}): has no "
-                    "triangles and its vertex coordinates have no lattice: assign "
-                    "them with assign_vertex_coords or notify_structure_changed, "
-                    "or call set_triangles")
             try:
-                self._triangles = _surface_triangles(
-                    self.vertex_indices, vertex_coords, self._lattice_matrix, ())
+                self._triangles = _hull_triangles(vertex_coords)
             except QhullError as error:
                 raise RuntimeError(
                     f"Degenerate vertex geometry for polyhedral_site {self.index} "
                     f"(vertices {self.vertex_indices})"
                 ) from error
         try:
-            if self._surface_cache is None:
-                self._surface_cache = _SurfaceCache(self._triangles, vertex_coords)
-            else:
-                self._surface_cache.update(vertex_coords)
+            return _containment_planes(self._triangles, vertex_coords)
         except (RuntimeError, ValueError) as error:
             raise type(error)(
                 f"Site {self.index} (vertices {self.vertex_indices}): {error}") from error
-        self._cache_stale = False
-        return self._surface_cache
 
     def contains_atom(self,
             atom: Atom,
@@ -580,12 +532,10 @@ class PolyhedralSite(Site):
         label, reference centre and triangles. A dict without a
         ``reference_center`` or ``triangles`` key, as written by earlier
         versions, gives a site with no reference centre or no triangles. A
-        site restored without triangles cannot test containment until
-        triangles are set with ``set_triangles`` or its vertex coordinates
-        are assigned with a lattice. A collection of
-        restored sites that has not found its shared faces replaces their
-        triangles on its first analysis; calling ``find_shared_faces`` with
-        the original structure first keeps them.
+        collection of restored sites that has not found its shared faces
+        replaces their triangles on its first analysis; calling
+        ``find_shared_faces`` with the original structure first keeps
+        them.
 
         Args:
             d (dict): The dict representation of this site.
@@ -595,25 +545,22 @@ class PolyhedralSite(Site):
 
         Raises:
             ValueError: If ``reference_center`` is not None and not three
-                finite numbers, or ``triangles`` is not None and not
-                accepted by ``set_triangles``.
+                finite numbers.
         """
         polyhedral_site = cls(
             vertex_indices=d['vertex_indices'],
             reference_center=d.get('reference_center'))
         if d.get('triangles') is not None:
-            polyhedral_site.set_triangles(d['triangles'])
-        polyhedral_site._vertex_coords = (
-            None if d['vertex_coords'] is None
-            else np.asarray(d['vertex_coords'], dtype=float))
+            polyhedral_site._set_triangles(d['triangles'])
+        if d['vertex_coords'] is not None:
+            polyhedral_site._set_vertex_coords(np.asarray(d['vertex_coords'], dtype=float))
         polyhedral_site.contains_atoms = d['contains_atoms']
         polyhedral_site.label = d.get('label')
         return polyhedral_site
 
     @property
     def centre(self) -> np.ndarray:
-        """Returns the fractional coordinates of the centre point of
-        this polyhedral site.
+        """Fractional coordinates of the centre (the mean of the vertex coordinates).
 
         Args:
             None

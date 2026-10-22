@@ -17,6 +17,8 @@ from site_analysis.site import Site, _as_index
 from site_analysis.atom import Atom
 from site_analysis.distances import _as_point
 from site_analysis.pbc_utils import correct_pbc, update_pbc_shifts
+from site_analysis._reference_centre_deprecation import (
+    on_users_behalf, warn_without_reference_centres)
 from site_analysis.polyhedron_surface import (
     _containment_planes, _contains_point, _hull_triangles, _surface_triangles)
 
@@ -41,7 +43,8 @@ class PolyhedralSite(Site):
     Attributes:
         vertex_indices (list[int]): List of integer indices for the vertex atoms
             (counting from 0).
-        reference_center (np.ndarray or None): Optional reference centre for PBC handling.
+        reference_center (np.ndarray or None): Reference centre for PBC
+            handling, or None for a site created without one (deprecated).
 
     See Also:
         :class:`~site_analysis.site.Site`: Parent class documenting inherited attributes
@@ -59,11 +62,19 @@ class PolyhedralSite(Site):
                 as any iterable, such as a list, an array or a generator. They are
                 stored as a list of Python ``int``.
             label: Optional label for this site.
-            reference_center: Optional reference centre for PBC handling,
-                three finite numbers, stored as a float array.
+            reference_center: Reference centre for PBC handling, usually the
+                position of the site's central atom, as three finite numbers,
+                stored as a float array. The vertices are unwrapped to their
+                images nearest it. Deprecated: omitting it, which unwraps the
+                vertices by the spread-based rule
+                (``pbc_utils.apply_legacy_pbc_correction``), will be removed
+                in version 2.0.
         
         Returns:
             None
+
+        Warns:
+            FutureWarning: If ``reference_center`` is None.
         
         Raises:
             ValueError: If vertex_indices is empty, contains a negative index,
@@ -86,7 +97,12 @@ class PolyhedralSite(Site):
             if k in seen:
                 raise ValueError(f"vertex_indices lists atom {k} more than once")
             seen.add(k)
-        if reference_center is not None:
+        if reference_center is None:
+            warn_without_reference_centres(
+                "PolyhedralSite without a reference_center is deprecated and will be "
+                "removed in version 2.0; use reference_center, usually the position "
+                "of the site's central atom.")
+        else:
             reference_center = _as_point(reference_center, "reference_center")
 
         super(PolyhedralSite, self).__init__(label=label)
@@ -560,11 +576,14 @@ class PolyhedralSite(Site):
         """Create a PolyhedralSite object from a dict representation.
 
         Restores the vertex indices, vertex coordinates, contained atoms,
-        label and reference centre. A dict without a ``reference_center``
-        key, as written by earlier versions, gives a site with no reference
-        centre. The restored site has no triangles: a collection of
-        restored sites fixes them when it finds its shared faces, and a
-        site on its own takes its convex hull.
+        label and reference centre. The restored site has no triangles: a
+        collection of restored sites fixes them when it finds its shared
+        faces, and a site on its own takes its convex hull.
+
+        Deprecated for a dict without a reference centre: a dict whose
+        ``reference_center`` is None, or without the key, as written by
+        earlier versions, gives a site with no reference centre, which will
+        be removed in version 2.0.
 
         Args:
             d (dict): The dict representation of this site.
@@ -572,13 +591,23 @@ class PolyhedralSite(Site):
         Returns:
             PolyhedralSite: A new PolyhedralSite instance.
 
+        Warns:
+            FutureWarning: If the dict has no reference centre.
+
         Raises:
             ValueError: If ``reference_center`` is not None and not three
                 finite numbers.
         """
-        polyhedral_site = cls(
-            vertex_indices=d['vertex_indices'],
-            reference_center=d.get('reference_center'))
+        reference_center = d.get('reference_center')
+        if reference_center is None:
+            warn_without_reference_centres(
+                "PolyhedralSite.from_dict for a dict without a reference_center is "
+                "deprecated and will be removed in version 2.0; use a dict with a "
+                "reference_center, usually the position of the site's central atom.")
+        with on_users_behalf():
+            polyhedral_site = cls(
+                vertex_indices=d['vertex_indices'],
+                reference_center=reference_center)
         if d['vertex_coords'] is not None:
             polyhedral_site._set_vertex_coords(np.asarray(d['vertex_coords'], dtype=float))
         polyhedral_site.contains_atoms = d['contains_atoms']
@@ -606,5 +635,26 @@ class PolyhedralSite(Site):
     def sites_from_vertex_indices(cls,
         vertex_indices: list[list[int]],
         label: str | None=None) -> list[PolyhedralSite]:
-        sites = [cls(vertex_indices=vi, label=label) for vi in vertex_indices]
-        return sites
+        """Create sites without reference centres from lists of vertex indices.
+
+        Deprecated: use ``TrajectoryBuilder.with_polyhedral_sites`` (or
+        ``PolyhedralSite`` with ``reference_center``). This will be removed in
+        version 2.0, with sites without reference centres.
+
+        Args:
+            vertex_indices: The vertex indices of each site.
+            label: Optional label for every site.
+
+        Returns:
+            One site for each list of vertex indices, without a reference
+            centre.
+
+        Warns:
+            FutureWarning: Always, once per call.
+        """
+        warn_without_reference_centres(
+            "PolyhedralSite.sites_from_vertex_indices is deprecated and will be removed "
+            "in version 2.0; use TrajectoryBuilder.with_polyhedral_sites (or "
+            "PolyhedralSite with reference_center).")
+        with on_users_behalf():
+            return [cls(vertex_indices=vi, label=label) for vi in vertex_indices]

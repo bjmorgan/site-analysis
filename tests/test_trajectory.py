@@ -30,7 +30,7 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
         Site._newid = 0
 
     def test_initialisation_with_polyhedral_sites(self):
-        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3])]
+        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.5, 0.5, 0.5])]
         trajectory = Trajectory(atoms=[Atom(index=0)], sites=sites)
         self.assertIsInstance(trajectory.site_collection, PolyhedralSiteCollection)
 
@@ -45,7 +45,7 @@ class TrajectoryInitializationTestCase(unittest.TestCase):
         self.assertIsInstance(trajectory.site_collection, SphericalSiteCollection)
 
     def test_initialisation_with_dynamic_voronoi_sites(self):
-        sites = [DynamicVoronoiSite(reference_indices=[0, 1])]
+        sites = [DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.5, 0.5, 0.5])]
         trajectory = Trajectory(atoms=[Atom(index=0)], sites=sites)
         self.assertIsInstance(trajectory.site_collection, DynamicVoronoiSiteCollection)
 
@@ -517,8 +517,8 @@ class TrajectoryFunctionalityTestCase(unittest.TestCase):
                   [0.15, 0.15, 0.15]]
         structure = Structure(lattice, ["Na"] * 5, coords)
 
-        site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-        site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+        site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+        site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
         atom = Atom(index=4)
         trajectory = Trajectory(sites=[site1, site2], atoms=[atom])
 
@@ -1249,8 +1249,8 @@ class PolyhedralCommitmentTestCase(unittest.TestCase):
         self.vertices = [(5.0, 5.0, 6.0), (5.0, 4.134, 4.5), (5.0, 5.866, 4.5),
                          (3.4, 5.0, 5.0), (6.6, 5.0, 5.0)]
         self.lattice = Lattice.cubic(10.0)
-        self.tet_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        self.tet_b = PolyhedralSite(vertex_indices=[0, 1, 2, 4])
+        self.tet_a = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.46, 0.5, 0.5])
+        self.tet_b = PolyhedralSite(vertex_indices=[0, 1, 2, 4], reference_center=[0.54, 0.5, 0.5])
         self.trajectory = Trajectory(sites=[self.tet_a, self.tet_b],
                                      atoms=[Atom(index=5)],
                                      commitment_radius=0.2)
@@ -1283,8 +1283,8 @@ class DynamicVoronoiCommitmentTestCase(unittest.TestCase):
         self.reference = ([np.add((3.0, 5.0, 5.0), d) for d in offsets]
                           + [np.add((7.0, 5.0, 5.0), d) for d in offsets])
         self.lattice = Lattice.cubic(10.0)
-        self.site_a = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
-        self.site_b = DynamicVoronoiSite(reference_indices=[4, 5, 6, 7])
+        self.site_a = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3], reference_center=[0.3, 0.5, 0.5])
+        self.site_b = DynamicVoronoiSite(reference_indices=[4, 5, 6, 7], reference_center=[0.7, 0.5, 0.5])
         self.trajectory = Trajectory(sites=[self.site_a, self.site_b],
                                      atoms=[Atom(index=8)],
                                      commitment_radius=0.2)

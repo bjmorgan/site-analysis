@@ -93,7 +93,7 @@ class UnwrappedCoordinatesSiteTestCase(unittest.TestCase):
 		atoms = atoms_from_structure(structure, "Li")
 		
 		# Create polyhedral site
-		site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+		site = PolyhedralSite(vertex_indices=[1, 2, 3, 4], reference_center=[0.1, 0.1, 0.25])
 		
 		# Use PolyhedralSiteCollection to test the proper analysis pipeline
 		from site_analysis.polyhedral_site_collection import PolyhedralSiteCollection
@@ -127,8 +127,10 @@ class UnwrappedCoordinatesSiteTestCase(unittest.TestCase):
 		atom = atoms[0]
 		
 		# Create multiple dynamic Voronoi sites
-		site_target = DynamicVoronoiSite(reference_indices=[1, 2])  # Should contain atom
-		site_other = DynamicVoronoiSite(reference_indices=[3, 4])   # Further away
+		site_target = DynamicVoronoiSite(reference_indices=[1, 2],  # Should contain atom
+			reference_center=[0.1, 0.2, 0.3])
+		site_other = DynamicVoronoiSite(reference_indices=[3, 4],  # Further away
+			reference_center=[0.6, 0.5, 0.5])
 		
 		# Calculate centres for both sites
 		site_target.calculate_centre(structure.frac_coords, structure.lattice.matrix)

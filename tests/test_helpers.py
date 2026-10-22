@@ -1,5 +1,8 @@
 """Helper functions for testing."""
 
+import warnings
+from contextlib import contextmanager
+
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
@@ -73,3 +76,18 @@ def one_target_atom_for_two_reference_atoms():
 	target = Structure(reference.lattice, reference.species, coords,
 		coords_are_cartesian=True)
 	return reference, target
+
+
+@contextmanager
+def recorded_future_warnings():
+	"""Record the FutureWarnings issued in the block, repeats included.
+
+	Other warnings are ignored.
+
+	Yields:
+		list[warnings.WarningMessage]: The FutureWarnings issued so far, in order.
+	"""
+	with warnings.catch_warnings(record=True) as caught:
+		warnings.simplefilter("ignore")
+		warnings.simplefilter("always", FutureWarning)
+		yield caught

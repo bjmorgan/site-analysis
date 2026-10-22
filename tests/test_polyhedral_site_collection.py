@@ -23,6 +23,9 @@ from tests.test_faces import build_cubes, displaced, simple_cubic_cubes
 from tests.test_helpers import interstitial_structure
 from unittest.mock import patch, Mock, PropertyMock, MagicMock
 
+# A reference centre for sites whose geometry these tests do not use.
+CENTRE = np.array([0.5, 0.5, 0.5])
+
 class PolyhedralSiteCollectionTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -49,13 +52,16 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
         
         # Create polyhedral sites for testing
         # Site 1: tetrahedron with vertices 0, 1, 2, 3
-        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], label="site1")
+        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], label="site1",
+                                    reference_center=[0.05, 0.05, 0.0])
         
         # Site 2: tetrahedron with vertices 4, 5, 6, 7
-        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], label="site2")
+        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], label="site2",
+                                    reference_center=[0.05, 0.05, 0.1])
         
         # Site 3: tetrahedron with vertices 0, 1, 4, 5 - shares face with site1
-        self.site3 = PolyhedralSite(vertex_indices=[0, 1, 4, 5], label="site3")
+        self.site3 = PolyhedralSite(vertex_indices=[0, 1, 4, 5], label="site3",
+                                    reference_center=[0.05, 0.0, 0.05])
         
         # Test atoms
         self.atom1 = Atom(index=0)
@@ -152,8 +158,8 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
     def test_validate_atom_count_names_the_first_site_in_index_order(self):
         """The error names the lowest-index site with a vertex index beyond the atoms."""
         Site._newid = 0
-        first = PolyhedralSite(vertex_indices=[0, 1, 2, 8])
-        second = PolyhedralSite(vertex_indices=[0, 1, 2, 9])
+        first = PolyhedralSite(vertex_indices=[0, 1, 2, 8], reference_center=CENTRE)
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 9], reference_center=CENTRE)
         collection = PolyhedralSiteCollection([second, first])
         with self.assertRaisesRegex(
                 ValueError, "^Site 0 has vertex index 8, but the structure has 8 atoms$"):
@@ -244,10 +250,10 @@ class PolyhedralSiteCollectionTestCase(unittest.TestCase):
     
     def test_empty_atoms_list_polyhedral(self):
         """Test PolyhedralSiteCollection handles empty atom lists correctly."""
-        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.15, 0.15, 0.15])
         site1.contains_atoms = [1, 2]
         
-        site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=[0.65, 0.65, 0.65])
         site2.contains_atoms = [3, 4]
         
         # Create the collection
@@ -395,17 +401,21 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
         
         # Create polyhedral sites for testing
         # Site 1: tetrahedron with vertices 0, 1, 2, 3
-        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], label="site1")
+        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], label="site1",
+                                    reference_center=CENTRE)
         
         # Site 2: tetrahedron with vertices 4, 5, 6, 7
-        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], label="site2")
+        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], label="site2",
+                                    reference_center=CENTRE)
         
         # Site 3: tetrahedron with vertices 0, 1, 4, 5 - shares 2 vertices with site1, 2 with site2
         # Note: The current implementation considers this a neighbour of site4
-        self.site3 = PolyhedralSite(vertex_indices=[0, 1, 4, 5], label="site3")
+        self.site3 = PolyhedralSite(vertex_indices=[0, 1, 4, 5], label="site3",
+                                    reference_center=CENTRE)
         
         # Site 4: tetrahedron with vertices 0, 1, 2, 4 - shares 3 vertices with site1 (face sharing)
-        self.site4 = PolyhedralSite(vertex_indices=[0, 1, 2, 4], label="site4")
+        self.site4 = PolyhedralSite(vertex_indices=[0, 1, 2, 4], label="site4",
+                                    reference_center=CENTRE)
         
         # All sites
         self.sites = [self.site1, self.site2, self.site3, self.site4]
@@ -438,17 +448,17 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
     def test_construct_neighbouring_sites_in_site_order(self):
         """Neighbours are listed in the order the sites were given."""
         # The first neighbour does not contain vertex 0, the site's first vertex.
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        first = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
-        second = PolyhedralSite(vertex_indices=[0, 1, 2, 5])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
+        first = PolyhedralSite(vertex_indices=[1, 2, 3, 4], reference_center=CENTRE)
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 5], reference_center=CENTRE)
         neighbours = construct_neighbouring_sites([site, first, second])
         self.assertEqual(neighbours[site.index], [first, second])
 
     def test_construct_neighbouring_sites_no_neighbours(self):
         """Test construct_neighbouring_sites with sites that have no neighbours."""
         # Create isolated sites that don't share vertices
-        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
+        site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=CENTRE)
         sites = [site1, site2]
         
         # Call function
@@ -461,8 +471,8 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
     def test_construct_neighbouring_sites_identical_sites(self):
         """Test construct_neighbouring_sites with identical sites."""
         # Create two sites with identical vertices
-        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        site2 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
+        site2 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         sites = [site1, site2]
         
         # Call function
@@ -478,7 +488,7 @@ class ConstructNeighbouringSitesTestCase(unittest.TestCase):
     def test_construct_neighbouring_sites_with_self(self):
         """Test that a site is not identified as its own neighbour."""
         # Create a site
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         sites = [site]
         
         # Call function
@@ -494,21 +504,23 @@ class TestCollectReferenceCentres(unittest.TestCase):
     def test_returns_none_when_no_reference_centres(self):
         """Returns (None, indices) when any site lacks a reference centre."""
         Site._newid = 0
-        sites = [
-            PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-            PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
-        ]
+        with self.assertWarns(FutureWarning):
+            sites = [
+                PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+                PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
+            ]
         centres, site_indices = _collect_reference_centres(sites)
         self.assertIsNone(centres)
 
     def test_returns_none_when_mixed_reference_centres(self):
         """Returns None when only some sites have reference centres."""
         Site._newid = 0
-        sites = [
-            PolyhedralSite(vertex_indices=[0, 1, 2, 3],
-                           reference_center=np.array([0.1, 0.1, 0.1])),
-            PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
-        ]
+        with self.assertWarns(FutureWarning):
+            sites = [
+                PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                               reference_center=np.array([0.1, 0.1, 0.1])),
+                PolyhedralSite(vertex_indices=[4, 5, 6, 7]),
+            ]
         centres, site_indices = _collect_reference_centres(sites)
         self.assertIsNone(centres)
 
@@ -533,8 +545,8 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
         self.lattice = Lattice.cubic(2.0)
         self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
         
-        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
+        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7], reference_center=CENTRE)
         self.collection = PolyhedralSiteCollection([self.site1, self.site2])
         self.atoms = atoms_from_structure(self.structure, "Li")
         self.atom = self.atoms[0]
@@ -619,16 +631,19 @@ class TestAssignSiteOccupationsInteraction(unittest.TestCase):
             
             
 class TestGetPrioritySites(unittest.TestCase):
-    """Test _get_priority_sites generator behaviour."""
+    """Test _get_priority_sites generator behaviour for sites without reference centres (deprecated)."""
 
     def setUp(self):
         Site._newid = 0
         self.lattice = Lattice.cubic(2.0)
         self.structure = Structure(self.lattice, ["Li"], [[0.1, 0.1, 0.1]])
 
-        self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
-        self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
-        self.site3 = PolyhedralSite(vertex_indices=[8, 9, 10, 11])
+        with self.assertWarns(FutureWarning):
+            self.site1 = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            self.site2 = PolyhedralSite(vertex_indices=[4, 5, 6, 7])
+        with self.assertWarns(FutureWarning):
+            self.site3 = PolyhedralSite(vertex_indices=[8, 9, 10, 11])
         self.collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3])
 
         self.atoms = atoms_from_structure(self.structure, "Li")
@@ -643,7 +658,8 @@ class TestGetPrioritySites(unittest.TestCase):
     def test_neighbours_follow_transitions_without_repeats(self):
         """Without reference centres, the most recent site's neighbours follow its
         transitions, then the remaining sites in list order, each site once."""
-        site4 = PolyhedralSite(vertex_indices=[12, 13, 14, 15])
+        with self.assertWarns(FutureWarning):
+            site4 = PolyhedralSite(vertex_indices=[12, 13, 14, 15])
         collection = PolyhedralSiteCollection([self.site1, self.site2, self.site3, site4])
         self.assertIsNone(collection._site_centres)
         self.atom._recent_sites = [self.site1.index, None]
@@ -707,7 +723,9 @@ class TestDistanceRankingNeedsReferenceCentres(unittest.TestCase):
     def test_list_order_when_any_site_lacks_a_reference_centre(self):
         """Sites are searched in list order when any site lacks a reference centre."""
         centres = [np.array([0.1, 0.1, 0.1]), np.array([0.3, 0.1, 0.1]), None]
-        self.assertEqual(self.search_order(centres), [50, 51, 52])
+        with self.assertWarns(FutureWarning):
+            search_order = self.search_order(centres)
+        self.assertEqual(search_order, [50, 51, 52])
 
 
 def _tetrahedral_tiling(n):
@@ -767,8 +785,9 @@ class TestTilingLeavesNoAtomUnassigned(unittest.TestCase):
 
     def test_every_atom_is_assigned_without_reference_centres(self):
         """Atoms with a recent site are all assigned when sites have no reference centres."""
-        sites = [PolyhedralSite(vertex_indices=vertex_indices)
-                 for vertex_indices, _ in self.tetrahedra]
+        with self.assertWarns(FutureWarning):
+            sites = [PolyhedralSite(vertex_indices=vertex_indices)
+                     for vertex_indices, _ in self.tetrahedra]
         rng = np.random.default_rng(1)
         for atom in self.atoms:
             atom._recent_sites = [sites[rng.integers(len(sites))].index, None]
@@ -975,8 +994,10 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
         torn[[6, 7], 0] = 0.55
         lattice_matrix = Lattice.cubic(10.0).matrix
         Site.reset_index(0)
-        collection = PolyhedralSiteCollection([PolyhedralSite(vertex_indices=list(range(0, 8))),
-                                               PolyhedralSite(vertex_indices=list(range(4, 12)))])
+        with self.assertWarns(FutureWarning):
+            sites = [PolyhedralSite(vertex_indices=list(range(0, 8))),
+                     PolyhedralSite(vertex_indices=list(range(4, 12)))]
+        collection = PolyhedralSiteCollection(sites)
         collection.find_shared_faces(joined, lattice_matrix)
         self.assertEqual(collection.shared_faces(), (Face((0, 1), (4, 5, 6, 7)),))
         with self.assertWarnsRegex(
@@ -1102,7 +1123,8 @@ class TestAnalyseStructureFindsSharedFaces(unittest.TestCase):
                              [*base, (apex_x, 5.0, 5.0), (4.9, 5.0, 5.0)],
                              coords_are_cartesian=True)
         Site.reset_index(0)
-        trajectory = Trajectory(sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3])],
+        trajectory = Trajectory(sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                                      reference_center=[0.46, 0.5, 0.5])],
                                 atoms=[Atom(index=4)])
         trajectory.analyse_structure(frame(3.4))
         with self.assertRaisesRegex(

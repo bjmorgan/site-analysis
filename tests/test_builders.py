@@ -1608,12 +1608,13 @@ class TestBuilderValidation(unittest.TestCase):
 		"""Polyhedral sites without reference coordinates are checked by vertex indices."""
 		ref = self._make_argyrodite_ref([0.77, 0.585, 0.585])
 		target = self._make_target(ref)
+		centre = target.frac_coords[[0, 1, 2, 3]].mean(axis=0)
 
 		builder = (TrajectoryBuilder()
 			.with_structure(target)
 			.with_mobile_species("Li")
-			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-				PolyhedralSite(vertex_indices=[0, 1, 2, 3])]))
+			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=centre),
+				PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=centre)]))
 
 		with self.assertRaises(ValueError) as ctx:
 			builder.build()
@@ -1627,7 +1628,8 @@ class TestBuilderValidation(unittest.TestCase):
 			.with_reference_structure(structure)
 			.with_mobile_species("Li")
 			.with_polyhedral_sites(centre_species="Li", vertex_species="O", cutoff=2.0, n_vertices=4)
-			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
+			.with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+					reference_center=structure.frac_coords[[0, 1, 2, 3]].mean(axis=0)),
 				SphericalSite(frac_coords=np.array([0.1, 0.1, 0.1]), rcut=1.0)]))
 
 		with self.assertRaisesRegex(TypeError, "mixed Site types: PolyhedralSite, SphericalSite"):
@@ -1635,7 +1637,7 @@ class TestBuilderValidation(unittest.TestCase):
 
 	def test_existing_site_with_vertex_beyond_structure_raises(self):
 		"""A polyhedral site with a vertex index beyond the structure's atoms raises."""
-		existing_site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+		existing_site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.5, 0.5, 0.5])
 		existing_site.index = 0
 		builder = (TrajectoryBuilder()
 			.with_structure(li_na_structure())

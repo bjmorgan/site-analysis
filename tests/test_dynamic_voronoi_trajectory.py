@@ -27,7 +27,8 @@ class DynamicVoronoiTrajectoryIntegrationTestCase(unittest.TestCase):
 		o_atom = Atom(index=2)
 		
 		# Create a DynamicVoronoiSite using the two Re atoms
-		site = DynamicVoronoiSite(reference_indices=[0, 1])  # Re atoms at indices 0 and 1
+		site = DynamicVoronoiSite(reference_indices=[0, 1],  # Re atoms at indices 0 and 1
+			reference_center=[0.5, 0.5, 0.5])
 		
 		# Create a Trajectory object
 		trajectory = Trajectory(sites=[site], atoms=[o_atom])
@@ -62,7 +63,8 @@ class DynamicVoronoiTrajectoryIntegrationTestCase(unittest.TestCase):
 		o_atom = Atom(index=2)
 		
 		# Create a DynamicVoronoiSite using the two Re atoms
-		site = DynamicVoronoiSite(reference_indices=[0, 1])  # Re atoms at indices 0 and 1
+		site = DynamicVoronoiSite(reference_indices=[0, 1],  # Re atoms at indices 0 and 1
+			reference_center=[0.0, 0.25, 0.0])
 		
 		# Create a Trajectory object
 		trajectory = Trajectory(sites=[site], atoms=[o_atom])
@@ -109,8 +111,8 @@ class DynamicVoronoiTrajectoryIntegrationTestCase(unittest.TestCase):
 		o_atoms = [Atom(index=3), Atom(index=4)]  # Indices 3 and 4
 		
 		# Create DynamicVoronoiSite objects
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])  # Re0-Re1
-		site2 = DynamicVoronoiSite(reference_indices=[1, 2])  # Re1-Re2
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.4, 0.4, 0.5])  # Re0-Re1
+		site2 = DynamicVoronoiSite(reference_indices=[1, 2], reference_center=[0.6, 0.4, 0.5])  # Re1-Re2
 		
 		# Create a Trajectory object
 		trajectory = Trajectory(sites=[site1, site2], atoms=o_atoms)
@@ -169,7 +171,8 @@ class DynamicVoronoiTrajectoryIntegrationTestCase(unittest.TestCase):
 		o_atoms = [Atom(index=i) for i in o_indices]
 		
 		# Create DynamicVoronoiSite objects based on the nearest Re pairs
-		sites = [DynamicVoronoiSite(reference_indices=re_pair)
+		sites = [DynamicVoronoiSite(reference_indices=re_pair,
+				reference_center=structure[o_indices[i]].frac_coords)
 			for i, re_pair in enumerate(nearest_re_pairs)
 		]
 		

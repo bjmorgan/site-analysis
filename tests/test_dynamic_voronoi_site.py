@@ -1,4 +1,5 @@
 import unittest
+import warnings
 from unittest.mock import patch
 import numpy as np
 from collections import Counter
@@ -7,6 +8,11 @@ from pymatgen.core import Structure, Lattice
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
 from site_analysis.atom import Atom
+from tests.test_helpers import recorded_future_warnings
+
+# The reference centre of the sites in these tests whose reference atoms
+# lie around the middle of the cell.
+CENTRE = np.array([0.5, 0.5, 0.5])
 
 class DynamicVoronoiSiteTestCase(unittest.TestCase):
 
@@ -39,7 +45,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         
     def test_dynamic_voronoi_site_is_initialised(self):
         reference_indices = [1, 2, 3, 4]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=CENTRE)
         
         # Check that reference indices are stored correctly
         self.assertEqual(site.reference_indices, reference_indices)
@@ -59,7 +65,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         """Test that a DynamicVoronoiSite can be initialised with a label."""
         reference_indices = [1, 2, 3, 4]
         label = "tetrahedral_site"
-        site = DynamicVoronoiSite(reference_indices=reference_indices, label=label)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, label=label, reference_center=CENTRE)
         
         self.assertEqual(site.reference_indices, reference_indices)
         self.assertEqual(site.label, label)
@@ -67,7 +73,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
     def test_reset(self):
         """Test that reset clears the calculated centre and site occupation data."""
         reference_indices = [1, 2, 3, 4]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=CENTRE)
         
         # Mock some data that should be cleared on reset
         site._centre_coords = np.array([0.5, 0.5, 0.5])
@@ -87,7 +93,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
     def test_calculate_centre_no_wrapping(self):
         """Test centre calculation when result doesn't need wrapping."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=[0.125, 0.125, 0.125])
         
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1],
@@ -117,7 +123,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
     def test_calculate_centre_with_wrapping(self):
         """Test centre calculation when result needs wrapping."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=[0.125, 0.125, 0.125])
 
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1],
@@ -182,7 +188,8 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
 
     def test_calculate_centre_rejects_non_finite_coordinates_without_reference_centre(self):
         """A site without a reference centre rejects a NaN reference atom coordinate."""
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
         frac_coords = np.array([[0.1, 0.1, 0.1],
                                 [0.2, 0.1, 0.1],
                                 [0.1, np.nan, 0.1],
@@ -193,7 +200,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
     def test_centre_method(self):
         """Test that the centre method returns the calculated centre coordinates."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=CENTRE)
         
         # Set a predefined centre
         centre_coords = np.array([0.5, 0.5, 0.5])
@@ -210,7 +217,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
     def test_update_centre_when_reference_atoms_move(self):
         """Test that the centre updates when reference atoms move."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=[0.15, 0.15, 0.15])
         
         # Create initial structure
         lattice = Lattice.cubic(10.0)
@@ -246,7 +253,7 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         """Test serialization and deserialization of DynamicVoronoiSite."""
         reference_indices = [1, 2, 3, 4]
         label = "tetrahedral_site"
-        site = DynamicVoronoiSite(reference_indices=reference_indices, label=label)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, label=label, reference_center=CENTRE)
         
         # Set some attributes for testing
         site._centre_coords = np.array([0.5, 0.5, 0.5])
@@ -276,12 +283,12 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         """Test that coordination_number returns the number of reference atoms."""
         # Test with 4 reference atoms
         reference_indices = [1, 2, 3, 4]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=CENTRE)
         self.assertEqual(site.coordination_number, 4)
         
         # Test with a different number of reference atoms
         reference_indices = [1, 2, 3, 4, 5, 6]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        site = DynamicVoronoiSite(reference_indices=reference_indices, reference_center=CENTRE)
         self.assertEqual(site.coordination_number, 6)
         
         # Test the cn property (convenience alias for coordination_number)
@@ -293,7 +300,8 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         label = "tetrahedral_site"
         
         # Create sites using the class method
-        sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list, label=label)
+        with self.assertWarns(FutureWarning):
+            sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list, label=label)
         
         # Check that the correct number of sites were created
         self.assertEqual(len(sites), len(reference_indices_list))
@@ -308,7 +316,8 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         reference_indices_list = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
         
         # Create sites using the class method
-        sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
+        with self.assertWarns(FutureWarning):
+            sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
         
         # Check that the correct number of sites were created
         self.assertEqual(len(sites), len(reference_indices_list))
@@ -323,7 +332,8 @@ class DynamicVoronoiSiteTestCase(unittest.TestCase):
         reference_indices_list = []
         
         # Create sites using the class method
-        sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
+        with self.assertWarns(FutureWarning):
+            sites = DynamicVoronoiSite.sites_from_reference_indices(reference_indices_list)
         
         # Check that no sites were created
         self.assertEqual(len(sites), 0)
@@ -336,7 +346,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
 
     def test_as_dict_excludes_centre_when_not_calculated(self):
         """Test as_dict excludes centre_coords when centre not calculated."""
-        site = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+        site = DynamicVoronoiSite(reference_indices=[1, 2, 3], reference_center=CENTRE)
         # _centre_coords remains None
 
         site_dict = site.as_dict()
@@ -345,7 +355,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
 
     def test_as_dict_includes_centre_when_calculated(self):
         """Test as_dict includes centre_coords when centre calculated."""
-        site = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+        site = DynamicVoronoiSite(reference_indices=[1, 2, 3], reference_center=CENTRE)
         site._centre_coords = np.array([0.25, 0.5, 0.75])
 
         site_dict = site.as_dict()
@@ -357,6 +367,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         """Test from_dict restores centre coordinates when present in dict."""
         site_dict = {
             'reference_indices': [4, 5, 6],
+            'reference_center': [0.5, 0.5, 0.5],
             'centre_coords': [0.1, 0.2, 0.3]
         }
 
@@ -367,7 +378,8 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
     def test_from_dict_leaves_centre_none_when_absent(self):
         """Test from_dict leaves centre as None when not in dict."""
         site_dict = {
-            'reference_indices': [4, 5, 6]
+            'reference_indices': [4, 5, 6],
+            'reference_center': [0.5, 0.5, 0.5]
         }
 
         site = DynamicVoronoiSite.from_dict(site_dict)
@@ -378,6 +390,7 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
         """Test centre property works correctly after from_dict."""
         site_dict = {
             'reference_indices': [1, 2],
+            'reference_center': [0.5, 0.5, 0.5],
             'centre_coords': [0.4, 0.5, 0.6]
         }
 
@@ -388,7 +401,8 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
     def test_centre_property_raises_error_when_not_calculated_after_deserialisation(self):
         """Test centre property raises error when centre not calculated after deserialisation."""
         site_dict = {
-            'reference_indices': [1, 2]
+            'reference_indices': [1, 2],
+            'reference_center': [0.5, 0.5, 0.5]
             # No centre_coords
         }
 
@@ -408,7 +422,8 @@ class DynamicVoronoiSiteCentreSerialisationTestCase(unittest.TestCase):
     def test_calculate_centre_passes_none_reference_center(self):
         """Test that correct_pbc is called with reference_center=None when not set."""
         reference_indices = [0, 1, 2, 3]
-        site = DynamicVoronoiSite(reference_indices=reference_indices)
+        with self.assertWarns(FutureWarning):
+            site = DynamicVoronoiSite(reference_indices=reference_indices)
 
         lattice = Lattice.cubic(10.0)
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1], [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
@@ -443,12 +458,13 @@ class TestCalculateCentrePbc(unittest.TestCase):
         Site._newid = 0
 
     def test_wrapping_produces_correct_centre(self):
-        """Coordinates straddling the periodic boundary should produce a sensible centre."""
+        """Without a reference centre (deprecated), coordinates straddling the periodic boundary produce a sensible centre."""
         lattice = Lattice.cubic(10.0)
         coords = [[0.99, 0.5, 0.5],
                    [0.01, 0.5, 0.5]]
         structure = Structure(lattice, ["Li", "Li"], coords)
-        site = DynamicVoronoiSite(reference_indices=[0, 1])
+        with self.assertWarns(FutureWarning):
+            site = DynamicVoronoiSite(reference_indices=[0, 1])
 
         site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
@@ -470,7 +486,7 @@ class TestResetWithCalculatedCentre(unittest.TestCase):
         coords = [[0.1, 0.1, 0.1], [0.2, 0.1, 0.1],
                    [0.1, 0.2, 0.1], [0.1, 0.1, 0.2]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
-        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3], reference_center=[0.125, 0.125, 0.125])
 
         site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
         self.assertIsNotNone(site._centre_coords)
@@ -497,17 +513,72 @@ class DynamicVoronoiSiteReferenceCentreSerialisationTestCase(unittest.TestCase):
 
     def test_round_trip_without_reference_center_gives_none(self):
         """A site with no reference centre reloads with none."""
-        original = DynamicVoronoiSite(reference_indices=[1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            original = DynamicVoronoiSite(reference_indices=[1, 2, 3])
 
-        reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
+        with self.assertWarns(FutureWarning):
+            reconstructed = DynamicVoronoiSite.from_dict(original.as_dict())
 
         self.assertIsNone(reconstructed.reference_center)
 
     def test_from_dict_without_reference_center_key_gives_none(self):
         """A dict written before reference centres were saved still loads."""
-        site = DynamicVoronoiSite.from_dict({'reference_indices': [4, 5, 6]})
+        with self.assertWarns(FutureWarning):
+            site = DynamicVoronoiSite.from_dict({'reference_indices': [4, 5, 6]})
 
         self.assertIsNone(site.reference_center)
+
+
+class DynamicVoronoiSiteWithoutReferenceCentreDeprecationTestCase(unittest.TestCase):
+    """Sites without a reference centre are deprecated, warning at the caller's line."""
+
+    def test_site_without_reference_center_warns(self):
+        """A site created without a reference centre issues a FutureWarning pointing to reference_center."""
+        with self.assertWarnsRegex(
+                FutureWarning,
+                r"DynamicVoronoiSite without a reference_center is deprecated and will be "
+                r"removed in version 2\.0; use reference_center") as context:
+            DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+        self.assertEqual(context.filename, __file__)
+
+    def test_site_with_reference_center_does_not_warn(self):
+        """A site created with a reference centre issues no warning."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            DynamicVoronoiSite(reference_indices=[0, 1, 2, 3], reference_center=[0.5, 0.5, 0.5])
+
+    def test_from_dict_without_reference_center_warns_once(self):
+        """from_dict warns once, at the caller's line, for a dict with no reference centre or None."""
+        for name, site_dict in (("missing", {'reference_indices': [4, 5, 6]}),
+                                ("None", {'reference_indices': [4, 5, 6], 'reference_center': None})):
+            with self.subTest(name):
+                with recorded_future_warnings() as caught:
+                    DynamicVoronoiSite.from_dict(site_dict)
+                self.assertEqual(len(caught), 1)
+                self.assertRegex(
+                    str(caught[0].message),
+                    r"DynamicVoronoiSite\.from_dict for a dict without a reference_center is "
+                    r"deprecated and will be removed in version 2\.0; use a dict with a "
+                    r"reference_center")
+                self.assertEqual(caught[0].filename, __file__)
+
+    def test_from_dict_with_reference_center_does_not_warn(self):
+        """from_dict issues no warning for a dict with a reference centre."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            DynamicVoronoiSite.from_dict(
+                {'reference_indices': [4, 5, 6], 'reference_center': [0.5, 0.5, 0.5]})
+
+    def test_sites_from_reference_indices_warns_once_per_call(self):
+        """sites_from_reference_indices warns once, at the caller's line, however many sites it creates."""
+        with recorded_future_warnings() as caught:
+            DynamicVoronoiSite.sites_from_reference_indices([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+        self.assertEqual(len(caught), 1)
+        self.assertRegex(
+            str(caught[0].message),
+            r"DynamicVoronoiSite\.sites_from_reference_indices is deprecated and will be "
+            r"removed in version 2\.0; use TrajectoryBuilder")
+        self.assertEqual(caught[0].filename, __file__)
 
 
 if __name__ == '__main__':

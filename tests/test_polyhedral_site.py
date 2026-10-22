@@ -11,9 +11,14 @@ from unittest.mock import patch, Mock, PropertyMock
 import numpy as np
 from collections import Counter
 from pymatgen.core import Structure, Lattice
+from tests.test_helpers import recorded_future_warnings
 
 # Containment with numba where it is installed, and with numpy.
 BACKENDS = [True, False] if HAS_NUMBA else [False]
+
+# The reference centre of the sites in these tests that lie around the
+# middle of the cell, such as _TETRAHEDRON.
+CENTRE = np.array([0.5, 0.5, 0.5])
 
 
 class PolyhedralSiteTestCase(unittest.TestCase):
@@ -31,12 +36,12 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def setUp(self):
         Site._newid = 1
         vertex_indices = [0, 1, 3, 4]
-        self.site = PolyhedralSite(vertex_indices=vertex_indices)
+        self.site = PolyhedralSite(vertex_indices=vertex_indices, reference_center=CENTRE)
         Site._newid = 1
 
     def test_polyhedral_site_is_initialised(self):
         vertex_indices = [1, 2, 3, 4]
-        site = PolyhedralSite(vertex_indices=vertex_indices)
+        site = PolyhedralSite(vertex_indices=vertex_indices, reference_center=CENTRE)
         self.assertEqual(site.vertex_indices, vertex_indices)
         self.assertEqual(site.vertex_coords, None)
         self.assertEqual(site._delaunay, None)
@@ -49,7 +54,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def test_polyhedral_site_is_initialised_with_a_label(self):
         vertex_indices = [1, 2, 3, 4]
-        site = PolyhedralSite(vertex_indices=vertex_indices,
+        site = PolyhedralSite(vertex_indices=vertex_indices, reference_center=CENTRE,
                               label='foo')
         self.assertEqual(site.label, 'foo')
 
@@ -69,7 +74,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def test_reset_keeps_the_triangles(self):
         """reset() keeps the triangles fixed on the site."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         site.fix_triangles(_TETRAHEDRON, Lattice.cubic(10.0).matrix, [])
         site.reset()
         self.assertEqual(_triples(site._triangles), _triples(_TETRAHEDRON_TRIANGLES))
@@ -136,7 +141,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                 [0.4, 0.4, 0.4]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
 
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.25, 0.25, 0.25])
         site._delaunay = 'foo'
 
         with patch('site_analysis.polyhedral_site.correct_pbc') as mock_pbc:
@@ -165,7 +170,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
                   [0.9, 0.9, 0.9]]
         structure = Structure(lattice, ["Li", "Li", "Li", "Li"], coords)
 
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[1.0, 1.0, 1.0])
         site._delaunay = 'foo'
 
         with patch('site_analysis.polyhedral_site.correct_pbc') as mock_pbc:
@@ -230,7 +235,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                site = PolyhedralSite(vertex_indices=range(5))
+                site = PolyhedralSite(vertex_indices=range(5), reference_center=CENTRE)
                 site.assign_vertex_coords(vertices, lattice_matrix)
                 self.assertTrue(site.contains_point(point))
                 site.fix_triangles(vertices, lattice_matrix, [[0, 1, 2, 3]])
@@ -239,7 +244,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def test_fix_triangles_does_not_assign_the_vertex_coordinates(self):
         """fix_triangles fixes the triangles from a structure without assigning coordinates."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         site.fix_triangles(_TETRAHEDRON, Lattice.cubic(10.0).matrix, [])
         self.assertIsNone(site.vertex_coords)
         self.assertEqual(_triples(site._triangles), _triples(_TETRAHEDRON_TRIANGLES))
@@ -248,7 +253,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         """Shared atoms that are not a face of the site raise ValueError naming the atoms."""
         octahedron = 0.5 + 0.2 * np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0],
                                            [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=float)
-        site = PolyhedralSite(vertex_indices=range(6))
+        site = PolyhedralSite(vertex_indices=range(6), reference_center=CENTRE)
         with self.assertRaisesRegex(
                 ValueError, r"^Shared atoms \[0, 1, 2\] cannot be triangulated identically"):
             site.fix_triangles(octahedron, Lattice.cubic(10.0).matrix, [[0, 1, 2]])
@@ -256,7 +261,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def test_fix_triangles_raises_for_degenerate_vertices_naming_the_site(self):
         """Coplanar vertices raise RuntimeError naming the site."""
         Site._newid = 7
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         flat = np.array([[0.4, 0.4, 0.5], [0.6, 0.4, 0.5], [0.6, 0.6, 0.5], [0.4, 0.6, 0.5]])
         with self.assertRaisesRegex(
                 RuntimeError,
@@ -268,7 +273,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
                 site.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
                 self.assertTrue(site.contains_point(_TETRAHEDRON.mean(axis=0).tolist()))
                 self.assertFalse(site.contains_point([0.9, 0.9, 0.9]))
@@ -284,7 +289,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
                 site.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
                 for name, point in cases.items():
                     with self.subTest(name):
@@ -319,7 +324,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
     def test_degenerate_site_names_itself(self):
         """A flat site raises RuntimeError naming the site on its first test."""
         Site._newid = 4
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         flat = np.array([[0.4, 0.4, 0.5], [0.6, 0.4, 0.5], [0.6, 0.6, 0.5], [0.4, 0.6, 0.5]])
         site.assign_vertex_coords(flat, Lattice.cubic(10.0).matrix)
         with self.assertRaisesRegex(
@@ -421,14 +426,14 @@ class PolyhedralSiteTestCase(unittest.TestCase):
 
     def test_init_with_numpy_integer_vertex_indices(self):
         """Test that numpy integers in a list are accepted and stored as Python ints."""
-        site = PolyhedralSite(vertex_indices=[np.int64(1), np.int64(2), np.int64(3)])
+        site = PolyhedralSite(vertex_indices=[np.int64(1), np.int64(2), np.int64(3)], reference_center=CENTRE)
 
         self.assertEqual(site.vertex_indices, [1, 2, 3])
         self.assertTrue(all(type(idx) is int for idx in site.vertex_indices))
     
     def test_init_with_generator_vertex_indices(self):
         """Test that a generator of vertex indices is stored as a list."""
-        site = PolyhedralSite(vertex_indices=(i for i in range(4)))
+        site = PolyhedralSite(vertex_indices=(i for i in range(4)), reference_center=CENTRE)
 
         self.assertEqual(site.vertex_indices, [0, 1, 2, 3])
 
@@ -450,7 +455,7 @@ class PolyhedralSiteTestCase(unittest.TestCase):
         """Test that non-empty numpy array doesn't cause truthiness ambiguity error."""
         vertex_indices = np.array([0, 1, 2, 3])
         # This will fail with ValueError about ambiguous truth value if bug exists
-        PolyhedralSite(vertex_indices)
+        PolyhedralSite(vertex_indices, reference_center=CENTRE)
     
     def test_emptiness_check_with_empty_numpy_array(self):
         """Test that empty numpy array is correctly detected as empty."""
@@ -509,7 +514,7 @@ class TestContainmentImageLimit(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+                site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE).as_dict()
                 site_dict['vertex_coords'] = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
                                                              [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
                 site = PolyhedralSite.from_dict(site_dict)
@@ -518,7 +523,7 @@ class TestContainmentImageLimit(unittest.TestCase):
 
     def test_site_spanning_too_many_cells_names_itself(self):
         """The ValueError for a site spanning 1001 cells names the site and its vertices."""
-        site_dict = PolyhedralSite(vertex_indices=[3, 5, 8, 9]).as_dict()
+        site_dict = PolyhedralSite(vertex_indices=[3, 5, 8, 9], reference_center=CENTRE).as_dict()
         site_dict['vertex_coords'] = _TETRAHEDRON + [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0],
                                                      [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
         Site._newid = 7
@@ -574,8 +579,8 @@ class TestUnwrappedVertexCoords(unittest.TestCase):
     LATTICE = Lattice.cubic(10.0).matrix
 
     def test_unwrapped_vertex_coords_are_those_assign_vertex_coords_stores(self):
-        """With or without a reference centre, the result is what a fresh site stores."""
-        for reference_center in (None, np.zeros(3), np.ones(3)):
+        """The result is what a fresh site stores, for reference centres in different images."""
+        for reference_center in (np.zeros(3), np.ones(3)):
             with self.subTest(reference_center=reference_center):
                 unwrapped = PolyhedralSite(
                     vertex_indices=[0, 1, 2, 3], reference_center=reference_center,
@@ -586,9 +591,18 @@ class TestUnwrappedVertexCoords(unittest.TestCase):
                 np.testing.assert_array_equal(unwrapped, assigned.vertex_coords)
                 self.assertLess(np.ptp(unwrapped, axis=0).max(), 0.2)
 
+    def test_unwrapped_vertex_coords_without_reference_centre_are_those_assign_vertex_coords_stores(self):
+        """Without a reference centre (deprecated), the result is what a fresh site stores."""
+        with self.assertWarns(FutureWarning):
+            site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        unwrapped = site._unwrapped_vertex_coords(self.STRADDLING, self.LATTICE)
+        site.assign_vertex_coords(self.STRADDLING, self.LATTICE)
+        np.testing.assert_array_equal(unwrapped, site.vertex_coords)
+        self.assertLess(np.ptp(unwrapped, axis=0).max(), 0.2)
+
     def test_unwrapped_vertex_coords_does_not_change_the_site(self):
         """The call stores nothing on a fresh site and keeps the coordinates of one that has them."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=np.zeros(3))
         site._unwrapped_vertex_coords(self.STRADDLING, self.LATTICE)
         self.assertIsNone(site.vertex_coords)
         site.assign_vertex_coords(self.STRADDLING, self.LATTICE)
@@ -602,7 +616,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def setUp(self):
         Site._newid = 0
-        self.site = PolyhedralSite(vertex_indices=[1, 3])
+        self.site = PolyhedralSite(vertex_indices=[1, 3], reference_center=CENTRE)
 
     def test_contains_point_tests_the_notified_frame(self):
         """contains_point tests against the coordinates most recently notified."""
@@ -612,7 +626,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
                              [0.6, 0.6, 0.4],
                              [0.6, 0.4, 0.6]])
         lattice_matrix = Lattice.cubic(10.0).matrix
-        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4], reference_center=CENTRE)
         point = np.array([0.5, 0.5, 0.5])
         site.notify_structure_changed(all_frac, lattice_matrix)
         self.assertTrue(site.contains_point(point))
@@ -621,7 +635,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_vertex_coords_after_notify_are_the_new_frame(self):
         """Reading vertex_coords after notify_structure_changed gives the notified frame's coordinates."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         lattice_matrix = Lattice.cubic(10.0).matrix
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
         site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
@@ -629,13 +643,13 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_as_dict_after_notify_contains_the_new_frame(self):
         """as_dict after notify_structure_changed, with no containment test, has the notified coordinates."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         site.notify_structure_changed(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
         np.testing.assert_allclose(site.as_dict()['vertex_coords'], _TETRAHEDRON)
 
     def test_delaunay_after_notify_reflects_the_new_frame(self):
         """The Delaunay tessellation after notify_structure_changed is of the notified coordinates."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         lattice_matrix = Lattice.cubic(10.0).matrix
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
         site.delaunay
@@ -644,7 +658,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_centre_after_notify_is_the_new_frame(self):
         """The centre after notify_structure_changed is that of the notified coordinates."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         lattice_matrix = Lattice.cubic(10.0).matrix
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
         site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
@@ -652,7 +666,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_non_finite_notified_frame_raises_on_every_test(self):
         """A non-finite notified frame raises on each containment test, never using the previous frame."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         lattice_matrix = Lattice.cubic(10.0).matrix
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
         site.contains_point(np.array([0.5, 0.5, 0.5]))
@@ -667,7 +681,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_assigned_coordinates_replace_notified_coordinates(self):
         """Coordinates assigned after notify_structure_changed replace the notified ones."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         lattice_matrix = Lattice.cubic(10.0).matrix
         site.notify_structure_changed(_TETRAHEDRON + 0.01, lattice_matrix)
         site.assign_vertex_coords(_TETRAHEDRON, lattice_matrix)
@@ -675,7 +689,7 @@ class TestNotifyStructureChanged(unittest.TestCase):
 
     def test_vertex_coords_cannot_be_assigned(self):
         """vertex_coords is read-only: coordinates are assigned with a lattice."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         with self.assertRaises(AttributeError):
             site.vertex_coords = _TETRAHEDRON
 
@@ -702,7 +716,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_first_call_computes_full_shifts(self):
         """First call with no cached shifts uses full computation."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.25, 0.25, 0.25])
         frac = np.array([[0.1, 0.1, 0.1],
                          [0.2, 0.2, 0.2],
                          [0.3, 0.3, 0.3],
@@ -714,7 +728,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_second_call_uses_cached_path(self):
         """Second call with small displacement uses cached shifts."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.25, 0.25, 0.25])
         frac1 = np.array([[0.1, 0.1, 0.1],
                           [0.2, 0.2, 0.2],
                           [0.3, 0.3, 0.3],
@@ -727,7 +741,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_large_displacement_falls_through_to_full_computation(self):
         """Large displacement invalidates cache and recomputes."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.25, 0.25, 0.25])
         frac1 = np.array([[0.1, 0.1, 0.1],
                           [0.2, 0.2, 0.2],
                           [0.3, 0.3, 0.3],
@@ -741,7 +755,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_wrapping_adjusts_shifts_without_recomputation(self):
         """Coordinate wrapping (e.g. 0.99 -> 0.01) adjusts cached shifts."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.6225, 0.5, 0.5])
         frac1 = np.array([[0.99, 0.5, 0.5],
                           [0.5, 0.5, 0.5],
                           [0.5, 0.5, 0.5],
@@ -770,7 +784,8 @@ class TestStoreVertexCoords(unittest.TestCase):
         for offset in (2, -2):
             for frame in (1, 2):
                 with self.subTest(offset=offset, frame=frame):
-                    site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                    with self.assertWarns(FutureWarning):
+                        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
                     site._store_vertex_coords(
                         tetrahedron + offset, self.lattice_matrix)
                     if frame == 2:
@@ -780,7 +795,8 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_non_finite_coordinates_raise_without_reference_centre(self):
         """A site without a reference centre rejects a NaN vertex coordinate."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
         frac = np.array([[0.1, 0.1, 0.1],
                          [0.2, 0.2, 0.2],
                          [0.3, np.nan, 0.3],
@@ -790,7 +806,7 @@ class TestStoreVertexCoords(unittest.TestCase):
 
     def test_non_finite_coordinates_raise_on_a_later_frame(self):
         """A NaN vertex coordinate is rejected when cached shifts exist from an earlier frame."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.25, 0.25, 0.25])
         frac1 = np.array([[0.1, 0.1, 0.1],
                           [0.2, 0.2, 0.2],
                           [0.3, 0.3, 0.3],
@@ -825,7 +841,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_as_dict_includes_vertex_indices(self):
         """Test as_dict includes vertex_indices."""
-        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4])
+        site = PolyhedralSite(vertex_indices=[1, 2, 3, 4], reference_center=CENTRE)
 
         site_dict = site.as_dict()
 
@@ -834,7 +850,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_as_dict_includes_vertex_coords_when_set(self):
         """Test as_dict includes vertex_coords when they exist."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
         _assign_tetrahedron(site)
 
         site_dict = site.as_dict()
@@ -843,7 +859,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_as_dict_includes_none_vertex_coords_when_not_set(self):
         """Test as_dict includes None for vertex_coords when not set."""
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
 
         site_dict = site.as_dict()
 
@@ -854,7 +870,8 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         site_dict = {
             'vertex_indices': [5, 6, 7, 8],
             'vertex_coords': None,
-            'contains_atoms': []
+            'contains_atoms': [],
+            'reference_center': CENTRE,
         }
 
         site = PolyhedralSite.from_dict(site_dict)
@@ -869,7 +886,8 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
             'vertex_indices': [1, 2],
             'vertex_coords': vertex_coords,
             'contains_atoms': [],
-            'label': 'test_site'
+            'label': 'test_site',
+            'reference_center': CENTRE,
         }
 
         site = PolyhedralSite.from_dict(site_dict)
@@ -883,7 +901,8 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         site_dict = {
             'vertex_indices': [1, 2, 3, 4],
             'vertex_coords': None,
-            'contains_atoms': []
+            'contains_atoms': [],
+            'reference_center': CENTRE,
         }
 
         site = PolyhedralSite.from_dict(site_dict)
@@ -892,7 +911,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_round_trip_serialisation(self):
         """Test as_dict -> from_dict preserves site data."""
-        original = PolyhedralSite(vertex_indices=[10, 11, 12, 13], label="original")
+        original = PolyhedralSite(vertex_indices=[10, 11, 12, 13], label="original", reference_center=CENTRE)
         _assign_tetrahedron(original)
 
         site_dict = original.as_dict()
@@ -908,7 +927,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
         for has_numba in BACKENDS:
             with self.subTest(numba=has_numba), \
                     patch('site_analysis.polyhedron_surface.HAS_NUMBA', has_numba):
-                original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+                original = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE)
                 original.assign_vertex_coords(_TETRAHEDRON, Lattice.cubic(10.0).matrix)
                 site_dict = original.as_dict()
                 site_dict['vertex_coords'] = site_dict['vertex_coords'].tolist()
@@ -920,7 +939,7 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_restored_site_is_bounded_by_the_hull_of_its_coordinates(self):
         """A dict holds no triangles; a restored site takes the hull of its coordinates."""
-        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE).as_dict()
         self.assertNotIn('triangles', site_dict)
         site_dict['vertex_coords'] = _TETRAHEDRON
 
@@ -941,18 +960,21 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
 
     def test_round_trip_without_reference_center_gives_none(self):
         """A site with no reference centre reloads with none."""
-        original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            original = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 
-        reconstructed = PolyhedralSite.from_dict(original.as_dict())
+        with self.assertWarns(FutureWarning):
+            reconstructed = PolyhedralSite.from_dict(original.as_dict())
 
         self.assertIsNone(reconstructed.reference_center)
 
     def test_from_dict_without_reference_center_key_gives_none(self):
         """A dict written before reference centres were saved still loads."""
-        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3]).as_dict()
+        site_dict = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=CENTRE).as_dict()
         del site_dict['reference_center']
 
-        site = PolyhedralSite.from_dict(site_dict)
+        with self.assertWarns(FutureWarning):
+            site = PolyhedralSite.from_dict(site_dict)
 
         self.assertIsNone(site.reference_center)
         
@@ -969,7 +991,8 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
     def test_assign_vertex_coords_passes_none_reference_center(self):
         """Test that correct_pbc is called with reference_center=None when not set."""
         structure = example_structure()
-        site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        with self.assertWarns(FutureWarning):
+            site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 
         with patch('site_analysis.polyhedral_site.correct_pbc') as mock_pbc:
             mock_pbc.return_value = (
@@ -994,6 +1017,59 @@ class PolyhedralSiteSerialisationTestCase(unittest.TestCase):
             site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
             mock_pbc.assert_called_once()
             np.testing.assert_array_equal(mock_pbc.call_args[0][1], reference_center)
+
+
+class PolyhedralSiteWithoutReferenceCentreDeprecationTestCase(unittest.TestCase):
+    """Sites without a reference centre are deprecated, warning at the caller's line."""
+
+    SITE_DICT = {'vertex_indices': [0, 1, 2, 3], 'vertex_coords': None, 'contains_atoms': []}
+
+    def test_site_without_reference_center_warns(self):
+        """A site created without a reference centre issues a FutureWarning pointing to reference_center."""
+        with self.assertWarnsRegex(
+                FutureWarning,
+                r"PolyhedralSite without a reference_center is deprecated and will be "
+                r"removed in version 2\.0; use reference_center") as context:
+            PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        self.assertEqual(context.filename, __file__)
+
+    def test_site_with_reference_center_does_not_warn(self):
+        """A site created with a reference centre issues no warning."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.5, 0.5, 0.5])
+
+    def test_from_dict_without_reference_center_warns_once(self):
+        """from_dict warns once, at the caller's line, for a dict with no reference centre or None."""
+        for name, site_dict in (("missing", self.SITE_DICT),
+                                ("None", {**self.SITE_DICT, 'reference_center': None})):
+            with self.subTest(name):
+                with recorded_future_warnings() as caught:
+                    PolyhedralSite.from_dict(site_dict)
+                self.assertEqual(len(caught), 1)
+                self.assertRegex(
+                    str(caught[0].message),
+                    r"PolyhedralSite\.from_dict for a dict without a reference_center is "
+                    r"deprecated and will be removed in version 2\.0; use a dict with a "
+                    r"reference_center")
+                self.assertEqual(caught[0].filename, __file__)
+
+    def test_from_dict_with_reference_center_does_not_warn(self):
+        """from_dict issues no warning for a dict with a reference centre."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            PolyhedralSite.from_dict({**self.SITE_DICT, 'reference_center': [0.5, 0.5, 0.5]})
+
+    def test_sites_from_vertex_indices_warns_once_per_call(self):
+        """sites_from_vertex_indices warns once, at the caller's line, however many sites it creates."""
+        with recorded_future_warnings() as caught:
+            PolyhedralSite.sites_from_vertex_indices([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+        self.assertEqual(len(caught), 1)
+        self.assertRegex(
+            str(caught[0].message),
+            r"PolyhedralSite\.sites_from_vertex_indices is deprecated and will be removed "
+            r"in version 2\.0; use TrajectoryBuilder")
+        self.assertEqual(caught[0].filename, __file__)
 
 
 # Vertex fixtures for containment tests

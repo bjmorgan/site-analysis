@@ -384,9 +384,6 @@ def _hull_triangles(coords: np.ndarray) -> np.ndarray:
         (N_triangles, 3) int64 array of vertex indices per triangle, each
         wound so that ``(b - a) x (c - a)`` points away from the centre
         (the mean of ``coords``).
-
-    Raises:
-        scipy.spatial.QhullError: If the vertices are degenerate.
     """
     hull = [frozenset(t) for t in ConvexHull(coords).simplices.tolist()]
     return _wound_away_from_centre(hull, coords)

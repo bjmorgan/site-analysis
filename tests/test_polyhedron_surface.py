@@ -134,7 +134,7 @@ class TestSurfaceTriangles(unittest.TestCase):
         """A shared ear {0, 1, 2} of a hexagon split into {0, 1, 4}, {0, 4, 5}, {1, 2, 3}, {1, 3, 4} raises ValueError."""
         coords = _hexagonal_prism([1e-6, 0.0, 2e-6, 1e-6, 0.0, 2e-6])
         on_bottom = {tuple(sorted(t)) for t in ConvexHull(coords).simplices if max(t) < 6}
-        self.assertNotIn((0, 1, 2), on_bottom)
+        self.assertEqual(on_bottom, {(0, 1, 4), (0, 4, 5), (1, 2, 3), (1, 3, 4)})
         with self.assertRaisesRegex(ValueError, "cannot be triangulated identically"):
             _surface_triangles(list(range(20, 32)), coords, np.eye(3), [{20, 21, 22}])
 

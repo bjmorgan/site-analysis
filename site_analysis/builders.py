@@ -1177,7 +1177,7 @@ def create_trajectory_with_dynamic_voronoi_sites(
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
         use_reference_centers: Whether to use reference centres for 
-            PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+            PBC handling. See TrajectoryBuilder.with_dynamic_voronoi_sites() for details.
             Default is True. Deprecated: ``False`` will be removed in version
             2.0.
             

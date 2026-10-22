@@ -233,7 +233,7 @@ class ReferenceBasedSites:
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
             use_reference_centers: Whether to use reference centres for 
-                PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
+                PBC handling. See TrajectoryBuilder.with_dynamic_voronoi_sites() for details.
                 Default is True. Deprecated: ``False`` will be removed in
                 version 2.0.
             

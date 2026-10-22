@@ -1062,8 +1062,11 @@ class PolyhedralSiteWithoutReferenceCentreDeprecationTestCase(unittest.TestCase)
 
     def test_sites_from_vertex_indices_warns_once_per_call(self):
         """sites_from_vertex_indices warns once, at the caller's line, however many sites it creates."""
+        vertex_indices = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
         with recorded_future_warnings() as caught:
-            PolyhedralSite.sites_from_vertex_indices([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+            sites = PolyhedralSite.sites_from_vertex_indices(vertex_indices)
+        self.assertEqual([site.vertex_indices for site in sites], vertex_indices)
+        self.assertTrue(all(site.reference_center is None for site in sites))
         self.assertEqual(len(caught), 1)
         self.assertRegex(
             str(caught[0].message),

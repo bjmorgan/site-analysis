@@ -5,12 +5,11 @@ for defining sites using a reference structure approach.
 """
 
 import unittest
+import warnings
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
-import warnings
-
 from tests.test_helpers import (interstitial_structure, one_target_atom_for_two_reference_atoms,
     recorded_future_warnings)
 

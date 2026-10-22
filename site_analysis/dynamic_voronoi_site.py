@@ -186,8 +186,8 @@ class DynamicVoronoiSite(Site):
 
         Deprecated for a dict without a reference centre: a dict whose
         ``reference_center`` is None, or without the key, as written by
-        earlier versions, gives a site with no reference centre, which will
-        be removed in version 2.0.
+        earlier versions, gives a site with no reference centre; support for such
+        dicts will be removed in version 2.0.
         
         Args:
             d (dict): The dict representation of this Site.
@@ -197,10 +197,6 @@ class DynamicVoronoiSite(Site):
 
         Warns:
             FutureWarning: If the dict has no reference centre.
-
-        Raises:
-            ValueError: If ``reference_center`` is not None and not three
-                finite numbers.
         """
         reference_center = d.get('reference_center')
         if reference_center is None:

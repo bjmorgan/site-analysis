@@ -64,8 +64,8 @@ For more details on using these workflows, see the {doc}`../guides/builders` and
 When creating sites directly using constructors, pass the reference centre, usually the fractional coordinates of the site's central atom:
 
 ```python
-site = PolyhedralSite(vertex_indices=[...], reference_center=center_coords)
-site = DynamicVoronoiSite(reference_indices=[...], reference_center=center_coords)
+site = PolyhedralSite(vertex_indices=[...], reference_center=centre_coords)
+site = DynamicVoronoiSite(reference_indices=[...], reference_center=centre_coords)
 ```
 
 Omitting `reference_center` is deprecated and issues a `FutureWarning`, as do `PolyhedralSite.sites_from_vertex_indices()`, `DynamicVoronoiSite.sites_from_reference_indices()`, and `from_dict()` for a dict without a reference centre.

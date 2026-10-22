@@ -103,27 +103,27 @@ class SiteFactory:
         
         # Create sites
         sites = []
-        for i, env in enumerate(environments):
-            # Determine label for this site
-            site_label = label if label is not None else (
-                labels[i] if labels is not None else None
-            )
-            
-            # Determine reference centre for this site
-            ref_centre = reference_centers[i] if reference_centers is not None else None
-            
-            # Create site
-            with on_users_behalf():
+        with on_users_behalf():
+            for i, env in enumerate(environments):
+                # Determine label for this site
+                site_label = label if label is not None else (
+                    labels[i] if labels is not None else None
+                )
+
+                # Determine reference centre for this site
+                ref_centre = reference_centers[i] if reference_centers is not None else None
+
+                # Create site
                 site = PolyhedralSite(
-                    vertex_indices=env, 
+                    vertex_indices=env,
                     label=site_label,
                     reference_center=ref_centre
                 )
-            
-            # Assign vertex coordinates
-            self._assign_vertex_coords(site)
-            
-            sites.append(site)
+
+                # Assign vertex coordinates
+                self._assign_vertex_coords(site)
+
+                sites.append(site)
         
         return sites
     
@@ -175,24 +175,24 @@ class SiteFactory:
             
         # Create sites
         sites = []
-        for i, env in enumerate(environments):
-            # Determine label for this site
-            site_label = label if label is not None else (
-                labels[i] if labels is not None else None
-            )
-            
-            # Determine reference centre for this site  
-            ref_centre = reference_centers[i] if reference_centers is not None else None
-            
-            # Create site
-            with on_users_behalf():
+        with on_users_behalf():
+            for i, env in enumerate(environments):
+                # Determine label for this site
+                site_label = label if label is not None else (
+                    labels[i] if labels is not None else None
+                )
+
+                # Determine reference centre for this site
+                ref_centre = reference_centers[i] if reference_centers is not None else None
+
+                # Create site
                 site = DynamicVoronoiSite(
-                    reference_indices=env, 
+                    reference_indices=env,
                     label=site_label,
                     reference_center=ref_centre
                 )
-            
-            sites.append(site)
+
+                sites.append(site)
         
         return sites
     

@@ -1428,10 +1428,7 @@ class TestBuilderWithoutReferenceCentres(unittest.TestCase):
 		("with_dynamic_voronoi_sites", {"reference_species": "O", "n_reference": 4}),
 	)
 
-	FUNCTIONS = (
-		(create_trajectory_with_polyhedral_sites, "with_polyhedral_sites"),
-		(create_trajectory_with_dynamic_voronoi_sites, "with_dynamic_voronoi_sites"),
-	)
+	FUNCTIONS = (create_trajectory_with_polyhedral_sites, create_trajectory_with_dynamic_voronoi_sites)
 
 	def setUp(self):
 		self.structure = interstitial_structure()
@@ -1465,7 +1462,7 @@ class TestBuilderWithoutReferenceCentres(unittest.TestCase):
 
 	def test_factory_functions_warn_once(self):
 		"""The factory functions warn once, at the caller's line, however many sites they create."""
-		for function, _ in self.FUNCTIONS:
+		for function in self.FUNCTIONS:
 			with self.subTest(function.__name__):
 				with recorded_future_warnings() as caught:
 					trajectory = function(self.structure, self.structure, "Li", "Li", "O", 2.0, 4,
@@ -1485,7 +1482,7 @@ class TestBuilderWithoutReferenceCentres(unittest.TestCase):
 				with warnings.catch_warnings():
 					warnings.simplefilter("error")
 					getattr(self._builder(), method)(centre_species="Li", cutoff=2.0, **kwargs).build()
-		for function, _ in self.FUNCTIONS:
+		for function in self.FUNCTIONS:
 			with self.subTest(function.__name__):
 				with warnings.catch_warnings():
 					warnings.simplefilter("error")

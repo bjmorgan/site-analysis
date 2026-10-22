@@ -9,7 +9,10 @@ from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
-from tests.test_helpers import interstitial_structure, one_target_atom_for_two_reference_atoms
+import warnings
+
+from tests.test_helpers import (interstitial_structure, one_target_atom_for_two_reference_atoms,
+    recorded_future_warnings)
 
 
 class TestReferenceBasedSites(unittest.TestCase):
@@ -712,14 +715,15 @@ class TestReferenceBasedSites(unittest.TestCase):
             with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
                 
                 # Call create_polyhedral_sites with use_reference_centers=False
-                rbs.create_polyhedral_sites(
-                    center_species='Na',
-                    vertex_species='Cl',
-                    cutoff=3.0,
-                    n_vertices=2,
-                    use_reference_centers=False,
-                    label='test_label'
-                )
+                with self.assertWarns(FutureWarning):
+                    rbs.create_polyhedral_sites(
+                        center_species='Na',
+                        vertex_species='Cl',
+                        cutoff=3.0,
+                        n_vertices=2,
+                        use_reference_centers=False,
+                        label='test_label'
+                    )
                 
                 # Verify that create_polyhedral_sites was called with reference_centers=None
                 self.mock_site_factory.create_polyhedral_sites.assert_called_once_with(
@@ -767,14 +771,15 @@ class TestReferenceBasedSites(unittest.TestCase):
             with patch.object(rbs, '_calculate_reference_centers_from_indices') as mock_calc_centers:
                 
                 # Call create_dynamic_voronoi_sites with use_reference_centers=False
-                rbs.create_dynamic_voronoi_sites(
-                    center_species='Na',
-                    reference_species='Cl',
-                    cutoff=3.0,
-                    n_reference=2,
-                    use_reference_centers=False,
-                    labels=['test_site']
-                )
+                with self.assertWarns(FutureWarning):
+                    rbs.create_dynamic_voronoi_sites(
+                        center_species='Na',
+                        reference_species='Cl',
+                        cutoff=3.0,
+                        n_reference=2,
+                        use_reference_centers=False,
+                        labels=['test_site']
+                    )
                 
                 # Verify that create_dynamic_voronoi_sites was called with reference_centers=None
                 self.mock_site_factory.create_dynamic_voronoi_sites.assert_called_once_with(
@@ -784,6 +789,44 @@ class TestReferenceBasedSites(unittest.TestCase):
                     labels=['test_site']
                 )
             
+class TestReferenceBasedSitesWithoutReferenceCentres(unittest.TestCase):
+    """use_reference_centers=False is deprecated, warning once per call at the caller's line."""
+
+    CALLS = (
+        ("create_polyhedral_sites", {"vertex_species": "O", "n_vertices": 4}),
+        ("create_dynamic_voronoi_sites", {"reference_species": "O", "n_reference": 4}),
+    )
+
+    def setUp(self):
+        self.structure = interstitial_structure()
+
+    def test_use_reference_centers_false_warns_once_per_call(self):
+        """Each call warns once, however many sites it creates."""
+        for method, kwargs in self.CALLS:
+            with self.subTest(method):
+                rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
+                with recorded_future_warnings() as caught:
+                    sites = getattr(rbs, method)(
+                        center_species="Li", cutoff=2.0, use_reference_centers=False, **kwargs)
+                self.assertEqual(len(sites), 64)
+                self.assertEqual(len(caught), 1)
+                self.assertRegex(
+                    str(caught[0].message),
+                    rf"ReferenceBasedSites\.{method}\(use_reference_centers=False\) is "
+                    r"deprecated and will be removed in version 2\.0; use the default, "
+                    r"use_reference_centers=True")
+                self.assertEqual(caught[0].filename, __file__)
+
+    def test_default_does_not_warn(self):
+        """The default, use_reference_centers=True, issues no warning."""
+        for method, kwargs in self.CALLS:
+            with self.subTest(method):
+                rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error")
+                    getattr(rbs, method)(center_species="Li", cutoff=2.0, **kwargs)
+
+
 class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):
     """Unit tests for _calculate_reference_centers_from_indices method."""
     

@@ -78,6 +78,19 @@ def one_target_atom_for_two_reference_atoms():
 	return reference, target
 
 
+def environment_centres(structure, environments):
+	"""The mean fractional coordinates of each environment's atoms, to use as its reference centre.
+
+	Args:
+		structure (Structure): The structure the atom indices refer to.
+		environments (list[list[int]]): The atom indices of each environment.
+
+	Returns:
+		list[np.ndarray]: One reference centre for each environment.
+	"""
+	return [structure.frac_coords[environment].mean(axis=0) for environment in environments]
+
+
 @contextmanager
 def recorded_future_warnings():
 	"""Record the FutureWarnings issued in the block, repeats included.

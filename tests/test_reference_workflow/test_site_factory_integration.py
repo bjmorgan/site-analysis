@@ -12,6 +12,7 @@ from site_analysis.reference_workflow.site_factory import SiteFactory
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
+from tests.test_helpers import environment_centres
 
 
 class TestSiteFactoryIntegration(unittest.TestCase):
@@ -48,7 +49,9 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		factory = SiteFactory(self.structure)
 		
 		# Create sites with a single environment
-		sites = factory.create_polyhedral_sites(self.tetrahedral_env)
+		sites = factory.create_polyhedral_sites(
+			self.tetrahedral_env,
+			reference_centers=environment_centres(self.structure, self.tetrahedral_env))
 		
 		# Check that we got the right number of sites
 		self.assertEqual(len(sites), 1)
@@ -72,7 +75,8 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		# Create sites with multiple environments and labels
 		sites = factory.create_dynamic_voronoi_sites(
 			self.multiple_envs, 
-			labels=["site1", "site2"]
+			labels=["site1", "site2"],
+			reference_centers=environment_centres(self.structure, self.multiple_envs)
 		)
 		
 		# Check that we got the right number of sites
@@ -95,9 +99,12 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		factory = SiteFactory(self.structure)
 		
 		# Create multiple sites of the same type
-		polyhedral_sites_1 = factory.create_polyhedral_sites([[1, 2, 3, 4]])
-		polyhedral_sites_2 = factory.create_polyhedral_sites([[2, 3, 4, 5]])
-		polyhedral_sites_3 = factory.create_polyhedral_sites([[0, 1, 2, 3]])
+		polyhedral_sites_1 = factory.create_polyhedral_sites(
+			[[1, 2, 3, 4]], reference_centers=environment_centres(self.structure, [[1, 2, 3, 4]]))
+		polyhedral_sites_2 = factory.create_polyhedral_sites(
+			[[2, 3, 4, 5]], reference_centers=environment_centres(self.structure, [[2, 3, 4, 5]]))
+		polyhedral_sites_3 = factory.create_polyhedral_sites(
+			[[0, 1, 2, 3]], reference_centers=environment_centres(self.structure, [[0, 1, 2, 3]]))
 		
 		# Check that site indices increment as expected
 		self.assertEqual(polyhedral_sites_1[0].index, 0)
@@ -108,8 +115,10 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		Site._newid = 0
 		
 		# Test with DynamicVoronoiSite
-		dynamic_sites_1 = factory.create_dynamic_voronoi_sites([[1, 2, 3]])
-		dynamic_sites_2 = factory.create_dynamic_voronoi_sites([[2, 3, 4]])
+		dynamic_sites_1 = factory.create_dynamic_voronoi_sites(
+			[[1, 2, 3]], reference_centers=environment_centres(self.structure, [[1, 2, 3]]))
+		dynamic_sites_2 = factory.create_dynamic_voronoi_sites(
+			[[2, 3, 4]], reference_centers=environment_centres(self.structure, [[2, 3, 4]]))
 		
 		# Check indices
 		self.assertEqual(dynamic_sites_1[0].index, 0)
@@ -122,8 +131,8 @@ class TestSiteFactoryIntegration(unittest.TestCase):
 		factory = SiteFactory(self.structure)
 		
 		# Create sites with empty environments
-		polyhedral_sites = factory.create_polyhedral_sites([])
-		dynamic_sites = factory.create_dynamic_voronoi_sites([])
+		polyhedral_sites = factory.create_polyhedral_sites([], reference_centers=[])
+		dynamic_sites = factory.create_dynamic_voronoi_sites([], reference_centers=[])
 		
 		# Check that we got empty lists
 		self.assertEqual(len(polyhedral_sites), 0)

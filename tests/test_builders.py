@@ -9,7 +9,7 @@ from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.spherical_site import SphericalSite
 from site_analysis.atom import Atom
 from tests.test_helpers import (interstitial_structure, interstitial_structure_outside_the_cell,
-	li_na_structure, one_target_atom_for_two_reference_atoms)
+	li_na_structure, one_target_atom_for_two_reference_atoms, recorded_future_warnings)
 
 from site_analysis.builders import (
 	TrajectoryBuilder,
@@ -1341,14 +1341,15 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder.with_mobile_species("Li")
 		
 		# Set up polyhedral sites with use_reference_centers=False
-		builder.with_polyhedral_sites(
-			centre_species="Li",
-			vertex_species="O",
-			cutoff=2.0,
-			n_vertices=4,
-			label="tetrahedral",
-			use_reference_centers=False
-		)
+		with self.assertWarns(FutureWarning):
+			builder.with_polyhedral_sites(
+				centre_species="Li",
+				vertex_species="O",
+				cutoff=2.0,
+				n_vertices=4,
+				label="tetrahedral",
+				use_reference_centers=False
+			)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
 		with self._patched_reference_build() as mock_rbs_class:
@@ -1384,14 +1385,15 @@ class TestTrajectoryBuilder(unittest.TestCase):
 		builder.with_mobile_species("Li")
 		
 		# Set up dynamic voronoi sites with use_reference_centers=False
-		builder.with_dynamic_voronoi_sites(
-			centre_species="Li",
-			reference_species="O",
-			cutoff=2.0,
-			n_reference=4,
-			label="tetrahedral",
-			use_reference_centers=False
-		)
+		with self.assertWarns(FutureWarning):
+			builder.with_dynamic_voronoi_sites(
+				centre_species="Li",
+				reference_species="O",
+				cutoff=2.0,
+				n_reference=4,
+				label="tetrahedral",
+				use_reference_centers=False
+			)
 		
 		# Mock ReferenceBasedSites to verify correct parameters are passed
 		with self._patched_reference_build() as mock_rbs_class:
@@ -1418,6 +1420,78 @@ class TestTrajectoryBuilder(unittest.TestCase):
 				use_reference_centers=False
 			)
 	
+class TestBuilderWithoutReferenceCentres(unittest.TestCase):
+	"""use_reference_centers=False is deprecated, warning once per call at the caller's line."""
+
+	METHODS = (
+		("with_polyhedral_sites", {"vertex_species": "O", "n_vertices": 4}),
+		("with_dynamic_voronoi_sites", {"reference_species": "O", "n_reference": 4}),
+	)
+
+	FUNCTIONS = (
+		(create_trajectory_with_polyhedral_sites, "with_polyhedral_sites"),
+		(create_trajectory_with_dynamic_voronoi_sites, "with_dynamic_voronoi_sites"),
+	)
+
+	def setUp(self):
+		self.structure = interstitial_structure()
+
+	def _builder(self):
+		"""A builder with the structure as target and reference, tracking Li."""
+		return (TrajectoryBuilder()
+			.with_structure(self.structure)
+			.with_reference_structure(self.structure)
+			.with_mobile_species("Li"))
+
+	def test_builder_methods_warn_once_when_called_and_not_when_built(self):
+		"""The method warns at the caller's line; build() creates the sites without further warnings."""
+		for method, kwargs in self.METHODS:
+			with self.subTest(method):
+				builder = self._builder()
+				with recorded_future_warnings() as caught:
+					getattr(builder, method)(
+						centre_species="Li", cutoff=2.0, use_reference_centers=False, **kwargs)
+				self.assertEqual(len(caught), 1)
+				self.assertRegex(
+					str(caught[0].message),
+					rf"TrajectoryBuilder\.{method}\(use_reference_centers=False\) is deprecated "
+					r"and will be removed in version 2\.0; use the default, use_reference_centers=True")
+				self.assertEqual(caught[0].filename, __file__)
+
+				with recorded_future_warnings() as caught:
+					trajectory = builder.build()
+				self.assertEqual(len(trajectory.sites), 64)
+				self.assertEqual(caught, [])
+
+	def test_factory_functions_warn_once(self):
+		"""The factory functions warn once, at the caller's line, however many sites they create."""
+		for function, _ in self.FUNCTIONS:
+			with self.subTest(function.__name__):
+				with recorded_future_warnings() as caught:
+					trajectory = function(self.structure, self.structure, "Li", "Li", "O", 2.0, 4,
+						use_reference_centers=False)
+				self.assertEqual(len(trajectory.sites), 64)
+				self.assertEqual(len(caught), 1)
+				self.assertRegex(
+					str(caught[0].message),
+					rf"{function.__name__}\(use_reference_centers=False\) is deprecated and will "
+					r"be removed in version 2\.0; use the default, use_reference_centers=True")
+				self.assertEqual(caught[0].filename, __file__)
+
+	def test_default_does_not_warn(self):
+		"""The default, use_reference_centers=True, issues no warning from definition to build."""
+		for method, kwargs in self.METHODS:
+			with self.subTest(method):
+				with warnings.catch_warnings():
+					warnings.simplefilter("error")
+					getattr(self._builder(), method)(centre_species="Li", cutoff=2.0, **kwargs).build()
+		for function, _ in self.FUNCTIONS:
+			with self.subTest(function.__name__):
+				with warnings.catch_warnings():
+					warnings.simplefilter("error")
+					function(self.structure, self.structure, "Li", "Li", "O", 2.0, 4)
+
+
 class TestBuilderValidation(unittest.TestCase):
 	"""Tests for builder validation of reference structures and duplicate sites."""
 

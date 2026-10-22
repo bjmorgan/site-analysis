@@ -5,6 +5,7 @@ coordination environments.
 """
 
 import unittest
+import warnings
 import numpy as np
 from unittest.mock import Mock, patch
 from pymatgen.core import Structure, Lattice
@@ -13,6 +14,7 @@ from site_analysis.reference_workflow.site_factory import SiteFactory
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
+from tests.test_helpers import environment_centres, recorded_future_warnings
 
 
 class TestSiteFactory(unittest.TestCase):
@@ -109,7 +111,9 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.side_effect = side_effect
 			
 			# Test with single environment
-			sites = self.site_factory.create_polyhedral_sites(self.tetrahedral_env)
+			sites = self.site_factory.create_polyhedral_sites(
+				self.tetrahedral_env,
+				reference_centers=environment_centres(self.structure, self.tetrahedral_env))
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 1)
@@ -122,7 +126,9 @@ class TestSiteFactory(unittest.TestCase):
 			
 			# Test with multiple environments and custom label
 			mock_sites.clear()
-			sites = self.site_factory.create_polyhedral_sites(self.multiple_envs, label="test_label")
+			sites = self.site_factory.create_polyhedral_sites(
+				self.multiple_envs, label="test_label",
+				reference_centers=environment_centres(self.structure, self.multiple_envs))
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 2)
@@ -152,7 +158,9 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.side_effect = side_effect
 			
 			# Test with single environment
-			sites = self.site_factory.create_dynamic_voronoi_sites(self.tetrahedral_env)
+			sites = self.site_factory.create_dynamic_voronoi_sites(
+				self.tetrahedral_env,
+				reference_centers=environment_centres(self.structure, self.tetrahedral_env))
 			
 			# Check that we got the right number of sites
 			self.assertEqual(len(sites), 1)
@@ -166,7 +174,8 @@ class TestSiteFactory(unittest.TestCase):
 			# Test with multiple environments and multiple labels
 			mock_sites.clear()
 			sites = self.site_factory.create_dynamic_voronoi_sites(
-				self.multiple_envs, labels=["label1", "label2"]
+				self.multiple_envs, labels=["label1", "label2"],
+				reference_centers=environment_centres(self.structure, self.multiple_envs)
 			)
 			
 			# Check that we got the right number of sites
@@ -202,7 +211,9 @@ class TestSiteFactory(unittest.TestCase):
 			mock_class.return_value = mock_site
 			
 			# Test creating a single site
-			self.site_factory.create_polyhedral_sites(self.tetrahedral_env)
+			self.site_factory.create_polyhedral_sites(
+				self.tetrahedral_env,
+				reference_centers=environment_centres(self.structure, self.tetrahedral_env))
 			
 			# Verify assign_vertex_coords was called with the correct arrays
 			call_args = mock_site.assign_vertex_coords.call_args
@@ -236,12 +247,12 @@ class TestSiteFactory(unittest.TestCase):
 		# Mock the site classes to ensure we're testing in isolation
 		with patch('site_analysis.reference_workflow.site_factory.PolyhedralSite'):
 			# Create sites with empty environments
-			sites = self.site_factory.create_polyhedral_sites([])
+			sites = self.site_factory.create_polyhedral_sites([], reference_centers=[])
 			self.assertEqual(len(sites), 0)
 		
 		with patch('site_analysis.reference_workflow.site_factory.DynamicVoronoiSite'):
 			# Create sites with empty environments
-			sites = self.site_factory.create_dynamic_voronoi_sites([])
+			sites = self.site_factory.create_dynamic_voronoi_sites([], reference_centers=[])
 			self.assertEqual(len(sites), 0)
 			
 	def test_create_polyhedral_sites_with_reference_centers(self):
@@ -267,11 +278,19 @@ class TestSiteFactory(unittest.TestCase):
 			np.testing.assert_array_equal(site.reference_center, expected_centre)
 	
 	def test_create_polyhedral_sites_without_reference_centers(self):
-		"""Test creating polyhedral sites without reference centres (existing behaviour)."""
+		"""Creating polyhedral sites without reference centres is deprecated, warning once per call."""
 		environments = [[1, 2, 3, 4], [0, 1, 2, 3]]
 		
-		sites = self.site_factory.create_polyhedral_sites(environments, label="test_label")
+		with recorded_future_warnings() as caught:
+			sites = self.site_factory.create_polyhedral_sites(environments, label="test_label")
 		
+		self.assertEqual(len(caught), 1)
+		self.assertRegex(
+			str(caught[0].message),
+			r"SiteFactory\.create_polyhedral_sites without reference_centers is deprecated "
+			r"and will be removed in version 2\.0; use reference_centers")
+		self.assertEqual(caught[0].filename, __file__)
+
 		# Check that sites were created without reference centres
 		self.assertEqual(len(sites), 2)
 		
@@ -302,11 +321,19 @@ class TestSiteFactory(unittest.TestCase):
 			np.testing.assert_array_equal(site.reference_center, expected_centre)
 	
 	def test_create_dynamic_voronoi_sites_without_reference_centers(self):
-		"""Test creating dynamic voronoi sites without reference centres (existing behaviour)."""
+		"""Creating dynamic Voronoi sites without reference centres is deprecated, warning once per call."""
 		environments = [[1, 2], [3, 4]]
 		
-		sites = self.site_factory.create_dynamic_voronoi_sites(environments, label="test_label")
+		with recorded_future_warnings() as caught:
+			sites = self.site_factory.create_dynamic_voronoi_sites(environments, label="test_label")
 		
+		self.assertEqual(len(caught), 1)
+		self.assertRegex(
+			str(caught[0].message),
+			r"SiteFactory\.create_dynamic_voronoi_sites without reference_centers is "
+			r"deprecated and will be removed in version 2\.0; use reference_centers")
+		self.assertEqual(caught[0].filename, __file__)
+
 		# Check that sites were created without reference centres
 		self.assertEqual(len(sites), 2)
 		
@@ -314,6 +341,16 @@ class TestSiteFactory(unittest.TestCase):
 			self.assertIsInstance(site, DynamicVoronoiSite)
 			self.assertIsNone(site.reference_center)
 	
+	def test_create_sites_with_reference_centers_does_not_warn(self):
+		"""Creating sites with reference centres issues no warning."""
+		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]
+		reference_centers = [np.array([0.1, 0.1, 0.1]), np.array([0.2, 0.2, 0.2])]
+		with warnings.catch_warnings():
+			warnings.simplefilter("error")
+			self.site_factory.create_polyhedral_sites(environments, reference_centers=reference_centers)
+			self.site_factory.create_dynamic_voronoi_sites(
+				environments, reference_centers=reference_centers)
+
 	def test_create_polyhedral_sites_mismatched_lengths_raises_error(self):
 		"""Test that mismatched lengths between environments and reference centres raises error."""
 		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]  # 2 environments

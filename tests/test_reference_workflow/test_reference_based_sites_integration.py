@@ -492,10 +492,11 @@ class TestPBCImplemenetation(unittest.TestCase):
         
         # Test legacy method
         rbs = ReferenceBasedSites(reference_structure, target_structure, align=True)
-        sites = rbs.create_polyhedral_sites(
-            center_species="Na", vertex_species="Cl", 
-            cutoff=3.5, n_vertices=6, use_reference_centers=False  # Legacy method
-        )
+        with self.assertWarns(FutureWarning):
+            sites = rbs.create_polyhedral_sites(
+                center_species="Na", vertex_species="Cl", 
+                cutoff=3.5, n_vertices=6, use_reference_centers=False  # Legacy method
+            )
         
         # Test that the site with Cl 7 among its vertices gets incorrectly unwrapped by legacy method
         # Sites are found by their target vertices: alignment may relabel them.

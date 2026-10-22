@@ -1,5 +1,6 @@
 import itertools
 import unittest
+import warnings
 from collections import Counter
 import numpy as np
 from pymatgen.core import Lattice, Structure
@@ -941,6 +942,49 @@ class TestFindSharedFacesSetsTriangles(unittest.TestCase):
         shared = [4, 5, 6, 7]
         self.assertEqual(len(triangles_on(sites[0], shared)), 2)
         self.assertEqual(triangles_on(sites[0], shared), triangles_on(sites[1], shared))
+
+    def test_first_finding_does_not_warn(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+
+    def test_finding_the_same_faces_again_does_not_warn(self):
+        structure, sites = two_cubes()
+        collection = PolyhedralSiteCollection(sites)
+        collection.find_shared_faces(structure.frac_coords, structure.lattice.matrix)
+        noisy = displaced(structure, 0.05)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            collection.find_shared_faces(noisy.frac_coords, noisy.lattice.matrix)
+        self.assertEqual(collection.shared_faces(), (Face((0, 1), (4, 5, 6, 7)),))
+
+    def test_finding_different_faces_warns_and_replaces_them(self):
+        # Two cubes without reference centres sharing atoms 4-7. In the second
+        # structure the left cube spans the cell boundary and unwraps two of the
+        # shared atoms by a cell and two not, so the cubes no longer share a face.
+        def cubes(x_left, x_shared, x_right):
+            coords = np.zeros((12, 3))
+            for i in range(12):
+                coords[i] = [(x_left, x_shared, x_right)[i // 4], 0.4 + 0.2 * ((i >> 1) & 1),
+                             0.4 + 0.2 * (i & 1)]
+            return coords
+        joined = cubes(0.75, 0.95, 0.15)
+        torn = cubes(0.85, 0.05, 0.25)
+        torn[[6, 7], 0] = 0.55
+        lattice_matrix = Lattice.cubic(10.0).matrix
+        Site.reset_index(0)
+        collection = PolyhedralSiteCollection([PolyhedralSite(vertex_indices=list(range(0, 8))),
+                                               PolyhedralSite(vertex_indices=list(range(4, 12)))])
+        collection.find_shared_faces(joined, lattice_matrix)
+        self.assertEqual(collection.shared_faces(), (Face((0, 1), (4, 5, 6, 7)),))
+        with self.assertWarnsRegex(
+                UserWarning,
+                r"^The shared faces differ from those found before \(0 added, 1 removed\), so the "
+                r"connectivity of the sites has changed$"):
+            collection.find_shared_faces(torn, lattice_matrix)
+        self.assertEqual(collection.shared_faces(), ())
 
     def test_a_second_structure_replaces_the_triangles(self):
         outward, sites = two_cubes(push=-0.1)

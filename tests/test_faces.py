@@ -399,7 +399,8 @@ class SharedFacesApiTestCase(unittest.TestCase):
         self.assertEqual(trajectory.shared_faces(), (Face((0, 1), (0, 1, 2)),))
         # Atom 0 moves half a cell, so each site unwraps it to a different image.
         coords[0, 0] += 0.5
-        trajectory.find_shared_faces(Structure(structure.lattice, structure.species, coords))
+        with self.assertWarnsRegex(UserWarning, "connectivity of the sites has changed"):
+            trajectory.find_shared_faces(Structure(structure.lattice, structure.species, coords))
         self.assertEqual(trajectory.shared_faces(), ())
 
     def test_failed_finding_leaves_the_earlier_result(self):
@@ -588,7 +589,8 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
                       .build())
         self.assertEqual(len(trajectory.shared_faces()), 24)
         # The moved atom leaves the target's cubes unable to share their faces.
-        with self.assertRaisesRegex(ValueError, "the sites may overlap"):
+        with self.assertWarns(UserWarning), \
+                self.assertRaisesRegex(ValueError, "the sites may overlap"):
             trajectory.find_shared_faces(target)
 
     def test_existing_site_on_vertices_of_generated_sites_shares_faces(self):

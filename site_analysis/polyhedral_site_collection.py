@@ -23,6 +23,7 @@ The module also includes utility functions:
   sites for distance-ranked ordering.
 """
 
+import warnings
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 
@@ -196,9 +197,11 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         vertices, with each face it shares triangulated by a rule that
         depends only on the face's atoms, so that the sites sharing it
         triangulate it identically. The faces and triangles replace any
-        earlier ones, and are kept when the collection is reset. If an
-        error is raised, the earlier faces are kept, as are the triangles
-        of the sites not yet fixed. Overlapping sites are not supported.
+        earlier ones, and are kept when the collection is reset. If the
+        faces differ from those found before, a ``UserWarning`` says so,
+        with the numbers of faces added and removed. If an error is
+        raised, the earlier faces are kept, as are the triangles of the
+        sites not yet fixed. Overlapping sites are not supported.
 
         Args:
             frac_coords: Fractional coordinates of the atoms, shape
@@ -220,6 +223,13 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
         lattice_matrix = np.asarray(lattice_matrix, dtype=float)
         self.validate_atom_count(len(frac_coords))
         faces = _find_shared_faces(self.sites, frac_coords, lattice_matrix)
+        if self._shared_faces is not None and set(faces) != set(self._shared_faces):
+            added = len(set(faces) - set(self._shared_faces))
+            removed = len(set(self._shared_faces) - set(faces))
+            warnings.warn(
+                f"The shared faces differ from those found before ({added} added, {removed} "
+                "removed), so the connectivity of the sites has changed",
+                UserWarning, stacklevel=2)
         sites_by_index = {site.index: site for site in self.sites}
         faces_by_site: defaultdict[int, list[Face]] = defaultdict(list)
         for face in faces:

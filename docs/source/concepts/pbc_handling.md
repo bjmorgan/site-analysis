@@ -45,7 +45,7 @@ Both methods unwrap vertices at similar cost. PBC image shifts are cached after 
 
 The reference centres also drive the site search for polyhedral sites: they are used to rank candidate sites by distance from each atom. If any site lacks one (deprecated), the search for the whole collection falls back to the neighbours of the atom's most recent site, then list order, which can make assignment slower.
 
-## Controlling PBC Handling in Your Code
+## Reference Centres in Your Code
 
 ### Using TrajectoryBuilder or ReferenceBasedSites
 

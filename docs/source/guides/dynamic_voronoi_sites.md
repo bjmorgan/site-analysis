@@ -165,8 +165,8 @@ site1_refs = [0, 5, 12, 18]  # O/Cl atoms around first Li site
 site2_refs = [1, 6, 13, 19]  # O/Cl atoms around second Li site
 
 # Reference centres: the fractional coordinates of each site's central atom
-site1_centre = structure[40].frac_coords  # First Li site
-site2_centre = structure[41].frac_coords  # Second Li site
+site1_centre = md_structure[40].frac_coords  # First Li site
+site2_centre = md_structure[41].frac_coords  # Second Li site
 
 # Create individual sites
 site1 = DynamicVoronoiSite(reference_indices=site1_refs, label="Li_site_1",
@@ -178,7 +178,7 @@ site2 = DynamicVoronoiSite(reference_indices=site2_refs, label="Li_site_2",
 site_collection = DynamicVoronoiSiteCollection([site1, site2])
 
 # Use in analysis
-site_collection.analyse_structure(atoms, structure)
+site_collection.analyse_structure(atoms, md_structure)
 ```
 
 This approach gives you full control over:

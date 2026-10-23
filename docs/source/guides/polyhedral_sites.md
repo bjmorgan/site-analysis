@@ -152,8 +152,8 @@ site1_vertices = [10, 15, 22, 28]  # Indices of O atoms forming tetrahedron
 site2_vertices = [11, 16, 23, 29, 35, 41]  # Indices for octahedron
 
 # Reference centres: the fractional coordinates of each site's central atom
-site1_centre = structure[2].frac_coords  # Central atom of the tetrahedron
-site2_centre = structure[3].frac_coords  # Central atom of the octahedron
+site1_centre = md_structure[2].frac_coords  # Central atom of the tetrahedron
+site2_centre = md_structure[3].frac_coords  # Central atom of the octahedron
 
 # Create individual polyhedral sites
 site1 = PolyhedralSite(vertex_indices=site1_vertices, label="tet_1",

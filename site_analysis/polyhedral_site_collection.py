@@ -48,10 +48,9 @@ class PolyhedralSiteCollection(PriorityAssignmentMixin[PolyhedralSite], SiteColl
 
     After an atom's recent sites and learned transitions, the remaining
     sites are searched in order of the distance of their reference centres
-    from the atom. If any site lacks a reference centre (for example, sites
-    built with ``use_reference_centers=False``), the search instead falls
-    back to the neighbours of the atom's most recent site, then list order,
-    for the whole collection.
+    from the atom. If any site lacks a reference centre (deprecated), the
+    search instead falls back to the neighbours of the atom's most recent
+    site, then list order, for the whole collection.
     
     Attributes:
         sites (list): List of ``PolyhedralSite`` objects.

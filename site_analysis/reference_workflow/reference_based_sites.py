@@ -186,7 +186,7 @@ class ReferenceBasedSites:
             List of PolyhedralSite objects
 
         Warns:
-            FutureWarning: If ``use_reference_centers`` is False.
+            FutureWarning: If ``use_reference_centers`` is False, once per call.
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
@@ -241,7 +241,7 @@ class ReferenceBasedSites:
             List of DynamicVoronoiSite objects
 
         Warns:
-            FutureWarning: If ``use_reference_centers`` is False.
+            FutureWarning: If ``use_reference_centers`` is False, once per call.
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,

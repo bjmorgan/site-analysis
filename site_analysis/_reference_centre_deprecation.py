@@ -36,8 +36,8 @@ def on_users_behalf() -> Iterator[None]:
     """Silence ``warn_without_reference_centres`` within the block.
 
     The package runs the calls it makes on the user's behalf in this block.
-    Those calls create sites without reference centres only when the user's
-    own call does, and that call has already warned.
+    Use it only around calls that create sites without reference centres
+    when the user's own call has already warned.
 
     Yields:
         None

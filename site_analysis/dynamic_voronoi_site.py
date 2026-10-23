@@ -61,10 +61,10 @@ class DynamicVoronoiSite(Site):
             reference_center: Reference centre for PBC handling, usually the
                 position of the site's central atom, as three finite numbers,
                 stored as a float array. The reference atoms are unwrapped to
-                their images nearest it. Deprecated: omitting it, which
-                unwraps the reference atoms by the spread-based rule
-                (``pbc_utils.apply_legacy_pbc_correction``), will be removed
-                in version 2.0.
+                their images nearest it. Deprecated: without it, the reference
+                atoms are unwrapped by the spread-based rule
+                (``pbc_utils.apply_legacy_pbc_correction``); version 2.0
+                will require it.
         
         Returns:
             None
@@ -184,10 +184,10 @@ class DynamicVoronoiSite(Site):
     def from_dict(cls, d: dict) -> DynamicVoronoiSite:
         """Create a DynamicVoronoiSite object from a dict representation.
 
-        Deprecated for a dict without a reference centre: a dict whose
-        ``reference_center`` is None, or without the key, as written by
-        earlier versions, gives a site with no reference centre; support for such
-        dicts will be removed in version 2.0.
+        Deprecated for a dict without a reference centre, where
+        ``reference_center`` is None or the key is missing, as in dicts
+        written by earlier versions: it gives a site with no reference
+        centre, and support for such dicts will be removed in version 2.0.
         
         Args:
             d (dict): The dict representation of this Site.
@@ -197,6 +197,10 @@ class DynamicVoronoiSite(Site):
 
         Warns:
             FutureWarning: If the dict has no reference centre.
+
+        Raises:
+            ValueError: If ``reference_center`` is not None and not three
+                finite numbers.
         """
         reference_center = d.get('reference_center')
         if reference_center is None:

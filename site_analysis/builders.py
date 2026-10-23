@@ -461,24 +461,23 @@ class TrajectoryBuilder:
             label: Optional label to assign to all created sites. Default is None.
             use_reference_centers: Whether to give each site a reference
                 centre, the position of its central atom in the reference
-                structure, and unwrap its vertices to their periodic images
-                nearest it. Default is True. Deprecated: ``False`` will be
-                removed in version 2.0. It creates sites without reference
-                centres, which unwrap their vertices by the spread-based rule:
-                along each axis, if the fractional coordinates span more than
-                0.5, coordinates below 0.5 are shifted by one cell. That rule
-                gives wrong results without error for sites that span more
-                than half the cell along an axis (e.g., octahedral sites in a
-                2x2x2 FCC supercell), and in thin or skewed cells.
-                The polyhedral site search also falls back to the neighbours
-                of an atom's most recent site, then list order, instead of
-                ranking sites by distance, which can make assignment slower.
+                structure (aligned when alignment is on), and unwrap its
+                vertices to their periodic images nearest it. Default is
+                True. Deprecated: ``False`` will be removed in version 2.0.
+                It creates sites without reference centres, which unwrap
+                their vertices by the spread-based rule: along each axis, if
+                the fractional coordinates span more than 0.5, coordinates
+                below 0.5 are shifted by one cell. The polyhedral site search
+                also falls back to the neighbours of an atom's most recent
+                site, then list order, instead of ranking sites by distance,
+                which can make assignment slower.
 
         Returns:
             self: For method chaining
 
         Warns:
-            FutureWarning: If ``use_reference_centers`` is False.
+            FutureWarning: If ``use_reference_centers`` is False, once per
+                call, when the sites are defined rather than at ``build()``.
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
@@ -572,22 +571,20 @@ class TrajectoryBuilder:
             label: Optional label to assign to all created sites. Default is None.
             use_reference_centers: Whether to give each site a reference
                 centre, the position of its central atom in the reference
-                structure, and unwrap its reference atoms to their periodic
-                images nearest it. Default is True. Deprecated: ``False``
-                will be removed in version 2.0. It creates sites without
-                reference centres, which unwrap their reference atoms by the
-                spread-based rule: along each axis, if the fractional
-                coordinates span more than 0.5, coordinates below 0.5 are
-                shifted by one cell. That rule gives wrong results without
-                error for sites that span more than half the cell along an
-                axis (e.g., octahedral sites in a 2x2x2 FCC supercell), and in
-                thin or skewed cells.
+                structure (aligned when alignment is on), and unwrap its
+                reference atoms to their periodic images nearest it. Default
+                is True. Deprecated: ``False`` will be removed in version
+                2.0. It creates sites without reference centres, which
+                unwrap their reference atoms by the spread-based rule: along
+                each axis, if the fractional coordinates span more than 0.5,
+                coordinates below 0.5 are shifted by one cell.
 
         Returns:
             self: For method chaining
 
         Warns:
-            FutureWarning: If ``use_reference_centers`` is False.
+            FutureWarning: If ``use_reference_centers`` is False, once per
+                call, when the sites are defined rather than at ``build()``.
 
         Raises:
             ValueError: At build() time if no coordination environments are found,

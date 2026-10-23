@@ -1,5 +1,8 @@
 """Helper functions for testing."""
 
+import warnings
+from contextlib import contextmanager
+
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
@@ -73,3 +76,34 @@ def one_target_atom_for_two_reference_atoms():
 	target = Structure(reference.lattice, reference.species, coords,
 		coords_are_cartesian=True)
 	return reference, target
+
+
+def environment_centres(structure, environments):
+	"""Return the mean fractional coordinates of each environment's atoms, as reference centres.
+
+	The mean is of the wrapped coordinates, so it is the centre only of an
+	environment that does not straddle a periodic boundary.
+
+	Args:
+		structure (Structure): The structure the atom indices refer to.
+		environments (list[list[int]]): The atom indices of each environment.
+
+	Returns:
+		list[np.ndarray]: One reference centre for each environment.
+	"""
+	return [structure.frac_coords[environment].mean(axis=0) for environment in environments]
+
+
+@contextmanager
+def recorded_future_warnings():
+	"""Record the FutureWarnings issued in the block, repeats included.
+
+	Other warnings are ignored.
+
+	Yields:
+		list[warnings.WarningMessage]: The FutureWarnings issued so far, in order.
+	"""
+	with warnings.catch_warnings(record=True) as caught:
+		warnings.simplefilter("ignore")
+		warnings.simplefilter("always", FutureWarning)
+		yield caught

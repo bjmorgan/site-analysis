@@ -11,6 +11,9 @@ from site_analysis.pbc_utils import correct_pbc
 from site_analysis.atom import Atom
 from site_analysis.site import Site
 
+# A reference centre for sites whose centres these tests do not calculate.
+CENTRE = np.array([0.5, 0.5, 0.5])
+
 
 def _reference_centre(
 	frac_coords: np.ndarray,
@@ -52,15 +55,15 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 
 	def test_init_accepts_a_generator_of_sites(self):
 		"""A collection built from a generator holds every site."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
 		collection = DynamicVoronoiSiteCollection(s for s in [site1, site2])
 		self.assertEqual(collection.sites, [site1, site2])
 			
 	def test_analyse_structure(self):
 		"""Test that analyse_structure computes centres and assigns occupations."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
 		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
 
 		lattice = Lattice.cubic(10.0)
@@ -84,8 +87,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 			
 	def test_assign_site_occupations(self):
 		"""Test that atoms are assigned to the nearest site centre."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.2, 0.2, 0.2])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.8, 0.8, 0.8])
 		site1._centre_coords = np.array([0.2, 0.2, 0.2])
 		site2._centre_coords = np.array([0.8, 0.8, 0.8])
 
@@ -111,8 +114,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 		
 	def test_assigns_atom_to_nearest_centre_across_boundary(self):
 		"""An atom near one face is assigned to the nearest centre across the boundary."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.1, 0.1, 0.1])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.5, 0.5, 0.5])
 		site1._centre_coords = np.array([0.1, 0.1, 0.1])
 		site2._centre_coords = np.array([0.5, 0.5, 0.5])
 		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
@@ -124,8 +127,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 
 	def test_equidistant_atom_assigned_to_first_site(self):
 		"""An atom equidistant from two centres is assigned to the first."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.25, 0.5, 0.5])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.5, 0.5])
 		site1._centre_coords = np.array([0.25, 0.5, 0.5])
 		site2._centre_coords = np.array([0.75, 0.5, 0.5])
 		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
@@ -137,8 +140,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 
 	def test_nearest_centre_uses_the_lattice(self):
 		"""Distances to centres are Cartesian, so the shape of the lattice matters."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.5, 0.5, 0.3])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.2, 0.5, 0.5])
 		# Nearer site1 in fractional coordinates, but nearer site2 in
 		# Cartesian coordinates (1.2 A against 4.0 A).
 		site1._centre_coords = np.array([0.5, 0.5, 0.3])
@@ -152,8 +155,8 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 
 	def test_nearest_centre_in_a_hexagonal_cell(self):
 		"""Distances use the rows of a non-symmetric lattice matrix as the lattice vectors."""
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.5, 0.82, 0.5])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.8, 0.8, 0.5])
 		# The atom is 1.28 A from site1 and 1.20 A from site2. With the
 		# lattice transposed, site1 would be nearer.
 		site1._centre_coords = np.array([0.5, 0.82, 0.5])
@@ -168,10 +171,10 @@ class DynamicVoronoiSiteCollectionTestCase(unittest.TestCase):
 	def test_empty_atoms_list(self):
 		"""Test that assign_site_occupations correctly handles empty atom lists."""
 		# Create sites with pre-populated contains_atoms
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.3, 0.3, 0.3])
 		site1.contains_atoms = [1, 2]
 		
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.7, 0.7, 0.7])
 		site2.contains_atoms = [3, 4]
 		
 		# Set the _centre_coords to avoid needing to calculate them
@@ -204,9 +207,9 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 	def test_groups_formed_by_reference_count(self):
 		"""Sites with different n_reference are placed in separate groups."""
 		sites = [
-			DynamicVoronoiSite(reference_indices=[0, 1]),
-			DynamicVoronoiSite(reference_indices=[2, 3]),
-			DynamicVoronoiSite(reference_indices=[4, 5, 6]),
+			DynamicVoronoiSite(reference_indices=[0, 1], reference_center=CENTRE),
+			DynamicVoronoiSite(reference_indices=[2, 3], reference_center=CENTRE),
+			DynamicVoronoiSite(reference_indices=[4, 5, 6], reference_center=CENTRE),
 		]
 		collection = DynamicVoronoiSiteCollection(sites=sites)
 		groups = collection._centre_groups
@@ -222,14 +225,14 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		structure = Structure(lattice, ["Na"] * 4, coords)
 
 		# Per-site path
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
 		site_a.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		site_b.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 
 		# Batch path
-		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_d = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_c = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+		site_d = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
 		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
 		collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
 
@@ -246,8 +249,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		struct1 = Structure(lattice, ["Na"] * 4, coords1)
 		struct2 = Structure(lattice, ["Na"] * 4, coords2)
 
-		site1 = DynamicVoronoiSite(reference_indices=[0, 1])
-		site2 = DynamicVoronoiSite(reference_indices=[2, 3])
+		site1 = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
+		site2 = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=[0.75, 0.75, 0.75])
 		collection = DynamicVoronoiSiteCollection(sites=[site1, site2])
 
 		# First frame populates caches
@@ -269,7 +272,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		coords = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
 		structure = Structure(lattice, ["Na"] * 2, coords)
 
-		site = DynamicVoronoiSite(reference_indices=[0, 1])
+		site = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=[0.15, 0.15, 0.15])
 		collection = DynamicVoronoiSiteCollection(sites=[site])
 
 		collection._batch_calculate_centres(structure.frac_coords, structure.lattice.matrix)
@@ -279,17 +282,21 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		self.assertFalse(collection._centre_groups[0].initialised)
 
 	def test_multi_frame_centres_match_per_site(self):
-		"""Batch centres over multiple frames should match per-site computation."""
+		"""Batch centres over multiple frames match per-site computation for sites without reference centres (deprecated)."""
 		lattice = Lattice.cubic(10.0)
 		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
 
 		# Per-site path
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		with self.assertWarns(FutureWarning):
+			site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		with self.assertWarns(FutureWarning):
+			site_b = DynamicVoronoiSite(reference_indices=[2, 3])
 		# Batch path
-		site_c = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_d = DynamicVoronoiSite(reference_indices=[2, 3])
+		with self.assertWarns(FutureWarning):
+			site_c = DynamicVoronoiSite(reference_indices=[0, 1])
+		with self.assertWarns(FutureWarning):
+			site_d = DynamicVoronoiSite(reference_indices=[2, 3])
 		collection = DynamicVoronoiSiteCollection(sites=[site_c, site_d])
 
 		for i in range(5):
@@ -309,11 +316,13 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		A large coordinate change should trigger fallback and still produce
 		correct centres."""
 		lattice = Lattice.cubic(10.0)
+		# Reference centres within half a cell of the reference atoms in every frame
+		centre_a, centre_b = np.full(3, 0.4), np.full(3, 0.5)
 		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
 
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
 
 		# Run several frames
@@ -330,16 +339,16 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		# New coords far from cached values (> 0.3 displacement triggers fallback)
 		new_base = np.array([[0.6, 0.6, 0.6], [0.7, 0.7, 0.7],
 							 [0.2, 0.2, 0.2], [0.3, 0.3, 0.3]])
-		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 
 		for i in range(3):
 			coords = new_base + 0.01 * i
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice.matrix)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], centre_a, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], centre_b, structure.lattice.matrix)
 			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -348,6 +357,8 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 	def test_batch_invalidation_falls_back_to_per_site(self):
 		"""Large displacement should invalidate batch cache and recompute per-site."""
 		lattice = Lattice.cubic(10.0)
+		# Reference centres within half a cell of the reference atoms in both frames
+		centre_a, centre_b = np.full(3, 0.35), np.full(3, 0.95)
 		coords1 = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
 		# Displacement > 0.3 triggers invalidation
@@ -356,15 +367,15 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		struct1 = Structure(lattice, ["Na"] * 4, coords1)
 		struct2 = Structure(lattice, ["Na"] * 4, coords2)
 
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
 
 		collection._batch_calculate_centres(struct1.frac_coords, struct1.lattice.matrix)
 
 		# Fresh per-site reference for the post-invalidation frame
-		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 		ref_a.calculate_centre(struct2.frac_coords, struct2.lattice.matrix)
 		ref_b.calculate_centre(struct2.frac_coords, struct2.lattice.matrix)
 
@@ -376,6 +387,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 	def test_batch_wrapping_across_periodic_boundary(self):
 		"""Coordinates wrapping across boundary (0.99 -> 0.01) should be handled correctly."""
 		lattice = Lattice.cubic(10.0)
+		centre_a, centre_b = np.array([0.095, 0.1, 0.1]), np.full(3, 0.75)
 		coords1 = [[0.99, 0.1, 0.1], [0.2, 0.1, 0.1],
 				   [0.7, 0.7, 0.7], [0.8, 0.8, 0.8]]
 		coords2 = [[0.01, 0.1, 0.1], [0.2, 0.1, 0.1],  # atom 0 wraps
@@ -383,18 +395,18 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		struct1 = Structure(lattice, ["Na"] * 4, coords1)
 		struct2 = Structure(lattice, ["Na"] * 4, coords2)
 
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
 
 		# Fresh per-site reference
-		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 
 		for struct in [struct1, struct2]:
 			frac = struct.frac_coords
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, struct.lattice.matrix)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, struct.lattice.matrix)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], centre_a, struct.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], centre_b, struct.lattice.matrix)
 			collection._batch_calculate_centres(frac, struct.lattice.matrix)
 
 		np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -403,6 +415,7 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 	def test_mixed_n_reference_groups_produce_correct_centres(self):
 		"""Batch with multiple groups (different n_reference) should produce correct centres."""
 		lattice = Lattice.cubic(10.0)
+		centre_a, centre_b, centre_c = np.full(3, 0.15), np.full(3, 0.633), np.full(3, 0.35)
 		# 7 atoms: sites use different subsets
 		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 								[0.5, 0.5, 0.5], [0.6, 0.6, 0.6],
@@ -410,28 +423,28 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 								[0.4, 0.4, 0.4]])
 
 		# 2-ref group
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
 		# 3-ref group
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3, 4])
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3, 4], reference_center=centre_b)
 		# 2-ref group (same group as site_a)
-		site_c = DynamicVoronoiSite(reference_indices=[5, 6])
+		site_c = DynamicVoronoiSite(reference_indices=[5, 6], reference_center=centre_c)
 
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b, site_c])
 		self.assertEqual(len(collection._centre_groups), 2)
 
 		# Fresh per-site references
-		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		ref_b = DynamicVoronoiSite(reference_indices=[2, 3, 4])
-		ref_c = DynamicVoronoiSite(reference_indices=[5, 6])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3, 4], reference_center=centre_b)
+		ref_c = DynamicVoronoiSite(reference_indices=[5, 6], reference_center=centre_c)
 
 		for i in range(5):
 			coords = base_coords + 0.01 * i
 			structure = Structure(lattice, ["Na"] * 7, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], None, structure.lattice.matrix)
-			ref_c._centre_coords = _reference_centre(frac[[5, 6]], None, structure.lattice.matrix)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], centre_a, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3, 4]], centre_b, structure.lattice.matrix)
+			ref_c._centre_coords = _reference_centre(frac[[5, 6]], centre_c, structure.lattice.matrix)
 			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)
@@ -473,11 +486,13 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 	def test_reset_then_reuse_produces_correct_centres(self):
 		"""After reset, batch centres on new data should match per-site computation."""
 		lattice = Lattice.cubic(10.0)
+		# Reference centres within half a cell of the reference atoms before and after the reset
+		centre_a, centre_b = np.full(3, 0.3), np.full(3, 0.95)
 		base_coords = np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2],
 								[0.7, 0.7, 0.7], [0.8, 0.8, 0.8]])
 
-		site_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		site_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		site_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		site_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 		collection = DynamicVoronoiSiteCollection(sites=[site_a, site_b])
 
 		# Run several frames to build up cache state
@@ -492,16 +507,16 @@ class BatchCentreCalculationTestCase(unittest.TestCase):
 		new_base = np.array([[0.4, 0.4, 0.4], [0.5, 0.5, 0.5],
 							 [0.1, 0.1, 0.1], [0.2, 0.2, 0.2]])
 		# Fresh per-site reference
-		ref_a = DynamicVoronoiSite(reference_indices=[0, 1])
-		ref_b = DynamicVoronoiSite(reference_indices=[2, 3])
+		ref_a = DynamicVoronoiSite(reference_indices=[0, 1], reference_center=centre_a)
+		ref_b = DynamicVoronoiSite(reference_indices=[2, 3], reference_center=centre_b)
 
 		for i in range(3):
 			coords = new_base + 0.01 * i
 			structure = Structure(lattice, ["Na"] * 4, coords.tolist())
 			frac = structure.frac_coords
 
-			ref_a._centre_coords = _reference_centre(frac[[0, 1]], None, structure.lattice.matrix)
-			ref_b._centre_coords = _reference_centre(frac[[2, 3]], None, structure.lattice.matrix)
+			ref_a._centre_coords = _reference_centre(frac[[0, 1]], centre_a, structure.lattice.matrix)
+			ref_b._centre_coords = _reference_centre(frac[[2, 3]], centre_b, structure.lattice.matrix)
 			collection._batch_calculate_centres(frac, structure.lattice.matrix)
 
 			np.testing.assert_array_almost_equal(ref_a.centre, site_a.centre)

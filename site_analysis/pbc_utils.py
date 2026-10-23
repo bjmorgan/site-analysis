@@ -29,9 +29,10 @@ def apply_legacy_pbc_correction(frac_coords: np.ndarray) -> np.ndarray:
         Adjusted fractional coordinates with the same shape.
         
     Warning:
-        This algorithm can produce incorrect results for sites spanning
-        periodic boundaries in small unit cells. Consider using reference
-        centre-based approaches for robust PBC handling.
+        This algorithm gives incorrect results for sites that span more than
+        half the cell along an axis, and in thin or skewed cells. Only sites
+        without a reference centre use this function; it is deprecated with
+        them and will be removed in version 2.0.
     """
     corrected_coords: np.ndarray = frac_coords.copy()
     for dim in range(3):

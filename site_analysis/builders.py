@@ -52,6 +52,8 @@ from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.trajectory import Trajectory
 from site_analysis.reference_workflow.reference_based_sites import ReferenceBasedSites
 from site_analysis.reference_workflow.structure_aligner import _check_deprecated_alignment_options
+from site_analysis._reference_centre_deprecation import (
+    on_users_behalf, warn_without_reference_centres)
 import numpy as np
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -457,29 +459,25 @@ class TrajectoryBuilder:
                 part of the coordination environment.
             n_vertices: Number of vertex atoms required for each polyhedral site.
             label: Optional label to assign to all created sites. Default is None.
-            use_reference_centers: Controls periodic boundary condition handling for
-                reference-based sites (polyhedral and dynamic Voronoi sites).
-                Default is True.
-
-                * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference centre for each site and unwraps vertex coordinates
-                  relative to this centre. Correctly handles sites that naturally
-                  span >50% of unit cell dimensions, even in small simulation cells.
-                * ``False`` (advanced usage) -- Spread-based PBC correction. If
-                  vertex coordinates span >50% of the unit cell in any dimension,
-                  assumes this indicates PBC wrapping and shifts coordinates
-                  accordingly. WARNING: Gives incorrect results when sites
-                  legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). It is no faster: after the first
-                  frame, both settings update the unwrapping in the same way.
-                  The polyhedral site search also falls back to the neighbours
-                  of an atom's most recent site, then list order, instead of
-                  ranking sites by distance, which can make assignment slower.
-                  Only use after verifying it works correctly for your
-                  structures.
+            use_reference_centers: Whether to give each site a reference
+                centre, the position of its central atom in the reference
+                structure (aligned when alignment is on), and unwrap its
+                vertices to their periodic images nearest it. Default is
+                True. Deprecated: ``False`` will be removed in version 2.0.
+                It creates sites without reference centres, which unwrap
+                their vertices by the spread-based rule: along each axis, if
+                the fractional coordinates span more than 0.5, coordinates
+                below 0.5 are shifted by one cell. The polyhedral site search
+                also falls back to the neighbours of an atom's most recent
+                site, then list order, instead of ranking sites by distance,
+                which can make assignment slower.
 
         Returns:
             self: For method chaining
+
+        Warns:
+            FutureWarning: If ``use_reference_centers`` is False, once per
+                call, when the sites are defined rather than at ``build()``.
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
@@ -507,21 +505,28 @@ class TrajectoryBuilder:
                 label="octahedral"
             )
         """
+        if not use_reference_centers:
+            warn_without_reference_centres(
+                "TrajectoryBuilder.with_polyhedral_sites(use_reference_centers=False) is "
+                "deprecated and will be removed in version 2.0; use the default, "
+                "use_reference_centers=True.")
+
         # Define the site generation function but don't execute it yet
         def create_polyhedral_sites(
                 get_reference_based_sites: _ReferenceBasedSitesGetter) -> Sequence[PolyhedralSite]:
             rbs = get_reference_based_sites()
 
             # Create sites
-            sites = rbs.create_polyhedral_sites(
-                        center_species=centre_species,
-                        vertex_species=vertex_species,
-                        cutoff=cutoff,
-                        n_vertices=n_vertices,
-                        label=label,
-                        target_species=self._effective_mapping_species,
-                        use_reference_centers=use_reference_centers
-                    )
+            with on_users_behalf():
+                sites = rbs.create_polyhedral_sites(
+                            center_species=centre_species,
+                            vertex_species=vertex_species,
+                            cutoff=cutoff,
+                            n_vertices=n_vertices,
+                            label=label,
+                            target_species=self._effective_mapping_species,
+                            use_reference_centers=use_reference_centers
+                        )
             if not sites:
                 raise ValueError(
                     f"No polyhedral sites found for centre_species='{centre_species}', "
@@ -564,26 +569,22 @@ class TrajectoryBuilder:
                 part of the coordination environment.
             n_reference: Number of reference atoms required for each dynamic site.
             label: Optional label to assign to all created sites. Default is None.
-            use_reference_centers: Controls periodic boundary condition handling for
-                reference-based sites (polyhedral and dynamic Voronoi sites).
-                Default is True.
-
-                * ``True`` (recommended) -- Reference-based PBC correction. Defines
-                  a reference centre for each site and unwraps vertex coordinates
-                  relative to this centre. Correctly handles sites that naturally
-                  span >50% of unit cell dimensions, even in small simulation cells.
-                * ``False`` (advanced usage) -- Spread-based PBC correction. If
-                  vertex coordinates span >50% of the unit cell in any dimension,
-                  assumes this indicates PBC wrapping and shifts coordinates
-                  accordingly. WARNING: Gives incorrect results when sites
-                  legitimately span >50% of the unit cell (e.g., octahedral sites
-                  in a 2x2x2 FCC supercell). It is no faster: after the first
-                  frame, both settings update the unwrapping in the same way.
-                  Only use after verifying it works correctly for your
-                  structures.
+            use_reference_centers: Whether to give each site a reference
+                centre, the position of its central atom in the reference
+                structure (aligned when alignment is on), and unwrap its
+                reference atoms to their periodic images nearest it. Default
+                is True. Deprecated: ``False`` will be removed in version
+                2.0. It creates sites without reference centres, which
+                unwrap their reference atoms by the spread-based rule: along
+                each axis, if the fractional coordinates span more than 0.5,
+                coordinates below 0.5 are shifted by one cell.
 
         Returns:
             self: For method chaining
+
+        Warns:
+            FutureWarning: If ``use_reference_centers`` is False, once per
+                call, when the sites are defined rather than at ``build()``.
 
         Raises:
             ValueError: At build() time if no coordination environments are found,
@@ -611,21 +612,28 @@ class TrajectoryBuilder:
                 label="mixed_coordination"
             )
         """
+        if not use_reference_centers:
+            warn_without_reference_centres(
+                "TrajectoryBuilder.with_dynamic_voronoi_sites(use_reference_centers=False) is "
+                "deprecated and will be removed in version 2.0; use the default, "
+                "use_reference_centers=True.")
+
         # Define the site generation function but don't execute it yet
         def create_dynamic_voronoi_sites(
                 get_reference_based_sites: _ReferenceBasedSitesGetter) -> Sequence[DynamicVoronoiSite]:
             rbs = get_reference_based_sites()
 
             # Create sites
-            sites = rbs.create_dynamic_voronoi_sites(
-                        center_species=centre_species,
-                        reference_species=reference_species,
-                        cutoff=cutoff,
-                        n_reference=n_reference,
-                        label=label,
-                        target_species=self._effective_mapping_species,
-                        use_reference_centers=use_reference_centers
-                    )
+            with on_users_behalf():
+                sites = rbs.create_dynamic_voronoi_sites(
+                            center_species=centre_species,
+                            reference_species=reference_species,
+                            cutoff=cutoff,
+                            n_reference=n_reference,
+                            label=label,
+                            target_species=self._effective_mapping_species,
+                            use_reference_centers=use_reference_centers
+                        )
             if not sites:
                 raise ValueError(
                     f"No dynamic Voronoi sites found for centre_species='{centre_species}', "
@@ -1072,10 +1080,14 @@ def create_trajectory_with_polyhedral_sites(
             If None, align_species will be used.
         use_reference_centers: Whether to use reference centres for 
             PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
-            Default is True.
+            Default is True. Deprecated: ``False`` will be removed in version
+            2.0.
             
     Returns:
         Trajectory: Configured trajectory object ready for site analysis.
+
+    Warns:
+        FutureWarning: If ``use_reference_centers`` is False, once per call.
         
     Raises:
         ValueError: If no coordination environments are found, if required 
@@ -1084,21 +1096,27 @@ def create_trajectory_with_polyhedral_sites(
     _check_deprecated_alignment_options(
         align_metric=align_metric, align_algorithm=align_algorithm,
         align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
-    builder = TrajectoryBuilder()
-    return (builder
-            .with_structure(structure)
-            .with_reference_structure(reference_structure)
-            .with_mobile_species(mobile_species)
-            .with_structure_alignment(align=align, align_species=align_species)
-            .with_site_mapping(mapping_species)
-            .with_polyhedral_sites(
-                centre_species,
-                vertex_species,
-                cutoff,
-                n_vertices,
-                label,
-                use_reference_centers)
-            .build())
+    if not use_reference_centers:
+        warn_without_reference_centres(
+            "create_trajectory_with_polyhedral_sites(use_reference_centers=False) "
+            "is deprecated and will be removed in version 2.0; use the default, "
+            "use_reference_centers=True.")
+    with on_users_behalf():
+        builder = TrajectoryBuilder()
+        return (builder
+                .with_structure(structure)
+                .with_reference_structure(reference_structure)
+                .with_mobile_species(mobile_species)
+                .with_structure_alignment(align=align, align_species=align_species)
+                .with_site_mapping(mapping_species)
+                .with_polyhedral_sites(
+                    centre_species,
+                    vertex_species,
+                    cutoff,
+                    n_vertices,
+                    label,
+                    use_reference_centers)
+                .build())
 
 
 def create_trajectory_with_dynamic_voronoi_sites(
@@ -1156,11 +1174,15 @@ def create_trajectory_with_dynamic_voronoi_sites(
         mapping_species: Species to use for mapping sites between structures. 
             If None, align_species will be used.
         use_reference_centers: Whether to use reference centres for 
-            PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
-            Default is True.
+            PBC handling. See TrajectoryBuilder.with_dynamic_voronoi_sites() for details.
+            Default is True. Deprecated: ``False`` will be removed in version
+            2.0.
             
     Returns:
         Trajectory: Configured trajectory object ready for site analysis.
+
+    Warns:
+        FutureWarning: If ``use_reference_centers`` is False, once per call.
         
     Raises:
         ValueError: If no coordination environments are found, if required 
@@ -1169,18 +1191,24 @@ def create_trajectory_with_dynamic_voronoi_sites(
     _check_deprecated_alignment_options(
         align_metric=align_metric, align_algorithm=align_algorithm,
         align_minimizer_options=align_minimizer_options, align_tolerance=align_tolerance)
-    builder = TrajectoryBuilder()
-    return (builder
-            .with_structure(structure)
-            .with_reference_structure(reference_structure)
-            .with_mobile_species(mobile_species)
-            .with_structure_alignment(align=align, align_species=align_species)
-            .with_site_mapping(mapping_species)
-            .with_dynamic_voronoi_sites(
-                centre_species,
-                reference_species,
-                cutoff,
-                n_reference,
-                label,
-                use_reference_centers)
-            .build())
+    if not use_reference_centers:
+        warn_without_reference_centres(
+            "create_trajectory_with_dynamic_voronoi_sites(use_reference_centers=False) "
+            "is deprecated and will be removed in version 2.0; use the default, "
+            "use_reference_centers=True.")
+    with on_users_behalf():
+        builder = TrajectoryBuilder()
+        return (builder
+                .with_structure(structure)
+                .with_reference_structure(reference_structure)
+                .with_mobile_species(mobile_species)
+                .with_structure_alignment(align=align, align_species=align_species)
+                .with_site_mapping(mapping_species)
+                .with_dynamic_voronoi_sites(
+                    centre_species,
+                    reference_species,
+                    cutoff,
+                    n_reference,
+                    label,
+                    use_reference_centers)
+                .build())

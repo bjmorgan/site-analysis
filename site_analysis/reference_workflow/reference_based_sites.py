@@ -34,6 +34,8 @@ from site_analysis.reference_workflow.site_factory import SiteFactory
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
 from site_analysis.site import Site
+from site_analysis._reference_centre_deprecation import (
+    on_users_behalf, warn_without_reference_centres)
 
 SiteT = TypeVar('SiteT', bound=Site)
 
@@ -177,10 +179,14 @@ class ReferenceBasedSites:
             target_species: Species to map to in the target structure. Default is None.
             use_reference_centers: Whether to use reference centres for 
                 PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
-                Default is True.
+                Default is True. Deprecated: ``False`` will be removed in
+                version 2.0.
             
         Returns:
             List of PolyhedralSite objects
+
+        Warns:
+            FutureWarning: If ``use_reference_centers`` is False, once per call.
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
@@ -191,6 +197,11 @@ class ReferenceBasedSites:
                 earlier calls (a 1:1 mapping violation), or if both label and
                 labels are provided.
         """
+        if not use_reference_centers:
+            warn_without_reference_centres(
+                "ReferenceBasedSites.create_polyhedral_sites(use_reference_centers=False) "
+                "is deprecated and will be removed in version 2.0; use the default, "
+                "use_reference_centers=True.")
         return self._create_sites(
             self._initialise_site_factory().create_polyhedral_sites,
             center_species=center_species,
@@ -222,11 +233,15 @@ class ReferenceBasedSites:
             labels: List of labels for each site. Default is None.
             target_species: Species to map to in the target structure. Default is None.
             use_reference_centers: Whether to use reference centres for 
-                PBC handling. See TrajectoryBuilder.with_polyhedral_sites() for details.
-                Default is True.
+                PBC handling. See TrajectoryBuilder.with_dynamic_voronoi_sites() for details.
+                Default is True. Deprecated: ``False`` will be removed in
+                version 2.0.
             
         Returns:
             List of DynamicVoronoiSite objects
+
+        Warns:
+            FutureWarning: If ``use_reference_centers`` is False, once per call.
             
         Raises:
             ValueError: If coordination environments cannot be found or mapped,
@@ -237,6 +252,11 @@ class ReferenceBasedSites:
                 earlier calls (a 1:1 mapping violation), or if both label and
                 labels are provided.
         """
+        if not use_reference_centers:
+            warn_without_reference_centres(
+                "ReferenceBasedSites.create_dynamic_voronoi_sites(use_reference_centers=False) "
+                "is deprecated and will be removed in version 2.0; use the default, "
+                "use_reference_centers=True.")
         return self._create_sites(
             self._initialise_site_factory().create_dynamic_voronoi_sites,
             center_species=center_species,
@@ -304,12 +324,13 @@ class ReferenceBasedSites:
             raise ValueError(
                 f"Failed to map coordination environments for {description}: {error}"
             ) from error
-        sites = create(
-            mapped_environments,
-            reference_centers=reference_centers,
-            label=label,
-            labels=labels
-        )
+        with on_users_behalf():
+            sites = create(
+                mapped_environments,
+                reference_centers=reference_centers,
+                label=label,
+                labels=labels
+            )
         self._target_of_ref[ref_atoms] = target_atoms
         return sites
 

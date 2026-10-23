@@ -174,9 +174,7 @@ This method benefits from using an idealised structure in the builder, as regula
 - `cutoff`: Distance cutoff for coordination environment
 - `n_vertices`: Number of vertices per environment
 - `label`: Optional label for all sites
-- `use_reference_centers`: Whether to use reference centre unwrapping for periodic boundary conditions (default: `True`)
-  - `True`: Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images
-  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms. The polyhedral site search also falls back to the neighbours of an atom's most recent site, then list order, instead of ranking sites by distance
+- `use_reference_centers`: Whether to give each site a reference centre, the position of its central atom, and unwrap its vertex coordinates to their periodic images nearest it (default: `True`). Deprecated: `False`, which creates sites without reference centres that use spread-based detection, issues a `FutureWarning` and will be removed in version 2.0
 
 **Example:**
 ```python
@@ -201,9 +199,7 @@ Defines dynamic Voronoi sites using reference atom positions.
 - `cutoff`: Distance cutoff for finding reference atoms
 - `n_reference`: Number of reference atoms per site
 - `label`: Optional label for all sites
-- `use_reference_centers`: Whether to use reference centre unwrapping for periodic boundary conditions (default: `True`)
-  - `True`: Uses each site's central atom position as an anchor point for unwrapping vertex coordinates to their closest periodic images
-  - `False`: Uses spread-based detection, which identifies wrapped sites based on the spatial distribution of reference atoms
+- `use_reference_centers`: Whether to give each site a reference centre, the position of its central atom, and unwrap its reference atoms to their periodic images nearest it (default: `True`). Deprecated: `False`, which creates sites without reference centres that use spread-based detection, issues a `FutureWarning` and will be removed in version 2.0
 
 **Example:**
 ```python
@@ -553,7 +549,8 @@ from site_analysis.polyhedral_site import PolyhedralSite
 builder = (TrajectoryBuilder()
     .with_structure(structure)
     .with_mobile_species("Li")
-    .with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 96])]))
+    .with_existing_sites([PolyhedralSite(vertex_indices=[0, 1, 2, 96],
+                                         reference_center=[0.5, 0.5, 0.5])]))
 trajectory = builder.build()
 # ValueError: Site 0 has vertex index 96, but the structure has 96 atoms
 ```

@@ -107,8 +107,11 @@ def tetrahedra_structure():
 def tetrahedra_faces(*vertex_indices):
     """Shared faces of tetrahedra on the atoms of `tetrahedra_structure`."""
     Site.reset_index(0)
-    sites = [PolyhedralSite(vertex_indices=list(v)) for v in vertex_indices]
-    return shared_faces_of(tetrahedra_structure(), sites)
+    structure = tetrahedra_structure()
+    sites = [PolyhedralSite(vertex_indices=list(v),
+                            reference_center=structure.frac_coords[list(v)].mean(axis=0))
+             for v in vertex_indices]
+    return shared_faces_of(structure, sites)
 
 
 class FaceTestCase(unittest.TestCase):
@@ -174,8 +177,9 @@ class FindSharedFacesTestCase(unittest.TestCase):
         for second in ([0, 1, 4, 5], [0, 4, 5, 6]):
             with self.subTest(shared=len({0, 1, 2, 3} & set(second))):
                 Site.reset_index(0)
-                sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-                         PolyhedralSite(vertex_indices=second)]
+                sites = [PolyhedralSite(vertex_indices=v,
+                                        reference_center=structure.frac_coords[v].mean(axis=0))
+                         for v in ([0, 1, 2, 3], second)]
                 self.assertEqual(shared_faces_of(structure, sites), ())
 
     def test_cell_two_sites_wide_gives_two_faces_per_face_neighbour(self):
@@ -302,8 +306,9 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
 
     def test_nested_site_without_reference_centres_raises_with_a_hint(self):
         Site.reset_index(0)
-        sites = [PolyhedralSite(vertex_indices=list(range(8))),
-                 PolyhedralSite(vertex_indices=[0, 3, 5, 6])]
+        with self.assertWarns(FutureWarning):
+            sites = [PolyhedralSite(vertex_indices=list(range(8))),
+                     PolyhedralSite(vertex_indices=[0, 3, 5, 6])]
         with self.assertRaisesRegex(ValueError, "Site 1 lies inside site 0") as context:
             shared_faces_of(self.cube_structure(), sites)
         self.assertIn("neither site has a reference centre", str(context.exception))
@@ -321,7 +326,7 @@ class FindSharedFacesErrorsTestCase(unittest.TestCase):
         coords = structure.frac_coords.copy()
         coords[2, 1] = np.nan
         Site.reset_index(0)
-        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3])]
+        sites = [PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.46, 0.5, 0.5])]
         with self.assertRaisesRegex(ValueError, "Site 0 has non-finite vertex coordinates"):
             _find_shared_faces(sites, coords, structure.lattice.matrix)
 
@@ -358,9 +363,9 @@ class SharedFacesApiTestCase(unittest.TestCase):
 
     def test_adjacency_is_indexed_by_site_index(self):
         Site.reset_index(5)
-        first = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+        first = PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.46, 0.5, 0.5])
         Site.reset_index(8)
-        second = PolyhedralSite(vertex_indices=[0, 1, 2, 4])
+        second = PolyhedralSite(vertex_indices=[0, 1, 2, 4], reference_center=[0.54, 0.5, 0.5])
         trajectory = Trajectory(sites=[first, second], atoms=[Atom(index=0)])
         trajectory.find_shared_faces(tetrahedra_structure())
         matrix = trajectory.site_adjacency().toarray()
@@ -376,8 +381,10 @@ class SharedFacesApiTestCase(unittest.TestCase):
             [(1, 1, 1), (2, 1, 1), (1, 2, 1), (1, 1, 2), (4, 4, 4), (5, 4, 4), (4, 5, 4)],
             coords_are_cartesian=True)
         trajectory = Trajectory(
-            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-                   PolyhedralSite(vertex_indices=[3, 4, 5, 6])],
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3],
+                                  reference_center=[0.125, 0.125, 0.125]),
+                   PolyhedralSite(vertex_indices=[3, 4, 5, 6],
+                                  reference_center=[0.35, 0.35, 0.35])],
             atoms=[Atom(index=0)])
         trajectory.find_shared_faces(structure)
         self.assertEqual(trajectory.shared_faces(), ())
@@ -459,8 +466,8 @@ class TransitionsAcrossFacesTestCase(unittest.TestCase):
                          (3.4, 5.0, 5.0), (6.6, 5.0, 5.0)]
         self.lattice = Lattice.cubic(10.0)
         self.trajectory = Trajectory(
-            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3]),
-                   PolyhedralSite(vertex_indices=[0, 1, 2, 4])],
+            sites=[PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.46, 0.5, 0.5]),
+                   PolyhedralSite(vertex_indices=[0, 1, 2, 4], reference_center=[0.54, 0.5, 0.5])],
             atoms=[Atom(index=5)])
         self.trajectory.find_shared_faces(self.frame((4.6, 5.0, 5.0)))
 
@@ -628,7 +635,8 @@ class BuilderSharedFacesTestCase(unittest.TestCase):
         structure = unit * (3, 3, 3)
         lithium = [i for i, site in enumerate(structure) if site.species_string == "Li"]
         Site.reset_index(1000)
-        existing = PolyhedralSite(vertex_indices=lithium[:4])
+        existing = PolyhedralSite(vertex_indices=lithium[:4],
+                                  reference_center=structure.frac_coords[lithium[:4]].mean(axis=0))
         trajectory = (TrajectoryBuilder()
                       .with_structure(structure)
                       .with_reference_structure(structure)

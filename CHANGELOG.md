@@ -43,6 +43,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The `pbc_images` argument of `PolyhedralSite.contains_point()` and `contains_atom()` is deprecated and ignored, and issues a `DeprecationWarning`: the site now tests the images of the point itself, so the result no longer depends on which images a caller passes. It will be removed in version 2.0 (#102).
 - `Trajectory.atom_sites` is deprecated in favour of `Trajectory.geometric_sites` (or `Trajectory.committed_sites`) and issues a `FutureWarning`. It keeps its previous values (the committed sites with commitment, otherwise the sites the atoms are inside) and will be removed in version 2.0.
+- Polyhedral and dynamic Voronoi sites without a reference centre are deprecated, and will be removed in version 2.0 with the spread-based unwrapping they use, which gives wrong results without error for sites that span more than half the cell along an axis and in thin or skewed cells, and with the slower polyhedral site search used when any site lacks a reference centre. These issue a `FutureWarning` at the caller's line, saying what to use instead; behaviour is otherwise unchanged (#101):
+  - `PolyhedralSite` and `DynamicVoronoiSite` created without `reference_center` (usually the position of the site's central atom);
+  - `use_reference_centers=False` in `TrajectoryBuilder.with_polyhedral_sites()`, `TrajectoryBuilder.with_dynamic_voronoi_sites()`, `create_trajectory_with_polyhedral_sites()`, `create_trajectory_with_dynamic_voronoi_sites()`, `ReferenceBasedSites.create_polyhedral_sites()` and `ReferenceBasedSites.create_dynamic_voronoi_sites()`;
+  - `SiteFactory.create_polyhedral_sites()` and `SiteFactory.create_dynamic_voronoi_sites()` without `reference_centers`;
+  - `PolyhedralSite.sites_from_vertex_indices()` and `DynamicVoronoiSite.sites_from_reference_indices()`, which create sites from indices alone, in favour of `TrajectoryBuilder` (or the site constructors with `reference_center`);
+  - `PolyhedralSite.from_dict()` and `DynamicVoronoiSite.from_dict()` for a dict without a reference centre.
+
+  Each call warns once, however many sites it creates.
 
 ### Removed
 

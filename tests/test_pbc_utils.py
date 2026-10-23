@@ -122,7 +122,10 @@ class TestLegacyPBCCorrection(unittest.TestCase):
 
 
 class TestCurrentPBCBehaviorRegression(unittest.TestCase):
-	"""Regression tests to preserve correct current PBC behavior during refactoring."""
+	"""Regression tests to preserve correct current PBC behavior during refactoring.
+
+	The sites have no reference centres (deprecated) and use the spread-based rule.
+	"""
 
 	def setUp(self):
 		"""Set up test fixtures."""
@@ -140,7 +143,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 
-		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Should remain unchanged (this works correctly)
@@ -158,7 +162,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 		
-		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
 		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# Should calculate centre correctly (this works correctly)
@@ -176,7 +181,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 
-		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Current algorithm should correctly shift small z-coordinates
@@ -199,7 +205,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 		
-		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
 		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# DynamicVoronoiSite applies correction AND wraps centre back to [0,1)
@@ -225,7 +232,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 
-		site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = PolyhedralSite(vertex_indices=[0, 1, 2, 3])
 		site.assign_vertex_coords(structure.frac_coords, structure.lattice.matrix)
 
 		# Spread < 0.5, so no spread correction; the vertices are only
@@ -244,7 +252,8 @@ class TestCurrentPBCBehaviorRegression(unittest.TestCase):
 		]
 		structure = Structure(self.lattice, species, coords)
 		
-		site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
+		with self.assertWarns(FutureWarning):
+			site = DynamicVoronoiSite(reference_indices=[0, 1, 2, 3])
 		site.calculate_centre(structure.frac_coords, structure.lattice.matrix)
 		
 		# Should calculate centre correctly (no correction needed)

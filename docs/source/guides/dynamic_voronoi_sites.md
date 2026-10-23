@@ -154,7 +154,7 @@ trajectory = Trajectory(sites=sites, atoms=atoms)
 
 ### Creating Sites from Reference Indices
 
-For complete control, create sites by specifying reference atom indices directly:
+For complete control, create sites by specifying reference atom indices directly, with a reference centre for each site:
 
 ```python
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
@@ -164,28 +164,29 @@ from site_analysis.dynamic_voronoi_site_collection import DynamicVoronoiSiteColl
 site1_refs = [0, 5, 12, 18]  # O/Cl atoms around first Li site
 site2_refs = [1, 6, 13, 19]  # O/Cl atoms around second Li site
 
-# Create individual sites
-site1 = DynamicVoronoiSite(reference_indices=site1_refs, label="Li_site_1")
-site2 = DynamicVoronoiSite(reference_indices=site2_refs, label="Li_site_2")
+# Reference centres: the fractional coordinates of each site's central atom
+site1_centre = md_structure[40].frac_coords  # First Li site
+site2_centre = md_structure[41].frac_coords  # Second Li site
 
-# Or create multiple sites at once
-reference_indices_list = [site1_refs, site2_refs]
-sites = DynamicVoronoiSite.sites_from_reference_indices(
-    reference_indices_list=reference_indices_list,
-    label="Li_site"
-)
+# Create individual sites
+site1 = DynamicVoronoiSite(reference_indices=site1_refs, label="Li_site_1",
+                           reference_center=site1_centre)
+site2 = DynamicVoronoiSite(reference_indices=site2_refs, label="Li_site_2",
+                           reference_center=site2_centre)
 
 # Create collection
-site_collection = DynamicVoronoiSiteCollection(sites)
+site_collection = DynamicVoronoiSiteCollection([site1, site2])
 
 # Use in analysis
-site_collection.analyse_structure(atoms, structure)
+site_collection.analyse_structure(atoms, md_structure)
 ```
 
 This approach gives you full control over:
 - Which specific atoms define each site
 - How sites are created and configured
 - The workflow for structure analysis
+
+Each site's reference atoms are unwrapped to their periodic images nearest its reference centre before their mean is taken (see [Periodic Boundary Conditions](../concepts/pbc_handling.md)). Creating a site without a reference centre is deprecated and issues a `FutureWarning`; such a site falls back to spread-based detection, and version 2.0 will require `reference_center`. `DynamicVoronoiSite.sites_from_reference_indices()`, which creates sites from reference indices alone, without reference centres, is deprecated in favour of `TrajectoryBuilder.with_dynamic_voronoi_sites()` (or `DynamicVoronoiSite` with `reference_center`), and issues a `FutureWarning`.
 
 For a comparison of all site types and guidance on choosing between them, see the [site selection guide](../concepts/sites.md#selecting-the-right-site-type).
 

@@ -22,7 +22,9 @@ from pymatgen.core import Structure
 
 from site_analysis.polyhedral_site import PolyhedralSite
 from site_analysis.dynamic_voronoi_site import DynamicVoronoiSite
-from site_analysis.site import Site
+from site_analysis.distances import _as_point
+from site_analysis._reference_centre_deprecation import (
+    on_users_behalf, warn_without_reference_centres)
 
 
 class SiteFactory:
@@ -57,17 +59,24 @@ class SiteFactory:
         Args:
             environments: List of environments, where each environment is a list
                 of atom indices defining the vertices of a polyhedral site.
-            reference_centers: Optional list of reference centres for PBC handling.
-                If provided, must have the same length as environments.
+            reference_centers: Reference centres for PBC handling, one for
+                each environment, usually the positions of the sites'
+                central atoms. Deprecated: without them, the sites have no
+                reference centres; version 2.0 will require them.
             label: Optional label to assign to all sites.
             labels: Optional list of labels, one for each environment.
             
         Returns:
             List of PolyhedralSite objects.
+
+        Warns:
+            FutureWarning: If ``reference_centers`` is None, once per call.
             
         Raises:
             ValueError: If environments are invalid, if minimum vertex count
-                is not met, or if reference_centers length doesn't match environments.
+                is not met, if ``reference_centers`` length does not match
+                environments, or if any reference centre is not three finite
+                numbers.
         """
         # Validate inputs
         self._validate_environments(environments)
@@ -81,39 +90,33 @@ class SiteFactory:
                     f"requires at least 4 vertices to form a polyhedron."
                 )
                 
-        # Validate number of environments == number of reference centres
-        if reference_centers is not None:
-            if len(reference_centers) != len(environments):
-                raise ValueError(
-                    f"Length of reference_centers ({len(reference_centers)}) must match "
-                    f"length of environments ({len(environments)})"
-                )
-        
-        # Create sites
+        centres: list[np.ndarray | None]
+        if reference_centers is None:
+            warn_without_reference_centres(
+                "SiteFactory.create_polyhedral_sites without reference_centers is "
+                "deprecated and will be removed in version 2.0; use reference_centers, "
+                "usually the positions of the sites' central atoms.")
+            centres = [None] * len(environments)
+        else:
+            centres = list(self._validate_reference_centres(
+                reference_centers, len(environments)))
+
         sites = []
-        for i, env in enumerate(environments):
-            # Determine label for this site
-            site_label = label if label is not None else (
-                labels[i] if labels is not None else None
-            )
-            
-            # Determine reference centre for this site
-            ref_centre = reference_centers[i] if reference_centers is not None else None
-            
-            # Create site
-            site = PolyhedralSite(
-                vertex_indices=env, 
-                label=site_label,
-                reference_center=ref_centre
-            )
-            
-            # Assign vertex coordinates
-            self._assign_vertex_coords(site)
-            
-            sites.append(site)
-        
+        with on_users_behalf():
+            for i, (env, centre) in enumerate(zip(environments, centres)):
+                site_label = label if label is not None else (
+                    labels[i] if labels is not None else None
+                )
+                site = PolyhedralSite(
+                    vertex_indices=env,
+                    label=site_label,
+                    reference_center=centre
+                )
+                self._assign_vertex_coords(site)
+                sites.append(site)
+
         return sites
-    
+
     def create_dynamic_voronoi_sites(
         self, 
         environments: list[list[int]], 
@@ -127,51 +130,80 @@ class SiteFactory:
             environments: List of environments, where each environment is a list
                 of atom indices defining the reference atoms for a dynamic
                 Voronoi site.
-            reference_centers: Optional list of reference centres for PBC handling.
-                If provided, must have the same length as environments.
+            reference_centers: Reference centres for PBC handling, one for
+                each environment, usually the positions of the sites'
+                central atoms. Deprecated: without them, the sites have no
+                reference centres; version 2.0 will require them.
             label: Optional label to assign to all sites.
             labels: Optional list of labels, one for each environment.
             
         Returns:
             List of DynamicVoronoiSite objects.
+
+        Warns:
+            FutureWarning: If ``reference_centers`` is None, once per call.
             
         Raises:
-            ValueError: If environments are invalid.
+            ValueError: If environments are invalid, if ``reference_centers``
+                length does not match environments, or if any reference
+                centre is not three finite numbers.
         """
         # Validate inputs
         self._validate_environments(environments)
         self._validate_labels(label, labels, len(environments))
         
-        # Validate number of environments == number of reference centres
-        if reference_centers is not None:
-            if len(reference_centers) != len(environments):
-                raise ValueError(
-                    f"Length of reference_centers ({len(reference_centers)}) must match "
-                    f"length of environments ({len(environments)})"
-                )
-            
-        # Create sites
+        centres: list[np.ndarray | None]
+        if reference_centers is None:
+            warn_without_reference_centres(
+                "SiteFactory.create_dynamic_voronoi_sites without reference_centers is "
+                "deprecated and will be removed in version 2.0; use reference_centers, "
+                "usually the positions of the sites' central atoms.")
+            centres = [None] * len(environments)
+        else:
+            centres = list(self._validate_reference_centres(
+                reference_centers, len(environments)))
+
         sites = []
-        for i, env in enumerate(environments):
-            # Determine label for this site
-            site_label = label if label is not None else (
-                labels[i] if labels is not None else None
-            )
-            
-            # Determine reference centre for this site  
-            ref_centre = reference_centers[i] if reference_centers is not None else None
-            
-            # Create site
-            site = DynamicVoronoiSite(
-                reference_indices=env, 
-                label=site_label,
-                reference_center=ref_centre
-            )
-            
-            sites.append(site)
-        
+        with on_users_behalf():
+            for i, (env, centre) in enumerate(zip(environments, centres)):
+                site_label = label if label is not None else (
+                    labels[i] if labels is not None else None
+                )
+                sites.append(DynamicVoronoiSite(
+                    reference_indices=env,
+                    label=site_label,
+                    reference_center=centre
+                ))
+
         return sites
-    
+
+    def _validate_reference_centres(
+        self,
+        reference_centers: list[np.ndarray],
+        num_environments: int
+    ) -> list[np.ndarray]:
+        """Validate reference centres, one for each environment.
+
+        Args:
+            reference_centers: Reference centres to validate.
+            num_environments: Number of environments.
+
+        Returns:
+            The reference centres as float64 arrays of shape (3,).
+
+        Raises:
+            ValueError: If the number of reference centres does not match
+                the number of environments, or if any reference centre is
+                not three finite numbers.
+        """
+        if len(reference_centers) != num_environments:
+            raise ValueError(
+                f"Length of reference_centers ({len(reference_centers)}) must match "
+                f"length of environments ({num_environments})"
+            )
+        return [_as_point(centre, f"reference_centers[{i}]")
+                for i, centre in enumerate(reference_centers)]
+
     def _validate_environments(
         self,
         environments: Any

@@ -5,7 +5,6 @@ coordination environments.
 """
 
 import unittest
-import warnings
 import numpy as np
 from unittest.mock import Mock, patch
 from pymatgen.core import Structure, Lattice
@@ -345,11 +344,11 @@ class TestSiteFactory(unittest.TestCase):
 		"""Creating sites with reference centres issues no warning."""
 		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]
 		reference_centers = [np.array([0.1, 0.1, 0.1]), np.array([0.2, 0.2, 0.2])]
-		with warnings.catch_warnings():
-			warnings.simplefilter("error")
+		with recorded_future_warnings() as caught:
 			self.site_factory.create_polyhedral_sites(environments, reference_centers=reference_centers)
 			self.site_factory.create_dynamic_voronoi_sites(
 				environments, reference_centers=reference_centers)
+		self.assertEqual(caught, [])
 
 	def test_create_polyhedral_sites_mismatched_lengths_raises_error(self):
 		"""Test that mismatched lengths between environments and reference centres raises error."""
@@ -378,6 +377,17 @@ class TestSiteFactory(unittest.TestCase):
 		
 		self.assertIn("reference_centers", str(context.exception))
 		self.assertIn("environments", str(context.exception))
+
+
+	def test_create_sites_with_a_none_reference_centre_raises_error(self):
+		"""A None entry in reference_centers raises ValueError naming its index."""
+		environments = [[0, 1, 2, 3], [1, 2, 3, 4]]
+		reference_centers = [np.array([0.1, 0.1, 0.1]), None]
+		for create in (self.site_factory.create_polyhedral_sites,
+				self.site_factory.create_dynamic_voronoi_sites):
+			with self.subTest(create=create.__name__):
+				with self.assertRaisesRegex(ValueError, r"reference_centers\[1\]"):
+					create(environments, reference_centers=reference_centers)
 
 
 if __name__ == '__main__':

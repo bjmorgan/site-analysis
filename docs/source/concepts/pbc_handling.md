@@ -45,7 +45,7 @@ Both methods unwrap vertices at similar cost. PBC image shifts are cached after 
 
 The reference centres also drive the site search for polyhedral sites: they are used to rank candidate sites by distance from each atom. If any site lacks one (deprecated), the search for the whole collection falls back to the neighbours of the atom's most recent site, then list order, which can make assignment slower.
 
-## Reference Centres in Your Code
+## Giving Sites Reference Centres
 
 ### Using TrajectoryBuilder or ReferenceBasedSites
 
@@ -59,7 +59,7 @@ Their `use_reference_centers` parameter defaults to `True`. Passing `use_referen
 
 For more details on using these workflows, see the {doc}`../guides/builders` and {doc}`../guides/reference_workflow` guides.
 
-## Manual Site Creation
+### Manual Site Creation
 
 When creating sites directly using constructors, pass the reference centre, usually the fractional coordinates of the site's central atom:
 

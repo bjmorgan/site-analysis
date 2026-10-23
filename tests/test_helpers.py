@@ -79,7 +79,10 @@ def one_target_atom_for_two_reference_atoms():
 
 
 def environment_centres(structure, environments):
-	"""The mean fractional coordinates of each environment's atoms, to use as its reference centre.
+	"""Return the mean fractional coordinates of each environment's atoms, as reference centres.
+
+	The mean is of the wrapped coordinates, so it is the centre only of an
+	environment that does not straddle a periodic boundary.
 
 	Args:
 		structure (Structure): The structure the atom indices refer to.

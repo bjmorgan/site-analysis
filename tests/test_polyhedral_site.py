@@ -1035,9 +1035,9 @@ class PolyhedralSiteWithoutReferenceCentreDeprecationTestCase(unittest.TestCase)
 
     def test_site_with_reference_center_does_not_warn(self):
         """A site created with a reference centre issues no warning."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with recorded_future_warnings() as caught:
             PolyhedralSite(vertex_indices=[0, 1, 2, 3], reference_center=[0.5, 0.5, 0.5])
+        self.assertEqual(caught, [])
 
     def test_from_dict_without_reference_center_warns_once(self):
         """from_dict warns once, at the caller's line, for a dict with no reference centre or None."""
@@ -1056,9 +1056,9 @@ class PolyhedralSiteWithoutReferenceCentreDeprecationTestCase(unittest.TestCase)
 
     def test_from_dict_with_reference_center_does_not_warn(self):
         """from_dict issues no warning for a dict with a reference centre."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with recorded_future_warnings() as caught:
             PolyhedralSite.from_dict({**self.SITE_DICT, 'reference_center': [0.5, 0.5, 0.5]})
+        self.assertEqual(caught, [])
 
     def test_sites_from_vertex_indices_warns_once_per_call(self):
         """sites_from_vertex_indices warns once, at the caller's line, however many sites it creates."""

@@ -5,7 +5,6 @@ for defining sites using a reference structure approach.
 """
 
 import unittest
-import warnings
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 from pymatgen.core import Structure, Lattice
@@ -821,9 +820,9 @@ class TestReferenceBasedSitesWithoutReferenceCentres(unittest.TestCase):
         for method, kwargs in self.CALLS:
             with self.subTest(method):
                 rbs = ReferenceBasedSites(self.structure, self.structure, align=False)
-                with warnings.catch_warnings():
-                    warnings.simplefilter("error")
+                with recorded_future_warnings() as caught:
                     getattr(rbs, method)(center_species="Li", cutoff=2.0, **kwargs)
+                self.assertEqual(caught, [])
 
 
 class TestReferenceBasedSitesCalculateReferenceCentres(unittest.TestCase):

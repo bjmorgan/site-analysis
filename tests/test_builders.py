@@ -1479,14 +1479,14 @@ class TestBuilderWithoutReferenceCentres(unittest.TestCase):
 		"""The default, use_reference_centers=True, issues no warning from definition to build."""
 		for method, kwargs in self.METHODS:
 			with self.subTest(method):
-				with warnings.catch_warnings():
-					warnings.simplefilter("error")
+				with recorded_future_warnings() as caught:
 					getattr(self._builder(), method)(centre_species="Li", cutoff=2.0, **kwargs).build()
+				self.assertEqual(caught, [])
 		for function in self.FUNCTIONS:
 			with self.subTest(function.__name__):
-				with warnings.catch_warnings():
-					warnings.simplefilter("error")
+				with recorded_future_warnings() as caught:
 					function(self.structure, self.structure, "Li", "Li", "O", 2.0, 4)
+				self.assertEqual(caught, [])
 
 
 class TestBuilderValidation(unittest.TestCase):
